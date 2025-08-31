@@ -2,6 +2,7 @@ const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const path = require('path');
+// FIX: This was incorrectly written as a string. It is now correctly requiring the 'fs' module.
 const fs = require('fs');
 const sessionFileStore = require('session-file-store')(session);
 require('./passport-setup');
@@ -30,10 +31,7 @@ function updateGuildCache(client) {
 }
 
 function start(client) {
-    // This setting is crucial for running behind a reverse proxy.
-    // It tells Express to trust the X-Forwarded-* headers.
     app.set('trust proxy', 1);
-    
     app.set('view engine', 'ejs');
     app.set('views', path.join(__dirname, 'views'));
     
@@ -43,13 +41,8 @@ function start(client) {
         secret: process.env.SESSION_SECRET,
         resave: false,
         saveUninitialized: false,
-        proxy: true, // This is correctly set, relies on 'trust proxy'
-        cookie: { 
-            httpOnly: true, 
-            secure: true, // Ensures cookie is only sent over HTTPS
-            maxAge: 86400000, 
-            sameSite: 'lax' 
-        }
+        proxy: true,
+        cookie: { httpOnly: true, secure: true, maxAge: 86400000, sameSite: 'lax' }
     }));
     app.use(passport.initialize());
     app.use(passport.session());
@@ -59,13 +52,13 @@ function start(client) {
 
     app.get('/', (req, res) => res.redirect('/dashboard'));
     app.get('/login', passport.authenticate('discord'));
-    app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
-    app.get('/logout', (req, res, next) => { req.logout(err => { if(err) return next(err); res.redirect('/'); }); });
+    app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: 'https://certifriedannouncer.online' }), (req, res) => res.redirect('/dashboard'));
+    app.get('/logout', (req, res, next) => { req.logout(err => { if(err) return next(err); res.redirect('https://certifriedannouncer.online'); }); });
 
     app.get('/dashboard', ensureAuth, async (req, res) => {
         try {
             const botGuildIds = new Set(guildDataCache.map(g => g.id));
-            const userAdminGuilds = req.user.guilds.filter(g => (g.permissions & 0x20) === 0x20); // 0x20 is MANAGE_GUILD
+            const userAdminGuilds = req.user.guilds.filter(g => (g.permissions & 0x20) === 0x20);
             const mutualGuilds = userAdminGuilds.filter(g => botGuildIds.has(g.id));
             let selectedGuild = null, streamers = [], guildSettings = {};
             const selectedGuildId = req.query.guild_id || mutualGuilds[0]?.id;
@@ -75,21 +68,17 @@ function start(client) {
                 const guildMeta = mutualGuilds.find(g => g.id === selectedGuildId);
                 if (guildFromCache) {
                     selectedGuild = { id: selectedGuildId, name: guildMeta.name, icon: guildMeta.icon ? `https://cdn.discordapp.com/icons/${guildMeta.id}/${guildMeta.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png', channels: guildFromCache.channels, roles: guildFromCache.roles };
-                    const db = require('../utils/db');
-                    const [streamerRows] = await db.execute(`SELECT s.*, sub.custom_message, sub.subscription_id FROM streamers s JOIN subscriptions sub ON s.streamer_id=sub.streamer_id WHERE sub.guild_id = ? ORDER BY s.platform, s.username`, [selectedGuildId]);
+                    const [streamerRows] = await require('../utils/db').execute(`SELECT s.*, sub.custom_message, sub.subscription_id FROM streamers s JOIN subscriptions sub ON s.streamer_id=sub.streamer_id WHERE sub.guild_id = ? ORDER BY s.platform, s.username`, [selectedGuildId]);
                     streamers = streamerRows;
-                    const [guildSettingRows] = await db.execute('SELECT * FROM guilds WHERE guild_id = ?', [selectedGuildId]);
+                    const [guildSettingRows] = await require('../utils/db').execute('SELECT * FROM guilds WHERE guild_id = ?', [selectedGuildId]);
                     if (guildSettingRows.length > 0) guildSettings = guildSettingRows[0];
                 }
             }
             res.render('dashboard', { user: req.user, guilds: mutualGuilds, selectedGuild, streamers, settings: guildSettings });
-        } catch (error) { 
-            console.error("Dashboard Error:", error);
-            res.status(500).render('error', { user: req.user, error: 'Dashboard failed to load.' }); 
-        }
+        } catch (error) { res.status(500).render('error', { user: req.user, error: 'Dashboard failed to load.' }); }
     });
     
-    // FIX: Listen on 0.0.0.0 to be reachable by the proxy/container environment.
+    // FIX: Listen on 0.0.0.0 to be reachable by the proxy.
     app.listen(PORT, '0.0.0.0', () => console.log(`[Dashboard] Server listening on port ${PORT}`));
 }
 

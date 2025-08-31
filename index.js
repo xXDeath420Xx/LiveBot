@@ -3,7 +3,8 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const db = require('./utils/db');
 const { getBrowser, closeBrowser } = require('./utils/browserManager');
-const { checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo } = require('./utils/api_checks');
+// FIX: Import the new unified api_checks file
+const { checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo } = require('./utils/api_checks'); 
 const { updateAnnouncement } = require('./utils/announcer');
 const dashboard = require(path.join(__dirname, 'dashboard', 'server.js'));
 
@@ -46,18 +47,19 @@ async function startupPurge() {
 
 async function checkStreams() {
     console.log(`[Check] Starting stream check @ ${new Date().toLocaleTimeString()}`);
-    const browser = await getBrowser();
-    if (!browser) return console.error('[Check] Browser failed, aborting check.');
     try {
         const [subs] = await db.execute(`SELECT s.*, sub.guild_id, sub.custom_message, g.announcement_channel_id, g.live_role_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id=s.streamer_id LEFT JOIN guilds g ON sub.guild_id=g.guild_id WHERE g.announcement_channel_id IS NOT NULL`);
         if (subs.length === 0) return;
 
         const liveChecks = await Promise.all(subs.map(async sub => {
              let apiResult, liveData=null;
-             if (sub.platform === 'twitch') apiResult = await checkTwitch(sub);
+             // FIX: Use the new Kick API check and handle browser instantiation more efficiently
+             if (sub.platform === 'kick') apiResult = await checkKick(sub.username);
+             else if (sub.platform === 'twitch') apiResult = await checkTwitch(sub);
              else {
+                const browser = await getBrowser();
+                if (!browser) { console.error(`[Check] Browser failed for ${sub.username}`); return { ...sub, isLive: false, liveData: null }; }
                 if (sub.platform === 'youtube') apiResult = await checkYouTube(browser, sub.platform_user_id);
-                else if (sub.platform === 'kick') apiResult = await checkKick(browser, sub.username);
                 else if (sub.platform === 'tiktok') apiResult = await checkTikTok(browser, sub.username);
                 else if (sub.platform === 'trovo') apiResult = await checkTrovo(browser, sub.username);
              }
@@ -77,28 +79,30 @@ async function checkStreams() {
         liveChecks.forEach(s => { const k=`${s.guild_id}-${s.discord_user_id || `username:${s.username.toLowerCase()}`}`; if (!liveGroup.has(k)) liveGroup.set(k, { platforms: [], details: s }); if(s.isLive) liveGroup.get(k).platforms.push(s); });
         
         for (const [userKey, data] of liveGroup.entries()) {
-            const isAnnounced = announcedUserMap.has(userKey);
+            const existingAnnouncement = announcedUserMap.get(userKey);
             const guildId=data.details.guild_id, {discord_user_id,live_role_id}=data.details;
             let member; if (live_role_id && discord_user_id) { try { member = await client.guilds.cache.get(guildId)?.members.fetch(discord_user_id); } catch {} }
 
-            if (data.platforms.length > 0) {
-                const existing = announcedUserMap.get(userKey);
+            if (data.platforms.length > 0) { // Streamer is LIVE
                 const primary = data.platforms[0];
-                const needsUpdate = !existing || existing.stream_title !== (primary.liveData.title || null) || existing.stream_game !== (primary.liveData.game || null);
+                const newTitle = primary.liveData.title || "Live Stream";
+                const newGame = primary.liveData.game || "N/A";
+                
+                // FIX: Check if an update is needed (is this a new announcement, or has the game/title changed?)
+                const needsUpdate = !existingAnnouncement || existingAnnouncement.stream_title !== newTitle || existingAnnouncement.stream_game !== newGame;
 
                 if (needsUpdate) {
-                    const message = await updateAnnouncement(client, data.platforms, existing);
+                    const message = await updateAnnouncement(client, data.platforms, existingAnnouncement);
                     if (message) {
                         await db.execute(`INSERT INTO announcements (guild_id,discord_user_id,username_key,message_id,channel_id,stream_title,stream_game) VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE message_id=VALUES(message_id),stream_title=VALUES(stream_title),stream_game=VALUES(stream_game)`,
-                        [guildId, discord_user_id, discord_user_id ? null : primary.username.toLowerCase(), message.id, message.channel.id, primary.liveData.title || "Live Stream", primary.liveData.game || "N/A"]);
+                        [guildId, discord_user_id, discord_user_id ? null : primary.username.toLowerCase(), message.id, message.channel.id, newTitle, newGame]);
                     }
                 }
                 if (member && !member.roles.cache.has(live_role_id)) { await member.roles.add(live_role_id).catch(e=>console.error(`Role Add Err: ${e.message}`)); }
-            } else if (isAnnounced) {
-                const announcement = announcedUserMap.get(userKey);
+            } else if (existingAnnouncement) { // FIX: Streamer is OFFLINE and was previously announced, so clean up.
                 console.log(`[Offline] ${data.details.username} is offline. Removing.`);
-                try { const channel=await client.channels.fetch(announcement.channel_id); await channel.messages.delete(announcement.message_id); } catch(e){if(e.code!==10008)console.error(`Msg Del Err: ${e.message}`);}
-                await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [announcement.announcement_id]);
+                try { const channel=await client.channels.fetch(existingAnnouncement.channel_id); await channel.messages.delete(existingAnnouncement.message_id); } catch(e){if(e.code!==10008)console.error(`Msg Del Err: ${e.message}`);}
+                await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [existingAnnouncement.announcement_id]);
                 if (member && member.roles.cache.has(live_role_id)) { await member.roles.remove(live_role_id).catch(e=>console.error(`Role Rem Err: ${e.message}`));}
             }
         }

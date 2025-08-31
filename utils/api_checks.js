@@ -15,28 +15,31 @@ async function checkYouTube(browser, channelId){if(!browser||!channelId)return{i
 async function checkTikTok(browser, username){if(!browser||!username)return{is_live:!1};let page=null;try{page=await browser.newPage();await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");await page.goto(`https://www.tiktok.com/@${username}/live`,{waitUntil:"domcontentloaded"});return{is_live:await page.evaluate(()=>document.querySelector('script[id="SIGI_STATE"]')?.textContent.includes('"roomModule"'))}}catch(e){console.error(`[TikTok Scraper] Error for ${username}:`,e.message);return{is_live:!1}}finally{if(page)await page.close()}}
 async function checkTrovo(browser, username){if(!browser||!username)return null;let page=null;try{page=await browser.newPage();await page.goto(`https://trovo.live/s/${username.toLowerCase()}`,{waitUntil:"networkidle2",timeout:6e4});return await page.evaluate(()=>{try{const d=window.__NUXT__?.state?.channel;if(!d?.liveInfo?.is_live||!d?.streamInfo)return{is_live:!1};return{is_live:!0,channel_url:`https://trovo.live/s/${d.streamInfo.username}`,viewers:d.liveInfo.viewers,thumbnail:d.liveInfo.thumbnail,category_name:d.liveInfo.category_name,title:d.liveInfo.title,username:d.streamInfo.username,user_id:d.streamInfo.channel_id}}catch{return{is_live:!1}}})}catch(e){console.error(`[Trovo Scraper] Error for ${username}:`,e.message);return null}finally{if(page)await page.close()}}
 
-async function checkKick(browser, username) {
-    if (!browser || !username) return null;
-    let page = null;
+/**
+ * --- FIX ---
+ * Replaces the unreliable Puppeteer scraper with a direct API call.
+ * This is faster, more stable, and bypasses 18+ filters.
+ * @param {string} username The Kick username.
+ * @returns {object|null} The API response object if the user is found, otherwise null.
+ */
+async function checkKick(username) {
+    if (!username) return null;
     try {
-        page = await browser.newPage();
-        let apiResponse = null;
-        const apiPromise = new Promise((resolve, reject) => {
-            page.on('response', async (response) => {
-                if (response.url().includes(`/api/v2/channels/${username.toLowerCase()}`)) {
-                    try { resolve(await response.json()); } catch (e) { /* ignore parse errors */ }
-                }
-            });
-            setTimeout(() => reject(new Error('API response timed out')), 25000);
+        const response = await axios.get(`https://kick.com/api/v2/channels/${username.toLowerCase()}`, {
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+            }
         });
-        await page.goto(`https://kick.com/${username.toLowerCase()}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        apiResponse = await apiPromise;
-        return apiResponse;
+        // The API returns data even for non-existent users, so we must check for a valid ID.
+        return response.data && response.data.id ? response.data : null;
     } catch (error) {
-        console.error(`[Kick Scraper] Error for ${username}: ${error.message}`);
+        if (error.response && error.response.status === 404) {
+             console.log(`[Kick API] User not found: ${username}`);
+        } else {
+            console.error(`[Kick API] Error for user ${username}:`, error.message);
+        }
         return null;
-    } finally {
-        if (page) await page.close();
     }
 }
 
