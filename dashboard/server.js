@@ -2,7 +2,7 @@ const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const path = require('path');
-// FIX: This was incorrectly written as a string. It is now correctly requiring the 'fs' module.
+// FIX: Correctly require the 'fs' (File System) module. This resolves the crash loop.
 const fs = require('fs');
 const sessionFileStore = require('session-file-store')(session);
 require('./passport-setup');
@@ -78,7 +78,6 @@ function start(client) {
         } catch (error) { res.status(500).render('error', { user: req.user, error: 'Dashboard failed to load.' }); }
     });
     
-    // FIX: Listen on 0.0.0.0 to be reachable by the proxy.
     app.listen(PORT, '0.0.0.0', () => console.log(`[Dashboard] Server listening on port ${PORT}`));
 }
 
