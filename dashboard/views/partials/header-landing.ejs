@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CertiFried Announcer</title>
+    <link href="/css/landing.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="https://cdn.discordapp.com/app-icons/1409904443125665875/e2810a3002f2321487f54c9d54e58b14.png">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="nav-brand">
+            <img src="https://cdn.discordapp.com/app-icons/1409904443125665875/e2810a3002f2321487f54c9d54e58b14.png?size=128" alt="Logo">
+            CertiFried Announcer
+        </a>
+        <div class="nav-login">
+            <% if (user) { %>
+                <a href="https://bot.certifriedannouncer.online/dashboard" class="btn">Dashboard</a>
+            <% } else { %>
+                <a href="https://bot.certifriedannouncer.online/login" class="btn">Login with Discord</a>
+            <% } %>
+        </div>
+    </nav>

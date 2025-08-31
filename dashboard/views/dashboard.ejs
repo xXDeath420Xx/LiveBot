@@ -1,0 +1,106 @@
+<%- include('partials/header', { user: user }) %>
+<div class="row g-0">
+    <div class="col-lg-3">
+        <div class="d-flex flex-column flex-shrink-0 p-3 bg-secondary sidebar">
+            <h5>Select Server</h5>
+            <select class="form-select mb-3" id="guildSelector">
+                <option>Choose...</option>
+                <% guilds.forEach(guild => { %>
+                    <option value="<%= guild.id %>" <%= (selectedGuild && guild.id === selectedGuild.id) ? 'selected' : '' %>>
+                        <%= guild.name %>
+                    </option>
+                <% }) %>
+            </select>
+            <% if (selectedGuild) { %>
+                <div class="text-center mb-3">
+                    <img src="<%= selectedGuild.icon %>" class="rounded-circle" width="80" height="80" alt="Server Icon">
+                    <h5 class="mt-2 mb-0"><%= selectedGuild.name %></h5>
+                </div>
+                <hr>
+                 <ul class="nav nav-pills flex-column mb-auto">
+                    <li class="nav-item"><a href="#streamer-management" data-bs-toggle="tab" class="nav-link active">Streamer Management</a></li>
+                    <li class="nav-item"><a href="#server-settings" data-bs-toggle="tab" class="nav-link">Server Settings</a></li>
+                    <li class="nav-item"><a href="#bulk-actions" data-bs-toggle="tab" class="nav-link">Bulk Actions</a></li>
+                </ul>
+            <% } %>
+        </div>
+    </div>
+
+    <div class="col-lg-9 p-4">
+        <% if (!selectedGuild) { %>
+            <div class="d-flex align-items-center justify-content-center" style="height: 80vh;">
+                <div class="text-center">
+                    <h2 class="display-6">Welcome to the Dashboard</h2>
+                    <p class="lead text-muted">Please select a server from the dropdown to begin.</p>
+                </div>
+            </div>
+        <% } else { %>
+            <div class="tab-content">
+
+                <!-- Streamer Management Tab -->
+                <div class="tab-pane fade show active" id="streamer-management">
+                    <div class="card bg-tertiary mb-4">
+                        <div class="card-header"><h4>Add New Streamer</h4></div>
+                        <div class="card-body">
+                            <form action="/add-streamer" method="POST" class="row g-2 align-items-end">
+                                 <input type="hidden" name="guild_id" value="<%= selectedGuild.id %>">
+                                <div class="col-md-3"><label class="form-label">Platform</label><select name="platform" class="form-select" required><option value="twitch">Twitch</option><option value="youtube">YouTube</option><option value="kick">Kick</option><option value="trovo">Trovo</option><option value="tiktok">TikTok</option></select></div>
+                                <div class="col-md-4"><label class="form-label">Username / Channel ID</label><input type="text" name="username" class="form-control" placeholder="YouTube needs Channel ID (UC...)" required></div>
+                                <div class="col-md-3"><label class="form-label">Linked User ID</label><input type="text" name="discord_user_id" class="form-control" placeholder="(Optional)"></div>
+                                <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">Add Streamer</button></div>
+                            </form>
+                        </div>
+                    </div>
+                    <h4>Tracked Streamers (<%= streamers.length %>)</h4>
+                    <div class="table-responsive">
+                    <table class="table table-dark table-striped align-middle">
+                       <thead><tr><th>Platform</th><th>Username</th><th>Linked User</th><th>Message</th><th>Actions</th></tr></thead>
+                       <tbody>
+                           <% streamers.forEach(streamer => { %>
+                           <tr>
+                               <td><i class="bi bi-<%= streamer.platform.toLowerCase() %>"></i> <%= streamer.platform.charAt(0).toUpperCase() + streamer.platform.slice(1) %></td>
+                               <td><a href="#" class="text-decoration-none"><%= streamer.username %></a></td>
+                               <td><%= streamer.discord_user_id || 'None' %></td>
+                               <td><i class="bi <%= streamer.custom_message ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger' %>"></i></td>
+                               <td>
+                                   <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#editStreamerModal" data-streamer='<%- JSON.stringify(streamer) %>'><i class="bi bi-pencil-fill"></i></button>
+                                   <form action="/remove-streamer" method="POST" class="d-inline" onsubmit="return confirm('Remove <%= streamer.username %>?');"><input type="hidden" name="subscription_id" value="<%= streamer.subscription_id %>"><input type="hidden" name="guild_id" value="<%= selectedGuild.id %>"><button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-trash-fill"></i></button></form>
+                               </td>
+                           </tr>
+                           <% }) %>
+                           <% if (streamers.length === 0) { %><tr><td colspan="5" class="text-center py-4">No streamers are being tracked yet. Add one above!</td></tr><% } %>
+                       </tbody>
+                    </table>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="server-settings">
+                     <div class="card bg-tertiary"><div class="card-header"><h4>Server Settings</h4></div><div class="card-body">
+                     <form action="/update-settings" method="POST"><input type="hidden" name="guild_id" value="<%= selectedGuild.id %>">
+                        <div class="mb-3"><label class="form-label">Announcement Channel</label><select name="announcement_channel_id" class="form-select"><option value="">- Select a channel -</option><% selectedGuild.channels.forEach(ch => { %><option value="<%= ch.id %>" <%= (settings.announcement_channel_id === ch.id) ? 'selected' : '' %>>#<%= ch.name %></option><% }) %></select></div>
+                        <div class="mb-3"><label class="form-label">Live Role</label><select name="live_role_id" class="form-select"><option value="">- (Disabled) -</option><% selectedGuild.roles.forEach(role => { %><option value="<%= role.id %>" <%= (settings.live_role_id === role.id) ? 'selected' : '' %>>@<%= role.name %></option><% }) %></select></div>
+                        <button type="submit" class="btn btn-primary">Save Settings</button>
+                     </form></div></div>
+                </div>
+
+                <div class="tab-pane fade" id="bulk-actions">
+                     <h4>Bulk Actions</h4>
+                    <div class="row g-4"><div class="col-md-6"><div class="card bg-tertiary h-100"><div class="card-header"><h5>Import from CSV</h5></div><div class="card-body"><form action="/import-csv" method="POST" enctype="multipart/form-data"><input type="hidden" name="guild_id" value="<%= selectedGuild.id %>"><div class="mb-3"><input type="file" name="csvfile" class="form-control" required accept=".csv"><div class="form-text">Headers: platform,username,discord_user_id,custom_message</div></div><button type="submit" class="btn btn-success">Import CSV</button></form></div></div></div><div class="col-md-6"><div class="card bg-tertiary h-100"><div class="card-header"><h5>Export & Clear</h5></div><div class="card-body d-flex flex-column"><p>Export all current streamers to a CSV file.</p><a href="/export-csv/<%= selectedGuild.id %>" class="btn btn-secondary mb-auto">Export to CSV</a><hr><p class="text-danger mb-2">Permanently delete all tracked streamers.</p><form action="/clear-streamers" method="POST" onsubmit="return confirm('ARE YOU SURE you want to delete ALL streamers?');"><input type="hidden" name="guild_id" value="<%= selectedGuild.id %>"><button type="submit" class="btn btn-danger">Clear All Streamers</button></form></div></div></div></div>
+                </div>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<div class="modal fade" id="editStreamerModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog"><div class="modal-content">
+<div class="modal-header"><h5 class="modal-title">Editing...</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+<form action="/edit-subscription" method="POST">
+<div class="modal-body">
+    <input type="hidden" name="subscription_id" id="editSubscriptionId"><input type="hidden" name="streamer_id" id="editStreamerId">
+    <input type="hidden" name="guild_id" value="<%= selectedGuild ? selectedGuild.id : '' %>">
+    <div class="mb-3"><label for="editCustomMessage" class="form-label">Custom Message</label><textarea class="form-control" name="custom_message" id="editCustomMessage" rows="3" placeholder="{username} is live! {url}"></textarea></div>
+    <div class="mb-3"><label for="editDiscordUser" class="form-label">Linked Discord User ID (Optional)</label><input type="text" class="form-control" name="discord_user_id" id="editDiscordUser"></div>
+</div>
+<div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button type="submit" class="btn btn-primary">Save Changes</button></div>
+</form></div></div></div>
+<%- include('partials/footer') %>

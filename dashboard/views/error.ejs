@@ -1,0 +1,10 @@
+<%- include('partials/header', { user: user }) %>
+<div class="container text-center mt-5">
+    <h1 class="text-danger">An Error Occurred</h1>
+    <p>We're sorry, but something went wrong.</p>
+    <% if (error) { %>
+    <p><i>Error: <%= error %></i></p>
+    <% } %>
+    <a href="/dashboard" class="btn btn-primary">Back to Dashboard</a>
+</div>
+<%- include('partials/footer') %>

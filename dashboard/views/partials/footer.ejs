@@ -1,0 +1,27 @@
+    </div> 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const guildSelector = document.getElementById('guildSelector');
+        if(guildSelector) {
+            guildSelector.addEventListener('change', (e) => {
+                if(e.target.value) {
+                    window.location.href = `/dashboard?guild_id=${e.target.value}`;
+                }
+            });
+        }
+        const editModal = document.getElementById('editStreamerModal');
+        if(editModal) {
+            editModal.addEventListener('show.bs.modal', event => {
+                const button = event.relatedTarget;
+                const streamer = JSON.parse(button.getAttribute('data-streamer'));
+                
+                editModal.querySelector('.modal-title').textContent = `Editing ${streamer.username} (${streamer.platform})`;
+                editModal.querySelector('#editSubscriptionId').value = streamer.subscription_id;
+                editModal.querySelector('#editStreamerId').value = streamer.streamer_id;
+                editModal.querySelector('#editCustomMessage').value = streamer.custom_message || '';
+                editModal.querySelector('#editDiscordUser').value = streamer.discord_user_id || '';
+            });
+        }
+    </script>
+</body>
+</html>

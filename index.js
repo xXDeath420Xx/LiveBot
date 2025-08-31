@@ -1,0 +1,124 @@
+const { Client, GatewayIntentBits, Collection, Partials, Events } = require('discord.js');
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+const db = require('./utils/db');
+const { getBrowser, closeBrowser } = require('./utils/browserManager');
+const { checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo } = require('./utils/api_checks');
+const { updateAnnouncement } = require('./utils/announcer');
+const dashboard = require(path.join(__dirname, 'dashboard', 'server.js'));
+
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers], partials: [Partials.GuildMember] });
+client.commands = new Collection();
+const commandFiles = require('fs').readdirSync(path.join(__dirname, 'commands')).filter(f => f.endsWith('.js'));
+for (const file of commandFiles) { try { const cmd = require(path.join(__dirname, 'commands', file)); if (cmd.data && cmd.execute) client.commands.set(cmd.data.name, cmd); } catch (e) { console.error(`[CMD Load Error] ${file}:`, e); } }
+
+async function startupPurge() {
+    console.log('[Purge] Starting cleanup of old state, messages, and roles...');
+    await db.execute('DELETE FROM announcements');
+    console.log('[Purge] Internal announcement state cleared.');
+    try {
+        const [guilds] = await db.execute('SELECT guild_id, announcement_channel_id, live_role_id FROM guilds');
+        for (const guildSettings of guilds) {
+            if (guildSettings.announcement_channel_id) {
+                try {
+                    const channel = await client.channels.fetch(guildSettings.announcement_channel_id);
+                    if (channel?.isTextBased()) {
+                        const messages = await channel.messages.fetch({ limit: 50 });
+                        const toDelete = messages.filter(m => m.author.id === client.user.id);
+                        if (toDelete.size > 0) { console.log(`[Purge] Deleting ${toDelete.size} message(s) from #${channel.name}.`); await channel.bulkDelete(toDelete, true).catch(() => {}); }
+                    }
+                } catch (e) { if (e.code !== 10003 && e.code !== 50001) console.error(`[Purge] Msg cleanup failed for Ch. ${guildSettings.announcement_channel_id}:`, e.message); }
+            }
+            if (guildSettings.live_role_id) {
+                try {
+                    const guild = await client.guilds.fetch(guildSettings.guild_id);
+                    const role = await guild.roles.fetch(guildSettings.live_role_id);
+                    if (role && role.members.size > 0) {
+                        console.log(`[Purge] Clearing role @${role.name} from ${role.members.size} members in ${guild.name}.`);
+                        for (const member of role.members.values()) { await member.roles.remove(role).catch(()=>{}); }
+                    }
+                } catch(e) { console.error(`[Purge] Role cleanup failed for G. ${guildSettings.guild_id}:`, e.message); }
+            }
+        }
+    } catch (e) { console.error('[Purge] A critical error occurred:', e); }
+    console.log('[Purge] Cleanup process finished.');
+}
+
+async function checkStreams() {
+    console.log(`[Check] Starting stream check @ ${new Date().toLocaleTimeString()}`);
+    const browser = await getBrowser();
+    if (!browser) return console.error('[Check] Browser failed, aborting check.');
+    try {
+        const [subs] = await db.execute(`SELECT s.*, sub.guild_id, sub.custom_message, g.announcement_channel_id, g.live_role_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id=s.streamer_id LEFT JOIN guilds g ON sub.guild_id=g.guild_id WHERE g.announcement_channel_id IS NOT NULL`);
+        if (subs.length === 0) return;
+
+        const liveChecks = await Promise.all(subs.map(async sub => {
+             let apiResult, liveData=null;
+             if (sub.platform === 'twitch') apiResult = await checkTwitch(sub);
+             else {
+                if (sub.platform === 'youtube') apiResult = await checkYouTube(browser, sub.platform_user_id);
+                else if (sub.platform === 'kick') apiResult = await checkKick(browser, sub.username);
+                else if (sub.platform === 'tiktok') apiResult = await checkTikTok(browser, sub.username);
+                else if (sub.platform === 'trovo') apiResult = await checkTrovo(browser, sub.username);
+             }
+
+             if (sub.platform === 'twitch' && apiResult?.[0]) { const d=apiResult[0]; liveData={username:d.user_name,url:`https://www.twitch.tv/${d.user_login}`,title:d.title,game:d.game_name,thumbnailUrl:d.thumbnail_url.replace('{width}','1280').replace('{height}','720')}; }
+             else if (sub.platform === 'youtube' && apiResult?.is_live) { liveData={username:sub.username, ...apiResult}; }
+             else if (sub.platform === 'kick' && apiResult?.livestream) { const d=apiResult; liveData={username:d.user.username,url:`https://kick.com/${d.user.username}`,title:d.livestream.session_title,game:d.livestream.categories?.[0]?.name,thumbnailUrl:d.livestream.thumbnail?.url}; }
+             else if (sub.platform === 'tiktok' && apiResult?.is_live) { liveData={username:sub.username,url:`https://www.tiktok.com/@${sub.username}/live`,title:'Live on TikTok', game: 'N/A'}; }
+             else if (sub.platform === 'trovo' && apiResult?.is_live) { liveData=apiResult; }
+             return { ...sub, isLive:!!liveData, liveData };
+        }));
+
+        const [previouslyAnnounced] = await db.execute('SELECT * FROM announcements');
+        const announcedUserMap = previouslyAnnounced.reduce((map, s) => { const k = `${s.guild_id}-${s.discord_user_id || `username:${s.username_key}`}`; map.set(k, s); return map; }, new Map());
+
+        const liveGroup = new Map();
+        liveChecks.forEach(s => { const k=`${s.guild_id}-${s.discord_user_id || `username:${s.username.toLowerCase()}`}`; if (!liveGroup.has(k)) liveGroup.set(k, { platforms: [], details: s }); if(s.isLive) liveGroup.get(k).platforms.push(s); });
+        
+        for (const [userKey, data] of liveGroup.entries()) {
+            const isAnnounced = announcedUserMap.has(userKey);
+            const guildId=data.details.guild_id, {discord_user_id,live_role_id}=data.details;
+            let member; if (live_role_id && discord_user_id) { try { member = await client.guilds.cache.get(guildId)?.members.fetch(discord_user_id); } catch {} }
+
+            if (data.platforms.length > 0) {
+                const existing = announcedUserMap.get(userKey);
+                const primary = data.platforms[0];
+                const needsUpdate = !existing || existing.stream_title !== (primary.liveData.title || null) || existing.stream_game !== (primary.liveData.game || null);
+
+                if (needsUpdate) {
+                    const message = await updateAnnouncement(client, data.platforms, existing);
+                    if (message) {
+                        await db.execute(`INSERT INTO announcements (guild_id,discord_user_id,username_key,message_id,channel_id,stream_title,stream_game) VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE message_id=VALUES(message_id),stream_title=VALUES(stream_title),stream_game=VALUES(stream_game)`,
+                        [guildId, discord_user_id, discord_user_id ? null : primary.username.toLowerCase(), message.id, message.channel.id, primary.liveData.title || "Live Stream", primary.liveData.game || "N/A"]);
+                    }
+                }
+                if (member && !member.roles.cache.has(live_role_id)) { await member.roles.add(live_role_id).catch(e=>console.error(`Role Add Err: ${e.message}`)); }
+            } else if (isAnnounced) {
+                const announcement = announcedUserMap.get(userKey);
+                console.log(`[Offline] ${data.details.username} is offline. Removing.`);
+                try { const channel=await client.channels.fetch(announcement.channel_id); await channel.messages.delete(announcement.message_id); } catch(e){if(e.code!==10008)console.error(`Msg Del Err: ${e.message}`);}
+                await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [announcement.announcement_id]);
+                if (member && member.roles.cache.has(live_role_id)) { await member.roles.remove(live_role_id).catch(e=>console.error(`Role Rem Err: ${e.message}`));}
+            }
+        }
+    } catch(e){ console.error("[checkStreams] CRITICAL ERROR:", e); }
+    finally { if (process.uptime() > 300) { await closeBrowser(); } console.log(`[Check] Finished stream check @ ${new Date().toLocaleTimeString()}`); }
+}
+
+client.on(Events.InteractionCreate, async (i) => { if (!i.isChatInputCommand()) return; const cmd = client.commands.get(i.commandName); if (!cmd) return; try { await cmd.execute(i); } catch (e) { console.error(`[Interaction Err] ${i.commandName}:`, e); if (i.replied || i.deferred) { await i.followUp({ content: 'Error!', ephemeral: true }); } else { await i.reply({ content: 'Error!', ephemeral: true }); } } });
+
+client.once(Events.ClientReady, async () => {
+    console.log(`[READY] Logged in as ${client.user.tag} in ${client.guilds.cache.size} servers.`);
+    
+    console.log('[Purge] Waiting 15 seconds for caches to populate...');
+    setTimeout(async () => {
+        await startupPurge();
+        dashboard.start(client);
+        checkStreams();
+        setInterval(checkStreams, 5 * 60 * 1000);
+        setInterval(async () => { await closeBrowser(); console.log("[Browser] Restarted browser instance for stability."); }, 60 * 60 * 1000);
+    }, 15000);
+});
+
+client.login(process.env.DISCORD_TOKEN);
