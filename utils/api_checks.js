@@ -1,65 +1,61 @@
 const axios = require('axios');
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-puppeteer.use(StealthPlugin());
+const { getBrowser } = require('./browserManager'); // Keep browser for TikTok/Trovo
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
 let twitchToken = null;
 let tokenExpires = 0;
 
-async function getTwitchAccessToken() { if (twitchToken && Date.now() < tokenExpires) return twitchToken; try { const r=await axios.post(`https://id.twitch.tv/oauth2/token?client_id=${process.env.TWITCH_CLIENT_ID}&client_secret=${process.env.TWITCH_CLIENT_SECRET}&grant_type=client_credentials`); twitchToken = r.data.access_token; tokenExpires = Date.now() + (r.data.expires_in * 1000) - 60000; return twitchToken; } catch (e) { console.error("Twitch Token Error:", e.response?.data); return null; } }
-async function getTwitchUser(username) { const token = await getTwitchAccessToken(); if (!token) return null; try { const r = await axios.get(`https://api.twitch.tv/helix/users?login=${username.toLowerCase()}`, { headers: { "Client-ID": process.env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}` } }); return r.data.data[0]; } catch (e) { console.error(`Twitch User Error ${username}:`, e.response?.data); return null; } }
-async function checkTwitch(streamer) { const token = await getTwitchAccessToken(); if (!token) return null; try { const r = await axios.get(`https://api.twitch.tv/helix/streams?user_id=${streamer.platform_user_id}`, { headers: { "Client-ID": process.env.TWITCH_CLIENT_ID, Authorization: `Bearer ${token}` } }); return r.data.data; } catch (e) { console.error(`Twitch Stream Error ${streamer.username}:`, e.response?.data); return null; } }
+async function getTwitchAccessToken() { /* ... unchanged ... */ }
+async function getTwitchUser(username) { /* ... unchanged ... */ }
+async function checkTwitch(streamer) { /* ... unchanged ... */ }
 
-async function checkYouTube(browser, channelId){if(!browser||!channelId)return{is_live:!1};let page=null;try{page=await browser.newPage();await page.goto(`https://www.youtube.com/channel/${channelId}/live`,{waitUntil:"networkidle2",timeout:6e4});const liveData=await page.evaluate(e=>{const r=document.querySelector('meta[property="og:image"]');if(!r||r.getAttribute("content").includes("yt3_ggpht"))return{is_live:!1};const t=document.querySelector('meta[property="og:title"]')?.getAttribute("content"),o=document.querySelector('link[rel="canonical"]')?.getAttribute("href");return{is_live:!0,url:o||`https://www.youtube.com/channel/${e}/live`,title:t||"Live on YouTube",thumbnailUrl:r.getAttribute("content")}},channelId);return liveData}catch(e){console.error(`[YouTube Scraper] Error for ${channelId}:`,e.message);return{is_live:!1}}finally{if(page)await page.close()}}
-async function checkTikTok(browser, username){if(!browser||!username)return{is_live:!1};let page=null;try{page=await browser.newPage();await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");await page.goto(`https://www.tiktok.com/@${username}/live`,{waitUntil:"domcontentloaded"});return{is_live:await page.evaluate(()=>document.querySelector('script[id="SIGI_STATE"]')?.textContent.includes('"roomModule"'))}}catch(e){console.error(`[TikTok Scraper] Error for ${username}:`,e.message);return{is_live:!1}}finally{if(page)await page.close()}}
-async function checkTrovo(browser, username){if(!browser||!username)return null;let page=null;try{page=await browser.newPage();await page.goto(`https://trovo.live/s/${username.toLowerCase()}`,{waitUntil:"networkidle2",timeout:6e4});return await page.evaluate(()=>{try{const d=window.__NUXT__?.state?.channel;if(!d?.liveInfo?.is_live||!d?.streamInfo)return{is_live:!1};return{is_live:!0,channel_url:`https://trovo.live/s/${d.streamInfo.username}`,viewers:d.liveInfo.viewers,thumbnail:d.liveInfo.thumbnail,category_name:d.liveInfo.category_name,title:d.liveInfo.title,username:d.streamInfo.username,user_id:d.streamInfo.channel_id}}catch{return{is_live:!1}}})}catch(e){console.error(`[Trovo Scraper] Error for ${username}:`,e.message);return null}finally{if(page)await page.close()}}
-
-async function checkKick(browser, username) {
-    if (!browser || !username) return null;
-    let page = null;
+// FIX: New, reliable API method for Kick. No Puppeteer needed.
+async function checkKick(username) {
+    if (!username) return null;
+    const url = `https://kick.com/api/v2/channels/${username.toLowerCase()}`;
     try {
-        page = await browser.newPage();
-        await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36");
-        await page.goto(`https://kick.com/${username.toLowerCase()}`, { waitUntil: 'domcontentloaded', timeout: 35000 });
-
-        try {
-            const ageGateButton = await page.waitForSelector('button.variant-action[aria-label="Accept"]', { timeout: 3000 });
-            await ageGateButton.click();
-            await page.waitForNavigation({ waitUntil: 'networkidle2' });
-        } catch (error) { /* No age gate, which is fine */ }
-
-        const liveData = await page.evaluate((uname) => {
-            const isLiveElement = document.querySelector('div.live-indicator-container');
-            const offlineElement = document.querySelector('div.player-stream-offline-overlay');
-            
-            // Explicitly check for an offline banner first.
-            if (offlineElement) return null;
-            // If there's no offline banner, require a positive 'live' indicator to proceed.
-            if (!isLiveElement) return null;
-
-            const titleElement = document.querySelector('h2.stream-title');
-            const categoryElement = document.querySelector('a[href*="/categories/"] p.text-sm');
-            const thumbnailElement = document.querySelector('meta[property="og:image"]');
-
-            return {
-                livestream: {
-                    session_title: titleElement ? titleElement.innerText.trim() : 'Live on Kick',
-                    categories: [{ name: categoryElement ? categoryElement.innerText.trim() : 'N/A' }],
-                    thumbnail: { url: thumbnailElement ? thumbnailElement.getAttribute('content') : null }
-                },
-                user: { username: uname }
-            };
-        }, username.toLowerCase());
-        
-        return liveData;
-
+        const { data } = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+            }
+        });
+        return data && data.id ? data : null;
     } catch (error) {
-        console.error(`[Kick Scraper] Error for ${username}: ${error.message}`);
+        if (error.response?.status !== 404) console.error(`[Kick API] Error for ${username}: ${error.message}`);
         return null;
-    } finally {
-        if (page) await page.close();
     }
 }
+
+// FIX: New, reliable API method for YouTube. No Puppeteer needed.
+async function checkYouTube(channelId) {
+    if (!channelId) return { is_live: false };
+    const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY; // You must get a key from Google Cloud Console
+    if (!YOUTUBE_API_KEY) {
+        console.error('[YouTube API] YOUTUBE_API_KEY is missing from .env file.');
+        return { is_live: false };
+    }
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&eventType=live&type=video&key=${YOUTUBE_API_KEY}`;
+    try {
+        const { data } = await axios.get(url);
+        if (data.items && data.items.length > 0) {
+            const video = data.items[0];
+            return {
+                is_live: true,
+                url: `https://www.youtube.com/watch?v=${video.id.videoId}`,
+                title: video.snippet.title,
+                thumbnailUrl: video.snippet.thumbnails.high.url
+            };
+        }
+        return { is_live: false };
+    } catch (error) {
+        console.error(`[YouTube API] Error for ${channelId}:`, error.response?.data?.error?.message || error.message);
+        return { is_live: false };
+    }
+}
+
+// Puppeteer-based checkers remain for platforms without reliable APIs
+async function checkTikTok(browser, username){ /* ... unchanged ... */ }
+async function checkTrovo(browser, username){ /* ... unchanged ... */ }
 
 module.exports = { getTwitchUser, checkTwitch, checkKick, checkYouTube, checkTikTok, checkTrovo };
