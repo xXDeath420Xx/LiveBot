@@ -15,42 +15,45 @@ async function checkYouTube(browser, channelId){if(!browser||!channelId)return{i
 async function checkTikTok(browser, username){if(!browser||!username)return{is_live:!1};let page=null;try{page=await browser.newPage();await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36");await page.goto(`https://www.tiktok.com/@${username}/live`,{waitUntil:"domcontentloaded"});return{is_live:await page.evaluate(()=>document.querySelector('script[id="SIGI_STATE"]')?.textContent.includes('"roomModule"'))}}catch(e){console.error(`[TikTok Scraper] Error for ${username}:`,e.message);return{is_live:!1}}finally{if(page)await page.close()}}
 async function checkTrovo(browser, username){if(!browser||!username)return null;let page=null;try{page=await browser.newPage();await page.goto(`https://trovo.live/s/${username.toLowerCase()}`,{waitUntil:"networkidle2",timeout:6e4});return await page.evaluate(()=>{try{const d=window.__NUXT__?.state?.channel;if(!d?.liveInfo?.is_live||!d?.streamInfo)return{is_live:!1};return{is_live:!0,channel_url:`https://trovo.live/s/${d.streamInfo.username}`,viewers:d.liveInfo.viewers,thumbnail:d.liveInfo.thumbnail,category_name:d.liveInfo.category_name,title:d.liveInfo.title,username:d.streamInfo.username,user_id:d.streamInfo.channel_id}}catch{return{is_live:!1}}})}catch(e){console.error(`[Trovo Scraper] Error for ${username}:`,e.message);return null}finally{if(page)await page.close()}}
 
-/**
- * --- NEW WEB CRAWLER FIX ---
- * Replaces the failing API call with a Puppeteer-based web crawler as requested.
- * @param {object} browser The Puppeteer browser instance.
- * @param {string} username The Kick username.
- * @returns {object|null} An object with livestream data if live, otherwise null.
- */
 async function checkKick(browser, username) {
     if (!browser || !username) return null;
     let page = null;
     try {
         page = await browser.newPage();
         await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36");
-        await page.goto(`https://kick.com/${username.toLowerCase()}`, { waitUntil: 'networkidle2', timeout: 30000 });
+        await page.goto(`https://kick.com/${username.toLowerCase()}`, { waitUntil: 'domcontentloaded', timeout: 35000 });
+
+        try {
+            const ageGateButton = await page.waitForSelector('button.variant-action[aria-label="Accept"]', { timeout: 3000 });
+            await ageGateButton.click();
+            await page.waitForNavigation({ waitUntil: 'networkidle2' });
+        } catch (error) { /* No age gate, which is fine */ }
 
         const liveData = await page.evaluate((uname) => {
-            const isOffline = document.querySelector('.player-stream-offline-overlay');
-            if (isOffline) {
-                return null; // Definitively offline
-            }
+            const isLiveElement = document.querySelector('div.live-indicator-container');
+            const offlineElement = document.querySelector('div.player-stream-offline-overlay');
+            
+            // Explicitly check for an offline banner first.
+            if (offlineElement) return null;
+            // If there's no offline banner, require a positive 'live' indicator to proceed.
+            if (!isLiveElement) return null;
 
             const titleElement = document.querySelector('h2.stream-title');
             const categoryElement = document.querySelector('a[href*="/categories/"] p.text-sm');
+            const thumbnailElement = document.querySelector('meta[property="og:image"]');
 
-            // If the offline banner is not present, we assume the user is live,
-            // even if we can't scrape all the details.
             return {
                 livestream: {
                     session_title: titleElement ? titleElement.innerText.trim() : 'Live on Kick',
-                    categories: [{ name: categoryElement ? categoryElement.innerText.trim() : 'N/A' }]
+                    categories: [{ name: categoryElement ? categoryElement.innerText.trim() : 'N/A' }],
+                    thumbnail: { url: thumbnailElement ? thumbnailElement.getAttribute('content') : null }
                 },
                 user: { username: uname }
             };
         }, username.toLowerCase());
-
+        
         return liveData;
+
     } catch (error) {
         console.error(`[Kick Scraper] Error for ${username}: ${error.message}`);
         return null;
