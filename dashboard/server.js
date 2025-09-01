@@ -2,7 +2,6 @@ const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
 const path = require('path');
-// FIX: Correctly require the 'fs' (File System) module. This resolves the crash loop.
 const fs = require('fs');
 const sessionFileStore = require('session-file-store')(session);
 require('./passport-setup');
