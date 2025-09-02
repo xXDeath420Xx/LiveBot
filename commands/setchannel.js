@@ -1,16 +1,35 @@
-const { SlashCommandBuilder, ChannelType, PermissionsBitField, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, ChannelType, PermissionsBitField, EmbedBuilder, MessageFlags } = require('discord.js');
 const db = require('../utils/db');
 
 module.exports = {
-  data: new SlashCommandBuilder().setName('setchannel').setDescription('Sets the channel for live stream announcements.')
-    .addChannelOption(o=>o.setName('channel').setDescription('The channel for notifications').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true))
+  data: new SlashCommandBuilder()
+    .setName('setchannel')
+    .setDescription('Sets the channel for live stream announcements.')
+    .addChannelOption(o => o.setName('channel').setDescription('The channel for notifications').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild),
 
-  async execute(interaction){
-    const channel=interaction.options.getChannel('channel');
-    try{
-      await db.execute('INSERT INTO guilds (guild_id,announcement_channel_id) VALUES (?,?) ON DUPLICATE KEY UPDATE announcement_channel_id=?',[interaction.guild.id,channel.id,channel.id]);
-      await interaction.reply({embeds:[new EmbedBuilder().setColor('#00FF00').setTitle('Channel Set!').setDescription(`Announcements will now be sent to ${channel}.`)],ephemeral:true});
-    }catch(e){console.error(e);await interaction.reply({content:'An error occurred.',ephemeral:true});}
+  async execute(interaction) {
+    const channel = interaction.options.getChannel('channel');
+    const guildId = interaction.guild.id;
+
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
+    try {
+      // REWRITE: Use a single, more efficient and atomic query.
+      await db.execute(
+        'INSERT INTO guilds (guild_id, announcement_channel_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE announcement_channel_id = VALUES(announcement_channel_id)',
+        [guildId, channel.id]
+      );
+      
+      const embed = new EmbedBuilder()
+        .setColor('#00FF00')
+        .setTitle('✅ Channel Set!')
+        .setDescription(`Announcements will now be sent to ${channel}.`);
+      await interaction.editReply({ embeds: [embed] });
+
+    } catch (e) {
+      console.error('[SetChannel Error]', e);
+      await interaction.editReply({ content: 'An error occurred while setting the channel.' });
+    }
   },
 };

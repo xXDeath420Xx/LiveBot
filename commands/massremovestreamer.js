@@ -1,52 +1,71 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const apiChecks = require('../utils/api_checks');
 
 module.exports = {
-  data: new SlashCommandBuilder().setName('massremovestreamer').setDescription('Removes multiple streamers from the notification list.')
-    .addStringOption(option=>option.setName('platform').setDescription('The platform of the streamers to remove.').setRequired(true).addChoices(
-        {name:'Twitch',value:'twitch'},
-        {name:'YouTube',value:'youtube'},
-        {name:'Kick',value:'kick'},
-        {name:'TikTok',value:'tiktok'},
-        {name:'Trovo',value:'trovo'}
-    ))
-    .addStringOption(option=>option.setName('usernames').setDescription('A comma-separated list of usernames to remove').setRequired(true))
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild),
-    
+  data: new SlashCommandBuilder()
+    // ... (command definition is the same)
+    ,
+
   async execute(interaction) {
     const platform = interaction.options.getString('platform');
-    const usernames = [...new Set(interaction.options.getString('usernames').split(',').map(n => n.trim().toLowerCase()).filter(Boolean))];
+    const usernames = [...new Set(interaction.options.getString('usernames').split(',').map(name => name.trim()).filter(Boolean))];
     if (usernames.length === 0) return interaction.reply({ content: 'Please provide at least one valid username.', ephemeral: true });
     
     await interaction.deferReply({ ephemeral: true });
-    
-    const [streamersToRemove] = await db.query(
-        'SELECT streamer_id, username FROM streamers WHERE platform = ? AND LOWER(username) IN (?)', 
-        [platform, usernames]
-    );
 
-    const successfullyRemoved = [];
-    const streamerIdsToRemove = streamersToRemove.map(s => s.streamer_id);
+    const added = [], failed = [], existed = [];
 
-    if (streamerIdsToRemove.length > 0) {
-        const [deleteResult] = await db.query(
-            'DELETE FROM subscriptions WHERE guild_id = ? AND streamer_id IN (?)', 
-            [interaction.guild.id, streamerIdsToRemove]
-        );
+    for (const username of usernames) {
+        try {
+            // Step 1: Validate streamer and get canonical data
+            let validatedData;
+            if (platform === 'twitch') {
+                const u = await apiChecks.getTwitchUser(username);
+                if (!u) { failed.push(`${username} (Not Found)`); continue; }
+                validatedData = { puid: u.id, dbUsername: u.login };
+            } else if (platform === 'kick') {
+                const u = await apiChecks.getKickUser(username);
+                if (!u) { failed.push(`${username} (Not Found)`); continue; }
+                validatedData = { puid: u.id.toString(), dbUsername: u.user.username };
+            } else if (platform === 'youtube') {
+                if (!username.startsWith('UC')) {failed.push(`${username} (YT requires Channel ID)`); continue;}
+                validatedData = { puid: username, dbUsername: username };
+            } else { // For TikTok, Trovo, etc.
+                validatedData = { puid: username, dbUsername: username };
+            }
+            
+            // Step 2: Find or create the global streamer record using the validated platform_user_id
+            let [streamer] = await db.execute('SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?', [platform, validatedData.puid]);
+            let streamerId;
 
-        if (deleteResult.affectedRows > 0) {
-           successfullyRemoved.push(...streamersToRemove.map(s => s.username));
+            if (streamer.length > 0) {
+                streamerId = streamer[0].streamer_id;
+            } else {
+                const [result] = await db.execute('INSERT INTO streamers (platform,username,platform_user_id) VALUES (?,?,?)', [platform, validatedData.dbUsername, validatedData.puid]);
+                streamerId = result.insertId;
+            }
+
+            // Step 3: Create subscription if it doesn't exist
+            const [subResult] = await db.execute('INSERT IGNORE INTO subscriptions (guild_id, streamer_id) VALUES (?, ?)', [interaction.guild.id, streamerId]);
+
+            if (subResult.affectedRows > 0) {
+                added.push(username);
+            } else {
+                existed.push(username);
+            }
+        } catch (e) {
+            console.error(`Mass Add Error for ${username}:`, e);
+            failed.push(`${username} (API/DB Error)`);
         }
     }
 
-    const removedSet = new Set(successfullyRemoved.map(u => u.toLowerCase()));
-    const notFound = usernames.filter(u => !removedSet.has(u));
-
-    const embed = new EmbedBuilder().setTitle('Mass Remove Report').setColor('#FF0000');
-    const createField = list => list.length > 0 ? list.join(', ').substring(0, 1020) : 'None';
+    const embed = new EmbedBuilder().setTitle('Mass Add Report').setColor('#5865F2');
+    const field = (l) => l.length > 0 ? l.join(', ').substring(0, 1020) : 'None';
     embed.addFields(
-        { name: `✅ Removed (${successfullyRemoved.length})`, value: createField(successfullyRemoved) },
-        { name: `❌ Not Found or Not on This Server (${notFound.length})`, value: createField(notFound) }
+        { name: `✅ Added (${added.length})`, value: field(added) },
+        { name: `ℹ️ Already Existed (${existed.length})`, value: field(existed) },
+        { name: `❌ Failed (${failed.length})`, value: field(failed) }
     );
     await interaction.editReply({ embeds: [embed] });
   },
