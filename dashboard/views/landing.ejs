@@ -1,15 +1,42 @@
-<%- include('partials/header', { user: locals.user || null }) %>
-
-<main class="container">
-    <div class="hero">
-        <img src="/logo.png" alt="Bot Logo" class="hero-logo">
-        <h1>CertiFried Announcer</h1>
-        <p>The only multi-platform stream announcement bot you’ll ever need. Reliable, fast, and fully customizable.</p>
-        <div class="hero-buttons">
-            <a href="YOUR_INVITE_LINK" class="btn btn-primary">Invite to Server</a>
-            <a href="/dashboard" class="btn btn-secondary">Open Dashboard</a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CertiFried Announcer - Multi-Platform Stream Alerts</title>
+    <link rel="icon" href="/images/CertiFried.png" type="image/png">
+    <link rel="stylesheet" href="/css/landing.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand"><img src="/images/CertiFried.png" alt="CertiFried Announcer Logo"><span>CertiFried Announcer</span></div>
+        <div class="nav-login">
+            <a href="https://bot.certifriedannouncer.online/dashboard" class="btn btn-primary">Login & Dashboard</a>
         </div>
-    </div>
-</main>
+    </nav>
+    <main class="container">
+        <header class="hero">
+            <img src="/images/CertiFried.png" alt="Bot Logo" class="hero-logo">
+            <h1>CertiFried Announcer</h1>
+            <p>The only multi-platform stream announcement bot you'll ever need. Reliable, fast, and fully customizable.</p>
+            <div class="hero-buttons">
+                <a href="https://discord.com/oauth2/authorize?client_id=1409904443125665875&permissions=2252074960120832&integration_type=0&scope=bot" target="_blank" class="btn btn-secondary">Invite to Server</a>
+                <a href="https://bot.certifriedannouncer.online/dashboard" class="btn btn-primary">Open Dashboard</a>
+            </div>
+        </header>
+        <section class="features">
+            <h2 class="section-title">Features</h2>
+            <div class="features-grid">
+                <div class="feature-card"><h3>🌟 Core Setup</h3><p>Configure the fundamental announcement channel and live roles for your server.</p></div>
+                <div class="feature-card"><h3>👤 Multi-Platform</h3><p>Track streamers across Twitch, Kick, YouTube, and more with a single, unified system.</p></div>
+                <div class="feature-card"><h3>💬 Custom Messages</h3><p>Set unique, personalized announcement messages for specific streamers using dynamic placeholders.</p></div>
+                <div class="feature-card"><h3>🚀 Bulk Actions</h3><p>Manage multiple streamers at once with powerful commands like mass add and CSV import/export.</p></div>
+                <div class="feature-card"><h3>🌐 Web Dashboard</h3><p>Manage everything visually from a simple and intuitive web dashboard. No more memorizing slash commands!</p></div>
+                <div class="feature-card"><h3>✅ Reliable & Fast</h3><p>Checks for live streams approximately every 5 minutes to ensure your community never misses a broadcast.</p></div>
+            </div>
+        </section>
+    </main>
+    <footer class="footer">
+        <p>&copy; 2025 CertiFried Announcer. All Rights Reserved.</p>
+    </footer>
 </body>
 </html>

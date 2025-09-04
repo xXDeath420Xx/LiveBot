@@ -1,25 +1,26 @@
-<%- include('partials/header', { user: locals.user || null }) %>
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Server Selection</title>
+<link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+<nav class="navbar">
+<a href="/" class="nav-brand"><img src="/images/CertiFried.png" alt="Logo"><span>CertiFried Announcer</span></a>
+<div class="user-info"><span>Signed in as <strong><%= user.username %></strong></span><a href="https://certifriedannouncer.online/logout" class="btn-logout">Log Out</a></div>
+</nav>
 <main class="container">
-    <div style="text-align: center; margin-bottom: 2rem;">
-        <h1>Server Selection</h1>
-        <p>Choose a server where you have Administrator permissions to manage.</p>
-    </div>
-
-    <div class="features-grid">
-        <% if (guilds.length > 0) { %>
-            <% guilds.forEach(guild => { %>
-                <a href="/manage/<%= guild.id %>" class="feature-card" style="text-decoration: none;">
-                    <img src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png?size=128" alt="<%= guild.name %> icon" style="width: 80px; height: 80px; border-radius: 50%; margin-bottom: 1rem;">
-                    <h3><%= guild.name %></h3>
-                    <p>Click to manage</p>
-                </a>
-            <% }); %>
-        <% } else { %>
-            <p>You don't appear to have admin permissions in any servers where I'm also present. Please invite me to a server where you are an admin!</p>
-        <% } %>
-    </div>
+<div class="header-card"><h1>Server Selection</h1><p>Choose a server where you have Administrator permissions to manage.</p></div>
+<div class="server-grid">
+<% guilds.forEach(guild => { const botGuild = client.guilds.cache.get(guild.id); if (botGuild) { %>
+<a href="/manage/<%= guild.id %>" class="server-card-link">
+<div class="server-card">
+<img src="<%= botGuild.iconURL({ size: 128, extension: 'png' }) || '/images/default-icon.png' %>" alt="<%= botGuild.name %> Icon">
+<h2><%= botGuild.name %></h2><span>Click to manage</span>
+</div>
+</a>
+<% } }); %>
+</div>
 </main>
-
 </body>
 </html>

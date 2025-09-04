@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Manage <%= guild.name %></title>
+    <link rel="stylesheet" href="/css/dashboard.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/dashboard" class="nav-brand">← Back to Servers</a>
+        <div class="user-info"><span>Signed in as <strong><%= user.username %></strong></span><a href="https://certifriedannouncer.online/logout" class="btn-logout">Log Out</a></div>
+    </nav>
+    <div class="container manage-container">
+        <div class="header-card">
+            <img src="<%= guild.iconURL({ size: 128, extension: 'png' }) %>" class="guild-icon">
+            <h1>Managing: <%= guild.name %></h1>
+        </div>
+        <div class="manage-grid">
+            <div class="main-col">
+                <div class="section-card">
+                    <h2>Streamer Management</h2>
+                    <form action="/manage/<%= guild.id %>/add" method="POST" class="add-streamer-form">
+                        <select name="platform" required><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="youtube">YouTube</option><option value="trovo">Trovo</option><option value="tiktok">TikTok</option></select>
+                        <input type="text" name="username" placeholder="Username / Channel ID" required>
+                        <button type="submit">Add Streamer</button>
+                    </form>
+                    <hr>
+                    <h3>Tracked Streamers (<%= streamers.length %>)</h3>
+                    <div class="streamer-list">
+                        <% if (streamers.length > 0) { streamers.forEach(s => { %>
+                            <div class="streamer-item">
+                                <div class="streamer-info"><span class="platform-<%= s.platform %>"><%= s.platform.charAt(0).toUpperCase() %></span><strong><%= s.username %></strong></div>
+                                <div class="streamer-actions">
+                                    <button class="btn-icon" onclick="openModal('<%= s.streamer_id %>')" title="Edit Settings">💬</button>
+                                    <form action="/manage/<%= guild.id %>/remove" method="POST" onsubmit="return confirm('Remove <%= s.username %>?');"><input type="hidden" name="streamerId" value="<%= s.streamer_id %>"><button type="submit" class="btn-remove" title="Remove Streamer">✖</button></form>
+                                </div>
+                            </div>
+                            <div id="modal-<%= s.streamer_id %>" class="modal">
+                                <div class="modal-content">
+                                    <span class="close-btn" onclick="closeModal('<%= s.streamer_id %>')">&times;</span>
+                                    <h3>Settings for <%= s.username %></h3>
+                                    <form action="/manage/<%= guild.id %>/updatestreamer" method="POST">
+                                        <input type="hidden" name="streamerId" value="<%= s.streamer_id %>">
+                                        <label>Custom Announcement Channel (Overrides Default)</label>
+                                        <select name="announcement_channel_id"><option value="">-- Use Server Default --</option><% channels.forEach(c => { %><option value="<%= c.id %>" <%= s.announcement_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }); %></select>
+                                        <label>Custom Message</label>
+                                        <textarea name="custom_message" placeholder="Placeholders: {username}, {url}, etc."><%= s.custom_message || '' %></textarea>
+                                        <button type="submit">Save Streamer Settings</button>
+                                    </form>
+                                </div>
+                            </div>
+                        <% }); } else { %><p>No streamers tracked.</p><% } %>
+                    </div>
+                </div>
+            </div>
+            <div class="side-col">
+                <div class="section-card">
+                    <h2>Live Status</h2>
+                    <div id="live-streamers-list"><p>Loading...</p></div>
+                </div>
+                <div class="section-card">
+                    <h2>Core Settings</h2>
+                    <form action="/manage/<%= guild.id %>/settings" method="POST" class="settings-form">
+                        <label>Default Announcement Channel</label>
+                        <select name="channelId"><option value="">-- Disable --</option><% channels.forEach(c => { %><option value="<%= c.id %>" <%= settings.announcement_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option><% }); %></select>
+                        <label>Live Role</label>
+                        <select name="roleId"><option value="">-- Disable --</option><% roles.forEach(r => { %><option value="<%= r.id %>" <%= settings.live_role_id === r.id ? 'selected' : '' %>>@<%= r.name %></option><% }); %></select>
+                        <button type="submit">Save Core Settings</button>
+                    </form>
+                </div>
+                <div class="section-card danger-zone">
+                    <h2>Bulk Actions</h2>
+                    <form action="/manage/<%= guild.id %>/import" method="POST" enctype="multipart/form-data" class="settings-form">
+                        <label for="csvfile">Import from CSV</label>
+                        <input type="file" id="csvfile" name="csvfile" accept=".csv" required>
+                        <button type="submit" class="btn-bulk btn-secondary">Import CSV</button>
+                    </form>
+                    <hr>
+                    <div class="bulk-actions">
+                        <a href="/manage/<%= guild.id %>/export" class="btn-bulk btn-secondary">Export to CSV</a>
+                        <form action="/manage/<%= guild.id %>/clear" method="POST" onsubmit="return confirm('This will remove ALL streamers. Are you sure?');"><button type="submit" class="btn-bulk btn-danger">Clear All</button></form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        function openModal(id) { document.getElementById(`modal-${id}`).style.display = 'block'; }
+        function closeModal(id) { document.getElementById(`modal-${id}`).style.display = 'none'; }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const list = document.getElementById('live-streamers-list');
+            fetch(`/api/guilds/<%= guild.id %>/livestatus`)
+                .then(res => res.json())
+                .then(data => {
+                    if (!data || data.length === 0) {
+                        list.innerHTML = '<p>No one is currently live.</p>';
+                        return;
+                    }
+
+                    // Group streamers by platform
+                    const groupedByPlatform = data.reduce((acc, streamer) => {
+                        (acc[streamer.platform] = acc[streamer.platform] || []).push(streamer);
+                        return acc;
+                    }, {});
+
+                    let html = '';
+                    // Generate HTML for each platform group
+                    for (const platform in groupedByPlatform) {
+                        html += `<h4 class="platform-header">${platform.charAt(0).toUpperCase() + platform.slice(1)}</h4>`;
+                        html += groupedByPlatform[platform].map(s => {
+                            let platformUrl = `https://${s.platform}.com/${s.username.toLowerCase()}`;
+                            if (s.platform === 'trovo') platformUrl = `https://trovo.live/s/${s.username.toLowerCase()}`;
+                             return `
+                                <div class="live-item">
+                                    <span class="live-indicator">●</span>
+                                    <div class="live-info">
+                                        <a href="${platformUrl}" target="_blank">${s.username}</a>
+                                        <small>${s.stream_title || 'No Title'}</small>
+                                    </div>
+                                </div>`
+                        }).join('');
+                    }
+                    list.innerHTML = html;
+                })
+                .catch(err => {
+                    list.innerHTML = '<p>Error loading live status.</p>';
+                });
+        });
+    </script>
+</body>
+</html>
