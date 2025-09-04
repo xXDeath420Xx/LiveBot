@@ -1,23 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CertiFried Announcer Dashboard</title>
-    <link rel="stylesheet" href="/styles/landing.css"> <!-- Assuming you will create a public/styles dir -->
-</head>
-<body>
-    <nav class="navbar">
-        <div class="nav-brand">
-            <img src="/logo.png" alt="Bot Logo"> <!-- Assuming public/logo.png -->
-            <a href="/">CertiFried Announcer</a>
-        </div>
-        <div class="nav-login">
-            <% if (user) { %>
-                <a href="/dashboard" class="btn"><%= user.username %>#<%= user.discriminator %></a>
-                <a href="/logout" class="btn">Logout</a>
-            <% } else { %>
-                <a href="/login" class="btn">Login with Discord</a>
-            <% } %>
-        </div>
-    </nav>
+<!-- dashboard/views/partials/header.ejs -->
+<nav class="navbar">
+    <a href="/" class="nav-brand">
+        <img src="/images/CertiFried.png" alt="Logo">
+        <span>CertiFried Announcer</span>
+    </a>
+    <div class="user-info">
+        <% if (user) { %>
+            <span class="user-details">
+                Signed in as <strong><%= user.username %>#<%= user.discriminator %></strong>
+            </span>
+            <a href="/logout" class="btn-logout">Log Out</a>
+        <% } %>
+    </div>
+</nav>
