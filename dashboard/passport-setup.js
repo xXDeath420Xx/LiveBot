@@ -1,22 +1,21 @@
 const passport = require('passport');
-const DiscordStrategy = require('passport-discord').Strategy;
+const { Strategy } = require('passport-discord');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
-passport.serializeUser((user, done) => { 
-    done(null, user); 
+passport.serializeUser((user, done) => {
+    done(null, user);
 });
 
-passport.deserializeUser((obj, done) => { 
-    done(null, obj); 
+passport.deserializeUser((obj, done) => {
+    done(null, obj);
 });
 
-passport.use(new DiscordStrategy({
+passport.use(new Strategy({
     clientID: process.env.DASHBOARD_CLIENT_ID,
     clientSecret: process.env.DASHBOARD_CLIENT_SECRET,
     callbackURL: process.env.DASHBOARD_CALLBACK_URL,
     scope: ['identify', 'guilds']
 }, (accessToken, refreshToken, profile, done) => {
-    process.nextTick(() => { 
-        return done(null, profile); 
-    });
+    // process.nextTick is generally not needed here for a simple return
+    return done(null, profile);
 }));
