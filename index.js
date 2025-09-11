@@ -171,9 +171,13 @@ async function checkStreams(client) {
         const guildSettingsMap = new Map((await db.execute('SELECT * FROM guilds'))[0].map(g => [g.guild_id, g]));
         const channelSettingsMap = new Map((await db.execute('SELECT * FROM channel_settings'))[0].map(c => [c.channel_id, c]));
         for (const sub of subscriptions) {
-            const liveData = liveStatusMap.get(sub.streamer_id);
-            const existingAnnouncement = announcements.find(a => a.subscription_id === sub.subscription_id);
-            await processSubscription(client, sub, liveData, existingAnnouncement, guildSettingsMap.get(sub.guild_id), channelSettingsMap.get(sub.announcement_channel_id));
+            try {
+                const liveData = liveStatusMap.get(sub.streamer_id);
+                const existingAnnouncement = announcements.find(a => a.subscription_id === sub.subscription_id);
+                await processSubscription(client, sub, liveData, existingAnnouncement, guildSettingsMap.get(sub.guild_id), channelSettingsMap.get(sub.announcement_channel_id));
+            } catch (e) {
+                console.error(`[ProcessSubscription Error] for sub ${sub.subscription_id} (${sub.username}):`, e);
+            }
         }
     } catch (e) { console.error("[checkStreams] CRITICAL ERROR:", e);
     } finally {
@@ -215,23 +219,43 @@ async function checkTeams(client) {
     finally { isCheckingTeams = false; console.log('[Team Sync] ---> Finished team sync.'); }
 }
 
+async function handleRole(member, roleId, action, guildId) {
+    if (!member || !roleId) return;
+    try {
+        if (action === 'add' && !member.roles.cache.has(roleId)) {
+            await member.roles.add(roleId);
+        } else if (action === 'remove' && member.roles.cache.has(roleId)) {
+            await member.roles.remove(roleId);
+        }
+    } catch (e) {
+        if (e.code === 10011 || (e.message && e.message.includes('Unknown Role'))) {
+            console.log(`[Role Cleanup] Invalid live role ID ${roleId} for guild ${guildId}. Removing from config.`);
+            const [teamSubs] = await db.execute('SELECT id FROM twitch_teams WHERE guild_id = ? AND live_role_id = ?', [guildId, roleId]);
+            if (teamSubs.length > 0) {
+                await db.execute('UPDATE twitch_teams SET live_role_id = NULL WHERE guild_id = ? AND live_role_id = ?', [guildId, roleId]);
+            } else {
+                await db.execute('UPDATE guilds SET live_role_id = NULL WHERE guild_id = ? AND live_role_id = ?', [guildId, roleId]);
+            }
+        } else {
+            console.error(`Failed to ${action} role ${roleId} for ${member.id} in ${guildId}: ${e.message}`);
+        }
+    }
+}
+
 async function processSubscription(client, sub, liveData, existing, guildSettings, channelSettings) {
     const isLive = liveData && liveData.isLive;
+    let member = null;
+    if (sub.discord_user_id) {
+        const guild = await client.guilds.fetch(sub.guild_id).catch(() => {});
+        if (guild) member = await guild.members.fetch(sub.discord_user_id).catch(() => {});
+    }
 
     if (isLive) {
-        if(sub.discord_user_id){
-            const guild=await client.guilds.fetch(sub.guild_id).catch(()=>{});
-            if(guild){
-                let targetRoleId=guildSettings?.live_role_id;
-                const[teamSubs]=await db.execute('SELECT tt.live_role_id FROM twitch_teams tt JOIN subscriptions s ON tt.announcement_channel_id=s.announcement_channel_id AND tt.guild_id=s.guild_id WHERE s.streamer_id=? AND tt.live_role_id IS NOT NULL',[sub?.streamer_id]);
-                if(teamSubs.length>0)targetRoleId=teamSubs[0].live_role_id;
-                if(targetRoleId){
-                    try{
-                        const member=await guild.members.fetch(sub.discord_user_id).catch(()=>{});
-                        if(member && !member.roles.cache.has(targetRoleId)) await member.roles.add(targetRoleId).catch(e => console.error(`Failed to add role to ${sub.discord_user_id} in ${guild.id}: ${e.message}`));
-                    }catch(e){}
-                }
-            }
+        if (member) {
+            let targetRoleId = guildSettings?.live_role_id;
+            const [teamSubs] = await db.execute('SELECT tt.live_role_id FROM twitch_teams tt JOIN subscriptions s ON tt.announcement_channel_id = s.announcement_channel_id AND tt.guild_id = s.guild_id WHERE s.streamer_id = ? AND tt.live_role_id IS NOT NULL', [sub?.streamer_id]);
+            if (teamSubs.length > 0) targetRoleId = teamSubs[0].live_role_id;
+            await handleRole(member, targetRoleId, 'add', sub.guild_id);
         }
 
         const sentMessage = await updateAnnouncement(client, sub, liveData, existing, guildSettings, channelSettings);
@@ -248,23 +272,11 @@ async function processSubscription(client, sub, liveData, existing, guildSetting
             }
         }
     } else if (existing) {
-        // --- THIS IS THE DEFINITIVE ROLE REMOVAL FIX ---
-        if (sub.discord_user_id) {
-            const guild = await client.guilds.fetch(sub.guild_id).catch(() => {});
-            if (guild) {
-                let targetRoleId = guildSettings?.live_role_id;
-                const [teamSubs] = await db.execute('SELECT tt.live_role_id FROM twitch_teams tt JOIN subscriptions s ON tt.announcement_channel_id = s.announcement_channel_id AND tt.guild_id = s.guild_id WHERE s.streamer_id = ? AND tt.live_role_id IS NOT NULL', [sub?.streamer_id]);
-                if (teamSubs.length > 0) targetRoleId = teamSubs[0].live_role_id;
-
-                if (targetRoleId) {
-                    try {
-                        const member = await guild.members.fetch(sub.discord_user_id).catch(() => {});
-                        if (member && member.roles.cache.has(targetRoleId)) {
-                            await member.roles.remove(targetRoleId).catch(e => console.error(`Failed to remove role from ${sub.discord_user_id} in ${guild.id}: ${e.message}`));
-                        }
-                    } catch(e) { /* Ignore errors if member left */ }
-                }
-            }
+        if (member) {
+            let targetRoleId = guildSettings?.live_role_id;
+            const [teamSubs] = await db.execute('SELECT tt.live_role_id FROM twitch_teams tt JOIN subscriptions s ON tt.announcement_channel_id = s.announcement_channel_id AND tt.guild_id = s.guild_id WHERE s.streamer_id = ? AND tt.live_role_id IS NOT NULL', [sub?.streamer_id]);
+            if (teamSubs.length > 0) targetRoleId = teamSubs[0].live_role_id;
+            await handleRole(member, targetRoleId, 'remove', sub.guild_id);
         }
 
         console.log(`[Purge] ${sub.username} offline. Removing Discord message but keeping record for next restart.`);
@@ -272,7 +284,6 @@ async function processSubscription(client, sub, liveData, existing, guildSetting
             const channel = await client.channels.fetch(existing.channel_id).catch(() => null);
             if (channel) await channel.messages.delete(existing.message_id).catch(() => {});
         } catch (e) {}
-        // The announcement record is intentionally KEPT in the database until the next full startup purge.
     }
 }
 
