@@ -1,15 +1,32 @@
-<!-- dashboard/views/partials/header.ejs -->
-<nav class="navbar">
-    <a href="/" class="nav-brand">
-        <img src="/images/CertiFried.png" alt="Logo">
-        <span>CertiFried Announcer</span>
-    </a>
-    <div class="user-info">
-        <% if (user) { %>
-            <span class="user-details">
-                Signed in as <strong><%= user.username %>#<%= user.discriminator %></strong>
-            </span>
-            <a href="/logout" class="btn-logout">Log Out</a>
-        <% } %>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark-2">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">
+            <img src="/images/CertiFried.png" alt="Logo" class="navbar-logo">
+            CertiFried Announcer
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto align-items-center">
+                <li class="nav-item">
+                    <a href="/help" class="btn btn-outline-secondary me-2">Help/Docs</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/dashboard" class="btn btn-outline-secondary me-2">Server List</a>
+                </li>
+                <% if (user) { %>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-white" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png" width="32" height="32" class="rounded-circle me-2" alt="<%= user.username %>">
+                            Signed in as <%= user.username %>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="navbarDropdown">
+                            <li><a class="dropdown-item" href="/logout">Log Out</a></li>
+                        </ul>
+                    </li>
+                <% } %>
+            </ul>
+        </div>
     </div>
 </nav>

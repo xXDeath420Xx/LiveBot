@@ -1,23 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CertiFried Announcer</title>
-    <link href="/css/landing.css" rel="stylesheet">
-    <link rel="icon" type="image/png" href="https://cdn.discordapp.com/app-icons/1409904443125665875/e2810a3002f2321487f54c9d54e58b14.png">
-</head>
-<body>
-    <nav class="navbar">
-        <a href="/" class="nav-brand">
-            <img src="https://cdn.discordapp.com/app-icons/1409904443125665875/e2810a3002f2321487f54c9d54e58b14.png?size=128" alt="Logo">
-            CertiFried Announcer
+<nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container-fluid">
+        <a class="nav-brand" href="/">
+            <img src="/images/CertiFried.png" alt="Bot Logo">
+            <span>CertiFried Announcer</span>
         </a>
-        <div class="nav-login">
-            <% if (user) { %>
-                <a href="https://bot.certifriedannouncer.online/dashboard" class="btn">Dashboard</a>
-            <% } else { %>
-                <a href="https://bot.certifriedannouncer.online/login" class="btn">Login with Discord</a>
-            <% } %>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="mainNav">
+            <div class="nav-login ms-auto">
+                <a href="/dashboard" class="btn btn-secondary">Dashboard</a>
+                <a href="/help" class="btn btn-secondary">Help/Docs</a>
+                <% if (user) { %>
+                    <a href="/logout" class="btn btn-danger">Log Out</a>
+                <% } else { %>
+                    <a href="/login" class="btn btn-primary">Login with Discord</a>
+                <% } %>
+            </div>
         </div>
-    </nav>
+    </div>
+</nav>
