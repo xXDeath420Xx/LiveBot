@@ -1,0 +1,27 @@
+<div class="content-card">
+    <h2><i class="fab fa-twitch me-2"></i>Twitch Team Management</h2>
+    <p>Subscribe a channel to automatically sync with a Twitch Team every 15 minutes.</p>
+    <hr class="my-3">
+    <form action="/manage/<%= guild.id %>/subscribe-team" method="POST">
+        <div class="row g-2 align-items-end">
+            <div class="col"><label class="form-label">Twitch Team Name</label><input type="text" name="teamName" class="form-control" placeholder="e.g. reeferrealm" required></div>
+            <div class="col"><label class="form-label">Channel to Sync</label><select name="channelId" class="form-select" required><option value="" disabled selected>Select Channel</option><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %></select></div>
+            <div class="col-auto"><button type="submit" class="btn btn-primary">Subscribe</button></div>
+        </div>
+    </form>
+    <% if (teamSubscriptions.length > 0) { %>
+        <hr class="my-4">
+        <h6>Active Team Subscriptions</h6>
+        <ul class="list-group list-group-flush">
+            <% teamSubscriptions.forEach(sub => { %>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><%= sub.team_name %> → #<%= channels.find(c => c.id === sub.announcement_channel_id)?.name || 'Unknown' %></span>
+                    <form action="/manage/<%= guild.id %>/removeteam" method="POST" onsubmit="return confirm('Unsubscribe and remove all members of team \'<%= sub.team_name %>\'?')">
+                        <input type="hidden" name="teamSubscriptionId" value="<%= sub.id %>">
+                        <button type="submit" class="btn btn-sm btn-danger">Unsubscribe & Purge</button>
+                    </form>
+                </li>
+            <% }); %>
+        </ul>
+    <% } %>
+</div>
