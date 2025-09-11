@@ -3,134 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CertiFried Announcer - The Ultimate Stream Announcer Bot</title>
+    <title>CertiFried Announcer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <!-- Updated version number to ensure fresh CSS is loaded -->
-    <link rel="stylesheet" href="/css/landing.css?v=1.0.3">
+    <link rel="stylesheet" href="/css/dashboard-style.css?v=12.1.0">
 </head>
 <body>
-    <%- include('partials/header-landing.ejs') %>
-    <div class="container">
-        <header class="hero">
-            <img src="/images/CertiFried.png" alt="CertiFried Announcer Logo" class="hero-logo">
-            <h1>CertiFried Announcer</h1>
-            <p>The multi-platform stream announcer bot with unparalleled customization, speed, and reliability. Never miss a stream again.</p>
-            <div class="hero-buttons">
-                <a href="https://discord.com/oauth2/authorize?client_id=<%= client_id %>&permissions=536873992&scope=bot+applications.commands" class="btn btn-primary">
-                    <i class="fab fa-discord"></i> Add to Your Server
-                </a>
-                <a href="/dashboard" class="btn btn-secondary">
-                    <i class="fas fa-tachometer-alt"></i> Open Dashboard
-                </a>
+<%- include('partials/header') %>
+<main class="page-container">
+    <header class="page-header">
+        <img src="/images/CertiFried.png" alt="Logo" style="width: 120px; border-radius: 50%;">
+        <h1 class="mt-3">CertiFried Announcer</h1>
+        <p>Your one-stop shop for stream announcements. The ultimate tool for Twitch Teams with seamless Kick, YouTube, TikTok, and Trovo integration.</p>
+        <div class="mt-4 d-flex justify-content-center gap-2">
+            <a href="https://discord.com/oauth2/authorize?client_id=<%= client_id %>&permissions=536873992&scope=bot+applications.commands" class="btn btn-primary btn-lg"><i class="fab fa-discord me-2"></i> Add to Server</a>
+            <a href="/dashboard" class="btn btn-secondary btn-lg"><i class="fas fa-tachometer-alt me-2"></i> Open Dashboard</a>
+        </div>
+    </header>
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="row g-4">
+                <div class="col-md-6"><div class="feature-card h-100"><h3><i class="fas fa-sync-alt me-2"></i>Twitch Team Powerhouse</h3><p>Automate your entire Twitch Team. The bot syncs members, assigns roles, and even cross-posts to Kick if they're live there—all automatically.</p></div></div>
+                <div class="col-md-6"><div class="feature-card h-100"><h3><i class="fas fa-desktop me-2"></i>Full Web Dashboard</h3><p>Manage all servers and streamers from a sleek, intuitive web interface. No more wrestling with complicated slash commands.</p></div></div>
+                <div class="col-md-6"><div class="feature-card h-100"><h3><i class="fas fa-cogs me-2"></i>Unmatched Customization</h3><p>From custom webhook avatars to per-streamer messages using placeholders like <code>{username}</code>, tailor every detail.</p></div></div>
             </div>
-        </header>
-
-        <section class="features">
-            <div class="features-grid">
-                
-              <div class="feature-card"><h3><i class="fas fa-desktop text-info me-2"></i>Full Web Dashboard</h3><ul><li>View and manage all your servers from one place.</li><li>Add, remove, and fully configure streamers with a few clicks.</li><li>See who's live at a glance with the live status viewer.</li></ul></div>
-                <div class="feature-card"><h3><i class="fas fa-sync-alt text-success me-2"></i>Automated Team Sync</h3><ul><li>Subscribe a Discord channel to a Twitch Team with <code>/subscribe-team</code>.</li><li>The bot automatically adds new team members.</li><li>It also automatically removes members who have left or been removed from the team.</li></ul></div>
-                <div class="feature-card"><h3><i class="fas fa-paint-brush me-2"></i>Complete Customization</h3><ul><li>Use <code>/customize-streamer</code> to set unique messages for any streamer.</li><li>Utilize placeholders like <code>{username}</code>, <code>{url}</code>, and <code>{game}</code>.</li><li>Override webhook names and avatars per-streamer or per-channel.</li></ul></div>
-
-
-                <div class="feature-card">
-                    <h3><i class="fas fa-cogs"></i> Unmatched Customization</h3>
-                    <p>From custom webhook avatars and nicknames to per-streamer or per-channel messages, tailor every detail of your announcements.</p>
-                    <ul>
-                        <li>Server-wide custom bot appearance</li>
-                        <li>Channel-specific webhook settings</li>
-                        <li>Individual streamer announcement overrides</li>
-                    </ul>
-                </div>
-
-                <div class="feature-card" id="live-feature-card">
-                    <h3><i class="fas fa-signal"></i> Reliable & Fast</h3>
-                    <p>
-                        Next stream check in: <strong id="stream-countdown" class="text-white">--:--</strong><br>
-                        Next team sync in: <strong id="team-countdown" class="text-white">--:--</strong><br>
-                        Here's an example of who's live across all servers right now!
-                    </p>
-                    <div id="featured-streamers-container" class="mt-3">
-                        <!-- Live streamers will be injected here by JavaScript -->
-                    </div>
-                </div>
+        </div>
+        <div class="col-md-4"><div class="feature-card h-100"><h3><i class="fas fa-signal me-2"></i>Global Live Status</h3>
+                <p class="mb-2 small">Stream check in: <strong id="stream-countdown">--:--</strong><br>Team sync in: <strong id="team-countdown">--:--</strong></p>
+                <div id="featured-streamers-container" class="live-status-scroll"><p class="text-center small">Loading live streamers...</p></div>
             </div>
-        </section>
+</main>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const streamCountdownEl = document.getElementById("stream-countdown");
+        const teamCountdownEl = document.getElementById("team-countdown");
+        const streamCheckInterval = 90000;
+        const teamSyncInterval = 900000;
 
-    </div>
-    <%- include('partials/footer') %>
+        function formatCountdown(ms) {
+            let totalSeconds = Math.floor(ms / 1000);
+            return `${String(Math.floor(totalSeconds/60)).padStart(2,"0")}:${String(totalSeconds%60).padStart(2,"0")}`;
+        }
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Countdown Timer Logic
-            const streamCountdownEl = document.getElementById('stream-countdown');
-            const teamCountdownEl = document.getElementById('team-countdown');
-            const streamInterval = 1.5 * 60 * 1000;
-            const teamInterval = 15 * 60 * 1000;
+        function updateCountdowns() {
+            const now = Date.now();
+            if (streamCountdownEl) streamCountdownEl.textContent = formatCountdown(streamCheckInterval - (now % streamCheckInterval));
+            if (teamCountdownEl) teamCountdownEl.textContent = formatCountdown(teamSyncInterval - (now % teamSyncInterval));
+        }
+        updateCountdowns();
+        setInterval(updateCountdowns, 1000);
 
-            function formatTime(ms) {
-                let totalSeconds = Math.floor(ms / 1000);
-                let minutes = Math.floor(totalSeconds / 60);
-                let seconds = totalSeconds % 60;
-                return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-            }
+        const streamersContainer = document.getElementById("featured-streamers-container");
+        async function fetchGlobalLiveStatus() {
+            if (!streamersContainer) return;
+            try {
+                const response = await fetch("/api/global-live-status");
+                const streamersData = await response.json();
 
-            function updateCountdowns() {
-                const now = Date.now();
-                streamCountdownEl.textContent = formatTime(streamInterval - (now % streamInterval));
-                teamCountdownEl.textContent = formatTime(teamInterval - (now % teamInterval));
-            }
-            updateCountdowns();
-            setInterval(updateCountdowns, 1000);
+                streamersContainer.innerHTML = "";
 
-
-            // Live Streamer Fetching Logic
-            const featuredContainer = document.getElementById('featured-streamers-container');
-            async function fetchFeaturedStreamers() {
-                try {
-                    const response = await fetch('/api/global-live-status');
-                    if (!response.ok) {
-                        featuredContainer.innerHTML = '<p class="text-muted">Could not load live streamers.</p>';
-                        return;
-                    }
-                    const streamers = await response.json();
-
-                    if (!streamers || streamers.length === 0) {
-                        featuredContainer.innerHTML = '<p class="text-muted">No one is currently live.</p>';
-                        return;
-                    }
-                    
-                    featuredContainer.innerHTML = '';
-                    streamers.forEach(streamer => {
-                        const card = document.createElement('div');
-                        // *** THIS IS THE CORRECTED LINE ***
-                        // It now adds the platform class to the main card element
-                        const primaryPlatform = streamer.live_platforms[0].platform.toLowerCase();
-                        card.className = `featured-streamer-card platform-${primaryPlatform}`;
-
-                        const platformsHtml = streamer.live_platforms.map(p => 
-                            `<span class="live-platform-pill platform-${p.platform.toLowerCase()}">${p.platform}</span>`
-                        ).join('');
-
-                        card.innerHTML = `
-                            <img src="${streamer.avatar_url}" alt="${streamer.username}" class="featured-avatar">
-                            <div class="featured-info">
-                                <span class="username">${streamer.username}</span>
-                                <div class="pills-container">${platformsHtml}</div>
-                                <span class="game">${streamer.live_platforms[0].game}</span>
-                            </div>
-                        `;
-                        featuredContainer.appendChild(card);
-                    });
-                } catch (error) {
-                    console.error("Error fetching featured streamers:", error);
-                    featuredContainer.innerHTML = '<p class="text-muted">Error loading live streamers.</p>';
+                if (!response.ok || streamersData.error) {
+                    throw new Error(streamersData.message || "API request failed");
                 }
+                if (!Array.isArray(streamersData) || streamersData.length === 0) {
+                    streamersContainer.innerHTML = '<p class="text-muted text-center small">No one is currently live.</p>';
+                    return;
+                }
+
+                streamersData.forEach(streamer => {
+                    const card = document.createElement("div");
+                    card.className = "live-streamer-card";
+                    const iconsHtml = streamer.live_platforms.map(p => p.platform === 'kick' ?
+                        '<i class="fas fa-k platform-icon-fa platform-icon-kick"></i>' :
+                        `<i class="fab fa-${p.platform} platform-icon-fa platform-icon-${p.platform}"></i>`
+                    ).join(" ");
+
+                    const games = streamer.live_platforms.map(p => p.game || 'N/A');
+                    const uniqueGames = [...new Set(games.filter(g => g !== 'N/A'))];
+                    const gameString = uniqueGames.length > 0 ? uniqueGames.join(', ') : 'N/A';
+
+                    card.innerHTML = `<img src="${streamer.avatar_url || '/images/default-icon.png'}" class="live-avatar"><div class="live-info"><strong>${streamer.username} <span class="platform-icons">${iconsHtml}</span></strong><span>${gameString}</span></div>`;
+                    streamersContainer.appendChild(card);
+                });
+            } catch (error) {
+                console.error("Global Live Status Error:", error);
+                streamersContainer.innerHTML = `<p class="text-danger text-center small">Error loading live streamers.</p>`;
             }
-            fetchFeaturedStreamers();
-            setInterval(fetchFeaturedStreamers, 60000);
-        });
-    </script>
+        }
+        fetchGlobalLiveStatus();
+        setInterval(fetchGlobalLiveStatus, 60000);
+    });
+</script>
+<%- include('partials/footer') %>
 </body>
 </html>

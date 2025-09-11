@@ -1,0 +1,14 @@
+<div class="content-card">
+    <h2><i class="fas fa-file-csv me-2"></i>Mass Management</h2>
+    <p>Quickly manage large numbers of streamers using CSV files.</p>
+    <hr class="my-3">
+    <h6>Export All to CSV</h6>
+    <a href="/manage/<%= guild.id %>/export" class="btn btn-secondary w-100 mb-4"><i class="fas fa-download me-2"></i>Export All Streamer Subscriptions</a>
+    <h6 class="mt-3">Sync Channel with CSV</h6>
+    <p class="small">Adds/updates members from the file and **removes** any members not in the file from that specific channel.</p>
+    <form action="/manage/<%= guild.id %>/import-team" method="POST" enctype="multipart/form-data">
+        <div class="mb-3"><select name="channelId" class="form-select" required><option value="" disabled selected>-- Select Channel to Sync --</option><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %></select></div>
+        <div class="mb-3"><input class="form-control" type="file" name="csvfile" accept=".csv" required></div>
+        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-sync-alt me-2"></i>Sync Channel from CSV</button>
+    </form>
+</div>

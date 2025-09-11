@@ -1,0 +1,99 @@
+/* =================================================================
+   CertiFried Announcer Dashboard Style - v13.0 (Definitive Rebuild)
+   ================================================================= */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+    --background-primary: #1E1F22;
+    --background-secondary: #2B2D31;
+    --background-tertiary: #313338;
+    --header-primary: #F2F3F5;
+    --text-normal: #c4c9d2;
+    --text-muted: #c4c9d2;
+    --brand-color: #5865F2;
+    --border-color: #383A40;
+    --border-radius: 8px;
+    --danger-color: #DA373C;
+}
+
+body { font-family: 'Inter', sans-serif; background-color: var(--background-primary); color: var(--text-normal); }
+h1,h2,h3,h4,h5,h6 { color: var(--header-primary); }
+p, small, .small, .form-text, span.text-muted, div.text-muted, .command-description, .form-label, label { color: var(--text-muted) !important; }
+
+/* === Navbar === */
+.navbar { background-color: var(--background-secondary) !important; border-bottom: 1px solid var(--border-color); }
+.navbar-brand img { height: 40px; border-radius: 50%; }
+.navbar-brand { display: flex; align-items: center; gap: 10px; color: var(--header-primary) !important; font-weight: bold; }
+.navbar-nav { align-items: center; }
+.navbar-nav .nav-link { color: var(--text-muted); font-weight: 500; }
+.navbar-nav .nav-link:hover { color: var(--header-primary); }
+
+/* === Buttons & Forms === */
+.btn { border: none; font-weight: 600; padding: 10px 20px; border-radius: 5px; transition: all 0.2s ease; }
+.btn-primary { background-color: var(--brand-color); color: white; }
+.btn-secondary { background-color: var(--background-tertiary); color: var(--text-normal); }
+.form-control, .form-select { background-color: var(--background-tertiary); border: 1px solid var(--border-color); color: var(--text-normal); }
+.form-control::placeholder { color: var(--text-muted); opacity: 0.7; }
+.form-control:focus, .form-select:focus { background-color: var(--background-tertiary); border-color: var(--brand-color); box-shadow: 0 0 0 2px var(--brand-color); }
+
+/* === General Pages (Landing, Dashboard, Commands) === */
+.page-container { max-width: 1100px; margin: 2rem auto; padding: 2rem; }
+.page-header { text-align: center; margin-bottom: 3rem; }
+.server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem; }
+.server-card { background-color: var(--background-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1.5rem; text-align: center; text-decoration: none; display: block; }
+.server-card:hover { transform: translateY(-5px); border-color: var(--brand-color); }
+.server-card img { width: 90px; height: 90px; border-radius: 50%; margin-bottom: 1rem; }
+
+/* === Manage Page Layout === */
+body.manage-page { overflow: hidden; }
+.manage-container { display: flex; height: calc(100vh - 57px); padding: 1.5rem; gap: 1.5rem; }
+.manage-sidebar { width: 320px; flex-shrink: 0; background-color: var(--background-secondary); border-radius: var(--border-radius); padding: 1.5rem; overflow-y: auto; }
+.manage-main-content { flex: 1; overflow-y: auto; padding-right: 1rem; }
+.sidebar-card { padding-bottom: 1.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); }
+.sidebar-card:last-child { border-bottom: none; }
+.content-card { background-color: var(--background-secondary); border-radius: var(--border-radius); padding: 1.5rem; margin-bottom: 1.5rem; }
+.accordion-item { border: none; background: transparent; }
+.accordion-header button {
+    background-color: var(--background-tertiary);
+    color: var(--header-primary) !important; /* <<< DEFINITIVE FIX FOR CHANNEL NAME TEXT */
+    font-weight: 600;
+    border-radius: 5px !important;
+}
+.accordion-header button:not(.collapsed) { background-color: var(--brand-color); }
+.accordion-body { padding: 1rem; background-color: var(--background-tertiary); }
+.list-group-item { background-color: transparent; border-color: var(--border-color); }
+.list-group-item strong { color: var(--header-primary); } /* This is the new rule for streamer names */
+.list-group-item > div > span { color: var(--text-muted); } /* This is the new rule for the platform name */
+
+/* <<< DEFINITIVE FIX FOR STREAMER & TEAM LIST TEXT */
+.list-group-item, .synced-team-entry {
+    color: var(--text-normal) !important;
+}
+.list-group-item strong {
+    color: var(--header-primary) !important;
+}
+.list-group-item > div > span {
+    color: var(--text-muted) !important;
+}
+
+/* Live Status & Platform Icons */
+.live-status-scroll { max-height: 400px; overflow-y: auto; }
+.live-streamer-card { display: flex; align-items: center; padding: 10px; margin-bottom: 8px; border-radius: 5px; background-color: var(--background-tertiary); }
+.live-avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 12px; }
+.live-info { overflow: hidden; }
+.platform-icons .platform-icon-fa { margin-left: .4rem; font-size: 1rem; }
+.platform-icon-twitch { color: #9146FF; }
+.platform-icon-youtube { color: #FF0000; }
+.platform-icon-kick { color: #52E252; }
+
+/* Modal Fix */
+.modal-content { background-color: var(--background-secondary); border-color: var(--border-color); }
+.modal-header, .modal-footer { border-color: var(--border-color); }
+.modal-header .btn-close { filter: invert(1); }
+
+/* Command Guide Page */
+.command-category-card { background-color: var(--background-secondary); padding: 1.5rem; border-radius: var(--border-radius); height: 100%; }
+.command-entry { padding: 0.5rem 0; }
+.perm-badge { font-size: .75em; padding: .25em .6em; border-radius: 4px; margin-left: .5rem; color: white; vertical-align: middle; }
+.perm-mod { background-color: var(--brand-color); }
+.perm-admin { background-color: var(--danger-color); }

@@ -1,0 +1,12 @@
+<div class="content-card">
+    <h2><i class="fas fa-paint-brush me-2"></i>Channel Appearance</h2>
+    <p>Set a default webhook nickname/avatar for all announcements in a specific channel.</p>
+    <hr class="my-3">
+    <form action="/manage/<%= guild.id %>/channel-appearance/save" method="POST" enctype="multipart/form-data">
+        <div class="mb-3"><select name="channelId" class="form-select" required><option value="">-- Select a channel --</option><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %></select></div>
+        <div class="mb-3"><input type="text" class="form-control" name="nickname" placeholder='Custom Nickname (type "reset" to clear)' maxlength="80"></div>
+        <div class="mb-3"><input class="form-control" type="file" name="avatar" accept="image/*"></div>
+        <div class="mb-3"><input type="text" class="form-control" name="avatar_url_text" placeholder='Or use Avatar URL (type "reset" to clear)'></div>
+        <button type="submit" class="btn btn-primary w-100">Save Channel Appearance</button>
+    </form>
+</div>
