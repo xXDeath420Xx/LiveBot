@@ -5,3 +5,5 @@ uploads/
 *.sql
 *.save
 sessions/*.json
+.vscode
+.idea
