@@ -13,7 +13,9 @@ async function sendPaginatedEmbed(interaction, pages) {
     );
 
     const message = await interaction.editReply({ embeds: [pages[currentPage]], components: pages.length > 1 ? [createButtons()] : [], ephemeral: true });
-    if (pages.length <= 1) return;
+
+    // Ensure message was successfully sent before creating a collector
+    if (!message || pages.length <= 1) return;
 
     const collector = message.createMessageComponentCollector({ componentType: ComponentType.Button, time: 300000 });
 
@@ -23,7 +25,10 @@ async function sendPaginatedEmbed(interaction, pages) {
         await i.update({ embeds: [pages[currentPage]], components: [createButtons()] });
     });
 
-    collector.on('end', () => message.edit({ components: [createButtons(true)] }).catch(() => {}));
+    collector.on('end', (collected, reason) => {
+        // Log the error if updating components fails on end
+        message.edit({ components: [createButtons(true)] }).catch(e => console.error(`Error updating pagination buttons for interaction ${interaction.id} on collector end (reason: ${reason}):`, e));
+    });
 };
 
 module.exports = {
@@ -54,8 +59,18 @@ module.exports = {
         const description = chunk.map(s => {
           const status = s.isLive ? '🟢' : '🔴';
           const user = s.discord_user_id ? `(<@${s.discord_user_id}>)` : '';
-          const url = `https://kick.com/${s.username}`; // Simplified for example
-          return `${status} [**${escapeMarkdown(s.username)}**](${url}) (${s.platform}) ${user}`;
+          let url;
+          switch (s.platform) {
+              case 'twitch': url = `https://www.twitch.tv/${s.username}`; break;
+              case 'youtube': url = `https://www.youtube.com/channel/${s.platform_user_id}`; break;
+              case 'kick': url = `https://kick.com/${s.username}`; break;
+              case 'tiktok': url = `https://www.tiktok.com/@${s.username}`; break;
+              case 'trovo': url = `https://trovo.live/s/${s.username}`; break;
+              default: url = null; // Changed fallback to null for unknown platforms
+          }
+          // Display as plain text if URL is null, otherwise as a link
+          const usernameDisplay = url ? `[**${escapeMarkdown(s.username)}**](${url})` : `**${escapeMarkdown(s.username)}**`;
+          return `${status} ${usernameDisplay} (${s.platform}) ${user}`;
         }).join('\n');
         
         pages.push(new EmbedBuilder()
@@ -69,7 +84,8 @@ module.exports = {
       await sendPaginatedEmbed(interaction, pages);
     } catch (e) { 
         console.error('Error in /liststreamers:', e);
-        if (!interaction.replied) await interaction.editReply({ content: 'An error occurred.' });
+        // interaction.editReply() is safe to call after deferReply, no need for !interaction.replied check
+        await interaction.editReply({ content: 'An error occurred.' }).catch(error => console.error('Failed to send error reply:', error));
     }
   },
 };
