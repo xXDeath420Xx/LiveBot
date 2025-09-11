@@ -23,7 +23,6 @@ module.exports = {
             }
         }
       
-      // REWRITE: Use a single, atomic query to prevent race conditions.
       await db.execute(
         'INSERT INTO guilds (guild_id, live_role_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE live_role_id = VALUES(live_role_id)',
         [guildId, roleId]
