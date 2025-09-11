@@ -8,9 +8,13 @@ const dbConfig = {
     database: process.env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 15,
-    queueLimit: 0,
+    // Set a sensible, finite queueLimit to prevent unbounded request growth if the DB is slow/down.
+    // A value of 0 means unlimited queue in mysql2, which can lead to memory issues.
+    queueLimit: 100, 
     // Add a connection timeout
-    connectTimeout: 10000 
+    connectTimeout: 10000,
+    // Best practice: Explicitly set timezone for consistent date/time handling
+    timezone: 'Z'
 };
 
 const pool = mysql.createPool(dbConfig);

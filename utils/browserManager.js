@@ -1,8 +1,19 @@
-// utils/browserManager.js (Simplified and Corrected)
-const { chromium } = require('playwright'); // Use the standard playwright library
+const { chromium } = require('playwright');
 
 let browser = null;
 let launchPromise = null;
+
+// Determine browser launch arguments based on environment variables
+const getLaunchArgs = () => {
+    const args = ['--disable-dev-shm-usage']; // Generally safe and recommended
+
+    // --no-sandbox is a security risk if the browser navigates to untrusted content.
+    // Only enable if explicitly allowed and understood, e.g., in controlled container environments.
+    if (process.env.PLAYWRIGHT_NO_SANDBOX === 'true') {
+        args.push('--no-sandbox', '--disable-setuid-sandbox');
+    }
+    return args;
+};
 
 const getBrowser = async () => {
     if (browser && browser.isConnected()) return browser;
@@ -11,9 +22,12 @@ const getBrowser = async () => {
     try {
         console.log('[BrowserManager] Initiating local browser for TikTok...');
         
+        // Make headless mode configurable via environment variable
+        const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== 'false'; // Default to true
+
         launchPromise = chromium.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+            headless: isHeadless,
+            args: getLaunchArgs()
         });
 
         browser = await launchPromise;
@@ -34,9 +48,12 @@ const getBrowser = async () => {
 };
 
 const closeBrowser = async () => {
+    // If a launch is in progress, wait for it to complete before attempting to close.
     if (launchPromise) await launchPromise;
     if (browser) {
-        await browser.close().catch(e => {});
+        await browser.close().catch(e => {
+            console.warn('[BrowserManager] Error closing browser gracefully:', e);
+        });
         browser = null;
         console.log('[BrowserManager] Browser closed successfully.');
     }
