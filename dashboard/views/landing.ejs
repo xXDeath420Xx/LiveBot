@@ -21,18 +21,36 @@
         </div>
     </header>
 
-    <div class="row g-4">
-        <div class="col-lg-8">
-            <div class="row g-4">
-                <div class="col-md-6"><div class="feature-card h-100"><h3><i class="fas fa-sync-alt me-2"></i>Twitch Team Powerhouse</h3><p>Automate your entire Twitch Team. The bot syncs members, assigns roles, and even cross-posts to Kick if they're live there—all automatically.</p></div></div>
-                <div class="col-md-6"><div class="feature-card h-100"><h3><i class="fas fa-desktop me-2"></i>Full Web Dashboard</h3><p>Manage all servers and streamers from a sleek, intuitive web interface. No more wrestling with complicated slash commands.</p></div></div>
-                <div class="col-md-6"><div class="feature-card h-100"><h3><i class="fas fa-cogs me-2"></i>Unmatched Customization</h3><p>From custom webhook avatars to per-streamer messages using placeholders like <code>{username}</code>, tailor every detail.</p></div></div>
+    <div class="row g-4 justify-content-center">
+        <div class="col-lg-4 col-md-6">
+            <div class="feature-card h-100">
+                <h3><i class="fas fa-sync-alt me-2"></i>Twitch Team Powerhouse</h3>
+                <p>Automate your entire Twitch Team. The bot syncs members, assigns roles, and even cross-posts to Kick if they're live there—all automatically.</p>
             </div>
         </div>
-        <div class="col-md-4"><div class="feature-card h-100"><h3><i class="fas fa-signal me-2"></i>Global Live Status</h3>
+        <div class="col-lg-4 col-md-6">
+            <div class="feature-card h-100">
+                <h3><i class="fas fa-desktop me-2"></i>Full Web Dashboard</h3>
+                <p>Manage all servers and streamers from a sleek, intuitive web interface. No more wrestling with complicated slash commands.</p>
+            </div>
+        </div>
+        <div class="col-lg-4 col-md-6">
+            <div class="feature-card h-100">
+                <h3><i class="fas fa-cogs me-2"></i>Unmatched Customization</h3>
+                <p>From custom webhook avatars to per-streamer messages using placeholders like <code>{username}</code>, tailor every detail.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 justify-content-center mt-4">
+        <div class="col-lg-6">
+            <div class="feature-card h-100">
+                <h3><i class="fas fa-signal me-2"></i>Global Live Status</h3>
                 <p class="mb-2 small">Stream check in: <strong id="stream-countdown">--:--</strong><br>Team sync in: <strong id="team-countdown">--:--</strong></p>
                 <div id="featured-streamers-container" class="live-status-scroll"><p class="text-center small">Loading live streamers...</p></div>
             </div>
+        </div>
+    </div>
 </main>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -71,19 +89,26 @@
                     return;
                 }
 
-                streamersData.forEach(streamer => {
+                // Shuffle the array for randomness
+                for (let i = streamersData.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [streamersData[i], streamersData[j]] = [streamersData[j], streamersData[i]];
+                }
+
+                // Determine a random number of streamers to show, between 5 and 8, or less if not enough are live
+                const maxStreamers = Math.min(streamersData.length, Math.floor(Math.random() * (8 - 5 + 1)) + 5);
+                const randomStreamers = streamersData.slice(0, maxStreamers);
+
+                randomStreamers.forEach(streamer => {
                     const card = document.createElement("div");
                     card.className = "live-streamer-card";
                     const iconsHtml = streamer.live_platforms.map(p => p.platform === 'kick' ?
                         '<i class="fas fa-k platform-icon-fa platform-icon-kick"></i>' :
                         `<i class="fab fa-${p.platform} platform-icon-fa platform-icon-${p.platform}"></i>`
                     ).join(" ");
+                    const game = streamer.live_platforms && streamer.live_platforms.length > 0 ? streamer.live_platforms[0].game : "N/A";
 
-                    const games = streamer.live_platforms.map(p => p.game || 'N/A');
-                    const uniqueGames = [...new Set(games.filter(g => g !== 'N/A'))];
-                    const gameString = uniqueGames.length > 0 ? uniqueGames.join(', ') : 'N/A';
-
-                    card.innerHTML = `<img src="${streamer.avatar_url || '/images/default-icon.png'}" class="live-avatar"><div class="live-info"><strong>${streamer.username} <span class="platform-icons">${iconsHtml}</span></strong><span>${gameString}</span></div>`;
+                    card.innerHTML = `<img src="${streamer.avatar_url || '/images/default-icon.png'}" class="live-avatar"><div class="live-info"><strong>${streamer.username} <span class="platform-icons">${iconsHtml}</span></strong><span>${game || "N/A"}</span></div>`;
                     streamersContainer.appendChild(card);
                 });
             } catch (error) {
