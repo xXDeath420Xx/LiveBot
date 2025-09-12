@@ -1,30 +1,26 @@
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark-2">
+<nav class="navbar navbar-expand-lg">
     <div class="container-fluid">
         <a class="navbar-brand" href="/">
-            <img src="/images/CertiFried.png" alt="Logo" class="navbar-logo">
-            CertiFried Announcer
+            <img src="/images/CertiFried.png" alt="Logo">
+            <span>CertiFried Announcer</span>
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"><span class="navbar-toggler-icon"></span></button>
+        <div class="collapse navbar-collapse" id="mainNav">
             <ul class="navbar-nav ms-auto align-items-center">
-                <li class="nav-item">
-                    <a href="/help" class="btn btn-outline-secondary me-2">Help/Docs</a>
-                </li>
-                <li class="nav-item">
-                    <a href="/dashboard" class="btn btn-outline-secondary me-2">Server List</a>
-                </li>
+                <li class="nav-item"><a class="nav-link" href="/dashboard">Server List</a></li>
+                <li class="nav-item"><a class="nav-link" href="/help">Help/Docs</a></li>
                 <% if (user) { %>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle text-white" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png" width="32" height="32" class="rounded-circle me-2" alt="<%= user.username %>">
-                            Signed in as <%= user.username %>
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=32" width="32" height="32" class="rounded-circle me-1" alt="<%= user.username %>'s avatar">
+                            <span><%= user.username %></span>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="navbarDropdown">
+                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
                             <li><a class="dropdown-item" href="/logout">Log Out</a></li>
                         </ul>
                     </li>
+                <% } else { %>
+                    <li class="nav-item"><a href="/login" class="btn btn-primary">Login with Discord</a></li>
                 <% } %>
             </ul>
         </div>
