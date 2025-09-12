@@ -337,7 +337,7 @@ async function startupCleanup(client) {
                                 const messages = await channel.messages.fetch({ limit: 100, before: lastMessageId });
                                 totalFetched = messages.size;
                                 if (totalFetched === 0) break;
-                                const botMessages = messages.filter(m => m.webhookId !== null);
+                                const botMessages = messages.filter(m => m.webhookId !== null || m.author.id === client.user.id);
                                 if (botMessages.size > 0) {
                                     const deleted = await channel.bulkDelete(botMessages, true);
                                     deletedCount += deleted.size;
