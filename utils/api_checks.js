@@ -1,6 +1,6 @@
 const axios = require('axios');
 const initCycleTLS = require('cycletls');
-const { getBrowser } = require('./browserManager');
+const { getBrowser, closeBrowser } = require('./browserManager');
 
 let twitchToken = null;
 let tokenExpires = 0;
@@ -101,9 +101,11 @@ async function getTwitchTeamMembers(teamName) {
 }
 
 async function checkKick(cycleTLS, username) {
-    const defaultResponse = { isLive: false, username: username, platform: 'kick', url: `https://kick.com/${username.toLowerCase()}`, title: null, game: null, thumbnailUrl: null, viewers: 0 };
+    const defaultResponse = { isLive: false, pfp: null };
+    let pfp = null;
     try {
         const kickData = await getKickUser(cycleTLS, username);
+        pfp = kickData?.user?.profile_pic || null;
         if (kickData?.livestream) {
             return { 
                 isLive: true, 
@@ -112,26 +114,37 @@ async function checkKick(cycleTLS, username) {
                 url: `https://kick.com/${kickData.user.username}`, 
                 title: kickData.livestream.session_title || 'Untitled Stream', 
                 game: kickData.livestream.categories?.[0]?.name || 'N/A', 
-                thumbnailUrl: kickData.livestream.thumbnail?.src || kickData.user?.profile_pic || null,
-                viewers: kickData.livestream.viewer_count || 0
+                thumbnailUrl: kickData.livestream.thumbnail?.src || pfp,
+                viewers: kickData.livestream.viewer_count || 0,
+                pfp: pfp
             };
         }
-        return defaultResponse;
+        return { ...defaultResponse, pfp: pfp };
     } catch (error) {
         console.error(`[Check Kick Error] for "${username}":`, error.message);
-        return defaultResponse; 
+        return { ...defaultResponse, pfp: pfp }; 
     }
 }
 
 async function checkTwitch(streamer) {
-    const defaultResponse = { isLive: false, username: streamer.username, platform: 'twitch', url: `https://www.twitch.tv/${streamer.username}`, title: null, game: null, thumbnailUrl: null, viewers: 0 };
+    const defaultResponse = { isLive: false, pfp: null };
     const token = await getTwitchAccessToken();
     if (!token) return defaultResponse;
+
+    let pfp = null;
     try {
-        const res = await axios.get(`https://api.twitch.tv/helix/streams?user_id=${streamer.platform_user_id}`, { headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${token}` } });
-        const streamData = res.data.data[0];
+        const userRes = await axios.get(`https://api.twitch.tv/helix/users?id=${streamer.platform_user_id}`, { headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${token}` } });
+        if (userRes.data.data[0]) {
+            pfp = userRes.data.data[0].profile_image_url;
+        }
+    } catch (e) {
+        console.error(`[Twitch User PFP Check Error] for user ID "${streamer.platform_user_id}":`, e.response ? e.response.data : e.message);
+    }
+
+    try {
+        const streamRes = await axios.get(`https://api.twitch.tv/helix/streams?user_id=${streamer.platform_user_id}`, { headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${token}` } });
+        const streamData = streamRes.data.data[0];
         if (streamData) {
-            let thumbnailUrl = streamData.thumbnail_url?.replace('{width}', '1280').replace('{height}', '720') || null;
             return { 
                 isLive: true, 
                 platform: 'twitch',
@@ -139,75 +152,118 @@ async function checkTwitch(streamer) {
                 url: `https://www.twitch.tv/${streamData.user_login}`, 
                 title: streamData.title || 'Untitled Stream', 
                 game: streamData.game_name || 'N/A', 
-                thumbnailUrl: thumbnailUrl, 
-                viewers: streamData.viewer_count 
+                thumbnailUrl: streamData.thumbnail_url?.replace('{width}', '1280').replace('{height}', '720') || null, 
+                viewers: streamData.viewer_count,
+                pfp: pfp
             };
         }
-        return defaultResponse;
+        return { isLive: false, pfp: pfp };
     } catch (e) {
         console.error(`[Check Twitch Error] for user ID "${streamer.platform_user_id}":`, e.response ? e.response.data : e.message);
-        return defaultResponse; 
+        return { ...defaultResponse, pfp: pfp }; 
     }
 }
 
-async function checkYouTube(browser, channelId) {
-    const defaultResponse = { isLive: false, platform: 'youtube', username: `Channel ${channelId}`, url: `https://www.youtube.com/channel/${channelId}`, title: null, game: null, thumbnailUrl: null, viewers: 0 };
+async function checkYouTube(channelId) {
+    console.log(`[YouTube Check] Starting for channel ID: ${channelId}`);
+    const defaultResponse = { isLive: false, pfp: null };
+    let browser = null;
     let page = null;
     try {
-        if (!browser || !browser.isConnected()) return defaultResponse;
+        browser = await getBrowser();
+        if (!browser || !browser.isConnected()) {
+            console.log(`[YouTube Check] Browser not connected for ${channelId}.`);
+            return defaultResponse;
+        }
         page = await browser.newPage();
-        await page.goto(`https://www.youtube.com/channel/${channelId}/live`, { waitUntil: "domcontentloaded", timeout: 30000 });
+        console.log(`[YouTube Check] Navigating to YouTube for ${channelId}...`);
+        await page.goto(`https://www.youtube.com/channel/${channelId}/live`, { waitUntil: "domcontentloaded", timeout: 45000 });
+        console.log(`[YouTube Check] Page loaded for ${channelId}. URL: ${page.url()}`);
+        
+        const pfp = await page.locator('#avatar #img').getAttribute('src').catch(() => null);
+        console.log(`[YouTube PFP Debug] for ${channelId}: ${pfp}`); 
+
         if (page.url().includes("/watch")) {
-            const isLiveBadge = await page.locator('span.ytp-live-badge').isVisible({ timeout: 2000 });
+            const isLiveBadge = await page.locator('span.ytp-live-badge').isVisible({ timeout: 5000 });
             if (isLiveBadge) {
                 const title = await page.title().then(t => t.replace(' - YouTube', '').trim());
                 return {
                     isLive: true, platform: 'youtube', username: title, url: page.url(),
                     title: title, thumbnailUrl: await page.locator('meta[property="og:image"]').getAttribute('content').catch(() => null),
-                    game: 'N/A', viewers: 'N/A'
+                    game: 'N/A', viewers: 'N/A', pfp: pfp
                 };
             }
         }
-        return defaultResponse;
+        return { ...defaultResponse, pfp: pfp };
     } catch (e) {
         console.error(`[Check YouTube Error] for channel ID "${channelId}":`, e.message);
-        return defaultResponse;
+        return { ...defaultResponse, pfp: null };
     } finally {
         if (page) await page.close().catch(() => {});
+        if (browser) await closeBrowser();
+        console.log(`[YouTube Check] Finished for channel ID: ${channelId}`);
     }
 }
 
-async function checkTikTok(browser, username) {
-    const defaultResponse = { isLive: false, platform: 'tiktok', username, url: `https://www.tiktok.com/@${username}`, title: null, game: null, thumbnailUrl: null, viewers: 0 };
+async function checkTikTok(username) {
+    console.log(`[TikTok Check] Starting for username: ${username}`);
+    const defaultResponse = { isLive: false, pfp: null };
+    let browser = null;
     let page = null;
     try {
-        if (!browser || !browser.isConnected()) return defaultResponse;
+        browser = await getBrowser();
+        if (!browser || !browser.isConnected()) {
+            console.log(`[TikTok Check] Browser not connected for ${username}.`);
+            return defaultResponse;
+        }
         page = await browser.newPage();
-        await page.goto(`https://www.tiktok.com/@${username}/live`, { waitUntil: "domcontentloaded", timeout: 30000 });
+        console.log(`[TikTok Check] Navigating to TikTok for ${username}...`);
+        await page.goto(`https://www.tiktok.com/@${username}/live`, { waitUntil: "domcontentloaded", timeout: 45000 });
+        console.log(`[TikTok Check] Page loaded for ${username}. URL: ${page.url()}`);
+
+        const pfp = await page.locator('img[class*="StyledAvatar"]').getAttribute('src').catch(() => null);
+        console.log(`[TikTok PFP Debug] for ${username}: ${pfp}`); 
         const isLive = await page.locator('[data-e2e="live-room-normal"]').isVisible({ timeout: 5000 });
+
         if (isLive) { 
             const title = await page.title();
             return { 
                 isLive: true, platform: 'tiktok', username: username, url: `https://www.tiktok.com/@${username}/live`,
                 title: title.includes(username) ? title : 'Live on TikTok', game: 'N/A', 
-                viewers: await page.locator('[data-e2e="live-room-user-count"] span').first().textContent({ timeout: 2000 }).catch(() => 'N/A')
+                viewers: await page.locator('[data-e2e="live-room-user-count"] span').first().textContent({ timeout: 2000 }).catch(() => 'N/A'),
+                pfp: pfp
             }; 
         }
-        return defaultResponse;
+        return { ...defaultResponse, pfp: pfp };
     } catch (e) {
         console.error(`[Check TikTok Error] for "${username}":`, e.message);
-        return defaultResponse; 
+        return { ...defaultResponse, pfp: null }; 
     }
-    finally { if (page) await page.close().catch(() => {}); }
+    finally { 
+        if (page) await page.close().catch(() => {}); 
+        if (browser) await closeBrowser();
+        console.log(`[TikTok Check] Finished for username: ${username}`);
+    }
 }
 
-async function checkTrovo(browser, username) {
-    const defaultResponse = { isLive: false, platform: 'trovo', username, url: `https://trovo.live/s/${username}`, title: null, game: null, thumbnailUrl: null, viewers: 0 };
+async function checkTrovo(username) {
+    console.log(`[Trovo Check] Starting for username: ${username}`);
+    const defaultResponse = { isLive: false, pfp: null };
+    let browser = null;
     let page = null;
     try {
-        if (!browser || !browser.isConnected()) return defaultResponse;
+        browser = await getBrowser();
+        if (!browser || !browser.isConnected()) {
+            console.log(`[Trovo Check] Browser not connected for ${username}.`);
+            return defaultResponse;
+        }
         page = await browser.newPage();
-        await page.goto(`https://trovo.live/s/${username}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+        console.log(`[Trovo Check] Navigating to Trovo for ${username}...`);
+        await page.goto(`https://trovo.live/s/${username}`, { waitUntil: "domcontentloaded", timeout: 45000 });
+        console.log(`[Trovo Check] Page loaded for ${username}. URL: ${page.url()}`);
+
+        const pfp = await page.locator('.caster-avatar img').getAttribute('src').catch(() => null);
+        console.log(`[Trovo PFP Debug] for ${username}: ${pfp}`); 
         const isLive = await page.locator('.live-indicator-ctn').isVisible({ timeout: 5000 });
         if (isLive) {
             const title = await page.title().then(t => t.split('|')[0].trim());
@@ -215,15 +271,18 @@ async function checkTrovo(browser, username) {
             return {
                 isLive: true, platform: 'trovo', username: username, url: `https://trovo.live/s/${username}`,
                 title: title || 'Untitled Stream', game: game, thumbnailUrl: await page.locator('meta[property="og:image"]').getAttribute('content').catch(() => null),
-                viewers: parseInt(await page.locator('.viewer-count span').textContent({ timeout: 2000 }).catch(() => '0'), 10) || 0
+                viewers: parseInt(await page.locator('.viewer-count span').textContent({ timeout: 2000 }).catch(() => '0'), 10) || 0,
+                pfp: pfp
             };
         }
-        return defaultResponse;
+        return { ...defaultResponse, pfp: pfp };
     } catch (e) {
         console.error(`[Check Trovo Error] for "${username}":`, e.message);
-        return defaultResponse;
+        return { ...defaultResponse, pfp: null };
     } finally {
         if (page) await page.close().catch(() => {});
+        if (browser) await closeBrowser();
+        console.log(`[Trovo Check] Finished for username: ${username}`);
     }
 }
 
