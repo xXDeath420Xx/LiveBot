@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection, Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, MessageFlags, Partials, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder, MessageFlags, Partials, PermissionsBitField, EmbedBuilder, ChannelType } = require('discord.js');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const initCycleTLS = require('cycletls');
@@ -11,6 +11,7 @@ const { pendingInteractions } = require('./commands/addstreamer');
 
 let isChecking = false;
 let isCheckingTeams = false;
+let isFirstCheck = true; // Flag for the initial avatar check
 
 async function main() {
     const client = new Client({
@@ -73,6 +74,140 @@ async function main() {
             if (failed.length > 0) summary += `❌ Failed: ${[...new Set(failed)].join(', ')}\n`;
             await interaction.editReply({ content: summary, components: [] });
             pendingInteractions.delete(interactionId);
+        } else if (interaction.isButton() && interaction.customId.startsWith('request_announcement_button_')) {
+            const requestsChannelId = interaction.customId.split('_')[3];
+            const platformSelect = new StringSelectMenuBuilder()
+                .setCustomId(`request_platforms_${requestsChannelId}`)
+                .setPlaceholder('Select the platform(s) you stream on')
+                .setMinValues(1)
+                .setMaxValues(5)
+                .addOptions([
+                    { label: 'Twitch', value: 'twitch', emoji: '🟣' },
+                    { label: 'Kick', value: 'kick', emoji: '🟢' },
+                    { label: 'YouTube', value: 'youtube', emoji: '🔴' },
+                    { label: 'TikTok', value: 'tiktok', emoji: '⚫' },
+                    { label: 'Trovo', value: 'trovo', emoji: '🟢' },
+                ]);
+            const row = new ActionRowBuilder().addComponents(platformSelect);
+            await interaction.reply({ content: 'Please select all platforms you would like to be announced for.', components: [row], ephemeral: true });
+        } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith('request_platforms_')) {
+            const requestsChannelId = interaction.customId.split('_')[2];
+            const platforms = interaction.values;
+            const modal = new ModalBuilder()
+                .setCustomId(`request_submit_${requestsChannelId}_${platforms.join(',')}`)
+                .setTitle('Enter Your Usernames');
+            platforms.forEach(platform => {
+                modal.addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId(`${platform}_username`)
+                        .setLabel(`${platform.charAt(0).toUpperCase() + platform.slice(1)} Username`)
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                ));
+            });
+            await interaction.showModal(modal);
+        } else if (interaction.isModalSubmit() && interaction.customId.startsWith('request_submit_')) {
+            const parts = interaction.customId.split('_');
+            const requestsChannelId = parts[2];
+            const platforms = parts[3].split(',');
+            const requestData = platforms.map(platform => {
+                const username = interaction.fields.getTextInputValue(`${platform}_username`);
+                return { platform, username };
+            });
+
+            const requestsChannel = await client.channels.fetch(requestsChannelId);
+            if (!requestsChannel) {
+                return interaction.reply({ content: 'Error: The requests channel could not be found.', ephemeral: true });
+            }
+
+            const serializedData = requestData.map(d => `${d.platform}:${d.username}`).join(';');
+            const approveButton = new ButtonBuilder().setCustomId(`approve_request_${interaction.user.id}_${serializedData}`).setLabel('Approve').setStyle(ButtonStyle.Success);
+            const denyButton = new ButtonBuilder().setCustomId(`deny_request_${interaction.user.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger);
+            const row = new ActionRowBuilder().addComponents(approveButton, denyButton);
+
+            const embed = new EmbedBuilder()
+                .setColor('#FFA500')
+                .setTitle('New Streamer Request')
+                .setAuthor({ name: interaction.user.tag, iconURL: interaction.user.displayAvatarURL() })
+                .addFields(requestData.map(d => ({ name: d.platform.charAt(0).toUpperCase() + d.platform.slice(1), value: d.username, inline: true })))
+                .setFooter({ text: `User ID: ${interaction.user.id}` });
+
+            await requestsChannel.send({ embeds: [embed], components: [row] });
+            await interaction.reply({ content: 'Your request has been submitted for approval.', ephemeral: true });
+        } else if (interaction.isButton() && interaction.customId.startsWith('approve_request_')) {
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+                return interaction.reply({ content: 'You do not have permission to approve requests.', ephemeral: true });
+            }
+            const parts = interaction.customId.split('_');
+            const requestingUserId = parts[2];
+            const serializedData = parts.slice(3).join('_');
+
+            const channelSelect = new ChannelSelectMenuBuilder()
+                .setCustomId(`approve_channels_${requestingUserId}_${serializedData}`)
+                .setPlaceholder('Select announcement channels for this user.')
+                .setMinValues(1)
+                .setMaxValues(25)
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement);
+
+            const row = new ActionRowBuilder().addComponents(channelSelect);
+            await interaction.reply({ content: 'Please select the channel(s) to add this streamer to:', components: [row], ephemeral: true });
+        
+        } else if (interaction.isChannelSelectMenu() && interaction.customId.startsWith('approve_channels_')) {
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+                return interaction.reply({ content: 'You do not have permission to approve requests.', ephemeral: true });
+            }
+            await interaction.deferUpdate();
+            const parts = interaction.customId.split('_');
+            const requestingUserId = parts[2];
+            const serializedData = parts.slice(3).join('_');
+            const requestData = serializedData.split(';').map(d => {
+                const [platform, username] = d.split(':');
+                return { platform, username };
+            });
+            const channelIds = interaction.values;
+
+            let addedCount = 0;
+            for (const { platform, username } of requestData) {
+                try {
+                    let streamerInfo = null;
+                    if (platform === 'twitch') { const u = await apiChecks.getTwitchUser(username); if (u) streamerInfo = { puid: u.id, dbUsername: u.login }; }
+                    else if (platform === 'kick') { const u = await apiChecks.getKickUser(await initCycleTLS({ timeout: 60000 }), username); if (u) streamerInfo = { puid: u.id.toString(), dbUsername: u.user.username }; }
+                    else if (platform === 'youtube') { const c = await apiChecks.getYouTubeChannelId(username); if (c?.channelId) streamerInfo = { puid: c.channelId, dbUsername: c.channelName || username }; }
+                    else { streamerInfo = { puid: username, dbUsername: username }; }
+
+                    if (streamerInfo) {
+                        const [result] = await db.execute('INSERT INTO streamers (platform, platform_user_id, username, discord_user_id) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE username=VALUES(username), discord_user_id=VALUES(discord_user_id)', [platform, streamerInfo.puid, streamerInfo.dbUsername, requestingUserId]);
+                        const streamerId = result.insertId || (await db.execute('SELECT streamer_id FROM streamers WHERE platform=? AND platform_user_id=?', [platform, streamerInfo.puid]))[0][0].streamer_id;
+                        for (const channelId of channelIds) {
+                            await db.execute('INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)', [interaction.guild.id, streamerId, channelId]);
+                            addedCount++;
+                        }
+                    }
+                } catch (e) { console.error('Error approving streamer request:', e); }
+            }
+
+            const originalEmbed = interaction.message.embeds[0];
+            const updatedEmbed = new EmbedBuilder(originalEmbed)
+                .setColor('#57F287')
+                .setTitle('Request Approved')
+                .setFooter({ text: `Approved by ${interaction.user.tag}` })
+                .addFields({ name: 'Approved for Channels', value: channelIds.map(id => `<#${id}>`).join(', ') });
+
+            await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
+            await interaction.editReply({ content: `Approved request and added ${addedCount} subscriptions.`, components: [] });
+
+        } else if (interaction.isButton() && interaction.customId.startsWith('deny_request_')) {
+            if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+                return interaction.reply({ content: 'You do not have permission to deny requests.', ephemeral: true });
+            }
+            const originalEmbed = interaction.message.embeds[0];
+            const updatedEmbed = new EmbedBuilder(originalEmbed)
+                .setColor('#ED4245')
+                .setTitle('Request Denied')
+                .setFooter({ text: `Denied by ${interaction.user.tag}` });
+
+            await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
+            await interaction.reply({ content: 'Request has been denied.', ephemeral: true });
         }
     });
 
@@ -176,27 +311,49 @@ async function startupCleanup(client) {
 
         // --- STAGE 3: Purge Old Announcements ---
         console.log('[Startup Cleanup] Stage 3: Purging all bot messages from announcement channels...');
-        const [defaultChannels] = await db.execute('SELECT DISTINCT announcement_channel_id FROM guilds WHERE announcement_channel_id IS NOT NULL');
-        const [subscriptionChannels] = await db.execute('SELECT DISTINCT announcement_channel_id FROM subscriptions WHERE announcement_channel_id IS NOT NULL');
-        const allChannelIds = [...new Set([...defaultChannels.map(r => r.announcement_channel_id), ...subscriptionChannels.map(r => r.announcement_channel_id)])];
+        const [allGuildsWithSettings] = await db.execute('SELECT DISTINCT guild_id FROM guilds');
+        const [allGuildsWithSubs] = await db.execute('SELECT DISTINCT guild_id FROM subscriptions');
+        const allGuildsWithActivity = [...new Set([...allGuildsWithSettings.map(g => g.guild_id), ...allGuildsWithSubs.map(g => g.guild_id)])];
 
-        for (const channelId of allChannelIds) {
-            if (!channelId) continue;
+        for (const guildId of allGuildsWithActivity) {
             try {
-                const channel = await client.channels.fetch(channelId);
-                if (channel && channel.isTextBased() && channel.guild.members.me.permissionsIn(channel).has(PermissionsBitField.Flags.ManageMessages)) {
-                    console.log(`[Startup Cleanup] Purging messages from #${channel.name} (${channel.id})`);
-                    let messages;
-                    do {
-                        messages = await channel.messages.fetch({ limit: 100 });
-                        const botMessages = messages.filter(m => m.author.id === client.user.id);
-                        if (botMessages.size > 0) {
-                            await channel.bulkDelete(botMessages, true);
+                const guild = await client.guilds.fetch(guildId);
+                console.log(`[Startup Cleanup] Purging announcements for guild: ${guild.name} (${guildId})`);
+
+                const [defaultChannels] = await db.execute('SELECT DISTINCT announcement_channel_id FROM guilds WHERE guild_id = ? AND announcement_channel_id IS NOT NULL', [guildId]);
+                const [subscriptionChannels] = await db.execute('SELECT DISTINCT announcement_channel_id FROM subscriptions WHERE guild_id = ? AND announcement_channel_id IS NOT NULL', [guildId]);
+                const allChannelIdsForGuild = [...new Set([...defaultChannels.map(r => r.announcement_channel_id), ...subscriptionChannels.map(r => r.announcement_channel_id)])];
+
+                for (const channelId of allChannelIdsForGuild) {
+                    if (!channelId) continue;
+                    try {
+                        const channel = await client.channels.fetch(channelId);
+                        if (channel && channel.isTextBased() && channel.guild.members.me.permissionsIn(channel).has(PermissionsBitField.Flags.ManageMessages)) {
+                            console.log(`[Startup Cleanup] Purging messages from #${channel.name} (${channel.id})`);
+                            let deletedCount = 0;
+                            let lastMessageId = null;
+                            let totalFetched;
+                            do {
+                                const messages = await channel.messages.fetch({ limit: 100, before: lastMessageId });
+                                totalFetched = messages.size;
+                                if (totalFetched === 0) break;
+                                const botMessages = messages.filter(m => m.author.id === client.user.id);
+                                if (botMessages.size > 0) {
+                                    const deleted = await channel.bulkDelete(botMessages, true);
+                                    deletedCount += deleted.size;
+                                }
+                                lastMessageId = messages.last().id;
+                            } while (totalFetched === 100);
+                            if (deletedCount > 0) {
+                                console.log(`[Startup Cleanup] Purged ${deletedCount} messages from #${channel.name}.`);
+                            }
                         }
-                    } while (messages.size >= 100);
+                    } catch (e) {
+                        console.error(`[Startup Cleanup] Failed to purge channel ${channelId}: ${e.message}`);
+                    }
                 }
             } catch (e) {
-                console.error(`[Startup Cleanup] Failed to purge channel ${channelId}: ${e.message}`);
+                console.error(`[Startup Cleanup] Failed to process guild ${guildId} for announcement purge: ${e.message}`);
             }
         }
         await db.execute('TRUNCATE TABLE announcements');
@@ -247,8 +404,9 @@ async function checkStreams(client) {
                     currentPfp = primaryData?.pfp;
                 }
 
-                if (currentPfp && currentPfp !== streamer.profile_image_url) {
-                    console.log(`[Avatar Update] Updating avatar for ${streamer.username} from ${streamer.profile_image_url} to ${currentPfp}`);
+                const shouldUpdateAvatar = (isFirstCheck && currentPfp && currentPfp !== streamer.profile_image_url) || (streamer.profile_image_url === null && currentPfp);
+                if (shouldUpdateAvatar) {
+                    console.log(`[Avatar Update] Updating avatar for ${streamer.username} (Reason: ${isFirstCheck ? 'Initial Check' : 'Null Value'}).`);
                     await db.execute('UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?', [currentPfp, streamer.streamer_id]);
                 }
 
@@ -277,6 +435,7 @@ async function checkStreams(client) {
     } finally {
         if (cycleTLS) try { await cycleTLS.exit(); } catch (e) {}
         isChecking = false;
+        isFirstCheck = false; // Set the flag to false after the first run completes
         console.log(`[Check] ---> Finished stream check`);
     }
 }
