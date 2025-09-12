@@ -269,25 +269,23 @@ async function startupCleanup(client) {
 
         // --- STAGE 2: Remove Roles from Members ---
         console.log('[Startup Cleanup] Stage 2: Removing live roles from all members...');
-        const [validGuildRoles] = await db.execute('SELECT guild_id, live_role_id FROM guilds WHERE live_role_id IS NOT NULL');
-        const [validTeamRoles] = await db.execute('SELECT guild_id, live_role_id FROM twitch_teams WHERE live_role_id IS NOT NULL');
-        const validConfigs = [...validGuildRoles, ...validTeamRoles];
-        const rolesToClearByGuild = new Map();
+        const [allGuildsWithRoles] = await db.execute('SELECT DISTINCT guild_id FROM guilds WHERE live_role_id IS NOT NULL');
+        const [allTeamsWithRoles] = await db.execute('SELECT DISTINCT guild_id FROM twitch_teams WHERE live_role_id IS NOT NULL');
+        const allGuildsWithActivity = [...new Set([...allGuildsWithRoles.map(g => g.guild_id), ...allTeamsWithRoles.map(g => g.guild_id)])];
 
-        for (const config of validConfigs) {
-            if (!config.live_role_id) continue;
-            if (!rolesToClearByGuild.has(config.guild_id)) {
-                rolesToClearByGuild.set(config.guild_id, new Set());
-            }
-            rolesToClearByGuild.get(config.guild_id).add(config.live_role_id);
-        }
-
-        for (const [guildId, roleIds] of rolesToClearByGuild.entries()) {
+        for (const guildId of allGuildsWithActivity) {
             try {
                 const guild = await client.guilds.fetch(guildId);
                 console.log(`[Startup Cleanup] Processing guild: ${guild.name} (${guildId}). Fetching all members...`);
                 const members = await guild.members.fetch({ force: true, cache: true }); 
                 console.log(`[Startup Cleanup] Member cache for ${guild.name} is full (${members.size} members). Clearing roles...`);
+
+                const [guildLiveRole] = await db.execute('SELECT live_role_id FROM guilds WHERE guild_id = ?', [guildId]);
+                const [teamLiveRoles] = await db.execute('SELECT live_role_id FROM twitch_teams WHERE guild_id = ?', [guildId]);
+                const roleIds = new Set([
+                    guildLiveRole[0]?.live_role_id,
+                    ...teamLiveRoles.map(t => t.live_role_id)
+                ].filter(Boolean));
 
                 for (const roleId of roleIds) {
                     const role = guild.roles.cache.get(roleId);
@@ -313,9 +311,9 @@ async function startupCleanup(client) {
         console.log('[Startup Cleanup] Stage 3: Purging all bot messages from announcement channels...');
         const [allGuildsWithSettings] = await db.execute('SELECT DISTINCT guild_id FROM guilds');
         const [allGuildsWithSubs] = await db.execute('SELECT DISTINCT guild_id FROM subscriptions');
-        const allGuildsWithActivity = [...new Set([...allGuildsWithSettings.map(g => g.guild_id), ...allGuildsWithSubs.map(g => g.guild_id)])];
+        const allGuildsForPurge = [...new Set([...allGuildsWithSettings.map(g => g.guild_id), ...allGuildsWithSubs.map(g => g.guild_id)])];
 
-        for (const guildId of allGuildsWithActivity) {
+        for (const guildId of allGuildsForPurge) {
             try {
                 const guild = await client.guilds.fetch(guildId);
                 console.log(`[Startup Cleanup] Purging announcements for guild: ${guild.name} (${guildId})`);
