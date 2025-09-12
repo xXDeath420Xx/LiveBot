@@ -25,18 +25,16 @@ async function getOrCreateWebhook(client, channelId, defaultAvatarUrl) {
 }
 
 async function updateAnnouncement(client, subContext, liveData, existingAnnouncement, guildSettings, channelSettings) {
-    // --- ROBUSTNESS FIX ---
-    // This check will now prevent a crash by verifying liveData before use.
-    // If an API check returns a malformed object, it will be caught and logged here.
     if (!liveData || typeof liveData.platform !== 'string') {
-        console.error(`[Announcer] Invalid or malformed liveData for streamer ${subContext.username}. Aborting announcement. LiveData received:`, liveData);
-        return null; // Return null to prevent further processing and crashes.
+        console.error(`[Announcer] Invalid liveData for ${subContext.username}. Aborting.`, liveData);
+        return null;
     }
-    
+
     const channelId = subContext.announcement_channel_id || guildSettings?.announcement_channel_id;
     if (!channelId) return null;
 
     const platformName = liveData.platform.charAt(0).toUpperCase() + liveData.platform.slice(1);
+
     const embed = new EmbedBuilder()
         .setColor(platformColors[liveData.platform] || platformColors.default)
         .setAuthor({ name: `${liveData.username} is LIVE on ${platformName}!`, url: liveData.url })
@@ -45,6 +43,7 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
         .setTimestamp();
     if (liveData.thumbnailUrl) embed.setImage(`${liveData.thumbnailUrl}?t=${Date.now()}`);
 
+    // This section correctly checks for and applies the custom message.
     let content = null;
     if (subContext.custom_message) {
         content = subContext.custom_message
@@ -56,6 +55,7 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
     }
 
     try {
+        // This section correctly cascades all appearance settings.
         let finalNickname = guildSettings?.bot_nickname || WEBHOOK_NAME_PREFIX;
         let finalAvatarURL = guildSettings?.webhook_avatar_url || client.user.displayAvatarURL();
         if (channelSettings?.override_nickname) finalNickname = channelSettings.override_nickname;
@@ -72,8 +72,10 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
             try {
                 return await webhookClient.editMessage(existingAnnouncement.message_id, messageOptions);
             } catch (e) {
-                await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [existingAnnouncement.announcement_id]);
-                return await webhookClient.send(messageOptions);
+                // If editing fails, post a new message and update the DB record.
+                const newMessage = await webhookClient.send(messageOptions);
+                await db.execute('UPDATE announcements SET message_id = ? WHERE announcement_id = ?', [newMessage.id, existingAnnouncement.announcement_id]);
+                return newMessage;
             }
         } else {
             return await webhookClient.send(messageOptions);
