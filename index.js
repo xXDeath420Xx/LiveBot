@@ -3,7 +3,6 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const initCycleTLS = require('cycletls');
 const db = require('./utils/db');
-const { getBrowser, closeBrowser } = require('./utils/browserManager');
 const apiChecks = require('./utils/api_checks.js');
 const dashboard = require(path.join(__dirname, 'dashboard', 'server.js'));
 const { updateAnnouncement } = require('./utils/announcer');
@@ -83,7 +82,7 @@ async function main() {
             await startupCleanup(client);
             await checkTeams(client);
             await checkStreams(client);
-            setInterval(() => checkStreams(client), 90 * 1000);
+            setInterval(() => checkStreams(client), 180 * 1000);
             setInterval(() => checkTeams(client), 15 * 60 * 1000);
             dashboard.start(client);
         } catch (e) { console.error('[ClientReady Error]', e); }
@@ -92,50 +91,116 @@ async function main() {
     await client.login(process.env.DISCORD_TOKEN);
 }
 
-async function startupCleanup(client) {
-    console.log('[Startup Cleanup] Starting aggressive channel purge...');
+async function cleanupInvalidRole(guildId, roleId) {
+    if (!guildId || !roleId) return;
+    console.log(`[Role Cleanup] Aggressively purging invalid role ID ${roleId} for guild ${guildId}.`);
     try {
-        const [guildRoles]=await db.execute('SELECT guild_id, live_role_id FROM guilds WHERE live_role_id IS NOT NULL');
-        const [teamRoles]=await db.execute('SELECT guild_id, live_role_id FROM twitch_teams WHERE live_role_id IS NOT NULL');
-        const allRoleConfigs=[...guildRoles,...teamRoles];const rolesToCleanByGuild=new Map();for(const config of allRoleConfigs){if(config.live_role_id){if(!rolesToCleanByGuild.has(config.guild_id))rolesToCleanByGuild.set(config.guild_id,new Set());rolesToCleanByGuild.get(config.guild_id).add(config.live_role_id)}}
-        for(const[guildId,roleIds]of rolesToCleanByGuild.entries()){try{const guild=await client.guilds.fetch(guildId);for(const roleId of roleIds){try{const role=await guild.roles.fetch(roleId);if(role){for(const member of role.members.values()){await member.roles.remove(role,'Bot restart cleanup').catch(()=>{})}}}catch(e){}}}catch(e){}}
-        console.log('[Startup Cleanup] Live role cleanup complete.');
+        await db.execute('UPDATE guilds SET live_role_id = NULL WHERE guild_id = ? AND live_role_id = ?', [guildId, roleId]);
+        await db.execute('UPDATE twitch_teams SET live_role_id = NULL WHERE guild_id = ? AND live_role_id = ?', [guildId, roleId]);
+    } catch (dbError) {
+        console.error(`[Role Cleanup] DB Error while purging role ${roleId} for guild ${guildId}:`, dbError);
+    }
+}
 
-        const [defaultChannels] = await db.execute('SELECT DISTINCT announcement_channel_id FROM guilds WHERE announcement_channel_id IS NOT NULL');
-        const [subscriptionChannels] = await db.execute('SELECT DISTINCT announcement_channel_id FROM subscriptions WHERE announcement_channel_id IS NOT NULL');
-        const allChannelIds = new Set([...defaultChannels.map(r => r.announcement_channel_id), ...subscriptionChannels.map(r => r.announcement_channel_id)]);
+async function startupCleanup(client) {
+    console.log('[Startup Cleanup] Starting...');
+    try {
+        // --- STAGE 1: Proactive Role Validation and Cleanup ---
+        console.log('[Startup Cleanup] Stage 1: Validating all configured role IDs...');
+        const [guildRoles] = await db.execute('SELECT guild_id, live_role_id FROM guilds WHERE live_role_id IS NOT NULL');
+        const [teamRoles] = await db.execute('SELECT guild_id, live_role_id FROM twitch_teams WHERE live_role_id IS NOT NULL');
+        const allRoleConfigs = [...guildRoles, ...teamRoles];
+        const uniqueGuildIds = [...new Set(allRoleConfigs.map(c => c.guild_id))];
 
-        console.log(`[Startup Cleanup] Found ${allChannelIds.size} unique announcement channels to purge.`);
-
-        let totalPurged = 0;
-        const purgePromises = Array.from(allChannelIds).map(async (channelId) => {
+        for (const guildId of uniqueGuildIds) {
             try {
-                const channel = await client.channels.fetch(channelId).catch(() => null);
-                if (!channel || !channel.isTextBased()) return;
+                const guild = await client.guilds.fetch(guildId);
+                const rolesForGuild = allRoleConfigs.filter(c => c.guild_id === guildId);
+                const uniqueRoleIds = [...new Set(rolesForGuild.map(c => c.live_role_id))];
 
-                if (!channel.guild.members.me.permissionsIn(channel).has(PermissionsBitField.Flags.ManageMessages)) {
-                    console.warn(`[Startup Cleanup] ⚠️ SKIPPING channel #${channel.name} (${channel.id}) in guild "${channel.guild.name}" - Missing 'Manage Messages' permission.`);
-                    return;
-                }
-
-                const messages = await channel.messages.fetch({ limit: 100 });
-                if (messages.size > 0) {
-                    const deleted = await channel.bulkDelete(messages, true);
-                    if (deleted.size > 0) {
-                        console.log(`[Startup Cleanup] Purged ${deleted.size} messages from channel #${channel.name} (${channel.id}).`);
-                        totalPurged += deleted.size;
+                for (const roleId of uniqueRoleIds) {
+                    if (!roleId) continue;
+                    const roleExists = await guild.roles.fetch(roleId).catch(() => null);
+                    if (!roleExists) {
+                        console.log(`[Startup Cleanup] Found invalid role ${roleId} in guild ${guildId} during validation.`);
+                        await cleanupInvalidRole(guildId, roleId);
                     }
                 }
             } catch (e) {
-                if (e.code !== 10003) { console.error(`[Startup Cleanup] Could not purge channel ${channelId}. Error: ${e.message}`); }
+                // Guild likely no longer exists, ignore.
             }
-        });
+        }
+        console.log('[Startup Cleanup] Stage 1: Proactive role validation complete.');
 
-        await Promise.allSettled(purgePromises);
-        console.log(`[Startup Cleanup] Finished purging a total of ${totalPurged} messages from all channels.`);
+        // --- STAGE 2: Remove Roles from Members ---
+        console.log('[Startup Cleanup] Stage 2: Removing live roles from all members...');
+        const [validGuildRoles] = await db.execute('SELECT guild_id, live_role_id FROM guilds WHERE live_role_id IS NOT NULL');
+        const [validTeamRoles] = await db.execute('SELECT guild_id, live_role_id FROM twitch_teams WHERE live_role_id IS NOT NULL');
+        const validConfigs = [...validGuildRoles, ...validTeamRoles];
+        const rolesToClearByGuild = new Map();
 
+        for (const config of validConfigs) {
+            if (!config.live_role_id) continue;
+            if (!rolesToClearByGuild.has(config.guild_id)) {
+                rolesToClearByGuild.set(config.guild_id, new Set());
+            }
+            rolesToClearByGuild.get(config.guild_id).add(config.live_role_id);
+        }
+
+        for (const [guildId, roleIds] of rolesToClearByGuild.entries()) {
+            try {
+                const guild = await client.guilds.fetch(guildId);
+                console.log(`[Startup Cleanup] Processing guild: ${guild.name} (${guildId}). Fetching all members...`);
+                const members = await guild.members.fetch({ force: true, cache: true }); 
+                console.log(`[Startup Cleanup] Member cache for ${guild.name} is full (${members.size} members). Clearing roles...`);
+
+                for (const roleId of roleIds) {
+                    const role = guild.roles.cache.get(roleId);
+                    if (role) {
+                        const membersWithRole = members.filter(member => member.roles.cache.has(roleId));
+                        if (membersWithRole.size > 0) {
+                            console.log(`[Startup Cleanup] Removing role '${role.name}' from ${membersWithRole.size} member(s) in ${guild.name}.`);
+                            for (const member of membersWithRole.values()) {
+                                await member.roles.remove(role, 'Bot restart cleanup').catch(e => {
+                                    console.error(`[Startup Cleanup] Failed to remove role ${role.name} from ${member.user.tag} (${member.id}): ${e.message}`);
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error(`[Startup Cleanup] Failed to process guild ${guildId}:`, e.message);
+            }
+        }
+        console.log('[Startup Cleanup] Stage 2: Live role removal from members complete.');
+
+        // --- STAGE 3: Purge Old Announcements ---
+        console.log('[Startup Cleanup] Stage 3: Purging all bot messages from announcement channels...');
+        const [defaultChannels] = await db.execute('SELECT DISTINCT announcement_channel_id FROM guilds WHERE announcement_channel_id IS NOT NULL');
+        const [subscriptionChannels] = await db.execute('SELECT DISTINCT announcement_channel_id FROM subscriptions WHERE announcement_channel_id IS NOT NULL');
+        const allChannelIds = [...new Set([...defaultChannels.map(r => r.announcement_channel_id), ...subscriptionChannels.map(r => r.announcement_channel_id)])];
+
+        for (const channelId of allChannelIds) {
+            if (!channelId) continue;
+            try {
+                const channel = await client.channels.fetch(channelId);
+                if (channel && channel.isTextBased() && channel.guild.members.me.permissionsIn(channel).has(PermissionsBitField.Flags.ManageMessages)) {
+                    console.log(`[Startup Cleanup] Purging messages from #${channel.name} (${channel.id})`);
+                    let messages;
+                    do {
+                        messages = await channel.messages.fetch({ limit: 100 });
+                        const botMessages = messages.filter(m => m.author.id === client.user.id);
+                        if (botMessages.size > 0) {
+                            await channel.bulkDelete(botMessages, true);
+                        }
+                    } while (messages.size >= 100);
+                }
+            } catch (e) {
+                console.error(`[Startup Cleanup] Failed to purge channel ${channelId}: ${e.message}`);
+            }
+        }
         await db.execute('TRUNCATE TABLE announcements');
-        console.log('[Startup Cleanup] Announcements database table successfully cleared.');
+        console.log('[Startup Cleanup] Announcements table cleared.');
 
     } catch (e) { console.error('[Startup Cleanup] A CRITICAL ERROR occurred:', e); }
     console.log('[Startup Cleanup] Full-stage purge process has finished.');
@@ -145,31 +210,60 @@ async function checkStreams(client) {
     if (isChecking) { return; }
     isChecking = true;
     console.log(`[Check] ---> Starting stream check @ ${new Date().toLocaleTimeString()}`);
-    let browser = null, cycleTLS = null;
+    let cycleTLS = null;
     try {
         const [subscriptions] = await db.execute('SELECT sub.*, s.* FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id');
         if (subscriptions.length === 0) { isChecking = false; return; }
 
         cycleTLS = await initCycleTLS({ timeout: 60000 });
-        browser = await getBrowser();
         const liveStatusMap = new Map();
         const uniqueStreamers = [...new Map(subscriptions.map(item => [item.streamer_id, item])).values()];
+
         for (const streamer of uniqueStreamers) {
             let primaryData, secondaryData;
             try {
-                if(streamer.platform==='twitch'){primaryData=await apiChecks.checkTwitch(streamer);if(!primaryData.isLive&&streamer.kick_username){secondaryData=await apiChecks.checkKick(cycleTLS,streamer.kick_username)}}
-                else if(streamer.platform==='kick'){primaryData=await apiChecks.checkKick(cycleTLS,streamer.username)}
-                else if(streamer.platform==='youtube'){primaryData=await apiChecks.checkYouTube(browser,streamer.platform_user_id)}
-                else if(streamer.platform==='tiktok'){primaryData=await apiChecks.checkTikTok(browser,streamer.username)}
-                else if(streamer.platform==='trovo'){primaryData=await apiChecks.checkTrovo(browser,streamer.username)}
-                if(primaryData?.isLive){liveStatusMap.set(streamer.streamer_id,primaryData)}
-                if(secondaryData?.isLive){const[[kickInfo]]=await db.execute('SELECT streamer_id FROM streamers WHERE platform="kick" AND username=?',[streamer.kick_username]);if(kickInfo){liveStatusMap.set(kickInfo.streamer_id,secondaryData)}}
+                let currentPfp = null;
+                if (streamer.platform === 'twitch') {
+                    primaryData = await apiChecks.checkTwitch(streamer);
+                    currentPfp = primaryData?.pfp;
+                    if (!primaryData.isLive && streamer.kick_username) {
+                        secondaryData = await apiChecks.checkKick(cycleTLS, streamer.kick_username);
+                        if(secondaryData?.pfp) {
+                            const [[kickInfo]] = await db.execute('SELECT streamer_id FROM streamers WHERE platform="kick" AND username=?', [streamer.kick_username]);
+                            if (kickInfo) await db.execute('UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?', [secondaryData.pfp, kickInfo.streamer_id]);
+                        }
+                    }
+                } else if (streamer.platform === 'kick') {
+                    primaryData = await apiChecks.checkKick(cycleTLS, streamer.username);
+                    currentPfp = primaryData?.pfp;
+                } else if (streamer.platform === 'youtube') {
+                    primaryData = await apiChecks.checkYouTube(streamer.platform_user_id);
+                    currentPfp = primaryData?.pfp;
+                } else if (streamer.platform === 'tiktok') {
+                    primaryData = await apiChecks.checkTikTok(streamer.username);
+                    currentPfp = primaryData?.pfp;
+                } else if (streamer.platform === 'trovo') {
+                    primaryData = await apiChecks.checkTrovo(streamer.username);
+                    currentPfp = primaryData?.pfp;
+                }
+
+                if (currentPfp && currentPfp !== streamer.profile_image_url) {
+                    console.log(`[Avatar Update] Updating avatar for ${streamer.username} from ${streamer.profile_image_url} to ${currentPfp}`);
+                    await db.execute('UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?', [currentPfp, streamer.streamer_id]);
+                }
+
+                if (primaryData?.isLive) liveStatusMap.set(streamer.streamer_id, primaryData);
+                if (secondaryData?.isLive) {
+                    const [[kickInfo]] = await db.execute('SELECT streamer_id FROM streamers WHERE platform="kick" AND username=?', [streamer.kick_username]);
+                    if (kickInfo) liveStatusMap.set(kickInfo.streamer_id, secondaryData);
+                }
             } catch(e) { console.error(`[API Check Error] for ${streamer.username}:`, e); }
         }
 
         const [announcements] = await db.execute('SELECT * FROM announcements');
         const guildSettingsMap = new Map((await db.execute('SELECT * FROM guilds'))[0].map(g => [g.guild_id, g]));
         const channelSettingsMap = new Map((await db.execute('SELECT * FROM channel_settings'))[0].map(c => [c.channel_id, c]));
+        
         for (const sub of subscriptions) {
             try {
                 const liveData = liveStatusMap.get(sub.streamer_id);
@@ -181,7 +275,6 @@ async function checkStreams(client) {
         }
     } catch (e) { console.error("[checkStreams] CRITICAL ERROR:", e);
     } finally {
-        if (browser) await closeBrowser();
         if (cycleTLS) try { await cycleTLS.exit(); } catch (e) {}
         isChecking = false;
         console.log(`[Check] ---> Finished stream check`);
@@ -229,13 +322,7 @@ async function handleRole(member, roleId, action, guildId) {
         }
     } catch (e) {
         if (e.code === 10011 || (e.message && e.message.includes('Unknown Role'))) {
-            console.log(`[Role Cleanup] Invalid live role ID ${roleId} for guild ${guildId}. Removing from config.`);
-            const [teamSubs] = await db.execute('SELECT id FROM twitch_teams WHERE guild_id = ? AND live_role_id = ?', [guildId, roleId]);
-            if (teamSubs.length > 0) {
-                await db.execute('UPDATE twitch_teams SET live_role_id = NULL WHERE guild_id = ? AND live_role_id = ?', [guildId, roleId]);
-            } else {
-                await db.execute('UPDATE guilds SET live_role_id = NULL WHERE guild_id = ? AND live_role_id = ?', [guildId, roleId]);
-            }
+            await cleanupInvalidRole(guildId, roleId);
         } else {
             console.error(`Failed to ${action} role ${roleId} for ${member.id} in ${guildId}: ${e.message}`);
         }
@@ -279,11 +366,13 @@ async function processSubscription(client, sub, liveData, existing, guildSetting
             await handleRole(member, targetRoleId, 'remove', sub.guild_id);
         }
 
-        console.log(`[Purge] ${sub.username} offline. Removing Discord message but keeping record for next restart.`);
         try {
             const channel = await client.channels.fetch(existing.channel_id).catch(() => null);
-            if (channel) await channel.messages.delete(existing.message_id).catch(() => {});
+            if (channel) {
+                await channel.messages.delete(existing.message_id).catch(() => {});
+            }
         } catch (e) {}
+        await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [existing.announcement_id]);
     }
 }
 
