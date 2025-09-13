@@ -1,9 +1,9 @@
+// Final, corrected version. Please deploy and restart.
 const { Client, GatewayIntentBits, Collection, Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder, MessageFlags, Partials, PermissionsBitField, EmbedBuilder, ChannelType } = require('discord.js');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const initCycleTLS = require('cycletls');
 const db = require('./utils/db');
-const { getBrowser, closeBrowser } = require('./utils/browserManager');
 const apiChecks = require('./utils/api_checks.js');
 const dashboard = require(path.join(__dirname, 'dashboard', 'server.js'));
 const { updateAnnouncement } = require('./utils/announcer');
@@ -152,7 +152,7 @@ async function main() {
 
             const row = new ActionRowBuilder().addComponents(channelSelect);
             await interaction.reply({ content: 'Please select the channel(s) to add this streamer to:', components: [row], ephemeral: true });
-        
+
         } else if (interaction.isChannelSelectMenu() && interaction.customId.startsWith('approve_channels_')) {
             if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
                 return interaction.reply({ content: 'You do not have permission to approve requests.', ephemeral: true });
@@ -270,15 +270,15 @@ async function startupCleanup(client) {
 
         // --- STAGE 2: Remove Roles from Members ---
         console.log('[Startup Cleanup] Stage 2: Removing live roles from all members...');
-        const [allGuildsWithSettings] = await db.execute('SELECT DISTINCT guild_id FROM guilds');
-        const [allGuildsWithSubs] = await db.execute('SELECT DISTINCT guild_id FROM subscriptions');
-        const allGuildsForRolePurge = [...new Set([...allGuildsWithSettings.map(g => g.guild_id), ...allGuildsWithSubs.map(g => g.guild_id)])];
+        const [allGuildsWithRoles] = await db.execute('SELECT DISTINCT guild_id FROM guilds WHERE live_role_id IS NOT NULL');
+        const [allTeamsWithRoles] = await db.execute('SELECT DISTINCT guild_id FROM twitch_teams WHERE live_role_id IS NOT NULL');
+        const allGuildsForRolePurge = [...new Set([...allGuildsWithRoles.map(g => g.guild_id), ...allTeamsWithRoles.map(g => g.guild_id)])];
 
         for (const guildId of allGuildsForRolePurge) {
             try {
                 const guild = await client.guilds.fetch(guildId);
                 console.log(`[Startup Cleanup] Processing guild for roles: ${guild.name} (${guildId}). Fetching all members...`);
-                const members = await guild.members.fetch({ force: true, cache: true }); 
+                const members = await guild.members.fetch({ force: true, cache: true });
                 console.log(`[Startup Cleanup] Member cache for ${guild.name} is full (${members.size} members). Clearing roles...`);
 
                 const [guildLiveRole] = await db.execute('SELECT live_role_id FROM guilds WHERE guild_id = ?', [guildId]);
@@ -290,7 +290,7 @@ async function startupCleanup(client) {
 
                 if (roleIds.size === 0) {
                     console.log(`[Startup Cleanup] No live roles configured for guild ${guild.name} (${guildId}). Skipping role removal.`);
-                    continue; 
+                    continue;
                 }
 
                 for (const roleId of roleIds) {
@@ -301,7 +301,7 @@ async function startupCleanup(client) {
                             console.log(`[Startup Cleanup] Removing role '${role.name}' from ${membersWithRole.size} member(s) in ${guild.name}.`);
                             for (const member of membersWithRole.values()) {
                                 await member.roles.remove(role, 'Bot restart cleanup').catch(e => {
-                                    console.error(`[Startup Cleanup] Failed to remove role ${role.name} from ${member.user.tag} (${member.id}) in ${guild.name}: ${e.message}`);
+                                    console.error(`[Startup Cleanup] Failed to remove role ${role.name} from ${member.user.tag} (${member.id}): ${e.message}`);
                                 });
                             }
                         }
@@ -315,7 +315,9 @@ async function startupCleanup(client) {
 
         // --- STAGE 3: Purge Old Announcements ---
         console.log('[Startup Cleanup] Stage 3: Purging all bot messages from announcement channels...');
-        const allGuildsForPurge = [...new Set([...allGuildsWithSettings.map(g => g.guild_id), ...allGuildsWithSubs.map(g => g.guild_id)])];
+        const [allGuildsWithSettingsForPurge] = await db.execute('SELECT DISTINCT guild_id FROM guilds');
+        const [allGuildsWithSubsForPurge] = await db.execute('SELECT DISTINCT guild_id FROM subscriptions');
+        const allGuildsForPurge = [...new Set([...allGuildsWithSettingsForPurge.map(g => g.guild_id), ...allGuildsWithSubsForPurge.map(g => g.guild_id)])];
 
         for (const guildId of allGuildsForPurge) {
             try {
@@ -371,9 +373,20 @@ async function checkStreams(client) {
     console.log(`[Check] ---> Starting stream check @ ${new Date().toLocaleTimeString()}`);
     let cycleTLS = null;
     try {
+        // --- Step 1: Fetch all necessary data from DB ---
         const [subscriptions] = await db.execute('SELECT sub.*, s.* FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id');
-        if (subscriptions.length === 0) { isChecking = false; return; }
+        if (subscriptions.length === 0) {
+            isChecking = false;
+            return;
+        }
+        const [announcements] = await db.execute('SELECT * FROM announcements');
+        const guildSettingsMap = new Map((await db.execute('SELECT * FROM guilds'))[0].map(g => [g.guild_id, g]));
+        const [channelSettingsResult] = await db.execute('SELECT * FROM channel_settings');
+        const channelSettingsMap = new Map(channelSettingsResult.map(cs => `${cs.guild_id}-${cs.channel_id}`, cs));
+        const [teamConfigs] = await db.execute('SELECT * FROM twitch_teams');
+        const teamSettingsMap = new Map(teamConfigs.map(t => [`${t.guild_id}-${t.announcement_channel_id}`, t]));
 
+        // --- Step 2: Check live status for all unique streamers ---
         cycleTLS = await initCycleTLS({ timeout: 60000 });
         const liveStatusMap = new Map();
         const uniqueStreamers = [...new Map(subscriptions.map(item => [item.streamer_id, item])).values()];
@@ -393,7 +406,7 @@ async function checkStreams(client) {
                         }
                     }
                 } else if (streamer.platform === 'kick') {
-                    primaryData = await apiChecks.checkKick(streamer.username);
+                    primaryData = await apiChecks.checkKick(cycleTLS, streamer.username);
                     currentPfp = primaryData?.pfp;
                 } else if (streamer.platform === 'youtube') {
                     primaryData = await apiChecks.checkYouTube(streamer.platform_user_id);
@@ -420,24 +433,94 @@ async function checkStreams(client) {
             } catch(e) { console.error(`[API Check Error] for ${streamer.username}:`, e); }
         }
 
-        const [announcements] = await db.execute('SELECT * FROM announcements');
-        const guildSettingsMap = new Map((await db.execute('SELECT * FROM guilds'))[0].map(g => [g.guild_id, g]));
-        const channelSettingsMap = new Map((await db.execute('SELECT * FROM channel_settings'))[0].map(c => [c.channel_id, c]));
-        
+        // --- Step 3: Process announcements per subscription ---
         for (const sub of subscriptions) {
-            try {
-                const liveData = liveStatusMap.get(sub.streamer_id);
-                const existingAnnouncement = announcements.find(a => a.subscription_id === sub.subscription_id);
-                await processSubscription(client, sub, liveData, existingAnnouncement, guildSettingsMap.get(sub.guild_id), channelSettingsMap.get(sub.announcement_channel_id));
-            } catch (e) {
-                console.error(`[ProcessSubscription Error] for sub ${sub.subscription_id} (${sub.username}):`, e);
+            const liveData = liveStatusMap.get(sub.streamer_id);
+            const existingAnnouncement = announcements.find(a => a.subscription_id === sub.subscription_id);
+
+            // Get channel settings for this subscription's announcement channel
+            const channelSettings = channelSettingsMap.get(`${sub.guild_id}-${sub.announcement_channel_id}`);
+
+            // Get team settings for this subscription (if it belongs to a team)
+            const teamSettings = teamSettingsMap.get(`${sub.guild_id}-${sub.announcement_channel_id}`);
+
+            if (liveData) { // Streamer is live
+                const sentMessage = await updateAnnouncement(client, sub, liveData, existingAnnouncement, guildSettingsMap.get(sub.guild_id), channelSettings, teamSettings);
+                if (sentMessage) {
+                    if (existingAnnouncement) {
+                        if (sentMessage.id !== existingAnnouncement.message_id) {
+                            await db.execute('UPDATE announcements SET message_id = ? WHERE announcement_id = ?', [sentMessage.id, existingAnnouncement.announcement_id]);
+                        }
+                    } else {
+                        console.log(`[Announce] Posted for ${liveData.username} (${liveData.platform})`);
+                        await db.execute('INSERT INTO announcements (subscription_id, streamer_id, guild_id, message_id, channel_id, stream_game, stream_title, platform, stream_thumbnail_url) VALUES (?,?,?,?,?,?,?,?,?)',
+                            [sub.subscription_id || null, sub.streamer_id || null, sub.guild_id || null, sentMessage?.id || null, sentMessage?.channelId || null, liveData?.game || null, liveData?.title || null, liveData?.platform || null, liveData?.thumbnailUrl || null]);
+                    }
+                }
+            } else if (existingAnnouncement) { // Streamer is offline but has an announcement
+                try {
+                    const channel = await client.channels.fetch(existingAnnouncement.channel_id).catch(() => null);
+                    if (channel) {
+                        await channel.messages.delete(existingAnnouncement.message_id).catch(() => {});
+                    }
+                } catch (e) {}
+                await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [existingAnnouncement.announcement_id]);
             }
         }
-    } catch (e) { console.error("[checkStreams] CRITICAL ERROR:", e);
+
+        // --- Step 4: Process role updates per user, per guild ---
+        const usersToUpdate = new Map(); // Key: guildId-userId, Value: { guildId, userId, isLive: boolean }
+        for (const sub of subscriptions) {
+            if (!sub.discord_user_id) continue;
+            const key = `${sub.guild_id}-${sub.discord_user_id}`;
+            if (!usersToUpdate.has(key)) {
+                usersToUpdate.set(key, { guildId: sub.guild_id, userId: sub.discord_user_id, isLive: false });
+            }
+            if (liveStatusMap.get(sub.streamer_id)) {
+                usersToUpdate.get(key).isLive = true;
+            }
+        }
+
+        for (const [key, userState] of usersToUpdate.entries()) {
+            const { guildId, userId, isLive } = userState;
+
+            const userSubscriptions = subscriptions.filter(s => s.discord_user_id === userId && s.guild_id === guildId);
+            if (userSubscriptions.length === 0) continue;
+
+            const rolesToManage = new Set();
+
+            const guildSettings = guildSettingsMap.get(guildId);
+            if (guildSettings?.live_role_id) {
+                rolesToManage.add(guildSettings.live_role_id);
+            }
+
+            userSubscriptions.forEach(sub => {
+                const teamRole = teamSettingsMap.get(`${guildId}-${sub.announcement_channel_id}`)?.live_role_id; // Use teamSettingsMap here
+                if (teamRole) {
+                    rolesToManage.add(teamRole);
+                }
+            });
+
+            if (rolesToManage.size > 0) {
+                const guild = await client.guilds.fetch(guildId).catch(() => null);
+                if (!guild) continue;
+                const member = await guild.members.fetch(userId).catch(() => null);
+                if (!member) {
+                    console.log(`[Role Handler] Could not fetch member ${userId} in guild ${guild.name} (${guildId}) for role update.`);
+                    continue;
+                }
+
+                const action = isLive ? 'add' : 'remove';
+                await handleRole(member, [...rolesToManage], action, guildId);
+            }
+        }
+
+    } catch (e) {
+        console.error("[checkStreams] CRITICAL ERROR:", e);
     } finally {
         if (cycleTLS) try { await cycleTLS.exit(); } catch (e) {}
         isChecking = false;
-        isFirstCheck = false; // Set the flag to false after the first run completes
+        isFirstCheck = false;
         console.log(`[Check] ---> Finished stream check`);
     }
 }
@@ -473,67 +556,23 @@ async function checkTeams(client) {
     finally { isCheckingTeams = false; console.log('[Team Sync] ---> Finished team sync.'); }
 }
 
-async function handleRole(member, roleId, action, guildId) {
-    if (!member || !roleId) return;
-    try {
-        if (action === 'add' && !member.roles.cache.has(roleId)) {
-            await member.roles.add(roleId);
-        } else if (action === 'remove' && member.roles.cache.has(roleId)) {
-            await member.roles.remove(roleId);
-        }
-    } catch (e) {
-        if (e.code === 10011 || (e.message && e.message.includes('Unknown Role'))) {
-            await cleanupInvalidRole(guildId, roleId);
-        } else {
-            console.error(`Failed to ${action} role ${roleId} for ${member.id} in ${guildId}: ${e.message}`);
-        }
-    }
-}
-
-async function processSubscription(client, sub, liveData, existing, guildSettings, channelSettings) {
-    const isLive = liveData && liveData.isLive;
-    let member = null;
-    if (sub.discord_user_id) {
-        const guild = await client.guilds.fetch(sub.guild_id).catch(() => {});
-        if (guild) member = await guild.members.fetch(sub.discord_user_id).catch(() => {});
-    }
-
-    if (isLive) {
-        if (member) {
-            let targetRoleId = guildSettings?.live_role_id;
-            const [teamSubs] = await db.execute('SELECT tt.live_role_id FROM twitch_teams tt JOIN subscriptions s ON tt.announcement_channel_id = s.announcement_channel_id AND tt.guild_id = s.guild_id WHERE s.streamer_id = ? AND tt.live_role_id IS NOT NULL', [sub?.streamer_id]);
-            if (teamSubs.length > 0) targetRoleId = teamSubs[0].live_role_id;
-            await handleRole(member, targetRoleId, 'add', sub.guild_id);
-        }
-
-        const sentMessage = await updateAnnouncement(client, sub, liveData, existing, guildSettings, channelSettings);
-
-        if (sentMessage) {
-            if (existing) {
-                if (sentMessage.id !== existing.message_id) {
-                    await db.execute('UPDATE announcements SET message_id = ? WHERE announcement_id = ?', [sentMessage.id, existing.announcement_id]);
-                }
-            } else {
-                console.log(`[Announce] Posted for ${liveData.username} (${liveData.platform})`);
-                await db.execute('INSERT INTO announcements (subscription_id, streamer_id, guild_id, message_id, channel_id, stream_game, stream_title, platform, stream_thumbnail_url) VALUES (?,?,?,?,?,?,?,?,?)',
-                    [sub?.subscription_id??null, sub?.streamer_id??null, sub?.guild_id??null, sentMessage?.id??null, sentMessage?.channelId??null, liveData?.game??null, liveData?.title??null, liveData?.platform??null, liveData?.thumbnailUrl??null]);
-            }
-        }
-    } else if (existing) {
-        if (member) {
-            let targetRoleId = guildSettings?.live_role_id;
-            const [teamSubs] = await db.execute('SELECT tt.live_role_id FROM twitch_teams tt JOIN subscriptions s ON tt.announcement_channel_id = s.announcement_channel_id AND tt.guild_id = s.guild_id WHERE s.streamer_id = ? AND tt.live_role_id IS NOT NULL', [sub?.streamer_id]);
-            if (teamSubs.length > 0) targetRoleId = teamSubs[0].live_role_id;
-            await handleRole(member, targetRoleId, 'remove', sub.guild_id);
-        }
-
+async function handleRole(member, roleIds, action, guildId) {
+    if (!member || !roleIds || roleIds.length === 0) return;
+    for (const roleId of roleIds) {
+        if (!roleId) continue;
         try {
-            const channel = await client.channels.fetch(existing.channel_id).catch(() => null);
-            if (channel) {
-                await channel.messages.delete(existing.message_id).catch(() => {});
+            if (action === 'add' && !member.roles.cache.has(roleId)) {
+                await member.roles.add(roleId);
+            } else if (action === 'remove' && member.roles.cache.has(roleId)) {
+                await member.roles.remove(roleId);
             }
-        } catch (e) {}
-        await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [existing.announcement_id]);
+        } catch (e) {
+            if (e.code === 10011 || (e.message && e.message.includes('Unknown Role'))) {
+                await cleanupInvalidRole(guildId, roleId);
+            } else {
+                console.error(`Failed to ${action} role ${roleId} for ${member.id} in ${guildId}: ${e.message}`);
+            }
+        }
     }
 }
 
