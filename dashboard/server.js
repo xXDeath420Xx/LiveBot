@@ -88,7 +88,7 @@ function start(botClient) {
         try {
             const botGuild = req.guildObject;
             const guildId = botGuild.id;
-            const [[subscriptions], [guildSettingsResult], [channelSettingsResult], allRoles, allChannels, [teamSubscriptions]] = await Promise.all([
+            const [[allSubscriptions], [guildSettingsResult], [channelSettingsResult], allRoles, allChannels, [rawTeamSubscriptions]] = await Promise.all([
                 db.execute(`SELECT sub.*, s.platform, s.username, s.discord_user_id, s.kick_username, s.streamer_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? ORDER BY s.username`, [guildId]),
                 db.execute('SELECT * FROM guilds WHERE guild_id = ?', [guildId]),
                 db.execute('SELECT * FROM channel_settings WHERE guild_id = ?', [guildId]),
@@ -97,35 +97,72 @@ function start(botClient) {
                 db.execute('SELECT * FROM twitch_teams WHERE guild_id = ?', [guildId])
             ]);
 
-            // Fetch members for each team subscription
-            for (const teamSub of teamSubscriptions) {
+            const channelsData = {};
+            const allChannelsMap = new Map(allChannels.map(ch => [ch.id, ch.name]));
+
+            // Initialize channelsData with all possible channels (text-based) and a 'default' entry
+            allChannels.filter(c => c.isTextBased()).forEach(ch => {
+                channelsData[ch.id] = { name: ch.name, individualStreamers: [], teams: [] };
+            });
+            channelsData['default'] = { name: 'Server Default', individualStreamers: [], teams: [] };
+
+            // Process team subscriptions and their members
+            const teamSubscriptions = [];
+            const teamStreamerSubscriptionKeys = new Set(); // To track streamer_id-channel_id pairs that are part of a team
+
+            for (const teamSub of rawTeamSubscriptions) {
                 const [members] = await db.execute(
-                    `SELECT s.platform, s.username AS twitch_username, s.kick_username
+                    `SELECT s.streamer_id, s.platform, s.username AS twitch_username, s.kick_username
                      FROM subscriptions sub
                      JOIN streamers s ON sub.streamer_id = s.streamer_id
                      WHERE sub.guild_id = ? AND sub.announcement_channel_id = ? AND s.platform = 'twitch'`,
                     [guildId, teamSub.announcement_channel_id]
                 );
                 teamSub.members = members;
-            }
+                teamSubscriptions.push(teamSub);
 
-            const channelsData = {};
-            const allChannelsMap = new Map(allChannels.map(ch => [ch.id, ch.name]));
-            for (const sub of subscriptions) {
-                const channelId = sub.announcement_channel_id || 'default';
-                if (!channelsData[channelId]) { channelsData[channelId] = { name: channelId === 'default' ? 'Server Default' : allChannelsMap.get(channelId) || 'Unknown Channel', streamers: [], teams: [] }; }
-                channelsData[channelId].streamers.push(sub);
-            }
-            for (const teamSub of teamSubscriptions) {
+                // Add team members' streamer_id and channel_id to the set for filtering individual streamers
+                members.forEach(member => {
+                    teamStreamerSubscriptionKeys.add(`${member.streamer_id}-${teamSub.announcement_channel_id}`);
+                });
+
                 const channelId = teamSub.announcement_channel_id;
-                if (!channelsData[channelId]) { channelsData[channelId] = { name: allChannelsMap.get(channelId) || 'Unknown Channel', streamers: [], teams: [] }; }
+                if (!channelsData[channelId]) {
+                    channelsData[channelId] = { name: allChannelsMap.get(channelId) || 'Unknown Channel', individualStreamers: [], teams: [] };
+                }
                 channelsData[channelId].teams.push(teamSub);
             }
+
+            // Process individual subscriptions, filtering out those already in teams for the specific channel
+            for (const sub of allSubscriptions) {
+                const subChannelId = sub.announcement_channel_id || 'default';
+                const subscriptionKey = `${sub.streamer_id}-${subChannelId}`;
+
+                if (!teamStreamerSubscriptionKeys.has(subscriptionKey)) {
+                    if (!channelsData[subChannelId]) {
+                        channelsData[subChannelId] = { name: allChannelsMap.get(subChannelId) || 'Unknown Channel', individualStreamers: [], teams: [] };
+                    }
+                    channelsData[subChannelId].individualStreamers.push(sub);
+                }
+            }
+
+            // Filter out channels that have no streamers or teams
+            const filteredChannelsData = Object.fromEntries(
+                Object.entries(channelsData).filter(([channelId, data]) =>
+                    data.individualStreamers.length > 0 || data.teams.length > 0
+                )
+            );
+
             res.render('manage', {
-                guild: botGuild, channelsData: channelsData, totalSubscriptions: subscriptions.length, user: req.user,
-                settings: guildSettingsResult[0] || {}, channelSettings: channelSettingsResult,
+                guild: botGuild,
+                channelsData: filteredChannelsData, // Use filtered and structured data
+                totalSubscriptions: allSubscriptions.length, // Total count of all subscriptions
+                user: req.user,
+                settings: guildSettingsResult[0] || {},
+                channelSettings: channelSettingsResult,
                 roles: allRoles.filter(r => !r.managed && r.name !== '@everyone'),
-                channels: allChannels.filter(c => c.isTextBased()), teamSubscriptions: teamSubscriptions
+                channels: allChannels.filter(c => c.isTextBased()),
+                teamSubscriptions: teamSubscriptions // Still pass this for the teams-tab partial
             });
         } catch (error) { console.error('[Dashboard GET Error]', error); res.status(500).render('error', { user: req.user, error: 'Error loading management page.' }); }
     });
@@ -165,7 +202,13 @@ function start(botClient) {
         try {
             const { teamSubscriptionId, liveRoleId, webhookName, webhookAvatarUrl } = req.body;
             const { guildId } = req.params;
-            await db.execute('UPDATE twitch_teams SET live_role_id = ?, webhook_name = ?, webhook_avatar_url = ? WHERE id = ? AND guild_id = ?', [liveRoleId || null, webhookName || null, webhookAvatarUrl || null, teamSubscriptionId, guildId]);
+            await db.execute('UPDATE twitch_teams SET live_role_id = ?, webhook_name = ?, webhook_avatar_url = ? WHERE id = ? AND guild_id = ?', [
+                liveRoleId || null,
+                webhookName || null,
+                webhookAvatarUrl || null,
+                teamSubscriptionId || null, // Ensure this is null if undefined/empty
+                guildId || null // Ensure this is null if undefined/empty
+            ]);
             res.redirect(`/manage/${guildId}?success=team_updated#teams-tab`);
         } catch (error) {
             console.error('[Dashboard Update Team Error]', error);
@@ -256,7 +299,16 @@ function start(botClient) {
 
     app.post('/manage/:guildId/edit-subscription', checkAuth, checkGuildAdmin, upload.single('avatar'), async (req, res) => {
         try {
-            const { subscription_id, discord_user_id, kick_username, announcement_channel_id, override_nickname, custom_message, override_avatar_url_text, reset_avatar } = req.body;
+            const {
+                subscription_id,
+                discord_user_id,
+                kick_username,
+                announcement_channel_id,
+                override_nickname,
+                custom_message,
+                override_avatar_url_text,
+                reset_avatar
+            } = req.body;
             const guildId = req.params.guildId;
 
             const [[sub]] = await db.execute('SELECT streamer_id, override_avatar_url FROM subscriptions WHERE subscription_id = ? AND guild_id = ?', [subscription_id, guildId]);
