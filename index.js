@@ -382,7 +382,7 @@ async function checkStreams(client) {
         const [announcements] = await db.execute('SELECT * FROM announcements');
         const guildSettingsMap = new Map((await db.execute('SELECT * FROM guilds'))[0].map(g => [g.guild_id, g]));
         const [channelSettingsResult] = await db.execute('SELECT * FROM channel_settings');
-        const channelSettingsMap = new Map(channelSettingsResult.map(cs => `${cs.guild_id}-${cs.channel_id}`, cs));
+        const channelSettingsMap = new Map(channelSettingsResult.map(cs => [`${cs.guild_id}-${cs.channel_id}`, cs]));
         const [teamConfigs] = await db.execute('SELECT * FROM twitch_teams');
         const teamSettingsMap = new Map(teamConfigs.map(t => [`${t.guild_id}-${t.announcement_channel_id}`, t]));
 
