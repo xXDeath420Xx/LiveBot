@@ -101,11 +101,15 @@ async function getTwitchTeamMembers(teamName) {
 }
 
 async function checkKick(cycleTLS, username) {
+    console.log(`[Kick Check] Starting for username: ${username}`);
     const defaultResponse = { isLive: false, pfp: null };
-    let pfp = null;
+    let pfp = null; 
     try {
         const kickData = await getKickUser(cycleTLS, username);
+        console.log(`[Kick Check] API Response for ${username}: Livestream data exists: ${!!kickData?.livestream}`);
+
         pfp = kickData?.user?.profile_pic || null;
+
         if (kickData?.livestream) {
             return { 
                 isLive: true, 
@@ -123,6 +127,8 @@ async function checkKick(cycleTLS, username) {
     } catch (error) {
         console.error(`[Check Kick Error] for "${username}":`, error.message);
         return { ...defaultResponse, pfp: pfp }; 
+    } finally {
+        console.log(`[Kick Check] Finished for username: ${username}`);
     }
 }
 
@@ -169,6 +175,7 @@ async function checkYouTube(channelId) {
     const defaultResponse = { isLive: false, pfp: null };
     let browser = null;
     let page = null;
+    let pfp = null; 
     try {
         browser = await getBrowser();
         if (!browser || !browser.isConnected()) {
@@ -180,7 +187,7 @@ async function checkYouTube(channelId) {
         await page.goto(`https://www.youtube.com/channel/${channelId}/live`, { waitUntil: "domcontentloaded", timeout: 45000 });
         console.log(`[YouTube Check] Page loaded for ${channelId}. URL: ${page.url()}`);
         
-        const pfp = await page.locator('#avatar #img').getAttribute('src').catch(() => null);
+        pfp = await page.locator('#avatar #img').getAttribute('src').catch(() => null);
         console.log(`[YouTube PFP Debug] for ${channelId}: ${pfp}`); 
 
         if (page.url().includes("/watch")) {
@@ -197,7 +204,7 @@ async function checkYouTube(channelId) {
         return { ...defaultResponse, pfp: pfp };
     } catch (e) {
         console.error(`[Check YouTube Error] for channel ID "${channelId}":`, e.message);
-        return { ...defaultResponse, pfp: null };
+        return { ...defaultResponse, pfp: pfp };
     } finally {
         if (page) await page.close().catch(() => {});
         if (browser) await closeBrowser();
@@ -210,6 +217,7 @@ async function checkTikTok(username) {
     const defaultResponse = { isLive: false, pfp: null };
     let browser = null;
     let page = null;
+    let pfp = null; 
     try {
         browser = await getBrowser();
         if (!browser || !browser.isConnected()) {
@@ -221,7 +229,7 @@ async function checkTikTok(username) {
         await page.goto(`https://www.tiktok.com/@${username}/live`, { waitUntil: "domcontentloaded", timeout: 45000 });
         console.log(`[TikTok Check] Page loaded for ${username}. URL: ${page.url()}`);
 
-        const pfp = await page.locator('img[class*="StyledAvatar"]').getAttribute('src').catch(() => null);
+        pfp = await page.locator('img[class*="StyledAvatar"]').getAttribute('src').catch(() => null);
         console.log(`[TikTok PFP Debug] for ${username}: ${pfp}`); 
         const isLive = await page.locator('[data-e2e="live-room-normal"]').isVisible({ timeout: 5000 });
 
@@ -237,7 +245,7 @@ async function checkTikTok(username) {
         return { ...defaultResponse, pfp: pfp };
     } catch (e) {
         console.error(`[Check TikTok Error] for "${username}":`, e.message);
-        return { ...defaultResponse, pfp: null }; 
+        return { ...defaultResponse, pfp: pfp }; 
     }
     finally { 
         if (page) await page.close().catch(() => {}); 
@@ -251,6 +259,7 @@ async function checkTrovo(username) {
     const defaultResponse = { isLive: false, pfp: null };
     let browser = null;
     let page = null;
+    let pfp = null; 
     try {
         browser = await getBrowser();
         if (!browser || !browser.isConnected()) {
@@ -278,7 +287,7 @@ async function checkTrovo(username) {
         return { ...defaultResponse, pfp: pfp };
     } catch (e) {
         console.error(`[Check Trovo Error] for "${username}":`, e.message);
-        return { ...defaultResponse, pfp: null };
+        return { ...defaultResponse, pfp: pfp };
     } finally {
         if (page) await page.close().catch(() => {});
         if (browser) await closeBrowser();

@@ -24,7 +24,7 @@ async function getOrCreateWebhook(client, channelId, defaultAvatarUrl) {
     }
 }
 
-async function updateAnnouncement(client, subContext, liveData, existingAnnouncement, guildSettings, channelSettings) {
+async function updateAnnouncement(client, subContext, liveData, existingAnnouncement, guildSettings, channelSettings, teamSettings) {
     if (!liveData || typeof liveData.platform !== 'string') {
         console.error(`[Announcer] Invalid liveData for ${subContext.username}. Aborting.`, liveData);
         return null;
@@ -55,11 +55,16 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
     }
 
     try {
-        // This section correctly cascades all appearance settings.
+        // Determine final webhook name and avatar based on precedence
         let finalNickname = guildSettings?.bot_nickname || WEBHOOK_NAME_PREFIX;
         let finalAvatarURL = guildSettings?.webhook_avatar_url || client.user.displayAvatarURL();
+
         if (channelSettings?.override_nickname) finalNickname = channelSettings.override_nickname;
         if (channelSettings?.override_avatar_url) finalAvatarURL = channelSettings.override_avatar_url;
+
+        if (teamSettings?.webhook_name) finalNickname = teamSettings.webhook_name;
+        if (teamSettings?.webhook_avatar_url) finalAvatarURL = teamSettings.webhook_avatar_url;
+
         if (subContext.override_nickname) finalNickname = subContext.override_nickname;
         if (subContext.override_avatar_url) finalAvatarURL = subContext.override_avatar_url;
 

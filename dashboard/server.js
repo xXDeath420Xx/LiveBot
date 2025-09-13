@@ -8,6 +8,7 @@ const db = require('../utils/db');
 const apiChecks = require('../utils/api_checks');
 const multer = require('multer');
 const { PermissionsBitField } = require('discord.js');
+const Papa = require('papaparse'); // Add PapaParse for CSV handling
 
 const upload = multer({ dest: 'uploads/' });
 const app = express();
@@ -95,6 +96,19 @@ function start(botClient) {
                 botGuild.channels.fetch(),
                 db.execute('SELECT * FROM twitch_teams WHERE guild_id = ?', [guildId])
             ]);
+
+            // Fetch members for each team subscription
+            for (const teamSub of teamSubscriptions) {
+                const [members] = await db.execute(
+                    `SELECT s.platform, s.username AS twitch_username, s.kick_username
+                     FROM subscriptions sub
+                     JOIN streamers s ON sub.streamer_id = s.streamer_id
+                     WHERE sub.guild_id = ? AND sub.announcement_channel_id = ? AND s.platform = 'twitch'`,
+                    [guildId, teamSub.announcement_channel_id]
+                );
+                teamSub.members = members;
+            }
+
             const channelsData = {};
             const allChannelsMap = new Map(allChannels.map(ch => [ch.id, ch.name]));
             for (const sub of subscriptions) {
@@ -147,6 +161,18 @@ function start(botClient) {
         }
     });
 
+    app.post('/manage/:guildId/update-team', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const { teamSubscriptionId, liveRoleId, webhookName, webhookAvatarUrl } = req.body;
+            const { guildId } = req.params;
+            await db.execute('UPDATE twitch_teams SET live_role_id = ?, webhook_name = ?, webhook_avatar_url = ? WHERE id = ? AND guild_id = ?', [liveRoleId || null, webhookName || null, webhookAvatarUrl || null, teamSubscriptionId, guildId]);
+            res.redirect(`/manage/${guildId}?success=team_updated#teams-tab`);
+        } catch (error) {
+            console.error('[Dashboard Update Team Error]', error);
+            res.status(500).render('error', { user: req.user, error: 'Error updating team.' });
+        }
+    });
+
     app.post('/manage/:guildId/removeteam', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const { teamSubscriptionId } = req.body;
@@ -192,7 +218,7 @@ function start(botClient) {
             if (avatar_url_text && avatar_url_text.toLowerCase() === 'reset') {
                 finalAvatarUrl = null;
             } else if (req.file) {
-                const newFilename = `${guildId}-${channelId}-${Date.now()}${path.extname(req.file.originalname)}`;
+                const newFilename = `${guildId}-${channelId}-${Date.now()}${path.extname(req.file.path)}`;
                 const publicPath = path.join(__dirname, 'public', 'uploads', 'avatars');
                 const newPath = path.join(publicPath, newFilename);
                 if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
@@ -230,16 +256,7 @@ function start(botClient) {
 
     app.post('/manage/:guildId/edit-subscription', checkAuth, checkGuildAdmin, upload.single('avatar'), async (req, res) => {
         try {
-            const {
-                subscription_id,
-                discord_user_id,
-                kick_username,
-                announcement_channel_id,
-                override_nickname,
-                custom_message,
-                override_avatar_url_text,
-                reset_avatar
-            } = req.body;
+            const { subscription_id, discord_user_id, kick_username, announcement_channel_id, override_nickname, custom_message, override_avatar_url_text, reset_avatar } = req.body;
             const guildId = req.params.guildId;
 
             const [[sub]] = await db.execute('SELECT streamer_id, override_avatar_url FROM subscriptions WHERE subscription_id = ? AND guild_id = ?', [subscription_id, guildId]);
@@ -252,7 +269,7 @@ function start(botClient) {
             if (reset_avatar === 'true' || (override_avatar_url_text && override_avatar_url_text.toLowerCase() === 'reset')) {
                 finalAvatarUrl = null;
             } else if (req.file) {
-                const newFilename = `${streamer_id}-${Date.now()}${path.extname(req.file.originalname)}`;
+                const newFilename = `${streamer_id}-${Date.now()}${path.extname(req.file.path)}`;
                 const publicPath = path.join(__dirname, 'public', 'uploads', 'avatars');
                 const newPath = path.join(publicPath, newFilename);
                 if (!fs.existsSync(publicPath)) {
@@ -306,6 +323,114 @@ function start(botClient) {
         } catch (error) {
             console.error('[Dashboard Export Error]', error);
             res.status(500).render('error', { user: req.user, error: 'Could not export subscriptions.' });
+        }
+    });
+
+    app.get('/manage/:guildId/export-teams', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { teamId } = req.query;
+            const botGuild = req.guildObject;
+
+            let query = 'SELECT tt.id, tt.team_name, tt.announcement_channel_id, tt.live_role_id, tt.webhook_name, tt.webhook_avatar_url FROM twitch_teams tt WHERE tt.guild_id = ?';
+            const params = [guildId];
+
+            if (teamId) {
+                query += ' AND tt.id = ?';
+                params.push(teamId);
+            }
+
+            const [teams] = await db.execute(query, params);
+
+            if (teams.length === 0) {
+                return res.status(404).send('No teams to export.');
+            }
+
+            const allRoles = await botGuild.roles.fetch();
+            const rolesMap = new Map(allRoles.map(role => [role.id, role.name]));
+            const allChannels = await botGuild.channels.fetch();
+            const channelsMap = new Map(allChannels.map(ch => [ch.id, ch.name]));
+
+            const csvHeader = "TeamName,AnnouncementChannel,LiveRole,WebhookName,WebhookAvatarUrl\n";
+            const csvRows = teams.map(team => {
+                const channelName = team.announcement_channel_id ? channelsMap.get(team.announcement_channel_id) || 'Unknown Channel' : '';
+                const roleName = team.live_role_id ? rolesMap.get(team.live_role_id) || 'Unknown Role' : '';
+                const webhookName = team.webhook_name || '';
+                const webhookAvatarUrl = team.webhook_avatar_url || '';
+                return `${team.team_name},#${channelName},${roleName},${webhookName},${webhookAvatarUrl}`;
+            }).join('\n');
+
+            const filename = teamId ? `team-${teams[0].team_name}-export.csv` : `teams-export-${guildId}.csv`;
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.send(csvHeader + csvRows);
+        } catch (error) {
+            console.error('[Dashboard Export Teams Error]', error);
+            res.status(500).render('error', { user: req.user, error: 'Could not export teams.' });
+        }
+    });
+
+    app.post('/manage/:guildId/import-teams-csv', checkAuth, checkGuildAdmin, upload.single('csvfile'), async (req, res) => {
+        try {
+            const { guildId } = req.params;
+            const { defaultChannelId } = req.body;
+            const botGuild = req.guildObject;
+
+            if (!req.file) {
+                return res.status(400).render('error', { user: req.user, error: 'No CSV file uploaded.' });
+            }
+
+            const csvData = fs.readFileSync(req.file.path, 'utf8');
+            const parsed = Papa.parse(csvData, { header: true, skipEmptyLines: true });
+            const teamsToImport = parsed.data;
+
+            const allChannels = await botGuild.channels.fetch();
+            const channelsMap = new Map(allChannels.map(ch => [ch.name.toLowerCase(), ch.id]));
+            const allRoles = await botGuild.roles.fetch();
+            const rolesMap = new Map(allRoles.map(role => [role.name.toLowerCase(), role.id]));
+
+            for (const teamRow of teamsToImport) {
+                const teamName = teamRow.TeamName;
+                let announcementChannelId = null; // Start with null
+                let liveRoleId = null;
+                let webhookName = teamRow.WebhookName || null;
+                let webhookAvatarUrl = teamRow.WebhookAvatarUrl || null;
+
+                if (!teamName) continue; // Skip rows without a team name
+
+                // 1. Try to get AnnouncementChannelId from CSV
+                if (teamRow.AnnouncementChannelName) {
+                    const channelName = teamRow.AnnouncementChannelName.replace(/^#/, '').toLowerCase();
+                    if (channelsMap.has(channelName)) {
+                        announcementChannelId = channelsMap.get(channelName);
+                    }
+                }
+
+                // 2. If not found in CSV, try to get from default dropdown (if provided and not empty)
+                if (!announcementChannelId && defaultChannelId) {
+                    announcementChannelId = defaultChannelId;
+                }
+
+                // Resolve LiveRoleName from CSV, if provided
+                if (teamRow.LiveRoleName) {
+                    const roleName = teamRow.LiveRoleName.toLowerCase();
+                    if (rolesMap.has(roleName)) {
+                        liveRoleId = rolesMap.get(roleName);
+                    }
+                }
+
+                // Insert or update the twitch_teams table
+                await db.execute(
+                    'INSERT INTO twitch_teams (guild_id, team_name, announcement_channel_id, live_role_id, webhook_name, webhook_avatar_url) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE announcement_channel_id = VALUES(announcement_channel_id), live_role_id = VALUES(live_role_id), webhook_name = VALUES(webhook_name), webhook_avatar_url = VALUES(webhook_avatar_url)',
+                    [guildId, teamName, announcementChannelId, liveRoleId, webhookName, webhookAvatarUrl]
+                );
+            }
+
+            fs.unlinkSync(req.file.path); // Clean up uploaded file
+            res.redirect(`/manage/${guildId}?success=teams_imported#teams-tab`);
+        } catch (error) {
+            console.error('[Dashboard Import Teams CSV Error]', error);
+            res.status(500).render('error', { user: req.user, error: 'Failed to import teams from CSV.' });
         }
     });
 
@@ -415,7 +540,7 @@ function start(botClient) {
             res.json(formatted);
         } catch (error) {
             console.error('[API global-live-status Error]', error);
-            res.status(500).json({ error: true, message: "Internal server error." });
+            res.status(500).json({ error: true, message: 'Internal server error.' });
         }
     });
 
@@ -433,7 +558,7 @@ function start(botClient) {
             res.json(formatted);
         } catch (error) {
             console.error(`[API guild-livestatus Error for ${req.params.guildId}]`, error);
-            res.status(500).json({ error: true, message: "Internal server error." });
+            res.status(500).json({ error: true, message: 'Internal server error.' });
         }
     });
 
