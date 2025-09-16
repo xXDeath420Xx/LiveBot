@@ -20,6 +20,13 @@ module.exports = {
     const panelChannel = interaction.options.getChannel('panel-channel');
     const requestsChannel = interaction.options.getChannel('requests-channel');
 
+    if (!panelChannel || !requestsChannel) {
+        return interaction.reply({
+            content: '❌ Could not resolve one or both of the channels. Please make sure I have permissions to view both channels and try again.',
+            ephemeral: true,
+        });
+    }
+
     const embed = new EmbedBuilder()
       .setColor('#5865F2')
       .setTitle('Request Live Stream Announcements')
