@@ -5,10 +5,11 @@ require('./passport-setup');
 const path = require('path');
 const fs = require('fs');
 const db = require('../utils/db');
-const apiChecks = require('../utils/api_checks');
+const apiChecks = require('../utils/api_checks.js');
 const multer = require('multer');
 const { PermissionsBitField } = require('discord.js');
 const Papa = require('papaparse'); // Add PapaParse for CSV handling
+const initCycleTLS = require('cycletls'); // Import initCycleTLS
 
 const upload = multer({ dest: 'uploads/' });
 const app = express();
@@ -88,17 +89,46 @@ function start(botClient) {
         try {
             const botGuild = req.guildObject;
             const guildId = botGuild.id;
-            const [[allSubscriptions], [guildSettingsResult], [channelSettingsResult], allRoles, allChannels, [rawTeamSubscriptions]] = await Promise.all([
+            const [[allSubscriptions], [guildSettingsResult], [channelSettingsResult], allRoles, allChannels, [rawTeamSubscriptions], [allStreamers]] = await Promise.all([
                 db.execute(`SELECT sub.*, s.platform, s.username, s.discord_user_id, s.kick_username, s.streamer_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? ORDER BY s.username`, [guildId]),
                 db.execute('SELECT * FROM guilds WHERE guild_id = ?', [guildId]),
                 db.execute('SELECT * FROM channel_settings WHERE guild_id = ?', [guildId]),
                 botGuild.roles.fetch(),
                 botGuild.channels.fetch(),
-                db.execute('SELECT * FROM twitch_teams WHERE guild_id = ?', [guildId])
+                db.execute('SELECT * FROM twitch_teams WHERE guild_id = ?', [guildId]),
+                db.execute('SELECT streamer_id, platform, username, kick_username, discord_user_id FROM streamers') // Fetch all streamers to link accounts
             ]);
 
             const channelsData = {};
             const allChannelsMap = new Map(allChannels.map(ch => [ch.id, ch.name]));
+
+            // Map to link Twitch and Kick streamers by discord_user_id or kick_username
+            const linkedStreamerMap = new Map(); // Key: streamer_id, Value: { twitch_streamer_id, kick_streamer_id, twitch_username, kick_username }
+            const streamerIdToDataMap = new Map(allStreamers.map(s => [s.streamer_id, s]));
+
+            allStreamers.forEach(s => {
+                if (s.discord_user_id) {
+                    const existing = linkedStreamerMap.get(`discord-${s.discord_user_id}`);
+                    if (!existing) {
+                        linkedStreamerMap.set(`discord-${s.discord_user_id}`, { [s.platform]: s.streamer_id, twitch_username: s.platform === 'twitch' ? s.username : null, kick_username: s.platform === 'kick' ? s.username : null });
+                    } else {
+                        existing[s.platform] = s.streamer_id;
+                        if (s.platform === 'twitch') existing.twitch_username = s.username;
+                        if (s.platform === 'kick') existing.kick_username = s.username;
+                    }
+                } else if (s.platform === 'twitch' && s.kick_username) {
+                    const kickStreamer = allStreamers.find(ks => ks.platform === 'kick' && ks.username === s.kick_username);
+                    if (kickStreamer) {
+                        const existing = linkedStreamerMap.get(`twitch-kick-${s.streamer_id}`);
+                        if (!existing) {
+                            linkedStreamerMap.set(`twitch-kick-${s.streamer_id}`, { twitch: s.streamer_id, kick: kickStreamer.streamer_id, twitch_username: s.username, kick_username: kickStreamer.username });
+                        } else {
+                            existing.kick = kickStreamer.streamer_id;
+                            existing.kick_username = kickStreamer.username;
+                        }
+                    }
+                }
+            });
 
             // Initialize channelsData with all possible channels (text-based) and a 'default' entry
             allChannels.filter(c => c.isTextBased()).forEach(ch => {
@@ -106,25 +136,58 @@ function start(botClient) {
             });
             channelsData['default'] = { name: 'Server Default', individualStreamers: [], teams: [] };
 
-            // Process team subscriptions and their members
             const teamSubscriptions = [];
-            const teamStreamerSubscriptionKeys = new Set(); // To track streamer_id-channel_id pairs that are part of a team
+            const processedStreamerSubscriptionKeys = new Set(); // To track streamer_id-channel_id pairs that have been processed (either in team or individual)
 
+            // Process team subscriptions and their members
             for (const teamSub of rawTeamSubscriptions) {
-                const [members] = await db.execute(
-                    `SELECT s.streamer_id, s.platform, s.username AS twitch_username, s.kick_username
+                const [rawMembers] = await db.execute(
+                    `SELECT sub.subscription_id, sub.announcement_channel_id, sub.override_nickname, sub.custom_message, sub.override_avatar_url, s.streamer_id, s.platform, s.username, s.kick_username, s.discord_user_id
                      FROM subscriptions sub
                      JOIN streamers s ON sub.streamer_id = s.streamer_id
                      WHERE sub.guild_id = ? AND sub.announcement_channel_id = ? AND s.platform = 'twitch'`,
                     [guildId, teamSub.announcement_channel_id]
                 );
+
+                const members = [];
+                for (const rawMember of rawMembers) {
+                    const memberData = {
+                        subscription_id: rawMember.subscription_id,
+                        announcement_channel_id: rawMember.announcement_channel_id,
+                        override_nickname: rawMember.override_nickname,
+                        custom_message: rawMember.custom_message,
+                        override_avatar_url: rawMember.override_avatar_url,
+                        twitch_username: rawMember.username,
+                        discord_user_id: rawMember.discord_user_id
+                    };
+                    let kickUsername = rawMember.kick_username;
+
+                    // Try to find linked Kick account if not directly specified or if discord_user_id links them
+                    if (rawMember.discord_user_id) {
+                        const linked = linkedStreamerMap.get(`discord-${rawMember.discord_user_id}`);
+                        if (linked?.kick) { // If a Kick account is linked via discord_user_id
+                            const kickStreamerData = streamerIdToDataMap.get(linked.kick);
+                            if (kickStreamerData) kickUsername = kickStreamerData.username;
+                        }
+                    } else if (rawMember.platform === 'twitch' && rawMember.kick_username) {
+                        // Fallback for older links without discord_user_id
+                        const kickStreamer = allStreamers.find(s => s.platform === 'kick' && s.username === kickUsername);
+                        if (kickStreamer) kickUsername = kickStreamer.username;
+                    }
+                    memberData.kick_username = kickUsername;
+                    members.push(memberData);
+
+                    // Mark this Twitch subscription and its linked Kick subscription as processed for this channel
+                    processedStreamerSubscriptionKeys.add(`${rawMember.streamer_id}-${teamSub.announcement_channel_id}`);
+                    if (kickUsername) { // If there's a linked Kick account, mark its subscription as processed too
+                        const kickStreamer = allStreamers.find(s => s.platform === 'kick' && s.username === kickUsername);
+                        if (kickStreamer) {
+                            processedStreamerSubscriptionKeys.add(`${kickStreamer.streamer_id}-${teamSub.announcement_channel_id}`);
+                        }
+                    }
+                }
                 teamSub.members = members;
                 teamSubscriptions.push(teamSub);
-
-                // Add team members' streamer_id and channel_id to the set for filtering individual streamers
-                members.forEach(member => {
-                    teamStreamerSubscriptionKeys.add(`${member.streamer_id}-${teamSub.announcement_channel_id}`);
-                });
 
                 const channelId = teamSub.announcement_channel_id;
                 if (!channelsData[channelId]) {
@@ -133,16 +196,36 @@ function start(botClient) {
                 channelsData[channelId].teams.push(teamSub);
             }
 
-            // Process individual subscriptions, filtering out those already in teams for the specific channel
+            // Process individual subscriptions, filtering out those already in teams
             for (const sub of allSubscriptions) {
                 const subChannelId = sub.announcement_channel_id || 'default';
                 const subscriptionKey = `${sub.streamer_id}-${subChannelId}`;
 
-                if (!teamStreamerSubscriptionKeys.has(subscriptionKey)) {
-                    if (!channelsData[subChannelId]) {
-                        channelsData[subChannelId] = { name: allChannelsMap.get(subChannelId) || 'Unknown Channel', individualStreamers: [], teams: [] };
+                // Check if this specific subscription (streamer_id + channel_id) has been processed by a team
+                if (!processedStreamerSubscriptionKeys.has(subscriptionKey)) {
+                    // Also check if this streamer's *linked* account is part of a team for this channel
+                    let isLinkedToTeam = false;
+                    if (sub.discord_user_id) {
+                        const linked = linkedStreamerMap.get(`discord-${sub.discord_user_id}`);
+                        if (linked) {
+                            // Check if the linked Twitch or Kick streamer_id is part of a team for this channel
+                            if (linked.twitch && processedStreamerSubscriptionKeys.has(`${linked.twitch}-${subChannelId}`)) isLinkedToTeam = true;
+                            if (linked.kick && processedStreamerSubscriptionKeys.has(`${linked.kick}-${subChannelId}`)) isLinkedToTeam = true;
+                        }
+                    } else if (sub.platform === 'twitch' && sub.kick_username) {
+                        const kickStreamer = allStreamers.find(s => s.platform === 'kick' && s.username === kickUsername);
+                        if (kickStreamer && processedStreamerSubscriptionKeys.has(`${kickStreamer.streamer_id}-${subChannelId}`)) isLinkedToTeam = true;
+                    } else if (sub.platform === 'kick' && sub.twitch_username) { // Assuming twitch_username might be stored for kick streamers
+                        const twitchStreamer = allStreamers.find(s => s.platform === 'twitch' && s.username === sub.twitch_username);
+                        if (twitchStreamer && processedStreamerSubscriptionKeys.has(`${twitchStreamer.streamer_id}-${subChannelId}`)) isLinkedToTeam = true;
                     }
-                    channelsData[subChannelId].individualStreamers.push(sub);
+
+                    if (!isLinkedToTeam) {
+                        if (!channelsData[subChannelId]) {
+                            channelsData[subChannelId] = { name: allChannelsMap.get(subChannelId) || 'Unknown Channel', individualStreamers: [], teams: [] };
+                        }
+                        channelsData[subChannelId].individualStreamers.push(sub);
+                    }
                 }
             }
 
@@ -164,7 +247,10 @@ function start(botClient) {
                 channels: allChannels.filter(c => c.isTextBased()),
                 teamSubscriptions: teamSubscriptions // Still pass this for the teams-tab partial
             });
-        } catch (error) { console.error('[Dashboard GET Error]', error); res.status(500).render('error', { user: req.user, error: 'Error loading management page.' }); }
+        } catch (error) {
+            console.error('[Dashboard GET Error]', error);
+            res.status(500).render('error', { user: req.user, error: 'Error loading management page.' });
+        }
     });
 
     app.post('/manage/:guildId/settings', checkAuth, checkGuildAdmin, async (req, res) => {
@@ -175,15 +261,100 @@ function start(botClient) {
 
     app.post('/manage/:guildId/add', checkAuth, checkGuildAdmin, async (req, res) => {
         const { platform, username } = req.body;
-        let streamerInfo = { puid: username, dbUsername: username };
-        if (platform === 'twitch') {
-            const u = await apiChecks.getTwitchUser(username);
-            if(u) streamerInfo = { puid: u.id, dbUsername: u.login };
+        let streamerInfo = { puid: null, dbUsername: null }; // Initialize with nulls
+        let pfp = null; 
+        let cycleTLSInstance = null; // Declare cycleTLSInstance here
+
+        try {
+            if (platform === 'kick') {
+                cycleTLSInstance = await initCycleTLS({ timeout: 60000 }); // Initialize cycleTLS for Kick
+                const u = await apiChecks.getKickUser(cycleTLSInstance, username); 
+                if (u) {
+                    streamerInfo = { puid: u.id?.toString() || null, dbUsername: u.user?.username || null };
+                    pfp = u.user?.profile_pic || null;
+                }
+            } else if (platform === 'twitch') {
+                const u = await apiChecks.getTwitchUser(username);
+                if (u) {
+                    streamerInfo = { puid: u.id || null, dbUsername: u.login || null };
+                    pfp = u.profile_image_url || null;
+                }
+            } else if (platform === 'youtube') {
+                const c = await apiChecks.getYouTubeChannelId(username);
+                if (c?.channelId) {
+                    streamerInfo = { puid: c.channelId || null, dbUsername: c.channelName || username || null };
+                }
+            } else if (['tiktok', 'trovo'].includes(platform)) {
+                // For these, username is often used as the primary identifier
+                streamerInfo = { puid: username || null, dbUsername: username || null };
+            }
+
+            // If streamerInfo.puid is still null after platform-specific logic, it means the user was not found or an error occurred.
+            if (!streamerInfo.puid) {
+                return res.status(400).render('error', { user: req.user, error: `Could not find streamer "${username}" on ${platform}. Please check the username/ID.` });
+            }
+
+            // Ensure all parameters are explicitly null if they are undefined
+            const finalPlatform = platform || null;
+            const finalPuid = streamerInfo.puid || null;
+            const finalDbUsername = streamerInfo.dbUsername || null;
+            const finalPfp = pfp || null;
+
+            // Insert or update streamer data
+            await db.execute(
+                'INSERT INTO streamers (platform, platform_user_id, username, profile_image_url) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE username = VALUES(username), profile_image_url = VALUES(profile_image_url)',
+                [finalPlatform, finalPuid, finalDbUsername, finalPfp]
+            );
+
+            const [[streamer]] = await db.execute('SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?', [finalPlatform, finalPuid]);
+
+            // --- NEW CHECK HERE ---
+            if (!streamer || typeof streamer.streamer_id === 'undefined' || streamer.streamer_id === null) {
+                console.error('Streamer or streamer_id is invalid after SELECT:', streamer); // Added more context
+                return res.status(500).render('error', { user: req.user, error: 'Failed to retrieve streamer ID after creation/update. Streamer might not have been properly saved or retrieved.' });
+            }
+            // --- END NEW CHECK ---
+
+            // Handle announcement_channel_id from form (can be multiple)
+            const announcementChannelIds = req.body.announcement_channel_id;
+            let channelsToSubscribe = [];
+
+            // Normalize to an array, handling undefined/null cases
+            const ids = announcementChannelIds ? (Array.isArray(announcementChannelIds) ? announcementChannelIds : [announcementChannelIds]) : [];
+
+            if (ids.length > 0) {
+                const hasDefault = ids.includes('');
+                // Get all actual (non-empty) channel IDs
+                channelsToSubscribe = ids.filter(id => id && id !== '');
+
+                if (hasDefault) {
+                    // Add null to represent the default channel subscription
+                    channelsToSubscribe.push(null);
+                }
+            }
+
+            for (const channelId of channelsToSubscribe) {
+                // Ensure all parameters are explicitly null if they are undefined right before the query
+                const finalGuildId = req.params.guildId || null; 
+                const finalStreamerId = streamer.streamer_id || null; 
+                const finalChannelId = channelId || null; 
+
+                await db.execute(
+                    'INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)',
+                    [finalGuildId, finalStreamerId, finalChannelId] // <-- This is line 183
+                );
+            }
+
+            res.redirect(`/manage/${req.params.guildId}?success=add`);
+
+        } catch (error) {
+            console.error('[Dashboard Add Streamer Error]:', error);
+            res.status(500).render('error', { user: req.user, error: 'An error occurred while adding the streamer.' });
+        } finally {
+            if (cycleTLSInstance) {
+                try { await cycleTLSInstance.exit(); } catch (e) { console.error("Error exiting cycleTLS instance:", e); }
+            }
         }
-        await db.execute('INSERT INTO streamers (platform, platform_user_id, username) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE username = VALUES(username)', [platform, streamerInfo.puid, streamerInfo.dbUsername]);
-        const [[streamer]] = await db.execute('SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?', [platform, streamerInfo.puid]);
-        await db.execute('INSERT IGNORE INTO subscriptions (guild_id, streamer_id) VALUES (?, ?)', [req.params.guildId, streamer.streamer_id]);
-        res.redirect(`/manage/${req.params.guildId}?success=add`);
     });
 
     app.post('/manage/:guildId/subscribe-team', checkAuth, checkGuildAdmin, async (req, res) => {
@@ -200,14 +371,22 @@ function start(botClient) {
 
     app.post('/manage/:guildId/update-team', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
-            const { teamSubscriptionId, liveRoleId, webhookName, webhookAvatarUrl } = req.body;
-            const { guildId } = req.params;
+            let { teamSubscriptionId, liveRoleId, webhookName, webhookAvatarUrl } = req.body;
+            let { guildId } = req.params;
+
+            // Explicitly convert "undefined" string or empty string to null
+            teamSubscriptionId = (teamSubscriptionId === "undefined" || teamSubscriptionId === "") ? null : teamSubscriptionId;
+            liveRoleId = (liveRoleId === "undefined" || liveRoleId === "") ? null : liveRoleId;
+            webhookName = (webhookName === "undefined" || webhookName === "") ? null : webhookName;
+            webhookAvatarUrl = (webhookAvatarUrl === "undefined" || webhookAvatarUrl === "") ? null : webhookAvatarUrl;
+            guildId = (guildId === "undefined" || guildId === "") ? null : guildId;
+
             await db.execute('UPDATE twitch_teams SET live_role_id = ?, webhook_name = ?, webhook_avatar_url = ? WHERE id = ? AND guild_id = ?', [
-                liveRoleId || null,
-                webhookName || null,
-                webhookAvatarUrl || null,
-                teamSubscriptionId || null, // Ensure this is null if undefined/empty
-                guildId || null // Ensure this is null if undefined/empty
+                liveRoleId,
+                webhookName,
+                webhookAvatarUrl,
+                teamSubscriptionId,
+                guildId
             ]);
             res.redirect(`/manage/${guildId}?success=team_updated#teams-tab`);
         } catch (error) {
@@ -551,17 +730,47 @@ function start(botClient) {
             streamersMap.get(key).push(row);
         }
 
+        // Pre-fetch all associated accounts for users with a discord_user_id
+        const discordUserIds = rows.map(r => r.discord_user_id).filter(id => id);
+        const allAssociatedAccounts = new Map();
+        if (discordUserIds.length > 0) {
+            const [accounts] = await db.query(
+                'SELECT discord_user_id, username, platform, profile_image_url FROM streamers WHERE discord_user_id IN (?)',
+                [[...new Set(discordUserIds)]] // Use Set to get unique IDs
+            );
+            for (const acc of accounts) {
+                if (!allAssociatedAccounts.has(acc.discord_user_id)) {
+                    allAssociatedAccounts.set(acc.discord_user_id, []);
+                }
+                allAssociatedAccounts.get(acc.discord_user_id).push(acc);
+            }
+            // Sort accounts by priority for each user
+            allAssociatedAccounts.forEach(userAccounts => {
+                userAccounts.sort((a, b) => platformPriority.indexOf(a.platform) - platformPriority.indexOf(b.platform));
+            });
+        }
+
         const formattedResult = [];
         for (const userAnnouncements of streamersMap.values()) {
-            // Sort the announcements for a user based on platform priority
+            // Sort the live announcements for a user based on platform priority
             userAnnouncements.sort((a, b) => {
                 const priorityA = platformPriority.indexOf(a.platform);
                 const priorityB = platformPriority.indexOf(b.platform);
                 return priorityA - priorityB;
             });
 
-            // The primary identity is the first one in the sorted list
-            const primaryAnnouncement = userAnnouncements[0];
+            const primaryLiveAnnouncement = userAnnouncements[0];
+            const discordId = primaryLiveAnnouncement.discord_user_id;
+
+            let primaryIdentity = primaryLiveAnnouncement; // Default to the live one
+            let bestAvatar = primaryLiveAnnouncement.profile_image_url;
+
+            // If the user is linked via Discord, find their absolute primary account (e.g., Kick)
+            const userAccounts = allAssociatedAccounts.get(discordId);
+            if (userAccounts && userAccounts.length > 0) {
+                primaryIdentity = userAccounts[0]; // This is the highest priority account overall
+                bestAvatar = userAccounts.find(acc => acc.profile_image_url)?.profile_image_url || bestAvatar;
+            }
 
             // Collect all unique platforms the user is live on
             const live_platforms = [...new Map(userAnnouncements.map(a => [a.platform, {
@@ -570,8 +779,8 @@ function start(botClient) {
             }])).values()];
 
             formattedResult.push({
-                username: primaryAnnouncement.username,
-                avatar_url: primaryAnnouncement.profile_image_url || getDefaultAvatar(0),
+                username: primaryIdentity.username, // Use username from primary overall account
+                avatar_url: bestAvatar || getDefaultAvatar(0), // Use the best avatar we could find
                 live_platforms: live_platforms,
             });
         }

@@ -1,5 +1,5 @@
 // Final, corrected version. Please deploy and restart.
-const { Client, GatewayIntentBits, Collection, Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder, MessageFlags, Partials, PermissionsBitField, EmbedBuilder, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder, MessageFlags, Partials, PermissionsBitField, EmbedBuilder, ChannelType, ButtonBuilder, ButtonStyle } = require('discord.js');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 const initCycleTLS = require('cycletls');
@@ -373,20 +373,20 @@ async function checkStreams(client) {
     console.log(`[Check] ---> Starting stream check @ ${new Date().toLocaleTimeString()}`);
     let cycleTLS = null;
     try {
-        // --- Step 1: Fetch all necessary data from DB ---
+        // Step 1: Get all subscriptions and current announcements
         const [subscriptions] = await db.execute('SELECT sub.*, s.* FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id');
-        if (subscriptions.length === 0) {
-            isChecking = false;
-            return;
-        }
-        const [announcements] = await db.execute('SELECT * FROM announcements');
-        const guildSettingsMap = new Map((await db.execute('SELECT * FROM guilds'))[0].map(g => [g.guild_id, g]));
-        const [channelSettingsResult] = await db.execute('SELECT * FROM channel_settings');
-        const channelSettingsMap = new Map(channelSettingsResult.map(cs => [`${cs.guild_id}-${cs.channel_id}`, cs]));
+        const [announcementsInDb] = await db.execute('SELECT * FROM announcements');
+        const announcementsMap = new Map(announcementsInDb.map(a => [a.subscription_id, a]));
+
+        // Step 2: Get guild-specific settings
+        const [guildSettingsList] = await db.execute('SELECT * FROM guilds');
+        const guildSettingsMap = new Map(guildSettingsList.map(g => [g.guild_id, g]));
+        const [channelSettingsList] = await db.execute('SELECT * FROM channel_settings');
+        const channelSettingsMap = new Map(channelSettingsList.map(cs => [`${cs.guild_id}-${cs.channel_id}`, cs]));
         const [teamConfigs] = await db.execute('SELECT * FROM twitch_teams');
         const teamSettingsMap = new Map(teamConfigs.map(t => [`${t.guild_id}-${t.announcement_channel_id}`, t]));
 
-        // --- Step 2: Check live status for all unique streamers ---
+        // Step 3: Check live status for all unique streamers
         cycleTLS = await initCycleTLS({ timeout: 60000 });
         const liveStatusMap = new Map();
         const uniqueStreamers = [...new Map(subscriptions.map(item => [item.streamer_id, item])).values()];
@@ -394,35 +394,31 @@ async function checkStreams(client) {
         for (const streamer of uniqueStreamers) {
             let primaryData, secondaryData;
             try {
-                let currentPfp = null;
                 if (streamer.platform === 'twitch') {
                     primaryData = await apiChecks.checkTwitch(streamer);
-                    currentPfp = primaryData?.pfp;
+                    if (primaryData.isLive) {
+                        const user = await apiChecks.getTwitchUser(streamer.username);
+                        if (user) primaryData.profileImageUrl = user.profile_image_url;
+                    }
                     if (!primaryData.isLive && streamer.kick_username) {
                         secondaryData = await apiChecks.checkKick(cycleTLS, streamer.kick_username);
-                        if(secondaryData?.pfp) {
-                            const [[kickInfo]] = await db.execute('SELECT streamer_id FROM streamers WHERE platform="kick" AND username=?', [streamer.kick_username]);
-                            if (kickInfo) await db.execute('UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?', [secondaryData.pfp, kickInfo.streamer_id]);
+                        if (secondaryData.isLive) {
+                            const user = await apiChecks.getKickUser(cycleTLS, streamer.kick_username);
+                            if (user) secondaryData.profileImageUrl = user.user.profile_pic;
                         }
                     }
                 } else if (streamer.platform === 'kick') {
                     primaryData = await apiChecks.checkKick(cycleTLS, streamer.username);
-                    currentPfp = primaryData?.pfp;
+                    if (primaryData.isLive) {
+                        const user = await apiChecks.getKickUser(cycleTLS, streamer.username);
+                        if (user) primaryData.profileImageUrl = user.user.profile_pic;
+                    }
                 } else if (streamer.platform === 'youtube') {
                     primaryData = await apiChecks.checkYouTube(streamer.platform_user_id);
-                    currentPfp = primaryData?.pfp;
                 } else if (streamer.platform === 'tiktok') {
                     primaryData = await apiChecks.checkTikTok(streamer.username);
-                    currentPfp = primaryData?.pfp;
                 } else if (streamer.platform === 'trovo') {
                     primaryData = await apiChecks.checkTrovo(streamer.username);
-                    currentPfp = primaryData?.pfp;
-                }
-
-                const shouldUpdateAvatar = (isFirstCheck && currentPfp && currentPfp !== streamer.profile_image_url) || (streamer.profile_image_url === null && currentPfp);
-                if (shouldUpdateAvatar) {
-                    console.log(`[Avatar Update] Updating avatar for ${streamer.username} (Reason: ${isFirstCheck ? 'Initial Check' : 'Null Value'}).`);
-                    await db.execute('UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?', [currentPfp, streamer.streamer_id]);
                 }
 
                 if (primaryData?.isLive) liveStatusMap.set(streamer.streamer_id, primaryData);
@@ -430,86 +426,93 @@ async function checkStreams(client) {
                     const [[kickInfo]] = await db.execute('SELECT streamer_id FROM streamers WHERE platform="kick" AND username=?', [streamer.kick_username]);
                     if (kickInfo) liveStatusMap.set(kickInfo.streamer_id, secondaryData);
                 }
-            } catch(e) { console.error(`[API Check Error] for ${streamer.username}:`, e); }
-        }
-
-        // --- Step 3: Process announcements per subscription ---
-        for (const sub of subscriptions) {
-            const liveData = liveStatusMap.get(sub.streamer_id);
-            const existingAnnouncement = announcements.find(a => a.subscription_id === sub.subscription_id);
-
-            // Get channel settings for this subscription's announcement channel
-            const channelSettings = channelSettingsMap.get(`${sub.guild_id}-${sub.announcement_channel_id}`);
-
-            // Get team settings for this subscription (if it belongs to a team)
-            const teamSettings = teamSettingsMap.get(`${sub.guild_id}-${sub.announcement_channel_id}`);
-
-            if (liveData) { // Streamer is live
-                const sentMessage = await updateAnnouncement(client, sub, liveData, existingAnnouncement, guildSettingsMap.get(sub.guild_id), channelSettings, teamSettings);
-                if (sentMessage) {
-                    if (existingAnnouncement) {
-                        if (sentMessage.id !== existingAnnouncement.message_id) {
-                            await db.execute('UPDATE announcements SET message_id = ? WHERE announcement_id = ?', [sentMessage.id, existingAnnouncement.announcement_id]);
-                        }
-                    } else {
-                        console.log(`[Announce] Posted for ${liveData.username} (${liveData.platform})`);
-                        await db.execute('INSERT INTO announcements (subscription_id, streamer_id, guild_id, message_id, channel_id, stream_game, stream_title, platform, stream_thumbnail_url) VALUES (?,?,?,?,?,?,?,?,?)',
-                            [sub.subscription_id || null, sub.streamer_id || null, sub.guild_id || null, sentMessage?.id || null, sentMessage?.channelId || null, liveData?.game || null, liveData?.title || null, liveData?.platform || null, liveData?.thumbnailUrl || null]);
-                    }
-                }
-            } else if (existingAnnouncement) { // Streamer is offline but has an announcement
-                try {
-                    const channel = await client.channels.fetch(existingAnnouncement.channel_id).catch(() => null);
-                    if (channel) {
-                        await channel.messages.delete(existingAnnouncement.message_id).catch(() => {});
-                    }
-                } catch (e) {}
-                await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [existingAnnouncement.announcement_id]);
+            } catch (e) {
+                console.error(`[API Check Error] for ${streamer.username}:`, e);
             }
         }
 
-        // --- Step 4: Process role updates per user, per guild ---
-        const usersToUpdate = new Map(); // Key: guildId-userId, Value: { guildId, userId, isLive: boolean }
+        // Step 4: Reconcile state
+        const desiredAnnouncementKeys = new Set();
+
+        // Handle Creations and Updates
+        for (const sub of subscriptions) {
+            const liveData = liveStatusMap.get(sub.streamer_id);
+            if (!liveData) continue; // Streamer is not live, do nothing here
+
+            const guildSettings = guildSettingsMap.get(sub.guild_id);
+            const targetChannelId = sub.announcement_channel_id || guildSettings?.announcement_channel_id;
+            if (!targetChannelId) continue; // No channel to post in
+
+            desiredAnnouncementKeys.add(sub.subscription_id);
+            const existing = announcementsMap.get(sub.subscription_id);
+            const channelSettings = channelSettingsMap.get(`${sub.guild_id}-${targetChannelId}`);
+            const teamSettings = teamSettingsMap.get(`${sub.guild_id}-${targetChannelId}`);
+
+            try {
+                const sentMessage = await updateAnnouncement(client, sub, liveData, existing, guildSettings, channelSettings, teamSettings);
+                if (sentMessage && !existing) {
+                    console.log(`[Announce] CREATED new announcement for ${sub.username} in channel ${targetChannelId}`);
+                    await db.execute('INSERT INTO announcements (subscription_id, streamer_id, guild_id, message_id, channel_id, stream_game, stream_title, platform, stream_thumbnail_url) VALUES (?,?,?,?,?,?,?,?,?)',
+                        [sub.subscription_id, sub.streamer_id, sub.guild_id, sentMessage.id, targetChannelId, liveData.game || null, liveData.title || null, liveData.platform, liveData.thumbnailUrl || null]);
+                } else if (sentMessage && existing && sentMessage.id !== existing.message_id) {
+                    console.log(`[Announce] UPDATED message ID for ${sub.username}`);
+                    await db.execute('UPDATE announcements SET message_id = ? WHERE announcement_id = ?', [sentMessage.id, existing.announcement_id]);
+                }
+            } catch (e) {
+                console.error(`[Announce] Error processing announcement for ${sub.username}:`, e);
+            }
+        }
+
+        // Handle Deletions
+        for (const [subscription_id, existing] of announcementsMap.entries()) {
+            if (!desiredAnnouncementKeys.has(subscription_id)) {
+                try {
+                    console.log(`[Cleanup] Deleting announcement for subscription ${subscription_id}`);
+                    const channel = await client.channels.fetch(existing.channel_id).catch(() => null);
+                    if (channel) {
+                        await channel.messages.delete(existing.message_id).catch(err => {
+                            if (err.code !== 10008) console.error(`[Cleanup] Failed to delete message ${existing.message_id}:`, err);
+                        });
+                    }
+                    await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [existing.announcement_id]);
+                } catch (e) {
+                    console.error(`[Cleanup] Error during deletion for announcement ${existing.announcement_id}:`, e);
+                }
+            }
+        }
+
+        // --- Step 5: Process role updates per user, per guild ---
+        const usersToUpdate = new Map();
         for (const sub of subscriptions) {
             if (!sub.discord_user_id) continue;
             const key = `${sub.guild_id}-${sub.discord_user_id}`;
             if (!usersToUpdate.has(key)) {
                 usersToUpdate.set(key, { guildId: sub.guild_id, userId: sub.discord_user_id, isLive: false });
             }
-            if (liveStatusMap.get(sub.streamer_id)) {
+            if (liveStatusMap.has(sub.streamer_id)) {
                 usersToUpdate.get(key).isLive = true;
             }
         }
 
         for (const [key, userState] of usersToUpdate.entries()) {
             const { guildId, userId, isLive } = userState;
-
             const userSubscriptions = subscriptions.filter(s => s.discord_user_id === userId && s.guild_id === guildId);
             if (userSubscriptions.length === 0) continue;
 
             const rolesToManage = new Set();
-
             const guildSettings = guildSettingsMap.get(guildId);
-            if (guildSettings?.live_role_id) {
-                rolesToManage.add(guildSettings.live_role_id);
-            }
+            if (guildSettings?.live_role_id) rolesToManage.add(guildSettings.live_role_id);
 
             userSubscriptions.forEach(sub => {
-                const teamRole = teamSettingsMap.get(`${guildId}-${sub.announcement_channel_id}`)?.live_role_id; // Use teamSettingsMap here
-                if (teamRole) {
-                    rolesToManage.add(teamRole);
-                }
+                const teamRole = teamSettingsMap.get(`${guildId}-${sub.announcement_channel_id}`)?.live_role_id;
+                if (teamRole) rolesToManage.add(teamRole);
             });
 
             if (rolesToManage.size > 0) {
                 const guild = await client.guilds.fetch(guildId).catch(() => null);
                 if (!guild) continue;
                 const member = await guild.members.fetch(userId).catch(() => null);
-                if (!member) {
-                    console.log(`[Role Handler] Could not fetch member ${userId} in guild ${guild.name} (${guildId}) for role update.`);
-                    continue;
-                }
-
+                if (!member) continue;
                 const action = isLive ? 'add' : 'remove';
                 await handleRole(member, [...rolesToManage], action, guildId);
             }
