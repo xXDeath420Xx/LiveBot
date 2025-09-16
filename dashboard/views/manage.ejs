@@ -41,7 +41,7 @@
             <div class="tab-pane fade show active" id="streamers-tab" role="tabpanel">
                 <div class="content-card">
                     <h2><i class="fas fa-user-plus me-2"></i>Add Streamer</h2>
-                    <form action="/manage/<%= guild.id %>/add" method="POST" enctype="multipart/form-data">
+                    <form action="/manage/<%= guild.id %>/add" method="POST">
                         <div class="row g-3 align-items-end">
                             <div class="col-md-3"><label class="form-label">Platform</label><select name="platform" class="form-select"><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="youtube">YouTube</option></select></div>
                             <div class="col-md-4"><label class="form-label">Username/ID</label><input type="text" name="username" class="form-control" required></div>
@@ -58,56 +58,52 @@
                     <div class="accordion" id="channelsAccordion">
                         <% Object.entries(channelsData).forEach(([channelId, data], index) => { %>
                             <div class="accordion-item mb-2">
-                                <h2 class="accordion-header">
-                                    <button class="accordion-button <%= index > 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= channelId %>">
+                                <h2 class="accordion-header" id="heading-<%= channelId %>">
+                                    <button class="accordion-button <%= index > 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= channelId %>" aria-expanded="<%= index === 0 ? 'true' : 'false' %>" aria-controls="collapse-<%= channelId %>">
                                         <%= data.name %>
                                         <span class="badge bg-secondary ms-auto me-2"><%= data.individualStreamers.length + data.teams.reduce((sum, team) => sum + team.members.length, 0) %> Streamers / <%= data.teams.length %> Teams</span>
                                     </button>
                                 </h2>
-                                <div id="collapse-<%= channelId %>" class="accordion-collapse collapse <%= index === 0 ? 'show' : '' %>" data-bs-parent="#channelsAccordion">
+                                <div id="collapse-<%= channelId %>" class="accordion-collapse collapse <%= index === 0 ? 'show' : '' %>" aria-labelledby="heading-<%= channelId %>" data-bs-parent="#channelsAccordion">
                                     <div class="accordion-body">
-                                        <% if (data.individualStreamers.length > 0) { %>
-                                            <h6 class="synced-team-header"><i class="fas fa-user me-2"></i>Individual Streamers</h6>
-                                            <div class="list-group list-group-flush mb-3">
-                                                <% data.individualStreamers.forEach(streamer => { %>
-                                                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                                                        <div>
-                                                            <% if (['twitch','youtube'].includes(streamer.platform)) { %><i class="fab fa-<%= streamer.platform %> platform-icon-fa platform-icon-<%= streamer.platform %>"></i><% } else if (streamer.platform === 'kick') { %><i class="fas fa-k platform-icon-fa platform-icon-kick"></i><% } %>
-                                                            <strong class="ms-2 me-2"><%= streamer.username %></strong>
-                                                            <% if(streamer.kick_username) { %><span class="badge bg-success ms-2">Linked: <%= streamer.kick_username %></span><% } %>
-                                                        </div>
-                                                        <div>
-                                                            <a href="#" role="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" data-subscription-id="<%= streamer.subscription_id %>" data-streamer-name="<%= streamer.username %>" data-discord-user-id="<%= streamer.discord_user_id || '' %>" data-kick-username="<%= streamer.kick_username || '' %>" data-channel-override="<%= streamer.announcement_channel_id || '' %>" data-override-nickname="<%= streamer.override_nickname || '' %>" data-custom-message="<%= streamer.custom_message || '' %>" data-override-avatar-url="<%= streamer.override_avatar_url || '' %>"><i class="fas fa-cog"></i></a>
-                                                            <form action="/manage/<%= guild.id %>/remove-subscription" method="POST" class="d-inline" onsubmit="return confirm('Remove this subscription for <%= streamer.username %>?')"><input type="hidden" name="subscription_id" value="<%= streamer.subscription_id %>"><button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button></form>
-                                                        </div>
-                                                    </div>
-                                                <% }) %>
-                                            </div>
-                                        <% } %>
-
                                         <% if (data.teams.length > 0) { %>
                                             <h6 class="synced-team-header"><i class="fas fa-sync-alt me-2"></i>Synced Teams</h6>
                                             <div class="accordion" id="teamsAccordion-<%= channelId %>">
                                                 <% data.teams.forEach(team => { %>
                                                     <div class="accordion-item mb-2">
-                                                        <h2 class="accordion-header">
-                                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-team-<%= team.id %>">
+                                                        <h2 class="accordion-header" id="heading-team-<%= team.id %>">
+                                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-team-<%= team.id %>" aria-expanded="false" aria-controls="collapse-team-<%= team.id %>">
                                                                 <i class="fab fa-twitch me-2" style="color: #9146FF;"></i> <%= team.team_name %>
                                                                 <span class="badge bg-secondary ms-auto me-2"><%= team.members.length %> Members</span>
                                                             </button>
                                                         </h2>
-                                                        <div id="collapse-team-<%= team.id %>" class="accordion-collapse collapse" data-bs-parent="#teamsAccordion-<%= channelId %>">
+                                                        <div id="collapse-team-<%= team.id %>" class="accordion-collapse collapse" aria-labelledby="heading-team-<%= team.id %>" data-bs-parent="#teamsAccordion-<%= channelId %>">
                                                             <div class="accordion-body">
                                                                 <% if (team.members && team.members.length > 0) { %>
                                                                     <ul class="list-group list-group-flush mb-0">
                                                                         <% team.members.forEach(member => { %>
-                                                                            <li class="list-group-item">
-                                                                                <% if (member.platform === 'twitch') { %>
-                                                                                    <i class="fab fa-twitch" style="color: #9146FF;"></i> <%= member.twitch_username %>
-                                                                                <% } %>
-                                                                                <% if (member.kick_username) { %>
-                                                                                    <i class="fab fa-kickstarter-k" style="color: #52E252;"></i> <%= member.kick_username %>
-                                                                                <% } %>
+                                                                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                                                <div>
+                                                                                    <% if (member.twitch_username) { %>
+                                                                                        <i class="fab fa-twitch" style="color: #9146FF;"></i> <%= member.twitch_username %>
+                                                                                    <% } %>
+                                                                                    <% if (member.kick_username) { %>
+                                                                                        <i class="fab fa-kickstarter-k" style="color: #52E252;"></i> <%= member.kick_username %>
+                                                                                    <% } %>
+                                                                                </div>
+                                                                                <div>
+                                                                                    <a href="#" role="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal"
+                                                                                       data-subscription-id="<%= member.subscription_id %>"
+                                                                                       data-streamer-name="<%= member.twitch_username %>"
+                                                                                       data-discord-user-id="<%= member.discord_user_id || '' %>"
+                                                                                       data-kick-username="<%= member.kick_username || '' %>"
+                                                                                       data-channel-override="<%= member.announcement_channel_id || '' %>"
+                                                                                       data-override-nickname="<%= member.override_nickname || '' %>"
+                                                                                       data-custom-message="<%= member.custom_message || '' %>"
+                                                                                       data-override-avatar-url="<%= member.override_avatar_url || '' %>">
+                                                                                        <i class="fas fa-cog"></i>
+                                                                                    </a>
+                                                                                </div>
                                                                             </li>
                                                                         <% }); %>
                                                                     </ul>
@@ -118,6 +114,25 @@
                                                         </div>
                                                     </div>
                                                 <% }); %>
+                                            </div>
+                                        <% } %>
+
+                                        <% if (data.individualStreamers.length > 0) { %>
+                                            <h6 class="synced-team-header mt-3"><i class="fas fa-user me-2"></i>Individual Streamers</h6>
+                                            <div class="list-group list-group-flush mb-3">
+                                                <% data.individualStreamers.forEach(streamer => { %>
+                                                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <% if (streamer.platform === 'twitch') { %><i class="fab fa-twitch platform-icon-fa platform-icon-twitch"></i><% } else if (streamer.platform === 'youtube') { %><i class="fab fa-youtube platform-icon-fa platform-icon-youtube"></i><% } else if (streamer.platform === 'kick') { %><i class="fas fa-k platform-icon-fa platform-icon-kick"></i><% } %>
+                                                            <strong class="ms-2 me-2"><%= streamer.username %></strong>
+                                                            <% if(streamer.kick_username) { %><span class="badge bg-success ms-2">Linked: <%= streamer.kick_username %></span><% } %>
+                                                        </div>
+                                                        <div>
+                                                            <a href="#" role="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" data-subscription-id="<%= streamer.subscription_id %>" data-streamer-name="<%= streamer.username %>" data-discord-user-id="<%= streamer.discord_user_id || '' %>" data-kick-username="<%= streamer.kick_username || '' %>" data-channel-override="<%= streamer.announcement_channel_id || '' %>" data-override-nickname="<%= streamer.override_nickname || '' %>" data-custom-message="<%= streamer.custom_message || '' %>" data-override-avatar-url="<%= streamer.override_avatar_url || '' %>"><i class="fas fa-cog"></i></a>
+                                                            <form action="/manage/<%= guild.id %>/remove-subscription" method="POST" class="d-inline" onsubmit="return confirm('Remove this subscription for <%= streamer.username %>?')"><input type="hidden" name="subscription_id" value="<%= streamer.subscription_id %>"><button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button></form>
+                                                        </div>
+                                                    </div>
+                                                <% }) %>
                                             </div>
                                         <% } %>
 
