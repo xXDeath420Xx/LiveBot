@@ -90,10 +90,6 @@ module.exports = {
             content: `Adding streamer \`${username}\`. Please select the platforms below to continue.`,
             components: [row]
         });
-    }
-    // Removed 'pendingInteractions' from module.exports to improve encapsulation.
-    // If other modules need to access this data (e.g., the select menu handler),
-    // consider creating a dedicated state management module or passing necessary data
-    // through the interaction handlers' state if Discord.js allows, or ensure the
-    // select menu handler can import and access this Map internally.
+    },
+    pendingInteractions
 };

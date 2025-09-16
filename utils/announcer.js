@@ -30,6 +30,15 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
         return null;
     }
 
+    // Update streamer profile image URL if it has changed
+    if (liveData.profileImageUrl && liveData.profileImageUrl !== subContext.profile_image_url) {
+        try {
+            await db.execute('UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?', [liveData.profileImageUrl, subContext.streamer_id]);
+        } catch (dbError) {
+            console.error(`[Announcer] Failed to update profile image for ${subContext.username}:`, dbError);
+        }
+    }
+
     const channelId = subContext.announcement_channel_id || guildSettings?.announcement_channel_id;
     if (!channelId) return null;
 
