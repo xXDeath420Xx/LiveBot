@@ -1,8 +1,22 @@
-const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder, MessageFlags } = require('discord.js');
-const db = require('../utils/db');
-const apiChecks = require('../utils/api_checks');
+import { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder, MessageFlags, ChatInputCommandInteraction, TextChannel } from 'discord.js';
+import db from '../utils/db';
+import * as apiChecks from '../utils/api_checks';
 
-module.exports = {
+// Define interfaces for data structures
+interface TwitchTeamMember {
+    user_id: string;
+    user_login: string;
+    // Add other properties if apiChecks.getTwitchTeamMembers returns more
+}
+
+interface StreamerDBEntry {
+    streamer_id: number;
+    platform: string;
+    platform_user_id: string;
+    username: string;
+}
+
+export default {
     data: new SlashCommandBuilder()
         .setName('addteam')
         .setDescription('Adds all members of a Twitch Team to the announcement list for a channel.')
@@ -17,18 +31,20 @@ module.exports = {
                 .setRequired(true))
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild),
 
-    async execute(interaction) {
+    async execute(interaction: ChatInputCommandInteraction) {
         await interaction.deferReply({ ephemeral: true });
 
-        const teamName = interaction.options.getString('team').toLowerCase();
-        const channel = interaction.options.getChannel('channel');
-        const guildId = interaction.guild.id;
+        const teamName = interaction.options.getString('team', true).toLowerCase();
+        const channel = interaction.options.getChannel('channel', true) as TextChannel; // Cast to TextChannel as per addChannelTypes
+        const guildId = interaction.guild!.id; // guild is guaranteed to exist in a guild command
 
-        const added = [], updated = [], failed = [];
+        const added: string[] = [];
+        const updated: string[] = [];
+        const failed: string[] = [];
 
         try {
             // Step 1: Fetch the list of team members from the Twitch API
-            const teamMembers = await apiChecks.getTwitchTeamMembers(teamName);
+            const teamMembers: TwitchTeamMember[] | null = await apiChecks.getTwitchTeamMembers(teamName);
 
             if (!teamMembers) {
                 return interaction.editReply({ content: `❌ Could not find a Twitch Team named \`${teamName}\`. Please check the name and try again.` });
@@ -49,23 +65,23 @@ module.exports = {
                     );
 
                     // Get the internal streamer_id for the subscription
-                    const [[streamer]] = await db.execute('SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?', ['twitch', member.user_id]);
+                    const [[streamer]]: [[StreamerDBEntry], any] = await db.execute('SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?', ['twitch', member.user_id]);
 
                     // Add or update the subscription for this specific guild and channel
-                    const [subResult] = await db.execute(
+                    const [subResult]: any = await db.execute(
                         `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)
-                         ON DUPLICATE KEY UPDATE streamer_id = VALUES(streamer_id)`, // Benign update to check for existence
+                         ON DUPLICATE KEY UPDATE streamer_id = VALUES(streamer_id)`,
                         [guildId, streamer.streamer_id, channel.id]
                     );
 
                     // Check if it was a new addition or an update
-                    if (subResult.affectedRows > 1) {
+                    if (subResult.affectedRows > 1) { // affectedRows > 1 typically means an update occurred
                         updated.push(member.user_login);
                     } else {
                         added.push(member.user_login);
                     }
 
-                } catch (dbError) {
+                } catch (dbError: any) {
                     console.error(`Error processing team member ${member.user_login}:`, dbError);
                     failed.push(`${member.user_login} (DB Error)`);
                 }
@@ -85,7 +101,7 @@ module.exports = {
             
             await interaction.editReply({ embeds: [embed] });
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('AddTeam Command Error:', error);
             await interaction.editReply({ content: 'A critical error occurred while executing the command.' });
         }

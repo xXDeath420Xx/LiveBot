@@ -1,8 +1,9 @@
-const playwright = require('playwright-core');
+import * as playwright from 'playwright-core';
+import { BrowserContext } from 'playwright-core';
 
-let browser = null;
+let browser: BrowserContext | null = null;
 
-async function getBrowser() {
+export async function getBrowser(): Promise<BrowserContext | null> {
     if (browser && browser.isConnected()) {
         return browser;
     }
@@ -28,18 +29,18 @@ async function getBrowser() {
         });
         console.log('[BrowserManager] New browser instance launched successfully.');
         return browser;
-    } catch (e) {
+    } catch (e: any) {
         console.error('[BrowserManager] FATAL: Could not launch browser:', e);
         return null;
     }
 }
 
-async function closeBrowser() {
+export async function closeBrowser(): Promise<void> {
     // This function is now a no-op because we want to keep the browser persistent.
     // The browser will be closed on application shutdown.
 }
 
-async function gracefulShutdown() {
+async function gracefulShutdown(): Promise<void> {
     if (browser) {
         console.log('[BrowserManager] Gracefully shutting down persistent browser...');
         await browser.close();
@@ -50,5 +51,3 @@ async function gracefulShutdown() {
 // Graceful shutdown hook
 process.on('SIGINT', gracefulShutdown);
 process.on('SIGTERM', gracefulShutdown);
-
-module.exports = { getBrowser, closeBrowser };
