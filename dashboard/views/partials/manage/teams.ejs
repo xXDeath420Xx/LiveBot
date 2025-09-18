@@ -1,115 +1,109 @@
-<div class="content-card">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="mb-0"><i class="fab fa-twitch me-2"></i>Twitch Team Management</h2>
-        <a href="/manage/<%= guild.id %>/export-teams" class="btn btn-outline-secondary btn-sm">Export All Teams as CSV</a>
+<div class="row">
+    <div class="col-lg-6">
+        <div class="content-card h-100">
+            <h2><i class="fab fa-twitch me-2"></i>Subscribe to Team</h2>
+            <p class="text-muted">Sync a channel with a Twitch Team. The bot will automatically add/remove members every 15 minutes.</p>
+            <hr class="my-4">
+            <form action="/manage/<%= guild.id %>/subscribe-team" method="POST">
+                <div class="mb-3">
+                    <label class="form-label">Twitch Team Name</label>
+                    <input type="text" name="teamName" class="form-control" placeholder="e.g. reeferrealm" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Channel to Sync</label>
+                    <select name="channelId" class="form-select" required>
+                        <option value="" disabled selected>-- Select a channel --</option>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>">#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-sync-alt me-2"></i>Subscribe to Team</button>
+            </form>
+        </div>
     </div>
-    <p>Subscribe a channel to automatically sync with a Twitch Team every 15 minutes.</p>
-    <hr class="my-3">
-    <form action="/manage/<%= guild.id %>/subscribe-team" method="POST">
-        <div class="row g-2 align-items-end">
-            <div class="col"><label class="form-label">Twitch Team Name</label><input type="text" name="teamName" class="form-control" placeholder="e.g. reeferrealm" required></div>
-            <div class="col"><label class="form-label">Channel to Sync</label><select name="channelId" class="form-select" required><option value="" disabled selected>Select Channel</option><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %></select></div>
-            <div class="col-auto"><button type="submit" class="btn btn-primary">Subscribe</button></div>
+    <div class="col-lg-6">
+        <div class="content-card h-100">
+            <h2><i class="fas fa-file-csv me-2"></i>Import & Export</h2>
+            <p class="text-muted">Quickly manage your team subscriptions using CSV files.</p>
+            <hr class="my-4">
+            <form action="/manage/<%= guild.id %>/import-teams-csv" method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="teamCsvFile" class="form-label">Import Teams from CSV</label>
+                    <input class="form-control" type="file" id="teamCsvFile" name="csvfile" accept=".csv" required>
+                </div>
+                <div class="mb-3">
+                    <label for="defaultChannel" class="form-label">Default Channel (Optional)</label>
+                    <select name="defaultChannelId" id="defaultChannel" class="form-select">
+                        <option value="">-- No Default --</option>
+                        <% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-secondary w-100 mb-3"><i class="fas fa-file-import me-2"></i>Import Teams</button>
+            </form>
+            <a href="/manage/<%= guild.id %>/export-teams" class="btn btn-outline-secondary w-100"><i class="fas fa-file-export me-2"></i>Export All Teams as CSV</a>
         </div>
-    </form>
-
-    <hr class="my-4">
-    <h6>Import Teams from CSV</h6>
-    <form action="/manage/<%= guild.id %>/import-teams-csv" method="POST" enctype="multipart/form-data">
-        <div class="row g-2 align-items-end">
-            <div class="col-md-6">
-                <label for="teamCsvFile" class="form-label">CSV File</label>
-                <input class="form-control" type="file" id="teamCsvFile" name="csvfile" accept=".csv" required>
-            </div>
-            <div class="col-md-4">
-                <label for="defaultChannel" class="form-label">Default Announcement Channel (Optional)</label>
-                <select name="defaultChannelId" id="defaultChannel" class="form-select">
-                    <option value="">-- No Default Channel --</option>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>">#<%= channel.name %></option>
-                    <% }) %>
-                </select>
-            </div>
-            <div class="col-auto">
-                <button type="submit" class="btn btn-primary">Import Teams</button>
-            </div>
-        </div>
-        <small class="form-text text-muted">CSV should have columns: <code>TeamName</code>, <code>AnnouncementChannelName</code> (optional), <code>LiveRoleName</code> (optional), <code>WebhookName</code> (optional), <code>WebhookAvatarUrl</code> (optional).</small>
-    </form>
-
-    <% if (teamSubscriptions.length > 0) { %>
-        <hr class="my-4">
-        <h6>Active Team Subscriptions</h6>
-        <ul class="list-group list-group-flush">
-            <% teamSubscriptions.forEach(sub => { %>
-                <li class="list-group-item px-0">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="d-flex align-items-center">
-                            <a class="text-decoration-none" data-bs-toggle="collapse" href="#team-members-<%= sub.id %>" role="button" aria-expanded="false" aria-controls="team-members-<%= sub.id %>">
-                                <h4 class="mb-0"><i class="fab fa-twitch me-2" style="color: #9146FF;"></i><%= sub.team_name %></h4>
-                            </a>
-                            <span class="text-muted ms-3">→ #<%= channels.find(c => c.id === sub.announcement_channel_id)?.name || 'Unknown' %></span>
-                            <% if (sub.webhook_name) { %><br><small class="text-muted">Webhook Name: <%= sub.webhook_name %></small><% } %>
-                            <% if (sub.webhook_avatar_url) { %><br><small class="text-muted">Webhook Avatar: <a href="<%= sub.webhook_avatar_url %>" target="_blank">Link</a></small><% } %>
-                        </div>
-                        <div>
-                            <a href="/manage/<%= guild.id %>/export-teams?teamId=<%= sub.id %>" class="btn btn-sm btn-outline-secondary me-2">Export</a>
-                            <form action="/manage/<%= guild.id %>/removeteam" method="POST" onsubmit="return confirm('Unsubscribe and remove all members of team \'<%= sub.team_name %>\'')" style="display: inline;">
-                                <input type="hidden" name="teamSubscriptionId" value="<%= sub.id %>">
-                                <button type="submit" class="btn btn-sm btn-danger">Unsubscribe & Purge</button>
-                            </form>
-                        </div>
-                    </div>
-                    <div class="collapse mt-2" id="team-members-<%= sub.id %>">
-                        <div class="card card-body bg-light">
-                            <% if (sub.members && sub.members.length > 0) { %>
-                                <strong>Team Members:</strong>
-                                <ul class="list-unstyled mb-0">
-                                    <% sub.members.forEach(member => { %>
-                                        <li>
-                                            <% if (member.platform === 'twitch') { %>
-                                                <i class="fab fa-twitch" style="color: #9146FF;"></i> <%= member.twitch_username %>
-                                            <% } %>
-                                            <% if (member.kick_username) { %>
-                                                <i class="fab fa-kickstarter-k" style="color: #52E252;"></i> <%= member.kick_username %>
-                                            <% } %>
-                                        </li>
-                                    <% }); %>
-                                </ul>
-                            <% } else { %>
-                                <p class="mb-0">No members found for this team.</p>
-                            <% } %>
-                        </div>
-                    </div>
-                    <form action="/manage/<%= guild.id %>/update-team" method="POST" class="row g-2 align-items-center mt-2">
-                        <input type="hidden" name="teamSubscriptionId" value="<%= sub.id %>">
-                        <div class="col-md-4">
-                            <label for="live-role-<%= sub.id %>" class="form-label">Live Role:</label>
-                            <select name="liveRoleId" id="live-role-<%= sub.id %>" class="form-select form-select-sm">
-                                <option value="">-- No Live Role --</option>
-                                <% roles.forEach(role => { %>
-                                    <option value="<%= role.id %>" <%= sub.live_role_id == role.id ? 'selected' : '' %>>
-                                        <%= role.name %>
-                                    </option>
-                                <% }); %>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label for="webhook-name-<%= sub.id %>" class="form-label">Webhook Name:</label>
-                            <input type="text" name="webhookName" id="webhook-name-<%= sub.id %>" class="form-control form-control-sm" value="<%= sub.webhook_name || '' %>" placeholder="Optional">
-                        </div>
-                        <div class="col-md-4">
-                            <label for="webhook-avatar-<%= sub.id %>" class="form-label">Webhook Avatar URL:</label>
-                            <input type="url" name="webhookAvatarUrl" id="webhook-avatar-<%= sub.id %>" class="form-control form-control-sm" value="<%= sub.webhook_avatar_url || '' %>" placeholder="Optional">
-                        </div>
-                        <div class="col-auto mt-3">
-                            <button type="submit" class="btn btn-sm btn-primary">Update Team Settings</button>
-                        </div>
-                    </form>
-                </li>
-            <% }); %>
-        </ul>
-    <% } %>
+    </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<% if (teamSubscriptions.length > 0) { %>
+    <div class="content-card mt-4">
+        <h2 class="mb-3">Active Team Subscriptions</h2>
+        <div class="accordion" id="activeTeamsAccordion">
+            <% teamSubscriptions.forEach((sub, index) => { %>
+                <div class="accordion-item mb-3">
+                    <h2 class="accordion-header" id="heading-team-sub-<%= sub.id %>">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-team-sub-<%= sub.id %>" aria-expanded="false" aria-controls="collapse-team-sub-<%= sub.id %>">
+                            <div class="d-flex justify-content-between w-100 align-items-center pe-3">
+                                <div>
+                                    <i class="fab fa-twitch me-2" style="color: #9146FF;"></i>
+                                    <strong class="me-2"><%= sub.team_name %></strong>
+                                    <span class="text-muted">→ #<%= channels.find(c => c.id === sub.announcement_channel_id)?.name || 'Unknown' %></span>
+                                </div>
+                                <span class="badge bg-dark"><%= sub.members ? sub.members.length : 0 %> Members</span>
+                            </div>
+                        </button>
+                    </h2>
+                    <div id="collapse-team-sub-<%= sub.id %>" class="accordion-collapse collapse" aria-labelledby="heading-team-sub-<%= sub.id %>">
+                        <div class="accordion-body">
+                            <form action="/manage/<%= guild.id %>/update-team" method="POST" class="row g-3 align-items-end mb-4">
+                                <input type="hidden" name="teamSubscriptionId" value="<%= sub.id %>">
+                                <div class="col-md-4">
+                                    <label class="form-label">Live Role</label>
+                                    <select name="liveRoleId" class="form-select">
+                                        <option value="">-- No Role --</option>
+                                        <% roles.forEach(role => { %>
+                                            <option value="<%= role.id %>" <%= sub.live_role_id == role.id ? 'selected' : '' %>>@<%= role.name %></option>
+                                        <% }); %>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Webhook Name</label>
+                                    <input type="text" name="webhookName" class="form-control" value="<%= sub.webhook_name || '' %>" placeholder="Optional">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Webhook Avatar URL</label>
+                                    <input type="url" name="webhookAvatarUrl" class="form-control" value="<%= sub.webhook_avatar_url || '' %>" placeholder="Optional">
+                                </div>
+                                <div class="col-12 d-flex justify-content-end mt-3">
+                                     <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save me-2"></i>Update Team</button>
+                                </div>
+                            </form>
+                            <hr>
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <h5 class="mb-0">Team Actions</h5>
+                                <div>
+                                    <a href="/manage/<%= guild.id %>/export-teams?teamId=<%= sub.id %>" class="btn btn-sm btn-outline-secondary me-2"><i class="fas fa-file-export me-2"></i>Export</a>
+                                    <form action="/manage/<%= guild.id %>/removeteam" method="POST" onsubmit="return confirm('Unsubscribe and remove all members of team \'<%= sub.team_name %>\'')" class="d-inline">
+                                        <input type="hidden" name="teamSubscriptionId" value="<%= sub.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash-alt me-2"></i>Unsubscribe & Purge</button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <% }); %>
+        </div>
+    </div>
+<% } %>

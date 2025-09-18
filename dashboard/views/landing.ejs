@@ -6,7 +6,7 @@
     <title>CertiFried Announcer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/dashboard-style.css?v=12.1.0">
+    <link rel="stylesheet" href="/css/dashboard-style.css?v=14.0.0">
 </head>
 <body>
 <%- include('partials/header') %>
@@ -21,33 +21,35 @@
         </div>
     </header>
 
-    <div class="row g-4 justify-content-center">
-        <div class="col-lg-4 col-md-6">
-            <div class="feature-card h-100">
-                <h3><i class="fas fa-sync-alt me-2"></i>Twitch Team Powerhouse</h3>
-                <p>Automate your entire Twitch Team. The bot syncs members, assigns roles, and even cross-posts to Kick if they're live there—all automatically.</p>
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="content-card h-100">
+                <h3 class="mb-4">Features</h3>
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-sync-alt me-2 text-primary"></i>Twitch Team Powerhouse</h5>
+                        <p>Automate your entire Twitch Team. The bot syncs members, assigns roles, and even cross-posts to Kick if they're live there—all automatically.</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-desktop me-2 text-primary"></i>Full Web Dashboard</h5>
+                        <p>Manage all servers and streamers from a sleek, intuitive web interface. No more wrestling with complicated slash commands.</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-cogs me-2 text-primary"></i>Unmatched Customization</h5>
+                        <p>From custom webhook avatars to per-streamer messages using placeholders like <code>{username}</code>, tailor every detail.</p>
+                    </div>
+                     <div class="col-md-6">
+                        <h5><i class="fas fa-file-csv me-2 text-primary"></i>Mass Management</h5>
+                        <p>Easily manage hundreds of streamers across different channels and servers using CSV file imports and exports.</p>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="col-lg-4 col-md-6">
-            <div class="feature-card h-100">
-                <h3><i class="fas fa-desktop me-2"></i>Full Web Dashboard</h3>
-                <p>Manage all servers and streamers from a sleek, intuitive web interface. No more wrestling with complicated slash commands.</p>
-            </div>
-        </div>
-        <div class="col-lg-4 col-md-6">
-            <div class="feature-card h-100">
-                <h3><i class="fas fa-cogs me-2"></i>Unmatched Customization</h3>
-                <p>From custom webhook avatars to per-streamer messages using placeholders like <code>{username}</code>, tailor every detail.</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-4 justify-content-center mt-4">
-        <div class="col-lg-6">
-            <div class="feature-card h-100">
-                <h3><i class="fas fa-signal me-2"></i>Global Live Status</h3>
-                <p class="mb-2 small">Stream check in: <strong id="stream-countdown">--:--</strong><br>Team sync in: <strong id="team-countdown">--:--</strong></p>
-                <div id="featured-streamers-container" class="live-status-scroll"><p class="text-center small">Loading live streamers...</p></div>
+        <div class="col-lg-4">
+            <div class="content-card h-100">
+                <h3 class="mb-3">Global Live Status</h3>
+                <p class="mb-2 small text-muted">Stream check in: <strong id="stream-countdown">--:--</strong><br>Team sync in: <strong id="team-countdown">--:--</strong></p>
+                <div id="featured-streamers-container" class="live-status-scroll" style="max-height: 300px;"><p class="text-center small">Loading live streamers...</p></div>
             </div>
         </div>
     </div>
