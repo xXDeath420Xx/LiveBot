@@ -1,4 +1,4 @@
-// Final, corrected version. Please deploy and restart.
+console.log('--- EXECUTING LATEST INDEX.JS ---');
 const { Client, GatewayIntentBits, Collection, Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ChannelSelectMenuBuilder, MessageFlags, Partials, PermissionsBitField, EmbedBuilder, ChannelType, ButtonBuilder, ButtonStyle } = require('discord.js');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
@@ -90,7 +90,7 @@ async function main() {
                     { label: 'Trovo', value: 'trovo', emoji: '🟢' },
                 ]);
             const row = new ActionRowBuilder().addComponents(platformSelect);
-            await interaction.reply({ content: 'Please select all platforms you would like to be announced for.', components: [row], ephemeral: true });
+            await interaction.reply({ content: 'Please select all platforms you would like to be announced for.', components: [row], flags: [MessageFlags.Ephemeral] });
         } else if (interaction.isStringSelectMenu() && interaction.customId.startsWith('request_platforms_')) {
             const requestsChannelId = interaction.customId.split('_')[2];
             const platforms = interaction.values;
@@ -118,7 +118,7 @@ async function main() {
 
             const requestsChannel = await client.channels.fetch(requestsChannelId);
             if (!requestsChannel) {
-                return interaction.reply({ content: 'Error: The requests channel could not be found.', ephemeral: true });
+                return interaction.reply({ content: 'Error: The requests channel could not be found.', flags: [MessageFlags.Ephemeral] });
             }
 
             const serializedData = requestData.map(d => `${d.platform}:${d.username}`).join(';');
@@ -134,33 +134,35 @@ async function main() {
                 .setFooter({ text: `User ID: ${interaction.user.id}` });
 
             await requestsChannel.send({ embeds: [embed], components: [row] });
-            await interaction.reply({ content: 'Your request has been submitted for approval.', ephemeral: true });
+            await interaction.reply({ content: 'Your request has been submitted for approval.', flags: [MessageFlags.Ephemeral] });
         } else if (interaction.isButton() && interaction.customId.startsWith('approve_request_')) {
             if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-                return interaction.reply({ content: 'You do not have permission to approve requests.', ephemeral: true });
+                return interaction.reply({ content: 'You do not have permission to approve requests.', flags: [MessageFlags.Ephemeral] });
             }
             const parts = interaction.customId.split('_');
             const requestingUserId = parts[2];
             const serializedData = parts.slice(3).join('_');
 
             const channelSelect = new ChannelSelectMenuBuilder()
-                .setCustomId(`approve_channels_${requestingUserId}_${serializedData}`)
+                .setCustomId(`approve_channels_${requestingUserId}_${interaction.channelId}_${interaction.message.id}_${serializedData}`)
                 .setPlaceholder('Select announcement channels for this user.')
                 .setMinValues(1)
                 .setMaxValues(25)
                 .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement);
 
             const row = new ActionRowBuilder().addComponents(channelSelect);
-            await interaction.reply({ content: 'Please select the channel(s) to add this streamer to:', components: [row], ephemeral: true });
+            await interaction.reply({ content: 'Please select the channel(s) to add this streamer to:', components: [row], flags: [MessageFlags.Ephemeral] });
 
         } else if (interaction.isChannelSelectMenu() && interaction.customId.startsWith('approve_channels_')) {
             if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-                return interaction.reply({ content: 'You do not have permission to approve requests.', ephemeral: true });
+                return interaction.reply({ content: 'You do not have permission to approve requests.', flags: [MessageFlags.Ephemeral] });
             }
             await interaction.deferUpdate();
             const parts = interaction.customId.split('_');
             const requestingUserId = parts[2];
-            const serializedData = parts.slice(3).join('_');
+            const originalChannelId = parts[3];
+            const originalMessageId = parts[4];
+            const serializedData = parts.slice(5).join('_');
             const requestData = serializedData.split(';').map(d => {
                 const [platform, username] = d.split(':');
                 return { platform, username };
@@ -187,19 +189,27 @@ async function main() {
                 } catch (e) { console.error('Error approving streamer request:', e); }
             }
 
-            const originalEmbed = interaction.message.embeds[0];
-            const updatedEmbed = new EmbedBuilder(originalEmbed)
-                .setColor('#57F287')
-                .setTitle('Request Approved')
-                .setFooter({ text: `Approved by ${interaction.user.tag}` })
-                .addFields({ name: 'Approved for Channels', value: channelIds.map(id => `<#${id}>`).join(', ') });
+            try {
+                const originalChannel = await client.channels.fetch(originalChannelId);
+                const originalMessage = await originalChannel.messages.fetch(originalMessageId);
 
-            await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
-            await interaction.editReply({ content: `Approved request and added ${addedCount} subscriptions.`, components: [] });
+                const originalEmbed = originalMessage.embeds[0];
+                const updatedEmbed = new EmbedBuilder(originalEmbed)
+                    .setColor('#57F287')
+                    .setTitle('Request Approved')
+                    .setFooter({ text: `Approved by ${interaction.user.tag}` })
+                    .addFields({ name: 'Approved for Channels', value: channelIds.map(id => `<#${id}>`).join(', ') });
+
+                await originalMessage.edit({ embeds: [updatedEmbed], components: [] });
+                await interaction.editReply({ content: `Approved request and added ${addedCount} subscriptions.`, components: [] });
+            } catch (error) {
+                console.error("Error updating original request message:", error);
+                await interaction.editReply({ content: `Approved request and added ${addedCount} subscriptions, but failed to update the original message.`, components: [] });
+            }
 
         } else if (interaction.isButton() && interaction.customId.startsWith('deny_request_')) {
             if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-                return interaction.reply({ content: 'You do not have permission to deny requests.', ephemeral: true });
+                return interaction.reply({ content: 'You do not have permission to deny requests.', flags: [MessageFlags.Ephemeral] });
             }
             const originalEmbed = interaction.message.embeds[0];
             const updatedEmbed = new EmbedBuilder(originalEmbed)
@@ -207,8 +217,8 @@ async function main() {
                 .setTitle('Request Denied')
                 .setFooter({ text: `Denied by ${interaction.user.tag}` });
 
-            await interaction.message.edit({ embeds: [updatedEmbed], components: [] });
-            await interaction.reply({ content: 'Request has been denied.', ephemeral: true });
+            await interaction.update({ embeds: [updatedEmbed], components: [] });
+            await interaction.followUp({ content: 'Request has been denied.', flags: [MessageFlags.Ephemeral] });
         }
     });
 
@@ -373,12 +383,10 @@ async function checkStreams(client) {
     console.log(`[Check] ---> Starting stream check @ ${new Date().toLocaleTimeString()}`);
     let cycleTLS = null;
     try {
-        // Step 1: Get all subscriptions and current announcements
         const [subscriptions] = await db.execute('SELECT sub.*, s.* FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id');
         const [announcementsInDb] = await db.execute('SELECT * FROM announcements');
         const announcementsMap = new Map(announcementsInDb.map(a => [a.subscription_id, a]));
 
-        // Step 2: Get guild-specific settings
         const [guildSettingsList] = await db.execute('SELECT * FROM guilds');
         const guildSettingsMap = new Map(guildSettingsList.map(g => [g.guild_id, g]));
         const [channelSettingsList] = await db.execute('SELECT * FROM channel_settings');
@@ -386,7 +394,6 @@ async function checkStreams(client) {
         const [teamConfigs] = await db.execute('SELECT * FROM twitch_teams');
         const teamSettingsMap = new Map(teamConfigs.map(t => [`${t.guild_id}-${t.announcement_channel_id}`, t]));
 
-        // Step 3: Check live status for all unique streamers
         cycleTLS = await initCycleTLS({ timeout: 60000 });
         const liveStatusMap = new Map();
         const uniqueStreamers = [...new Map(subscriptions.map(item => [item.streamer_id, item])).values()];
@@ -431,17 +438,16 @@ async function checkStreams(client) {
             }
         }
 
-        // Step 4: Reconcile state
         const desiredAnnouncementKeys = new Set();
+        const successfulAnnouncements = new Map(); // streamer_id -> platform
 
-        // Handle Creations and Updates
         for (const sub of subscriptions) {
             const liveData = liveStatusMap.get(sub.streamer_id);
-            if (!liveData) continue; // Streamer is not live, do nothing here
+            if (!liveData) continue;
 
             const guildSettings = guildSettingsMap.get(sub.guild_id);
             const targetChannelId = sub.announcement_channel_id || guildSettings?.announcement_channel_id;
-            if (!targetChannelId) continue; // No channel to post in
+            if (!targetChannelId) continue;
 
             desiredAnnouncementKeys.add(sub.subscription_id);
             const existing = announcementsMap.get(sub.subscription_id);
@@ -450,20 +456,25 @@ async function checkStreams(client) {
 
             try {
                 const sentMessage = await updateAnnouncement(client, sub, liveData, existing, guildSettings, channelSettings, teamSettings);
-                if (sentMessage && !existing) {
-                    console.log(`[Announce] CREATED new announcement for ${sub.username} in channel ${targetChannelId}`);
-                    await db.execute('INSERT INTO announcements (subscription_id, streamer_id, guild_id, message_id, channel_id, stream_game, stream_title, platform, stream_thumbnail_url) VALUES (?,?,?,?,?,?,?,?,?)',
-                        [sub.subscription_id, sub.streamer_id, sub.guild_id, sentMessage.id, targetChannelId, liveData.game || null, liveData.title || null, liveData.platform, liveData.thumbnailUrl || null]);
-                } else if (sentMessage && existing && sentMessage.id !== existing.message_id) {
-                    console.log(`[Announce] UPDATED message ID for ${sub.username}`);
-                    await db.execute('UPDATE announcements SET message_id = ? WHERE announcement_id = ?', [sentMessage.id, existing.announcement_id]);
+                if (sentMessage) {
+                    if (!successfulAnnouncements.has(sub.streamer_id)) {
+                        successfulAnnouncements.set(sub.streamer_id, new Set());
+                    }
+                    successfulAnnouncements.get(sub.streamer_id).add(liveData.platform);
+
+                    if (!existing) {
+                        console.log(`[Announce] CREATED new announcement for ${sub.username} in channel ${targetChannelId}`);
+                        await db.execute('INSERT INTO announcements (subscription_id, streamer_id, guild_id, message_id, channel_id, stream_game, stream_title, platform, stream_thumbnail_url) VALUES (?,?,?,?,?,?,?,?,?)', [sub.subscription_id, sub.streamer_id, sub.guild_id, sentMessage.id, targetChannelId, liveData.game || null, liveData.title || null, liveData.platform, liveData.thumbnailUrl || null]);
+                    } else if (existing && sentMessage.id !== existing.message_id) {
+                        console.log(`[Announce] UPDATED message ID for ${sub.username}`);
+                        await db.execute('UPDATE announcements SET message_id = ? WHERE announcement_id = ?', [sentMessage.id, existing.announcement_id]);
+                    }
                 }
             } catch (e) {
                 console.error(`[Announce] Error processing announcement for ${sub.username}:`, e);
             }
         }
 
-        // Handle Deletions
         for (const [subscription_id, existing] of announcementsMap.entries()) {
             if (!desiredAnnouncementKeys.has(subscription_id)) {
                 try {
@@ -481,40 +492,59 @@ async function checkStreams(client) {
             }
         }
 
-        // --- Step 5: Process role updates per user, per guild ---
         const usersToUpdate = new Map();
         for (const sub of subscriptions) {
             if (!sub.discord_user_id) continue;
             const key = `${sub.guild_id}-${sub.discord_user_id}`;
             if (!usersToUpdate.has(key)) {
-                usersToUpdate.set(key, { guildId: sub.guild_id, userId: sub.discord_user_id, isLive: false });
+                usersToUpdate.set(key, { guildId: sub.guild_id, userId: sub.discord_user_id, livePlatforms: new Set() });
             }
-            if (liveStatusMap.has(sub.streamer_id)) {
-                usersToUpdate.get(key).isLive = true;
+            if (successfulAnnouncements.has(sub.streamer_id)) {
+                successfulAnnouncements.get(sub.streamer_id).forEach(platform => {
+                    usersToUpdate.get(key).livePlatforms.add(platform);
+                });
             }
         }
 
         for (const [key, userState] of usersToUpdate.entries()) {
-            const { guildId, userId, isLive } = userState;
-            const userSubscriptions = subscriptions.filter(s => s.discord_user_id === userId && s.guild_id === guildId);
-            if (userSubscriptions.length === 0) continue;
+            const { guildId, userId, livePlatforms } = userState;
 
-            const rolesToManage = new Set();
+            const member = await client.guilds.fetch(guildId).then(g => g.members.fetch(userId)).catch(() => null);
+            if (!member) continue;
+
             const guildSettings = guildSettingsMap.get(guildId);
-            if (guildSettings?.live_role_id) rolesToManage.add(guildSettings.live_role_id);
+            const userSubscriptions = subscriptions.filter(s => s.discord_user_id === userId && s.guild_id === guildId);
+            const allTeamConfigsForGuild = teamConfigs.filter(t => t.guild_id === guildId && t.live_role_id);
 
-            userSubscriptions.forEach(sub => {
-                const teamRole = teamSettingsMap.get(`${guildId}-${sub.announcement_channel_id}`)?.live_role_id;
-                if (teamRole) rolesToManage.add(teamRole);
-            });
+            const desiredRoles = new Set();
 
-            if (rolesToManage.size > 0) {
-                const guild = await client.guilds.fetch(guildId).catch(() => null);
-                if (!guild) continue;
-                const member = await guild.members.fetch(userId).catch(() => null);
-                if (!member) continue;
-                const action = isLive ? 'add' : 'remove';
-                await handleRole(member, [...rolesToManage], action, guildId);
+            // Determine guild-wide role
+            if (guildSettings?.live_role_id && livePlatforms.size > 0) {
+                desiredRoles.add(guildSettings.live_role_id);
+            }
+
+            // Determine team-specific roles
+            for (const teamConfig of allTeamConfigsForGuild) {
+                const isLiveOnTwitchForThisTeam = userSubscriptions.some(sub => 
+                    sub.announcement_channel_id === teamConfig.announcement_channel_id && livePlatforms.has('twitch')
+                );
+                if (isLiveOnTwitchForThisTeam) {
+                    desiredRoles.add(teamConfig.live_role_id);
+                }
+            }
+
+            const allManagedRoles = new Set([guildSettings?.live_role_id, ...allTeamConfigsForGuild.map(t => t.live_role_id)].filter(Boolean));
+
+            for (const roleId of allManagedRoles) {
+                if (desiredRoles.has(roleId)) {
+                    if (!member.roles.cache.has(roleId)) {
+                        await handleRole(member, [roleId], 'add', guildId);
+                    }
+                } else {
+                    if (member.roles.cache.has(roleId)) {
+                        await handleRole(member, [roleId], 'remove', guildId);
+                    }
+                }
             }
         }
 

@@ -1,62 +1,54 @@
-const { chromium } = require('playwright');
+const playwright = require('playwright-core');
 
 let browser = null;
-let launchPromise = null;
 
-// Determine browser launch arguments based on environment variables
-const getLaunchArgs = () => {
-    const args = ['--disable-dev-shm-usage']; // Generally safe and recommended
-
-    // --no-sandbox is a security risk if the browser navigates to untrusted content.
-    // Only enable if explicitly allowed and understood, e.g., in controlled container environments.
-    if (process.env.PLAYWRIGHT_NO_SANDBOX === 'true') {
-        args.push('--no-sandbox', '--disable-setuid-sandbox');
-    }
-    return args;
-};
-
-const getBrowser = async () => {
-    if (browser && browser.isConnected()) return browser;
-    if (launchPromise) return await launchPromise;
-
-    try {
-        console.log('[BrowserManager] Initiating local browser for TikTok...');
-        
-        // Make headless mode configurable via environment variable
-        const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== 'false'; // Default to true
-
-        launchPromise = chromium.launch({
-            headless: isHeadless,
-            args: getLaunchArgs()
-        });
-
-        browser = await launchPromise;
-        console.log('[BrowserManager] Local browser launched successfully.');
-        launchPromise = null;
-
-        browser.on('disconnected', () => {
-            console.error('[BrowserManager] Browser disconnected unexpectedly.');
-            browser = null;
-        });
+async function getBrowser() {
+    if (browser && browser.isConnected()) {
         return browser;
-    } catch (error) {
-        console.error('[BrowserManager] FATAL: Could not launch browser:', error);
-        browser = null;
-        launchPromise = null;
+    }
+    try {
+        console.log('[BrowserManager] Initializing new persistent browser instance...');
+        browser = await playwright.chromium.launchPersistentContext('./user-data-dir', {
+            headless: true,
+            executablePath: process.env.CHROME_EXECUTABLE_PATH, // Make sure to set this in your .env
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process', // Might help on low-resource systems
+                '--disable-gpu'
+            ],
+        });
+        browser.on('close', () => {
+            console.log('[BrowserManager] Persistent browser instance closed.');
+            browser = null; // Reset browser instance on close
+        });
+        console.log('[BrowserManager] New browser instance launched successfully.');
+        return browser;
+    } catch (e) {
+        console.error('[BrowserManager] FATAL: Could not launch browser:', e);
         return null;
     }
-};
+}
 
-const closeBrowser = async () => {
-    // If a launch is in progress, wait for it to complete before attempting to close.
-    if (launchPromise) await launchPromise;
+async function closeBrowser() {
+    // This function is now a no-op because we want to keep the browser persistent.
+    // The browser will be closed on application shutdown.
+}
+
+async function gracefulShutdown() {
     if (browser) {
-        await browser.close().catch(e => {
-            console.warn('[BrowserManager] Error closing browser gracefully:', e);
-        });
+        console.log('[BrowserManager] Gracefully shutting down persistent browser...');
+        await browser.close();
         browser = null;
-        console.log('[BrowserManager] Browser closed successfully.');
     }
-};
+}
+
+// Graceful shutdown hook
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);
 
 module.exports = { getBrowser, closeBrowser };

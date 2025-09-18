@@ -1,6 +1,7 @@
+console.log('--- EXECUTING LATEST API_CHECKS.JS ---');
 const axios = require('axios');
 const initCycleTLS = require('cycletls');
-const { getBrowser, closeBrowser } = require('./browserManager');
+const { getBrowser } = require('./browserManager');
 
 let twitchToken = null;
 let tokenExpires = 0;
@@ -48,7 +49,12 @@ async function getKickUser(cycleTLS, username) {
             userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
         });
         if (response.status === 200 && response.body) {
-            return typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+            const data = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+            if (!data || !data.user) {
+                console.log(`[Kick API] No 'user' object in response for '${username}', assuming non-existent.`);
+                return null;
+            }
+            return data;
         }
         return null;
     } catch (error) {
@@ -106,11 +112,9 @@ async function checkKick(cycleTLS, username) {
     let profileImageUrl = null;
     try {
         const kickData = await getKickUser(cycleTLS, username);
-        console.log(`[Kick Check] API Response for ${username}: Livestream data exists: ${!!kickData?.livestream}`);
-
         profileImageUrl = kickData?.user?.profile_pic || null;
 
-        if (kickData?.livestream) {
+        if (kickData?.livestream && kickData.livestream.id) {
             return {
                 isLive: true,
                 platform: 'kick',
@@ -173,22 +177,25 @@ async function checkTwitch(streamer) {
 async function checkYouTube(channelId) {
     console.log(`[YouTube Check] Starting for channel ID: ${channelId}`);
     const defaultResponse = { isLive: false, profileImageUrl: null };
-    let browser = null;
     let page = null;
-    let profileImageUrl = null;
     try {
-        browser = await getBrowser();
-        if (!browser || !browser.isConnected()) {
-            console.log(`[YouTube Check] Browser not connected for ${channelId}.`);
+        const browser = await getBrowser();
+        if (!browser) {
+            console.error('[YouTube Check] Browser not available.');
             return defaultResponse;
         }
         page = await browser.newPage();
-        console.log(`[YouTube Check] Navigating to YouTube for ${channelId}...`);
-        await page.goto(`https://www.youtube.com/channel/${channelId}/live`, { waitUntil: "domcontentloaded", timeout: 45000 });
-        console.log(`[YouTube Check] Page loaded for ${channelId}. URL: ${page.url()}`);
+        page.on('crash', () => console.error(`[YouTube Check] Page crashed for ${channelId}`));
 
-        profileImageUrl = await page.locator('#avatar #img').getAttribute('src').catch(() => null);
-        console.log(`[YouTube PFP Debug] for ${channelId}: ${profileImageUrl}`);
+        const url = `https://www.youtube.com/channel/${channelId}/live`;
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+
+        if (!page.url().includes(channelId)) {
+            console.log(`[YouTube Check] Redirect detected for ${channelId}. Final URL: ${page.url()}`);
+            return { ...defaultResponse, profileImageUrl: null };
+        }
+
+        const profileImageUrl = await page.locator('#avatar #img').getAttribute('src').catch(() => null);
 
         if (page.url().includes("/watch")) {
             const isLiveBadge = await page.locator('span.ytp-live-badge').isVisible({ timeout: 5000 });
@@ -204,10 +211,9 @@ async function checkYouTube(channelId) {
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
     } catch (e) {
         console.error(`[Check YouTube Error] for channel ID "${channelId}":`, e.message);
-        return { ...defaultResponse, profileImageUrl: profileImageUrl };
+        return { ...defaultResponse, profileImageUrl: null };
     } finally {
-        if (page) await page.close().catch(() => {});
-        if (browser) await closeBrowser();
+        if (page) await page.close().catch(e => console.error(`[YouTube Check] Error closing page for ${channelId}:`, e));
         console.log(`[YouTube Check] Finished for channel ID: ${channelId}`);
     }
 }
@@ -215,28 +221,31 @@ async function checkYouTube(channelId) {
 async function checkTikTok(username) {
     console.log(`[TikTok Check] Starting for username: ${username}`);
     const defaultResponse = { isLive: false, profileImageUrl: null };
-    let browser = null;
     let page = null;
-    let profileImageUrl = null;
     try {
-        browser = await getBrowser();
-        if (!browser || !browser.isConnected()) {
-            console.log(`[TikTok Check] Browser not connected for ${username}.`);
+        const browser = await getBrowser();
+        if (!browser) {
+            console.error('[TikTok Check] Browser not available.');
             return defaultResponse;
         }
         page = await browser.newPage();
-        console.log(`[TikTok Check] Navigating to TikTok for ${username}...`);
-        await page.goto(`https://www.tiktok.com/@${username}/live`, { waitUntil: "domcontentloaded", timeout: 45000 });
-        console.log(`[TikTok Check] Page loaded for ${username}. URL: ${page.url()}`);
+        page.on('crash', () => console.error(`[TikTok Check] Page crashed for ${username}`));
 
-        profileImageUrl = await page.locator('img[class*="StyledAvatar"]').getAttribute('src').catch(() => null);
-        console.log(`[TikTok PFP Debug] for ${username}: ${profileImageUrl}`);
+        const url = `https://www.tiktok.com/@${username}/live`;
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+
+        if (!page.url().includes(username)) {
+            console.log(`[TikTok Check] Redirect detected for ${username}. Final URL: ${page.url()}`);
+            return { ...defaultResponse, profileImageUrl: null };
+        }
+
+        const profileImageUrl = await page.locator('img[class*="StyledAvatar"]').getAttribute('src').catch(() => null);
         const isLive = await page.locator('[data-e2e="live-room-normal"]').isVisible({ timeout: 5000 });
 
         if (isLive) {
             const title = await page.title();
             return {
-                isLive: true, platform: 'tiktok', username: username, url: `https://www.tiktok.com/@${username}/live`,
+                isLive: true, platform: 'tiktok', username: username, url: url,
                 title: title.includes(username) ? title : 'Live on TikTok', game: 'N/A',
                 viewers: await page.locator('[data-e2e="live-room-user-count"] span').first().textContent({ timeout: 2000 }).catch(() => 'N/A'),
                 profileImageUrl: profileImageUrl
@@ -245,11 +254,9 @@ async function checkTikTok(username) {
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
     } catch (e) {
         console.error(`[Check TikTok Error] for "${username}":`, e.message);
-        return { ...defaultResponse, profileImageUrl: profileImageUrl };
-    }
-    finally {
-        if (page) await page.close().catch(() => {});
-        if (browser) await closeBrowser();
+        return { ...defaultResponse, profileImageUrl: null };
+    } finally {
+        if (page) await page.close().catch(e => console.error(`[TikTok Check] Error closing page for ${username}:`, e));
         console.log(`[TikTok Check] Finished for username: ${username}`);
     }
 }
@@ -257,28 +264,31 @@ async function checkTikTok(username) {
 async function checkTrovo(username) {
     console.log(`[Trovo Check] Starting for username: ${username}`);
     const defaultResponse = { isLive: false, profileImageUrl: null };
-    let browser = null;
     let page = null;
-    let profileImageUrl = null;
     try {
-        browser = await getBrowser();
-        if (!browser || !browser.isConnected()) {
-            console.log(`[Trovo Check] Browser not connected for ${username}.`);
+        const browser = await getBrowser();
+        if (!browser) {
+            console.error('[Trovo Check] Browser not available.');
             return defaultResponse;
         }
         page = await browser.newPage();
-        console.log(`[Trovo Check] Navigating to Trovo for ${username}...`);
-        await page.goto(`https://trovo.live/s/${username}`, { waitUntil: "domcontentloaded", timeout: 45000 });
-        console.log(`[Trovo Check] Page loaded for ${username}. URL: ${page.url()}`);
+        page.on('crash', () => console.error(`[Trovo Check] Page crashed for ${username}`));
 
-        profileImageUrl = await page.locator('.caster-avatar img').getAttribute('src').catch(() => null);
-        console.log(`[Trovo PFP Debug] for ${username}: ${profileImageUrl}`);
+        const url = `https://trovo.live/s/${username}`;
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+
+        if (!page.url().includes(`/s/${username}`)) {
+            console.log(`[Trovo Check] Redirect detected for ${username}. Final URL: ${page.url()}`);
+            return { ...defaultResponse, profileImageUrl: null };
+        }
+
+        const profileImageUrl = await page.locator('.caster-avatar img').getAttribute('src').catch(() => null);
         const isLive = await page.locator('.live-indicator-ctn').isVisible({ timeout: 5000 });
         if (isLive) {
             const title = await page.title().then(t => t.split('|')[0].trim());
             const game = await page.locator('div.category-name > a').textContent({ timeout: 2000 }).catch(() => 'N/A');
             return {
-                isLive: true, platform: 'trovo', username: username, url: `https://trovo.live/s/${username}`,
+                isLive: true, platform: 'trovo', username: username, url: url,
                 title: title || 'Untitled Stream', game: game, thumbnailUrl: await page.locator('meta[property="og:image"]').getAttribute('content').catch(() => null),
                 viewers: parseInt(await page.locator('.viewer-count span').textContent({ timeout: 2000 }).catch(() => '0'), 10) || 0,
                 profileImageUrl: profileImageUrl
@@ -287,10 +297,9 @@ async function checkTrovo(username) {
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
     } catch (e) {
         console.error(`[Check Trovo Error] for "${username}":`, e.message);
-        return { ...defaultResponse, profileImageUrl: profileImageUrl };
+        return { ...defaultResponse, profileImageUrl: null };
     } finally {
-        if (page) await page.close().catch(() => {});
-        if (browser) await closeBrowser();
+        if (page) await page.close().catch(e => console.error(`[Trovo Check] Error closing page for ${username}:`, e));
         console.log(`[Trovo Check] Finished for username: ${username}`);
     }
 }

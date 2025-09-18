@@ -405,7 +405,7 @@ function start(botClient) {
 
             if (teamSub) {
                 // Get team members from Twitch API
-                const teamMembers = await apiChecks.getTwitchTeam(teamSub.team_name);
+                const teamMembers = await apiChecks.getTwitchTeamMembers(teamSub.team_name);
                 if (teamMembers && teamMembers.length > 0) {
                     // Get streamer_ids for all team members
                     const memberLogins = teamMembers.map(m => m.user_login);
