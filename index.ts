@@ -366,7 +366,8 @@ async function startupCleanup(client) {
                         console.error(`[Startup Cleanup] Failed to purge channel ${channelId}: ${e.message}`);
                     }
                 }
-            } catch (e) {
+            }
+            catch (e) {
                 console.error(`[Startup Cleanup] Failed to process guild ${guildId} for announcement purge: ${e.message}`);
             }
         }

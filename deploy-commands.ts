@@ -11,7 +11,7 @@ try {
     commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 } catch (error) {
     console.error(`[❌] Error reading commands directory at ${commandsPath}:`, error.message);
-    process.exit(1); // Exit if commands directory can't be read
+    process.exit(1);
 }
 
 console.log('Loading commands for deployment...');
