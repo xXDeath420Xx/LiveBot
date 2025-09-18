@@ -1,7 +1,7 @@
-const mysql = require('mysql2/promise');
-require('dotenv').config();
+import mysql, { Pool, PoolOptions } from 'mysql2/promise';
+import 'dotenv/config'; // Use 'dotenv/config' for direct loading
 
-const dbConfig = {
+const dbConfig: PoolOptions = {
     host: process.env.DB_HOST || '127.0.0.1',
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
@@ -17,7 +17,7 @@ const dbConfig = {
     timezone: 'Z'
 };
 
-const pool = mysql.createPool(dbConfig);
+const pool: Pool = mysql.createPool(dbConfig);
 
 // Test the connection on startup
 (async () => {
@@ -25,7 +25,7 @@ const pool = mysql.createPool(dbConfig);
         const connection = await pool.getConnection();
         console.log('[DB] Database connection successful.');
         connection.release();
-    } catch (error) {
+    } catch (error: any) {
         console.error('[DB] FATAL: Could not connect to the database.');
         console.error(`[DB] Reason: ${error.message}`);
         // Exit the process if the database connection fails, as the bot cannot function.
@@ -33,8 +33,8 @@ const pool = mysql.createPool(dbConfig);
     }
 })();
 
-pool.on('error', (err) => {
+pool.on('error', (err: Error) => {
     console.error('[DB Pool Error]', err);
 });
 
-module.exports = pool;
+export default pool;

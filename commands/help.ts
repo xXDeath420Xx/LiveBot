@@ -1,11 +1,11 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+import { SlashCommandBuilder, EmbedBuilder, ChatInputCommandInteraction } from 'discord.js';
 
-module.exports = {
+export default {
   data: new SlashCommandBuilder()
     .setName('help')
     .setDescription('Displays a guide for all bot commands and their permissions.'),
 
-  async execute(interaction) {
+  async execute(interaction: ChatInputCommandInteraction) {
     const embed = new EmbedBuilder()
       .setColor('#5865F2')
       .setTitle('CertiFried Announcer Command & Feature Guide')

@@ -1,12 +1,40 @@
-console.log('--- EXECUTING LATEST API_CHECKS.JS ---');
-const axios = require('axios');
-const initCycleTLS = require('cycletls');
-const { getBrowser } = require('./browserManager');
+import axios from 'axios';
+// cycleTLS is likely no longer needed for official Kick API calls, but kept for other potential uses
+// import initCycleTLS from 'cycletls'; 
+import { getBrowser } from './browserManager';
 
-let twitchToken = null;
-let tokenExpires = 0;
+console.log('--- EXECUTING LATEST API_CHECKS.TS ---');
 
-async function getYouTubeChannelId(identifier) {
+// --- Interfaces for Kick Public API v1 ---
+interface KickPublicStream {
+    is_live: boolean;
+    viewer_count: number;
+    session_title?: string;
+    categories?: Array<{ name: string }>;
+    thumbnail?: { src: string };
+}
+
+interface KickPublicChannelUser {
+    username: string;
+    profile_pic?: string;
+}
+
+interface KickPublicChannel {
+    id: number; // Important for other API calls like chatroom settings
+    slug: string;
+    user: KickPublicChannelUser;
+    livestream: KickPublicStream | null; // Stream might be null if not live
+    // Add other channel properties if known/needed
+}
+
+interface KickPublicChannelDataResponse {
+    data: KickPublicChannel[];
+}
+
+let twitchToken: string | null = null;
+let tokenExpires: number = 0;
+
+export async function getYouTubeChannelId(identifier: string): Promise<{ channelId: string; channelName: string | null } | null> {
     if (!process.env.YOUTUBE_API_KEY) {
         console.error("[YouTube API Error] YOUTUBE_API_KEY is not set in the environment variables.");
         return null;
@@ -35,35 +63,40 @@ async function getYouTubeChannelId(identifier) {
             };
         }
         return null;
-    } catch (error) {
+    } catch (error: any) {
         console.error(`[YouTube API Check Error] for "${identifier}":`, error.response?.data?.error?.message || error.message);
         return null;
     }
 }
 
-async function getKickUser(cycleTLS, username) {
+export async function getKickUser(appAccessToken: string | null, username: string): Promise<KickPublicChannel | null> {
     if (typeof username !== 'string' || !username) return null;
+    if (!appAccessToken) {
+        console.error("Cannot get Kick user, App Access Token is missing.");
+        return null;
+    }
     try {
-        const requestUrl = `https://kick.com/api/v1/channels/${username.toLowerCase()}`;
-        const response = await cycleTLS(requestUrl, {
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+        const requestUrl = `https://api.kick.com/public/v1/channels?slug=${username.toLowerCase()}`;
+        const response = await axios.get<KickPublicChannelDataResponse>(requestUrl, {
+            headers: { 'Authorization': `Bearer ${appAccessToken}`, 'Accept': 'application/json' },
         });
-        if (response.status === 200 && response.body) {
-            const data = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
-            if (!data || !data.user) {
+
+        if (response.data.data && response.data.data.length > 0) {
+            const channelData = response.data.data[0];
+            if (!channelData || !channelData.user) {
                 console.log(`[Kick API] No 'user' object in response for '${username}', assuming non-existent.`);
                 return null;
             }
-            return data;
+            return channelData;
         }
         return null;
-    } catch (error) {
-        console.error(`[Kick API Check Error] for "${username}":`, error.message);
+    } catch (error: any) {
+        console.error(`[Kick API Check Error] for "${username}":`, error.response ? error.response.data : error.message);
         return null;
     }
 }
 
-async function getTwitchAccessToken() {
+export async function getTwitchAccessToken(): Promise<string | null> {
     if (!process.env.TWITCH_CLIENT_ID || !process.env.TWITCH_CLIENT_SECRET) {
         console.error("[Twitch Auth Error] Missing TWITCH_CLIENT_ID or TWITCH_CLIENT_SECRET in the .env file.");
         return null;
@@ -74,13 +107,13 @@ async function getTwitchAccessToken() {
         twitchToken = response.data.access_token;
         tokenExpires = Date.now() + (response.data.expires_in * 1000);
         return twitchToken;
-    } catch (error) { 
+    } catch (error: any) { 
         console.error("[Twitch Auth Error]", error.response ? error.response.data : error.message);
         return null; 
     }
 }
 
-async function getTwitchUser(identifier) {
+export async function getTwitchUser(identifier: string): Promise<any | null> { // TODO: Define TwitchUser interface
     const token = await getTwitchAccessToken();
     if (!token) return null;
     const isUserId = /^[0-9]+$/.test(identifier);
@@ -88,33 +121,45 @@ async function getTwitchUser(identifier) {
     try {
         const res = await axios.get(`https://api.twitch.tv/helix/users?${param}=${identifier.toLowerCase()}`, { headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${token}` } });
         return res.data.data?.[0];
-    } catch (e) {
+    } catch (e: any) {
         console.error(`[Twitch User Check Error] for "${identifier}":`, e.response ? e.response.data : e.message);
         return null;
     }
 }
 
-async function getTwitchTeamMembers(teamName) {
+export async function getTwitchTeamMembers(teamName: string): Promise<any[] | null> { // TODO: Define TwitchTeamMember interface
     const token = await getTwitchAccessToken();
     if (!token) return null;
     try {
         const res = await axios.get(`https://api.twitch.tv/helix/teams?name=${teamName.toLowerCase()}`, { headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${token}` } });
         return res.data.data?.[0]?.users || null;
-    } catch (e) {
+    } catch (e: any) {
         console.error(`[Twitch Team Check Error] for "${teamName}":`, e.response ? e.response.data : e.message);
         return null;
     }
 }
 
-async function checkKick(cycleTLS, username) {
+interface LiveStatusResponse {
+    isLive: boolean;
+    platform: string;
+    username: string;
+    url: string;
+    title: string;
+    game: string;
+    thumbnailUrl: string | null;
+    viewers: number | string;
+    profileImageUrl: string | null;
+}
+
+export async function checkKick(appAccessToken: string | null, username: string): Promise<LiveStatusResponse> {
     console.log(`[Kick Check] Starting for username: ${username}`);
-    const defaultResponse = { isLive: false, profileImageUrl: null };
-    let profileImageUrl = null;
+    const defaultResponse: LiveStatusResponse = { isLive: false, platform: 'kick', username: username, url: `https://kick.com/${username}`, title: 'N/A', game: 'N/A', thumbnailUrl: null, viewers: 0, profileImageUrl: null };
+    let profileImageUrl: string | null = null;
     try {
-        const kickData = await getKickUser(cycleTLS, username);
+        const kickData = await getKickUser(appAccessToken, username);
         profileImageUrl = kickData?.user?.profile_pic || null;
 
-        if (kickData?.livestream && kickData.livestream.id) {
+        if (kickData?.livestream && kickData.livestream.is_live) {
             return {
                 isLive: true,
                 platform: 'kick',
@@ -128,7 +173,7 @@ async function checkKick(cycleTLS, username) {
             };
         }
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
-    } catch (error) {
+    } catch (error: any) {
         console.error(`[Check Kick Error] for "${username}":`, error.message);
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
     } finally {
@@ -136,18 +181,26 @@ async function checkKick(cycleTLS, username) {
     }
 }
 
-async function checkTwitch(streamer) {
-    const defaultResponse = { isLive: false, profileImageUrl: null };
+interface StreamerInfo {
+    platform_user_id: string;
+    // Add other streamer info properties if known/needed
+}
+
+export async function checkTwitch(streamer: StreamerInfo): Promise<LiveStatusResponse> {
+    const defaultResponse: LiveStatusResponse = { isLive: false, platform: 'twitch', username: 'N/A', url: 'N/A', title: 'N/A', game: 'N/A', thumbnailUrl: null, viewers: 0, profileImageUrl: null };
     const token = await getTwitchAccessToken();
     if (!token) return defaultResponse;
 
-    let profileImageUrl = null;
+    let profileImageUrl: string | null = null;
+    let twitchUsername: string = 'N/A';
+
     try {
         const userRes = await axios.get(`https://api.twitch.tv/helix/users?id=${streamer.platform_user_id}`, { headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${token}` } });
         if (userRes.data.data[0]) {
             profileImageUrl = userRes.data.data[0].profile_image_url;
+            twitchUsername = userRes.data.data[0].display_name; // Get username for URL
         }
-    } catch (e) {
+    } catch (e: any) {
         console.error(`[Twitch User PFP Check Error] for user ID "${streamer.platform_user_id}":`, e.response ? e.response.data : e.message);
     }
 
@@ -167,17 +220,17 @@ async function checkTwitch(streamer) {
                 profileImageUrl: profileImageUrl
             };
         }
-        return { isLive: false, profileImageUrl: profileImageUrl };
-    } catch (e) {
+        return { ...defaultResponse, profileImageUrl: profileImageUrl, username: twitchUsername, url: `https://www.twitch.tv/${twitchUsername.toLowerCase()}` };
+    } catch (e: any) {
         console.error(`[Check Twitch Error] for user ID "${streamer.platform_user_id}":`, e.response ? e.response.data : e.message);
-        return { ...defaultResponse, profileImageUrl: profileImageUrl };
+        return { ...defaultResponse, profileImageUrl: profileImageUrl, username: twitchUsername, url: `https://www.twitch.tv/${twitchUsername.toLowerCase()}` };
     }
 }
 
-async function checkYouTube(channelId) {
+export async function checkYouTube(channelId: string): Promise<LiveStatusResponse> {
     console.log(`[YouTube Check] Starting for channel ID: ${channelId}`);
-    const defaultResponse = { isLive: false, profileImageUrl: null };
-    let page = null;
+    const defaultResponse: LiveStatusResponse = { isLive: false, platform: 'youtube', username: 'N/A', url: 'N/A', title: 'N/A', game: 'N/A', thumbnailUrl: null, viewers: 0, profileImageUrl: null };
+    let page: any = null; // TODO: Type Playwright Page
     try {
         const browser = await getBrowser();
         if (!browser) {
@@ -203,25 +256,25 @@ async function checkYouTube(channelId) {
                 const title = await page.title().then(t => t.replace(' - YouTube', '').trim());
                 return {
                     isLive: true, platform: 'youtube', username: title, url: page.url(),
-                    title: title, thumbnailUrl: await page.locator('meta[property="og:image"]').getAttribute('content').catch(() => null),
+                    title: title, thumbnailUrl: await page.locator('meta[property="og.image"]').getAttribute('content').catch(() => null),
                     game: 'N/A', viewers: 'N/A', profileImageUrl: profileImageUrl
                 };
             }
         }
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
-    } catch (e) {
+    } catch (e: any) {
         console.error(`[Check YouTube Error] for channel ID "${channelId}":`, e.message);
         return { ...defaultResponse, profileImageUrl: null };
     } finally {
-        if (page) await page.close().catch(e => console.error(`[YouTube Check] Error closing page for ${channelId}:`, e));
+        if (page) await page.close().catch((e: any) => console.error(`[YouTube Check] Error closing page for ${channelId}:`, e));
         console.log(`[YouTube Check] Finished for channel ID: ${channelId}`);
     }
 }
 
-async function checkTikTok(username) {
+export async function checkTikTok(username: string): Promise<LiveStatusResponse> {
     console.log(`[TikTok Check] Starting for username: ${username}`);
-    const defaultResponse = { isLive: false, profileImageUrl: null };
-    let page = null;
+    const defaultResponse: LiveStatusResponse = { isLive: false, platform: 'tiktok', username: username, url: `https://tiktok.com/@${username}`, title: 'N/A', game: 'N/A', thumbnailUrl: null, viewers: 0, profileImageUrl: null };
+    let page: any = null; // TODO: Type Playwright Page
     try {
         const browser = await getBrowser();
         if (!browser) {
@@ -247,24 +300,24 @@ async function checkTikTok(username) {
             return {
                 isLive: true, platform: 'tiktok', username: username, url: url,
                 title: title.includes(username) ? title : 'Live on TikTok', game: 'N/A',
-                viewers: await page.locator('[data-e2e="live-room-user-count"] span').first().textContent({ timeout: 2000 }).catch(() => 'N/A'),
+                viewers: await page.locator('[data-e2e="live-room-user-count"] span').first().textContent({ timeout: 2000 }).catch(() => '0'),
                 profileImageUrl: profileImageUrl
             };
         }
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
-    } catch (e) {
+    } catch (e: any) {
         console.error(`[Check TikTok Error] for "${username}":`, e.message);
         return { ...defaultResponse, profileImageUrl: null };
     } finally {
-        if (page) await page.close().catch(e => console.error(`[TikTok Check] Error closing page for ${username}:`, e));
+        if (page) await page.close().catch((e: any) => console.error(`[TikTok Check] Error closing page for ${username}:`, e));
         console.log(`[TikTok Check] Finished for username: ${username}`);
     }
 }
 
-async function checkTrovo(username) {
+export async function checkTrovo(username: string): Promise<LiveStatusResponse> {
     console.log(`[Trovo Check] Starting for username: ${username}`);
-    const defaultResponse = { isLive: false, profileImageUrl: null };
-    let page = null;
+    const defaultResponse: LiveStatusResponse = { isLive: false, platform: 'trovo', username: username, url: `https://trovo.live/s/${username}`, title: 'N/A', game: 'N/A', thumbnailUrl: null, viewers: 0, profileImageUrl: null };
+    let page: any = null; // TODO: Type Playwright Page
     try {
         const browser = await getBrowser();
         if (!browser) {
@@ -295,13 +348,13 @@ async function checkTrovo(username) {
             };
         }
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
-    } catch (e) {
+    } catch (e: any) {
         console.error(`[Check Trovo Error] for "${username}":`, e.message);
         return { ...defaultResponse, profileImageUrl: null };
     } finally {
-        if (page) await page.close().catch(e => console.error(`[Trovo Check] Error closing page for ${username}:`, e));
+        if (page) await page.close().catch((e: any) => console.error(`[Trovo Check] Error closing page for ${username}:`, e));
         console.log(`[Trovo Check] Finished for username: ${username}`);
     }
 }
 
-module.exports = { getYouTubeChannelId, getTwitchUser, getKickUser, checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo, getTwitchTeamMembers };
+export { getYouTubeChannelId, getTwitchUser, getKickUser, checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo, getTwitchTeamMembers };
