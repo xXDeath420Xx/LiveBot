@@ -1,6 +1,6 @@
 {
   "name": "certifried-announcer-stable",
-  "version": "4.0.0",
+  "version": "0.1.6",
   "description": "A stable, multi-platform stream announcer bot.",
   "main": "index.js",
   "scripts": {
