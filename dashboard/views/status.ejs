@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Status</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/dashboard-style.css?v=14.1.0">
+    <style>
+        body {
+            background-color: #1a1a2e;
+            color: #e0e0e0;
+            font-family: 'Arial', sans-serif;
+        }
+        .page-container {
+            max-width: 900px;
+            margin: 50px auto;
+            background-color: #16213e;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+        }
+        .page-header h1 {
+            color: #e0e0e0; /* Adjusted for better contrast on dark background */
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        pre {
+            background-color: #0f3460;
+            color: #e0e0e0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 0.9em;
+            border: 1px solid #0a2342;
+        }
+        .status-message {
+            text-align: center;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            color: #e0e0e0;
+        }
+        .error-message {
+            color: #e94560;
+            text-align: center;
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+        .login-prompt {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .login-prompt a {
+            color: #e0e0e0;
+            background-color: #e94560;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+        .login-prompt a:hover {
+            background-color: #b8324a;
+        }
+        .pm2-status-online {
+            color: #4CAF50; /* Green for online */
+            font-weight: bold;
+        }
+        .pm2-status-offline {
+            color: #e94560; /* Red for offline */
+            font-weight: bold;
+        }
+        .pm2-status-restarting {
+            color: #FFC107; /* Yellow for restarting */
+            font-weight: bold;
+        }
+        #statusContent {
+            min-height: 150px; /* Give it some height to prevent jumping */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        #lastUpdated {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <%- include('partials/header') %>
+
+    <main class="page-container">
+        <div class="page-header">
+            <h1>Server Status</h1>
+        </div>
+
+        <div id="statusContent">
+            <div class="spinner-border text-light" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="status-message mt-3">Loading status...</p>
+        </div>
+        <p id="lastUpdated" class="text-center"></p>
+
+    </main>
+
+    <%- include('partials/footer') %>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const isAuthenticated = <%= isAuthenticated %>;
+            const statusContentDiv = document.getElementById('statusContent');
+            const lastUpdatedP = document.getElementById('lastUpdated');
+
+            async function fetchStatus() {
+                statusContentDiv.innerHTML = `
+                    <div class="spinner-border text-light" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="status-message mt-3">Loading status...</p>
+                `;
+                lastUpdatedP.textContent = '';
+
+                try {
+                    let response;
+                    let data;
+
+                    if (isAuthenticated) {
+                        response = await fetch('/api/authenticated-logs');
+                        data = await response.json();
+
+                        if (data.error) {
+                            statusContentDiv.innerHTML = `<p class="error-message">Error: ${data.error}</p>`;
+                        } else {
+                            statusContentDiv.innerHTML = `
+                                <div class="status-message">Displaying last 50 lines of logs for CertiFriedAnnouncer:</div>
+                                <pre>${data.logs}</pre>
+                            `;
+                        }
+                    } else {
+                        response = await fetch('/api/public-status');
+                        data = await response.json();
+
+                        if (data.error) {
+                            statusContentDiv.innerHTML = `<p class="error-message">Error: ${data.error}</p>`;
+                        } else {
+                            let statusHtml = '';
+                            if (data.status.includes('online')) {
+                                statusHtml = `CertiFriedAnnouncer is <span class="pm2-status-online">Online</span>.`;
+                            } else if (data.status.includes('offline')) {
+                                statusHtml = `CertiFriedAnnouncer is <span class="pm2-status-offline">Offline</span>.`;
+                            } else if (data.status.includes('restarting')) {
+                                statusHtml = `CertiFriedAnnouncer is <span class="pm2-status-restarting">Restarting</span>.`;
+                            } else {
+                                statusHtml = `CertiFriedAnnouncer status: <br>${data.status}`;
+                            }
+                            statusContentDiv.innerHTML = `
+                                <div class="status-message">${statusHtml}</div>
+                                <p class="login-prompt">Login to view live logs: <a href="/login">Login with Discord</a></p>
+                            `;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching status:', error);
+                    statusContentDiv.innerHTML = `<p class="error-message">An unexpected error occurred: ${error.message}</p>`;
+                }
+                lastUpdatedP.textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
+            }
+
+            // Fetch status immediately on page load
+            fetchStatus();
+
+            // Refresh status every 5 seconds
+            setInterval(fetchStatus, 5000);
+        });
+    </script>
+</body>
+</html>

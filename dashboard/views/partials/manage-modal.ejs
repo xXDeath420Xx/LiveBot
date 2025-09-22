@@ -1,29 +1,67 @@
-<div class="modal fade" id="streamerSettingsModal" tabindex="-1">
+<div class="modal fade" id="streamerSettingsModal" tabindex="-1" aria-labelledby="streamerSettingsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form action="/manage/<%= guild.id %>/edit-subscription" method="POST" enctype="multipart/form-data">
                 <div class="modal-header">
-                    <h5 class="modal-title">Edit Settings for <span id="modal-streamer-name"></span></h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="streamerSettingsModalLabel">Edit Settings for <span id="modal-streamer-name"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="subscription_id" id="edit-subscription-id">
-                    <div class="row">
-                        <div class="col-md-6 mb-3"><label class="form-label">Linked Discord User ID</label><input type="text" class="form-control" id="edit-discord-user-id" name="discord_user_id"></div>
-                        <div class="col-md-6 mb-3"><label class="form-label">Linked Kick Username</label><input type="text" class="form-control" id="edit-kick-username" name="kick_username"></div>
+                    
+                    <h6><i class="fas fa-link fa-fw me-2"></i>Account Linking</h6>
+                    <p class="small text-muted">Link accounts to merge announcements when live on multiple platforms.</p>
+                    <div class="row mb-3">
+                        <div class="col-md-6 mb-3 mb-md-0">
+                            <label class="form-label">Linked Discord User ID</label>
+                            <input type="text" class="form-control" id="edit-discord-user-id" name="discord_user_id" placeholder="Optional User ID">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Linked Kick Username</label>
+                            <input type="text" class="form-control" id="edit-kick-username" name="kick_username" placeholder="Optional Kick Username">
+                        </div>
                     </div>
-                    <div class="mb-3"><label class="form-label">Announce In Channel</label><select id="edit-channel-override" name="announcement_channel_id" class="form-select"><option value="">-- Use Server Default --</option><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }); %></select></div>
-                    <div class="mb-3"><label class="form-label">Custom Webhook Nickname</label><input type="text" class="form-control" id="edit-override-nickname" name="override_nickname"></div>
-                    <div class="mb-3"><label class="form-label">Custom Announcement Message</label><textarea class="form-control" id="edit-custom-message" name="custom_message" rows="3"></textarea></div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3"><label class="form-label">Upload New Avatar</label><input class="form-control" type="file" id="edit-avatar-file" name="avatar" accept="image/*"></div>
-                        <div class="col-md-6 mb-3"><label class="form-label">Or Use Avatar URL</label><input type="text" class="form-control" id="edit-avatar-url" name="override_avatar_url_text" placeholder='Type "reset" to clear'></div>
+                    <hr class="my-4">
+
+                    <h6><i class="fas fa-bullhorn fa-fw me-2"></i>Announcement Customization</h6>
+                    <p class="small text-muted">Override default settings for this specific streamer subscription.</p>
+                    <div class="mb-3">
+                        <label class="form-label">Announce In Channel</label>
+                        <select id="edit-channel-override" name="announcement_channel_id" class="form-select">
+                            <option value="">-- Use Server Default --</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                            <% }); %>
+                        </select>
                     </div>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="reset_avatar" value="true" id="reset-avatar-check"><label class="form-check-label" for="reset-avatar-check">Reset Avatar</label></div>
+                    <div class="mb-3">
+                        <label class="form-label">Custom Webhook Nickname</label>
+                        <input type="text" class="form-control" id="edit-override-nickname" name="override_nickname" placeholder="Leave blank to use channel/server default">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Custom Announcement Message</label>
+                        <textarea class="form-control" id="edit-custom-message" name="custom_message" rows="3" placeholder="e.g. {username} is live with {game}!"></textarea>
+                    </div>
+
+                    <div class="row align-items-center">
+                        <div class="col-md-6 mb-3 mb-md-0">
+                            <label class="form-label">Upload New Avatar</label>
+                            <input class="form-control" type="file" id="edit-avatar-file" name="avatar" accept="image/*">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Or Use Avatar URL</label>
+                            <input type="text" class="form-control" id="edit-avatar-url" name="override_avatar_url_text" placeholder='URL or type "reset" to clear'>
+                        </div>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" name="reset_avatar" value="true" id="reset-avatar-check">
+                        <label class="form-check-label" for="reset-avatar-check">Reset to default avatar</label>
+                    </div>
+
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary" formaction="/manage/<%= guild.id %>/edit-subscription" formmethod="POST">Save Changes</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Changes</button>
                 </div>
             </form>
         </div>
