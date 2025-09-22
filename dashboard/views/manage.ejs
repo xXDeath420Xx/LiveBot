@@ -188,9 +188,15 @@
                 const card = document.createElement("div");
                 card.className = "live-streamer-card";
                 const iconsHtml = streamer.live_platforms.map(p => {
-                    if (p.platform === 'kick') return '<i class="fas fa-k platform-icon-fa platform-icon-kick"></i>';
-                    if (p.platform === 'trovo') return '<i class="fas fa-t platform-icon-fa platform-icon-trovo"></i>';
-                    return `<i class="fab fa-${p.platform} platform-icon-fa platform-icon-${p.platform}"></i>`;
+                    let icon;
+                    if (p.platform === 'kick') {
+                        icon = '<i class="fas fa-k platform-icon-fa platform-icon-kick"></i>';
+                    } else if (p.platform === 'trovo') {
+                        icon = '<i class="fas fa-t platform-icon-fa platform-icon-trovo"></i>';
+                    } else {
+                        icon = `<i class="fab fa-${p.platform} platform-icon-fa platform-icon-${p.platform}"></i>`;
+                    }
+                    return p.url ? `<a href="${p.url}" target="_blank" rel="noopener noreferrer">${icon}</a>` : icon;
                 }).join(" ");
                 const game = streamer.live_platforms && streamer.live_platforms.length > 0 ? streamer.live_platforms[0].game : "N/A";
                 card.innerHTML = `<img src="${streamer.avatar_url || "/images/default-icon.png"}" class="live-avatar" alt="${streamer.username}"><div class="live-info"><strong>${streamer.username} <span class="platform-icons">${iconsHtml}</span></strong><span>${game || "N/A"}</span></div>`;

@@ -47,9 +47,24 @@
         </div>
         <div class="col-lg-4">
             <div class="content-card h-100">
-                <h3 class="mb-3">Global Live Status</h3>
-                <p class="mb-2 small text-muted">Stream check in: <strong id="stream-countdown">--:--</strong><br>Team sync in: <strong id="team-countdown">--:--</strong></p>
-                <div id="featured-streamers-container" class="live-status-scroll" style="max-height: 300px;"><p class="text-center small">Loading live streamers...</p></div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 class="mb-0">Global Live Status</h3>
+                </div>
+                <div class="row text-center small text-muted border-bottom pb-2 mb-3">
+                    <div class="col-6">
+                        <span><i class="fas fa-video text-danger"></i> <strong>Live:</strong> <span id="live-streamers-count">--/--</span></span>
+                    </div>
+                    <div class="col-6">
+                        <span><i class="fas fa-server"></i> <strong>Servers:</strong> <span id="servers-tracked-count">--</span></span>
+                    </div>
+                    <div class="col-6 mt-2">
+                        <span><i class="fas fa-sync-alt"></i> <strong>Team Sync:</strong> <span id="team-countdown">--:--</span></span>
+                    </div>
+                    <div class="col-6 mt-2">
+                        <span><i class="fas fa-clock"></i> <strong>Next Check:</strong> <span id="stream-countdown">--:--</span></span>
+                    </div>
+                </div>
+                <div id="featured-streamers-container" class="live-status-scroll" style="max-height: 250px;"><p class="text-center small">Loading live streamers...</p></div>
             </div>
         </div>
     </div>
@@ -75,21 +90,31 @@
         setInterval(updateCountdowns, 1000);
 
         const streamersContainer = document.getElementById("featured-streamers-container");
+        const liveStreamersCountEl = document.getElementById("live-streamers-count");
+        const serversTrackedCountEl = document.getElementById("servers-tracked-count");
+
         async function fetchGlobalLiveStatus() {
             if (!streamersContainer) return;
             try {
                 const response = await fetch("/api/global-live-status");
-                const streamersData = await response.json();
+                const data = await response.json();
 
-                streamersContainer.innerHTML = "";
-
-                if (!response.ok || streamersData.error) {
-                    throw new Error(streamersData.message || "API request failed");
+                if (!response.ok || data.error) {
+                    throw new Error(data.message || "API request failed");
                 }
-                if (!Array.isArray(streamersData) || streamersData.length === 0) {
+
+                // Update counters
+                if (liveStreamersCountEl) liveStreamersCountEl.textContent = `${data.liveCount}/${data.totalStreamers}`;
+                if (serversTrackedCountEl) serversTrackedCountEl.textContent = data.totalGuilds;
+
+                streamersContainer.innerHTML = ""; // Clear previous content
+
+                if (!Array.isArray(data.liveStreamers) || data.liveStreamers.length === 0) {
                     streamersContainer.innerHTML = '<p class="text-muted text-center small">No one is currently live.</p>';
                     return;
                 }
+
+                let streamersData = data.liveStreamers;
 
                 // Shuffle the array for randomness
                 for (let i = streamersData.length - 1; i > 0; i--) {
@@ -104,10 +129,12 @@
                 randomStreamers.forEach(streamer => {
                     const card = document.createElement("div");
                     card.className = "live-streamer-card";
-                    const iconsHtml = streamer.live_platforms.map(p => p.platform === 'kick' ?
-                        '<i class="fas fa-k platform-icon-fa platform-icon-kick"></i>' :
-                        `<i class="fab fa-${p.platform} platform-icon-fa platform-icon-${p.platform}"></i>`
-                    ).join(" ");
+                    const iconsHtml = streamer.live_platforms.map(p => {
+                        const icon = p.platform === 'kick' ?
+                            '<i class="fas fa-k platform-icon-fa platform-icon-kick"></i>' :
+                            `<i class="fab fa-${p.platform} platform-icon-fa platform-icon-${p.platform}"></i>`;
+                        return p.url ? `<a href="${p.url}" target="_blank" rel="noopener noreferrer" title="${p.platform}">${icon}</a>` : icon;
+                    }).join(" ");
                     const game = streamer.live_platforms && streamer.live_platforms.length > 0 ? streamer.live_platforms[0].game : "N/A";
 
                     card.innerHTML = `<img src="${streamer.avatar_url || '/images/default-icon.png'}" class="live-avatar"><div class="live-info"><strong>${streamer.username} <span class="platform-icons">${iconsHtml}</span></strong><span>${game || "N/A"}</span></div>`;
@@ -116,6 +143,8 @@
             } catch (error) {
                 console.error("Global Live Status Error:", error);
                 streamersContainer.innerHTML = `<p class="text-danger text-center small">Error loading live streamers.</p>`;
+                if (liveStreamersCountEl) liveStreamersCountEl.textContent = "Error";
+                if (serversTrackedCountEl) serversTrackedCountEl.textContent = "Error";
             }
         }
         fetchGlobalLiveStatus();
