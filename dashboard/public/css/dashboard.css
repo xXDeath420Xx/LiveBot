@@ -1,0 +1,93 @@
+:root {
+    --background-primary: #36393f;
+    --background-secondary: #2f3136;
+    --background-tertiary: #202225;
+    --header-primary: #fff;
+    --text-muted: #b9bbbe;
+    --brand-color: #5865F2;
+    --brand-color-hover: #4752C4;
+}
+
+body {
+    background-color: var(--background-secondary);
+    color: var(--header-primary);
+}
+
+.navbar {
+    background-color: var(--background-tertiary);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.navbar-brand img {
+    height: 32px;
+    margin-right: 10px;
+}
+
+.container {
+    max-width: 960px;
+    margin: 2rem auto;
+}
+
+.header-card {
+    background-color: var(--background-tertiary);
+    padding: 2rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+    text-align: center;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.header-card h1 {
+    margin-bottom: 0.5rem;
+}
+
+.header-card p {
+    color: var(--text-muted);
+}
+
+.server-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.5rem;
+}
+
+.server-card-link {
+    text-decoration: none;
+    color: var(--header-primary);
+}
+
+.server-card {
+    background-color: var(--background-secondary);
+    border: 1px solid var(--background-tertiary);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.2s ease-in-out;
+}
+
+.server-card:hover {
+    transform: translateY(-5px);
+    background-color: var(--background-tertiary);
+    border-color: var(--brand-color);
+}
+
+.server-card img {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    margin-bottom: 1rem;
+    background-color: var(--background-tertiary);
+}
+
+.server-card h2 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.server-card span {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
