@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "deploy": "node deploy-commands.js"
+    "deploy": "node deploy-commands.js",
+    "major": "npm version major",
+    "minor": "npm version minor",
+    "patch": "npm version patch"
   },
   "dependencies": {
     "axios": "^1.7.2",
