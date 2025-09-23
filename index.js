@@ -421,7 +421,7 @@ async function checkStreams(client) {
                 }
 
                 if (primaryData?.isLive) liveStatusMap.set(streamer.streamer_id, primaryData);
-                
+
                 if (secondaryData) {
                     const [[kickInfo]] = await db.execute('SELECT streamer_id, profile_image_url FROM streamers WHERE platform="kick" AND username=?', [streamer.kick_username]);
                     if (kickInfo && secondaryData.profileImageUrl && secondaryData.profileImageUrl !== kickInfo.profile_image_url) {
@@ -470,7 +470,14 @@ async function checkStreams(client) {
                     }
                 }
             } catch (e) {
-                console.error(`[Announce] Error processing announcement for ${sub.username}:`, e);
+                // --- THIS IS THE FIX ---
+                // Add a specific check for ECONNREFUSED to give a more helpful error message.
+                if (e.code === 'ECONNREFUSED') {
+                    console.error(`[FATAL DB Error] Connection to the database was refused for streamer ${sub.username}. Please ensure the database is running and check its 'wait_timeout' setting.`, e);
+                } else {
+                    console.error(`[Announce] Error processing announcement for ${sub.username}:`, e);
+                }
+                // --- END OF FIX ---
             }
         }
 
@@ -524,7 +531,7 @@ async function checkStreams(client) {
 
             // Determine team-specific roles
             for (const teamConfig of allTeamConfigsForGuild) {
-                const isTeamMember = userSubscriptions.some(sub => 
+                const isTeamMember = userSubscriptions.some(sub =>
                     sub.announcement_channel_id === teamConfig.announcement_channel_id
                 );
                 if (isTeamMember && livePlatforms.size > 0) {
