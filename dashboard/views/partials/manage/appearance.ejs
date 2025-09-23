@@ -1,31 +1,11 @@
 <div class="content-card">
     <h2><i class="fas fa-paint-brush me-2"></i>Channel Appearance</h2>
-    <p class="text-muted">Set a default webhook nickname and avatar for all announcements in a specific channel. This will override the bot's default appearance but can be overridden by individual streamer settings.</p>
-    <hr class="my-4">
-    <form action="/manage/<%= guild.id %>/channel-appearance/save" method="POST" enctype="multipart/form-data">
-        <div class="mb-3">
-            <label class="form-label">Channel to Customize</label>
-            <select name="channelId" class="form-select" required>
-                <option value="">-- Select a channel --</option>
-                <% channels.forEach(channel => { %>
-                    <option value="<%= channel.id %>">#<%= channel.name %></option>
-                <% }) %>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Custom Nickname</label>
-            <input type="text" class="form-control" name="nickname" placeholder='Optional Nickname (type "reset" to clear)' maxlength="80">
-        </div>
-        <div class="row g-3">
-            <div class="col-md-6">
-                <label class="form-label">Upload New Avatar</label>
-                <input class="form-control" type="file" name="avatar" accept="image/*">
-            </div>
-            <div class="col-md-6">
-                <label class="form-label">Or Use Avatar URL</label>
-                <input type="text" class="form-control" name="avatar_url_text" placeholder='Optional URL (type "reset" to clear)'>
-            </div>
-        </div>
-        <button type="submit" class="btn btn-primary w-100 mt-4"><i class="fas fa-save me-2"></i>Save Channel Appearance</button>
+    <p class="text-muted">Set a default webhook nickname and avatar for all announcements in a specific channel.</p>
+    <hr>
+    <form action="/manage/<%= guild.id %>/channel-appearance/save" method="POST">
+        <div class="mb-3"><label class="form-label">Channel to Customize</label><select name="channelId" class="form-select" required><option value="" disabled selected>-- Select a channel --</option><% channels.forEach(c => { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %></select></div>
+        <div class="mb-3"><label class="form-label">Custom Nickname</label><input type="text" class="form-control" name="nickname" placeholder='Optional Nickname (type "reset" to clear)' maxlength="80"></div>
+        <div class="mb-3"><label class="form-label">Custom Avatar URL</label><input type="text" class="form-control" name="avatar_url_text" placeholder='Optional URL (type "reset" to clear)'></div>
+        <button type="submit" class="btn btn-primary w-100 mt-3"><i class="fas fa-save me-2"></i>Save Channel Appearance</button>
     </form>
 </div>

@@ -6,142 +6,61 @@
     <title>Manage <%= guild.name %></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/dashboard-style.css?v=14.2.0">
+    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.0.0">
 </head>
 <body class="manage-page">
 <%- include('partials/header') %>
 <div class="manage-container">
     <aside class="manage-sidebar">
         <div class="sidebar-card text-center">
-            <a href="https://discordlookup.com/guild/<%= guild.id %>" target="_blank" rel="noopener noreferrer">
-                <% if (guild.icon) { %><img src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png?size=128" alt="<%= guild.name %> Icon" class="rounded-circle mb-3"><% } else { %><img src="/images/default-icon.png" alt="<%= guild.name %> Icon" class="rounded-circle mb-3"><% } %>
-            </a>
+            <% if (guild.icon) { %><img src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png?size=128" alt="<%= guild.name %> Icon" style="width:90px; height: 90px; border-radius:50%"><% } else { %><div class="d-flex justify-content-center align-items-center" style="width:90px; height:90px; border-radius:50%; background-color: var(--background-tertiary);"><h2 class="m-0"><%= guild.name.charAt(0) %></h2></div><% } %>
             <h4 class="mt-2 mb-1"><%= guild.name %></h4>
             <a href="/dashboard" class="btn btn-sm btn-secondary mt-2">Change Server</a>
         </div>
         <div class="sidebar-card">
             <h5><i class="fas fa-signal me-2"></i>Live Status</h5>
             <div id="live-status-container" class="live-status-scroll mb-2"><p class="text-center small">Loading...</p></div>
-            <div id="live-status-pagination" class="d-flex justify-content-between align-items-center" style="display: none !important;">
-                <button id="live-prev-btn" class="btn btn-sm btn-secondary"><i class="fas fa-arrow-left"></i></button>
-                <span id="live-page-info" class="small text-muted"></span>
-                <button id="live-next-btn" class="btn btn-sm btn-secondary"><i class="fas fa-arrow-right"></i></button>
-            </div>
         </div>
         <div class="sidebar-card flex-grow-1">
             <h5><i class="fas fa-toolbox me-2"></i>Toolbox</h5>
-            <ul class="nav nav-pills flex-column" id="toolbox-tabs" role="tablist">
-                <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1 active" data-bs-toggle="tab" data-bs-target="#streamers-tab">Streamer List</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#core-tab">Core Settings</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#appearance-tab">Appearance</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#teams-tab">Twitch Teams</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link w-100" data-bs-toggle="tab" data-bs-target="#csv-tab">Mass Management</button></li>
-            </ul>
+            <div class="nav flex-column nav-pills" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+                <button class="nav-link text-start active" id="v-pills-streamers-tab" data-bs-toggle="pill" data-bs-target="#streamers-tab" type="button" role="tab">Streamer List</button>
+                <button class="nav-link text-start" id="v-pills-core-tab" data-bs-toggle="pill" data-bs-target="#core-tab" type="button" role="tab">Core Settings</button>
+                <button class="nav-link text-start" id="v-pills-appearance-tab" data-bs-toggle="pill" data-bs-target="#appearance-tab" type="button" role="tab">Appearance</button>
+                <button class="nav-link text-start" id="v-pills-teams-tab" data-bs-toggle="pill" data-bs-target="#teams-tab" type="button" role="tab">Twitch Teams</button>
+                <button class="nav-link text-start" id="v-pills-csv-tab" data-bs-toggle="pill" data-bs-target="#csv-tab" type="button" role="tab">Mass Management</button>
+            </div>
         </div>
     </aside>
     <main class="manage-main-content">
-        <div class="tab-content">
+        <div class="tab-content" id="v-pills-tabContent">
             <div class="tab-pane fade" id="core-tab" role="tabpanel"><%- include('partials/manage/core', {guild, settings, channels, roles}) %></div>
-            <div class="tab-pane fade" id="appearance-tab" role="tabpanel"><%- include('partials/manage/appearance', {guild, channels, channelSettings}) %></div>
+            <div class="tab-pane fade" id="appearance-tab" role="tabpanel"><%- include('partials/manage/appearance', {guild, channels}) %></div>
             <div class="tab-pane fade" id="teams-tab" role="tabpanel"><%- include('partials/manage/teams', {guild, channels, teamSubscriptions, roles}) %></div>
             <div class="tab-pane fade" id="csv-tab" role="tabpanel"><%- include('partials/manage/mass', {guild, channels}) %></div>
             <div class="tab-pane fade show active" id="streamers-tab" role="tabpanel">
-                <div class="content-card">
-                    <h2><i class="fas fa-user-plus me-2"></i>Add Streamer</h2>
-                    <form action="/manage/<%= guild.id %>/add" method="POST">
-                        <div class="row g-3 align-items-end">
-                            <div class="col-md-3"><label class="form-label">Platform</label><select name="platform" class="form-select"><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="youtube">YouTube</option></select></div>
-                            <div class="col-md-4"><label class="form-label">Username/ID</label><input type="text" name="username" class="form-control" required></div>
-                            <div class="col-md-5"><label class="form-label">Link Discord User</label><input type="text" name="discord_user_id" class="form-control" placeholder="Optional User ID"></div>
-                        </div>
-                        <div class="row g-3 mt-1 align-items-end">
-                            <div class="col"><label class="form-label">Announce In Channels</label><select name="announcement_channel_id" class="form-select" multiple size="3"><option value="">-- Use Server Default --</option><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %></select></div>
-                            <div class="col-auto"><button type="submit" class="btn btn-primary"><i class="fas fa-plus me-2"></i>Add Streamer</button></div>
-                        </div>
-                    </form>
-                </div>
-                <div class="content-card">
+                <%- include('partials/manage/add-streamer', {guild, channels}) %>
+                <div class="content-card mt-4">
                     <h2><i class="fas fa-stream me-2"></i>Tracked Streamers (<%= totalSubscriptions %>)</h2>
                     <div class="accordion" id="channelsAccordion">
                         <% Object.entries(channelsData).forEach(([channelId, data], index) => { %>
                             <div class="accordion-item mb-2">
-                                <h2 class="accordion-header" id="heading-<%= channelId %>">
-                                    <button class="accordion-button <%= index > 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= channelId %>" aria-expanded="<%= index === 0 ? 'true' : 'false' %>" aria-controls="collapse-<%= channelId %>">
-                                        <%= data.name %>
-                                        <span class="badge bg-secondary ms-auto me-2"><%= data.individualStreamers.length + data.teams.reduce((sum, team) => sum + team.members.length, 0) %> Streamers / <%= data.teams.length %> Teams</span>
-                                    </button>
-                                </h2>
-                                <div id="collapse-<%= channelId %>" class="accordion-collapse collapse <%= index === 0 ? 'show' : '' %>" aria-labelledby="heading-<%= channelId %>" data-bs-parent="#channelsAccordion">
+                                <h2 class="accordion-header"><button class="accordion-button <%= index > 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= channelId %>"><%= data.name %><span class="badge bg-secondary ms-auto me-2"><%= data.individualStreamers.length + data.teams.reduce((s,t)=>s+t.members.length,0) %> total</span></button></h2>
+                                <div id="collapse-<%= channelId %>" class="accordion-collapse collapse <%= index === 0 ? 'show' : '' %>" data-bs-parent="#channelsAccordion">
                                     <div class="accordion-body">
-                                        <% if (data.teams.length > 0) { %>
-                                            <h6 class="text-uppercase small fw-bold text-muted mb-2">Synced Teams</h6>
-                                            <div class="list-group list-group-flush">
-                                            <% data.teams.forEach(team => { %>
-                                                <div class="list-group-item px-0">
-                                                    <div class="d-flex justify-content-between align-items-center">
-                                                        <a class="text-decoration-none text-normal" data-bs-toggle="collapse" href="#team-members-<%= team.id %>" role="button" aria-expanded="false" aria-controls="team-members-<%= team.id %>">
-                                                            <i class="fab fa-twitch me-2" style="color: #9146FF;"></i>
-                                                            <strong><%= team.team_name %></strong>
-                                                            <span class="badge bg-dark ms-2"><%= team.members.length %> Members</span>
-                                                        </a>
-                                                    </div>
-                                                    <div class="collapse" id="team-members-<%= team.id %>">
-                                                        <div class="list-group list-group-flush mt-2 ps-4">
-                                                            <% if (team.members && team.members.length > 0) { %>
-                                                                <% team.members.forEach(member => { %>
-                                                                    <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                                                                        <div>
-                                                                            <i class="fab fa-twitch platform-icon-fa platform-icon-twitch"></i>
-                                                                            <strong class="ms-2 me-2"><%= member.twitch_username %></strong>
-                                                                            <% if(member.kick_username) { %><span class="badge bg-success ms-2">Linked: <%= member.kick_username %></span><% } %>
-                                                                        </div>
-                                                                        <div>
-                                                                            <a href="#" role="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal"
-                                                                               data-subscription-id="<%= member.subscription_id %>"
-                                                                               data-streamer-name="<%= member.twitch_username %>"
-                                                                               data-discord-user-id="<%= member.discord_user_id || '' %>"
-                                                                               data-kick-username="<%= member.kick_username || '' %>"
-                                                                               data-channel-override="<%= member.announcement_channel_id || '' %>"
-                                                                               data-override-nickname="<%= member.override_nickname || '' %>"
-                                                                               data-custom-message="<%= member.custom_message || '' %>"
-                                                                               data-override-avatar-url="<%= member.override_avatar_url || '' %>">
-                                                                                <i class="fas fa-cog"></i>
-                                                                            </a>
-                                                                        </div>
-                                                                    </div>
-                                                                <% }); %>
-                                                            <% } else { %>
-                                                                <p class="mb-0 small text-muted">No members found for this team.</p>
-                                                            <% } %>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            <% }); %>
+                                        <% if(data.teams.length>0) { %><h6 class="text-uppercase small text-muted mb-2">Synced Teams</h6><% data.teams.forEach(team=>{ %> <div class="list-group-item px-0"><strong><%=team.team_name%></strong> (<%=team.members.length%> members)</div> <% }); %><% } %>
+                                        <% if(data.individualStreamers.length>0) { %><h6 class="text-uppercase small text-muted mt-3 mb-2">Individual Streamers</h6><% data.individualStreamers.forEach(s=>{ %>
+                                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                                            <div>
+                                                <i class="fab fa-<%=s.platform%> platform-icon-fa platform-icon-<%=s.platform%>"></i>
+                                                <strong class="ms-2 me-2"><%= s.username %></strong>
                                             </div>
-                                        <% } %>
-
-                                        <% if (data.individualStreamers.length > 0) { %>
-                                            <h6 class="text-uppercase small fw-bold text-muted mt-4 mb-2">Individual Streamers</h6>
-                                            <div class="list-group list-group-flush">
-                                                <% data.individualStreamers.forEach(streamer => { %>
-                                                    <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                                                        <div>
-                                                            <% if (streamer.platform === 'twitch') { %><i class="fab fa-twitch platform-icon-fa platform-icon-twitch"></i><% } else if (streamer.platform === 'youtube') { %><i class="fab fa-youtube platform-icon-fa platform-icon-youtube"></i><% } else if (streamer.platform === 'kick') { %><i class="fas fa-k platform-icon-fa platform-icon-kick"></i><% } %>
-                                                            <strong class="ms-2 me-2"><%= streamer.username %></strong>
-                                                            <% if(streamer.kick_username) { %><span class="badge bg-success ms-2">Linked: <%= streamer.kick_username %></span><% } %>
-                                                        </div>
-                                                        <div>
-                                                            <a href="#" role="button" class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" data-subscription-id="<%= streamer.subscription_id %>" data-streamer-name="<%= streamer.username %>" data-discord-user-id="<%= streamer.discord_user_id || '' %>" data-kick-username="<%= streamer.kick_username || '' %>" data-channel-override="<%= streamer.announcement_channel_id || '' %>" data-override-nickname="<%= streamer.override_nickname || '' %>" data-custom-message="<%= streamer.custom_message || '' %>" data-override-avatar-url="<%= streamer.override_avatar_url || '' %>"><i class="fas fa-cog"></i></a>
-                                                            <form action="/manage/<%= guild.id %>/remove-subscription" method="POST" class="d-inline" onsubmit="return confirm('Remove this subscription for <%= streamer.username %>?')"><input type="hidden" name="subscription_id" value="<%= streamer.subscription_id %>"><button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button></form>
-                                                        </div>
-                                                    </div>
-                                                <% }) %>
+                                            <div>
+                                                <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" data-subscription-id="<%= s.subscription_id %>" data-streamer-name="<%= s.username %>" data-discord-user-id="<%= s.discord_user_id || '' %>" data-kick-username="<%= s.kick_username || '' %>" data-channel-override="<%= s.announcement_channel_id || '' %>" data-override-nickname="<%= s.override_nickname || '' %>" data-custom-message="<%= s.custom_message || '' %>" data-override-avatar-url="<%= s.override_avatar_url || '' %>"><i class="fas fa-cog"></i></button>
+                                                <form action="/manage/<%= guild.id %>/remove-subscription" method="POST" class="d-inline" onsubmit="return confirm('Remove <%= s.username %>?')"><input type="hidden" name="subscription_id" value="<%= s.subscription_id %>"><button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button></form>
                                             </div>
-                                        <% } %>
-
-                                        <% if (data.individualStreamers.length === 0 && data.teams.length === 0) { %>
-                                            <p class="text-center p-3 mb-0">No streamers configured for this channel.</p>
-                                        <% } %>
+                                        </div>
+                                        <% }) %><% } %>
                                     </div>
                                 </div>
                             </div>
@@ -156,112 +75,45 @@
 <%- include('partials/footer') %>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const guildId = '<%= guild.id %>';
-        const liveStatusContainer = document.getElementById("live-status-container");
-        const paginationContainer = document.getElementById("live-status-pagination");
-        const prevBtn = document.getElementById("live-prev-btn");
-        const nextBtn = document.getElementById("live-next-btn");
-        const pageInfo = document.getElementById("live-page-info");
-
-        let liveStreamersData = [];
-        let currentPage = 1;
-        const streamersPerPage = 5;
-
-        function renderLivePage() {
-            liveStatusContainer.innerHTML = "";
-            paginationContainer.style.display = 'none';
-
-            if (liveStreamersData.length === 0) {
-                liveStatusContainer.innerHTML = '<p class="text-center small">No one is currently live.</p>';
-                return;
-            }
-
-            paginationContainer.style.display = 'flex';
-            const totalPages = Math.ceil(liveStreamersData.length / streamersPerPage);
-            pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-
-            const start = (currentPage - 1) * streamersPerPage;
-            const end = start + streamersPerPage;
-            const paginatedStreamers = liveStreamersData.slice(start, end);
-
-            paginatedStreamers.forEach(streamer => {
-                const card = document.createElement("div");
-                card.className = "live-streamer-card";
-                const iconsHtml = streamer.live_platforms.map(p => {
-                    let icon;
-                    if (p.platform === 'kick') {
-                        icon = '<i class="fas fa-k platform-icon-fa platform-icon-kick"></i>';
-                    } else if (p.platform === 'trovo') {
-                        icon = '<i class="fas fa-t platform-icon-fa platform-icon-trovo"></i>';
-                    } else {
-                        icon = `<i class="fab fa-${p.platform} platform-icon-fa platform-icon-${p.platform}"></i>`;
-                    }
-                    return p.url ? `<a href="${p.url}" target="_blank" rel="noopener noreferrer">${icon}</a>` : icon;
-                }).join(" ");
-                const game = streamer.live_platforms && streamer.live_platforms.length > 0 ? streamer.live_platforms[0].game : "N/A";
-                card.innerHTML = `<img src="${streamer.avatar_url || "/images/default-icon.png"}" class="live-avatar" alt="${streamer.username}"><div class="live-info"><strong>${streamer.username} <span class="platform-icons">${iconsHtml}</span></strong><span>${game || "N/A"}</span></div>`;
-                liveStatusContainer.appendChild(card);
+        // Tab persistence
+        const lastTab = localStorage.getItem('lastTab-' + '<%= guild.id %>');
+        if (lastTab) {
+            document.querySelector(lastTab).click();
+        }
+        document.querySelectorAll('.nav-pills .nav-link').forEach(tab => {
+            tab.addEventListener('shown.bs.tab', e => {
+                localStorage.setItem('lastTab-' + '<%= guild.id %>', '#' + e.target.id);
             });
+        });
 
-            prevBtn.disabled = currentPage === 1;
-            nextBtn.disabled = currentPage === totalPages;
-        }
-
+        // Live status fetcher
         async function fetchGuildLiveStatus() {
-            if (!liveStatusContainer) return;
             try {
-                const response = await fetch(`/api/guilds/${guildId}/livestatus`);
+                const response = await fetch(`/api/guilds/<%= guild.id %>/livestatus`);
                 const data = await response.json();
-                if (!response.ok || data.error) {
-                    throw new Error(data.message || "API request failed");
-                }
-                liveStreamersData = Array.isArray(data) ? data : [];
-                const totalPages = Math.ceil(liveStreamersData.length / streamersPerPage);
-                if (currentPage > totalPages && totalPages > 0) {
-                    currentPage = totalPages;
-                }
-                renderLivePage();
+                const container = document.getElementById("live-status-container");
+                container.innerHTML = data.length > 0 ? data.map(s => {
+                    const game = s.live_platforms[0]?.game || "N/A";
+                    return `<div class="live-streamer-card"><img src="${s.avatar_url}" class="live-avatar"> <div class="live-info"><strong>${s.username}</strong><span>${game}</span></div></div>`
+                }).join('') : '<p class="text-center small text-muted">No one is live.</p>';
             } catch (error) {
-                console.error("Guild Live Status Error:", error);
-                liveStatusContainer.innerHTML = '<p class="text-danger text-center small">Failed to load status.</p>';
-                paginationContainer.style.display = 'none';
+                document.getElementById("live-status-container").innerHTML = '<p class="text-danger text-center small">Failed to load status.</p>';
             }
         }
-
-        prevBtn.addEventListener('click', () => {
-            if (currentPage > 1) {
-                currentPage--;
-                renderLivePage();
-            }
-        });
-
-        nextBtn.addEventListener('click', () => {
-            const totalPages = Math.ceil(liveStreamersData.length / streamersPerPage);
-            if (currentPage < totalPages) {
-                currentPage++;
-                renderLivePage();
-            }
-        });
-
         fetchGuildLiveStatus();
         setInterval(fetchGuildLiveStatus, 60000);
 
+        // Modal data population
         const modal = document.getElementById("streamerSettingsModal");
-        if (modal) {
-            modal.addEventListener("show.bs.modal", function(event) {
-                const button = event.relatedTarget;
-                modal.querySelector("#modal-streamer-name").textContent = button.getAttribute("data-streamer-name");
-                modal.querySelector("#edit-subscription-id").value = button.getAttribute("data-subscription-id");
-                modal.querySelector("#edit-discord-user-id").value = button.getAttribute("data-discord-user-id");
-                modal.querySelector("#edit-kick-username").value = button.getAttribute("data-kick-username");
-                modal.querySelector("#edit-channel-override").value = button.getAttribute("data-channel-override") || "";
-                modal.querySelector("#edit-override-nickname").value = button.getAttribute("data-override-nickname");
-                modal.querySelector("#edit-custom-message").value = button.getAttribute("data-custom-message");
-                modal.querySelector("#edit-avatar-url").value = button.getAttribute("data-override-avatar-url") || "";
-                modal.querySelector("#edit-avatar-file").value = "";
-                modal.querySelector("#reset-avatar-check").checked = false;
+        modal.addEventListener("show.bs.modal", event => {
+            const btn = event.relatedTarget;
+            modal.querySelector("#modal-streamer-name").textContent = btn.dataset.streamerName;
+            Object.keys(btn.dataset).forEach(key => {
+                const input = modal.querySelector(`#edit-${key.replace(/([A-Z])/g, "-$1").toLowerCase()}`);
+                if(input) input.value = btn.dataset[key];
             });
-        }
+            modal.querySelector("#edit-channel-override").value = btn.dataset.channelOverride || ""; // Handle empty value for default
+        });
     });
 </script>
 </body>
