@@ -71,7 +71,7 @@ const CHANNEL_SLUG = "mindlesschaos";
 // --- Command Handler Setup ---
 const commands = new Map<string, Command>();
 const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter((file: string) => file.endsWith('.js')); // Commands are still .js for now
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js')); // Commands are still .js for now
 for (const file of commandFiles) {
     const command: Command = require(path.join(commandsPath, file));
     commands.set(command.name, command);
