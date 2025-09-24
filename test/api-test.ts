@@ -46,17 +46,17 @@ console.log(`🚀 Attempting to fetch info from the OFFICIAL V1 API for channel:
 
 axios(options)
   .then((response: { data: KickPublicChannelData }) => {
-    console.info("✅✅✅ SUCCESS! WE ARE THROUGH! ✅✅✅");
-    console.info("Here is the channel data:");
-    console.info(JSON.stringify(response.data, null, 2));
+    console.log("✅✅✅ SUCCESS! WE ARE THROUGH! ✅✅✅");
+    console.log("Here is the channel data:");
+    console.log(JSON.stringify(response.data, null, 2));
 
     // Example of accessing typed data
     if (response.data.data.length > 0) {
       const channel = response.data.data[0];
-      console.info(`Channel Slug: ${channel.slug}`);
+      console.log(`Channel Slug: ${channel.slug}`);
       if (channel.stream) {
-        console.info(`Is Live: ${channel.stream.is_live ? 'Yes' : 'No'}`);
-        console.info(`Viewers: ${channel.stream.viewer_count}`);
+        console.log(`Is Live: ${channel.stream.is_live ? 'Yes' : 'No'}`);
+        console.log(`Viewers: ${channel.stream.viewer_count}`);
       }
     }
 
