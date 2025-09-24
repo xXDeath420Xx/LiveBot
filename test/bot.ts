@@ -113,7 +113,7 @@ async function getChannelInfo(): Promise<boolean> {
     try {
         console.log(`📡 Fetching channel info for: ${CHANNEL_SLUG} using public v1 API...`);
         const response = await axios.get<KickPublicChannelResponse>(`https://api.kick.com/public/v1/channels?slug=${CHANNEL_SLUG}`, {
-            headers: { 'Authorization': `Bearer ${appAccessToken}`, 'Accept': 'application/json' },
+            headers: {'Authorization': `Bearer ${appAccessToken}`, 'Accept': 'application/json'},
         });
 
         if (response.data.data && response.data.data.length > 0) {
@@ -146,7 +146,7 @@ async function getChatroomSettings(): Promise<KickChatroomSettings | null> {
         // Keeping this endpoint as there's no public/v1 equivalent provided in the reference.
         // This endpoint likely requires the channel ID obtained from the public/v1 API.
         const response = await axios.get<KickChatroomSettings>(`https://kick.com/api/v2/channels/${currentChannelData.id}/chatroom`, {
-            headers: { 'Authorization': `Bearer ${appAccessToken}`, 'Accept': 'application/json' },
+            headers: {'Authorization': `Bearer ${appAccessToken}`, 'Accept': 'application/json'},
         });
         console.log(`✅ Chatroom settings acquired!`);
         return response.data;
@@ -171,10 +171,10 @@ function connectToChat(chatroomData: KickChatroomSettings) {
 
     ws.on('message', (data: WebSocket.RawData) => {
         const messageData = JSON.parse(data.toString());
-        
+
         // This is a PING message from the server to keep the connection alive
         if (messageData.event === 'App\\Events\\PingEvent') {
-            ws.send(JSON.stringify({ event: "pusher:pong" }));
+            ws.send(JSON.stringify({event: "pusher:pong"}));
             return;
         }
 
@@ -185,13 +185,17 @@ function connectToChat(chatroomData: KickChatroomSettings) {
             console.log(`[CHAT] ${author}: ${content}`);
 
             const prefix: string = '!';
-            if (!content.startsWith(prefix) || chatMessage.sender.id === currentChannelData.user.id) return;
+            if (!content.startsWith(prefix) || chatMessage.sender.id === currentChannelData.user.id) {
+                return;
+            }
 
             const args: string[] = content.slice(prefix.length).trim().split(/ +/);
             const commandName: string = args.shift()!.toLowerCase();
             const command = commands.get(commandName);
 
-            if (!command) return;
+            if (!command) {
+                return;
+            }
 
             try {
                 command.execute(chatMessage, sendMessage);
