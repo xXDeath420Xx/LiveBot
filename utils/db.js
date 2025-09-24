@@ -8,38 +8,39 @@ const dbConfig = {
   database: process.env.DB_NAME,
   waitForConnections: true,
   connectionLimit: 15,
-  // Set a sensible, finite queueLimit to prevent unbounded request growth if the DB is slow/down.
-  // A value of 0 means unlimited queue in mysql2, which can lead to memory issues.
   queueLimit: 100,
-  // Add a connection timeout
   connectTimeout: 10000,
-  // Best practice: Explicitly set timezone for consistent date/time handling
   timezone: "Z"
 };
 
 const pool = mysql.createPool(dbConfig);
 
-// Test the connection on startup
-(async () => {
+// New function to test the database connection
+async function testConnection() {
+  let connection;
   try {
-    const connection = (callback) => {
-      pool.getConnection((err, connection) => {
-        callback(err, connection);
-      });
-    };
-    connection.ping();
+    connection = await pool.getConnection();
+    await connection.ping();
     console.log("[DB] Database connection successful.");
-    connection.release();
   } catch (error) {
     console.error("[DB] FATAL: Could not connect to the database.");
     console.error(`[DB] Reason: ${error.message}`);
-    // Exit the process if the database connection fails, as the bot cannot function.
-    process.exit(1);
+    // Re-throw the error to let the main application handle it
+    throw error;
+  } finally {
+    if (connection) connection.release();
   }
-})();
+}
 
 pool.on("error", (err) => {
+  // This will catch errors that occur on the pool after the initial connection
   console.error("[DB Pool Error]", err);
 });
 
-module.exports = pool;
+// Export both the pool and the test function
+module.exports = {
+    pool,
+    testConnection,
+    // Expose the end method for graceful shutdown
+    end: () => pool.end()
+};

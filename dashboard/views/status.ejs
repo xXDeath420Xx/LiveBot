@@ -87,8 +87,10 @@
             }
             container.innerHTML = liveStreamers.map(streamerItem => {
                 if (!streamerItem || !streamerItem.username) return ''; // Skip invalid streamer data
-                // TEMPORARY: Replacing platformsHtml with a static string to isolate SyntaxError
-                const platformsHtml = '<div>PLATFORMS HERE</div>';
+                const platformsHtml = Array.isArray(streamerItem.live_platforms) ? streamerItem.live_platforms.map(p => {
+                    const platformName = p.platform || 'unknown';
+                    return '<a href="' + p.url + '" target="_blank" class="platform-badge platform-' + platformName.toLowerCase() + '" title="' + platformName + '">' + platformName + '</a>';
+                }).join('') : '';
                 return `\n                <div class="streamer-card">\n                    <img src="${streamerItem.avatar_url}" class="streamer-avatar">\n                    <div class="streamer-info">\n                        <h5>${streamerItem.username}</h5>\n                        <div>${platformsHtml}</div>\n                    </div>\n                </div>`;
             }).join('');
         }
@@ -120,9 +122,9 @@
             if (!panel) return;
             panel.style.display = 'block';
             const healthContainer = document.getElementById('health-items');
-            const statusHtml = (status) => status === 'ok' || status === 'online' ? '<span class="status-badge status-ok">Online</span>' : `<span class="status-badge status-error">${status || 'Error'}</span>`;
+            const statusHtml = (status) => (status && status.toLowerCase() === 'online') ? '<span class="status-badge status-ok">Online</span>' : `<span class="status-badge status-error">${status || 'Error'}</span>`;
             if (healthContainer) {
-                healthContainer.innerHTML = `\n                    <div class="health-item"><span>App Status</span>${statusHtml(data.app?.status)}</div>\n                    <div class="health-item"><span>App Uptime</span><span class="text-muted">${data.app?.uptime ? new Date(data.app.uptime * 1000).toISOString().substr(11, 8) : 'N/A'}</span></div>\n                    <div class="health-item"><span>Database</span>${statusHtml(data.db?.status)}</div>\n                    <div class="health-item"><span>Twitch API</span>${statusHtml(data.api?.twitch)}</div>`;
+                healthContainer.innerHTML = `\n                    <div class="health-item"><span>App Status</span>${statusHtml(data.app?.status)}</div>\n                    <div class="health-item"><span>App Uptime</span><span class="text-muted">${data.app?.uptime || 'N/A'}</span></div>\n                    <div class="health-item"><span>Database</span>${statusHtml(data.db?.status)}</div>\n                    <div class="health-item"><span>Twitch API</span>${statusHtml(data.api?.twitch)}</div>`;
             }
             fetchLogs();
         }

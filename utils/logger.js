@@ -1,20 +1,19 @@
 const winston = require("winston");
+const { combine, timestamp, errors, splat, json } = winston.format;
 
 const logger = winston.createLogger({
-  level: "info",
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
+  level: process.env.LOG_LEVEL || "info",
+  // The format combines timestamp, stack trace capturing, and string interpolation
+  format: combine(
+    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+    errors({ stack: true }), // This is key to capturing stack traces from Error objects
+    splat(),
+    json() // Log everything as a JSON object to ensure it's captured by PM2
   ),
+  // Log *only* to the console. PM2 or the container environment will handle file output.
   transports: [
-    new winston.transports.File({filename: "error.log", level: "error"}),
-    new winston.transports.File({filename: "combined.log"}),
+    new winston.transports.Console(),
   ],
 });
-
-// Always add console transport for better visibility in all environments
-logger.add(new winston.transports.Console({
-  format: winston.format.simple(),
-}));
 
 module.exports = logger;
