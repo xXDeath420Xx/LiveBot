@@ -110,7 +110,7 @@ module.exports = {
       }
 
       embed.setDescription(description.trim());
-      if (finalAvatarUrl && finalAvatarUrl !== null) {
+      if (finalAvatarUrl !== null) {
         embed.setThumbnail(finalAvatarUrl);
       }
 

@@ -93,7 +93,8 @@ client.once(Events.ClientReady, () => {
   });
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => logger.info("[Summary Worker] Successfully logged in"));
 
 async function shutdown(signal) {
   logger.warn(`[YouTube Worker] Received ${signal}. Shutting down...`);
@@ -107,4 +108,4 @@ async function shutdown(signal) {
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown('SIGTERM'));
+process.on("SIGTERM", () => shutdown("SIGTERM"));

@@ -312,16 +312,22 @@ async function checkStreams(client) {
     for (const streamer of uniqueStreamers) {
       try {
         let primaryLiveData = null;
-        if (streamer.platform === "twitch") {
-          primaryLiveData = await apiChecks.checkTwitch(streamer);
-        } else if (streamer.platform === "kick") {
-          primaryLiveData = await apiChecks.checkKick(cycleTLS, streamer.username);
-        } else if (streamer.platform === "youtube") {
-          primaryLiveData = await apiChecks.checkYouTube(streamer.platform_user_id);
-        } else if (streamer.platform === "tiktok") {
-          primaryLiveData = await apiChecks.checkTikTok(streamer.username);
-        } else if (streamer.platform === "trovo") {
-          primaryLiveData = await apiChecks.checkTrovo(streamer.username);
+        switch (streamer.platform) {
+          case "twitch":
+            primaryLiveData = await apiChecks.checkTwitch(streamer);
+            break;
+          case "kick":
+            primaryLiveData = await apiChecks.checkKick(cycleTLS, streamer.username);
+            break;
+          case "youtube":
+            primaryLiveData = await apiChecks.checkYouTube(streamer.platform_user_id);
+            break;
+          case "tiktok":
+            primaryLiveData = await apiChecks.checkTikTok(streamer.username);
+            break;
+          case "trovo":
+            primaryLiveData = await apiChecks.checkTrovo(streamer.username);
+            break;
         }
 
         if (primaryLiveData && primaryLiveData.profileImageUrl && primaryLiveData.profileImageUrl !== streamer.profile_image_url) {
