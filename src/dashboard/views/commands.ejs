@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commands Guide - CertiFried Announcer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.0.0">
+    <style>
+        .command-list .list-group-item {
+            border-left: 3px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .command-list .list-group-item:hover {
+            background-color: var(--background-tertiary);
+            border-left-color: var(--brand-color);
+            transform: translateX(5px);
+        }
+
+        .command-name {
+            color: var(--header-primary);
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+<%- include('partials/header') %>
+<main class="page-container">
+    <div class="page-header">
+        <h1><i class="fas fa-book me-2"></i>Bot Commands Guide</h1>
+        <p class="lead">Detailed information on all available slash commands.</p>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="content-card">
+                <h3><i class="fas fa-star text-warning me-2"></i>Core Setup</h3>
+                <p class="text-muted">Essential commands for initial setup.</p>
+                <ul class="list-group list-group-flush command-list">
+                    <li class="list-group-item"><strong>/setchannel</strong>
+                        <p class="command-description">Sets the default announcement channel.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/setliverole</strong>
+                        <p class="command-description">Sets the role for live users.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/customize-bot</strong>
+                        <p class="command-description">Changes the bot's default nickname or avatar.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/setup-requests</strong>
+                        <p class="command-description">Creates a panel for members to request announcements.</p><span class="perm-badge perm-admin">Admin</span></li>
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="content-card">
+                <h3><i class="fas fa-user-friends text-info me-2"></i>Streamer Management</h3>
+                <p class="text-muted">Manage individual streamers.</p>
+                <ul class="list-group list-group-flush command-list">
+                    <li class="list-group-item"><strong>/addstreamer</strong>
+                        <p class="command-description">Adds a streamer to the notification list.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/removestreamer</strong>
+                        <p class="command-description">Removes a streamer and purges announcements.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/liststreamers</strong>
+                        <p class="command-description">Lists all tracked streamers and their live status.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/check-live</strong>
+                        <p class="command-description">Instantly lists all currently live streamers.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="content-card">
+                <h3><i class="fas fa-paint-brush text-primary me-2"></i>Customization</h3>
+                <p class="text-muted">Fine-tune announcement appearance.</p>
+                <ul class="list-group list-group-flush command-list">
+                    <li class="list-group-item"><strong>/customize-streamer</strong>
+                        <p class="command-description">Sets a unique name, avatar, or message for a streamer in a specific channel.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/customize-channel</strong>
+                        <p class="command-description">Sets a default webhook name/avatar for all announcements in a specific channel.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="content-card">
+                <h3><i class="fas fa-rocket text-danger me-2"></i>Bulk & Team Actions</h3>
+                <p class="text-muted">For managing many streamers at once.</p>
+                <ul class="list-group list-group-flush command-list">
+                    <li class="list-group-item"><strong>/addteam</strong>
+                        <p class="command-description">(One-Time Add) Adds all members of a Twitch Team.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/subscribe-team</strong>
+                        <p class="command-description">(Automated) Keeps a channel synced with a Twitch Team.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/importcsv</strong>
+                        <p class="command-description">Adds or updates streamers in bulk from a CSV file.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                    <li class="list-group-item"><strong>/exportcsv</strong>
+                        <p class="command-description">Exports all tracked streamers to a CSV file.</p><span class="perm-badge perm-mod">Manage Server</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</main>
+<%- include('partials/footer') %>
+</body>
+</html>

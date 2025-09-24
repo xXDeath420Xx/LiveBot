@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage <%= guild.name ;%></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.0.0">
+</head>
+<body class="manage-page">
+<%- include('partials/header') %>
+<div class="manage-container">
+    <aside class="manage-sidebar">
+        <div class="sidebar-card text-center">
+            <% if (guild.icon) { %><img src="https://cdn.discordapp.com/icons/<%= guild.id ;%>/<%= guild.icon ;%>.png?size=128" alt="<%= guild.name ;%> Icon" style="width:90px; height: 90px; border-radius:50%">
+            <% } else { %>
+                <div class="d-flex justify-content-center align-items-center" style="width:90px; height:90px; border-radius:50%; background-color: var(--background-tertiary);"><h2 class="m-0"><%= guild.name.charAt(0) ;%></h2></div>
+            <% } %>
+            <h4 class="mt-2 mb-1"><%= guild.name ;%></h4>
+            <a href="/src/dashboardoard" class="btn btn-sm btn-secondary mt-2">Change Server</a>
+        </div>
+        <div class="sidebar-card">
+            <h5><i class="fas fa-signal me-2"></i>Live Status</h5>
+            <div id="live-status-container" class="live-status-scroll mb-2"><p class="text-center small">Loading...</p></div>
+        </div>
+        <div class="sidebar-card flex-grow-1">
+            <h5><i class="fas fa-toolbox me-2"></i>Toolbox</h5>
+            <div class="nav flex-column nav-pills" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+                <button class="nav-link text-start active" id="v-pills-streamers-tab" data-bs-toggle="pill" data-bs-target="#streamers-tab" type="button" role="tab">Streamer List</button>
+                <button class="nav-link text-start" id="v-pills-core-tab" data-bs-toggle="pill" data-bs-target="#core-tab" type="button" role="tab">Core Settings</button>
+                <button class="nav-link text-start" id="v-pills-appearance-tab" data-bs-toggle="pill" data-bs-target="#appearance-tab" type="button" role="tab">Appearance</button>
+                <button class="nav-link text-start" id="v-pills-teams-tab" data-bs-toggle="pill" data-bs-target="#teams-tab" type="button" role="tab">Twitch Teams</button>
+                <button class="nav-link text-start" id="v-pills-csv-tab" data-bs-toggle="pill" data-bs-target="#csv-tab" type="button" role="tab">Mass Management</button>
+            </div>
+        </div>
+    </aside>
+    <main class="manage-main-content">
+        <div class="tab-content" id="v-pills-tabContent">
+            <div class="tab-pane fade" id="core-tab" role="tabpanel"><%- include('partials/manage/core', {guild, settings, channels, roles}) %></div>
+            <div class="tab-pane fade" id="appearance-tab" role="tabpanel"><%- include('partials/manage/appearance', {guild, channels}) %></div>
+            <div class="tab-pane fade" id="teams-tab" role="tabpanel"><%- include('partials/manage/teams', {guild, channels, teamSubscriptions, roles}) %></div>
+            <div class="tab-pane fade" id="csv-tab" role="tabpanel"><%- include('partials/manage/mass', {guild, channels}) %></div>
+            <div class="tab-pane fade show active" id="streamers-tab" role="tabpanel">
+                <%- include('partials/manage/add-streamer', {guild, channels}) %>
+                <div class="content-card mt-4">
+                    <h2><i class="fas fa-stream me-2"></i>Tracked Streamers (<%= totalSubscriptions ;%>)</h2>
+                    <div class="accordion" id="channelsAccordion">
+                        <% Object.entries(channelsData).forEach(([channelId, data], index) => { %>
+                            <div class="accordion-item mb-2">
+                                <h2 class="accordion-header">
+                                    <button class="accordion-button <%= index > 0 ? "collapsed" : "" ;%>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= channelId ;%>"><%= data.name ;%><span class="badge bg-secondary ms-auto me-2"><%= data.individualStreamers.length + data.teams.reduce((s, t) => s + t.members.length, 0) ;%> total</span></button>
+                                </h2>
+                                <div id="collapse-<%= channelId ;%>" class="accordion-collapse collapse <%= index === 0 ? "show" : "" ;%>" data-bs-parent="#channelsAccordion">
+                                    <div class="accordion-body">
+                                        <% if(data.teams.length > 0) { %><h6 class="text-uppercase small text-muted mb-2">Synced Teams</h6><% data.teams.forEach(team=>{ %>
+                                        <div class="list-group-item px-0"><strong><%= team.team_name ;%></strong> (<%= team.members.length ;%> members)</div> <% }); %>
+                                        <% } %>
+                                        <% if(data.individualStreamers.length > 0) { %><h6 class="text-uppercase small text-muted mt-3 mb-2">Individual Streamers</h6><% data.individualStreamers.forEach(s=>{ %>
+                                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                                            <div>
+                                                <i class="fab fa-<%= s.platform ;%> platform-icon-fa platform-icon-<%= s.platform ;%>"></i>
+                                                <strong class="ms-2 me-2"><%= s.username ;%></strong>
+                                            </div>
+                                            <div>
+                                                <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" data-subscription-id="<%= s.subscription_id ;%>" data-streamer-name="<%= s.username ;%>" data-discord-user-id="<%= s.discord_user_id || "" ;%>" data-kick-username="<%= s.kick_username || "" ;%>" data-channel-override="<%= s.announcement_channel_id || "" ;%>" data-override-nickname="<%= s.override_nickname || "" ;%>" data-custom-message="<%= s.custom_message || "" ;%>" data-override-avatar-url="<%= s.override_avatar_url || "" ;%>"><i class="fas fa-cog"></i></button>
+                                                <form action="/manage/<%= guild.id ;%>/remove-subscription" method="POST" class="d-inline" onsubmit="return confirm('Remove <%= s.username ;%>?')"><input type="hidden" name="subscription_id" value="<%= s.subscription_id ;%>">
+                                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                        <% }); %>
+                                        <% } %>
+                                    </div>
+                                </div>
+                            </div>
+                        <% }); %>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+<%- include('partials/manage-modal', { guild, channels }) %>
+<%- include('partials/footer') %>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // Tab persistence
+    const lastTab = localStorage.getItem('lastTab-' + '<%= guild.id ;%>');
+    if (lastTab) {
+      document.querySelector(lastTab).click();
+    }
+    document.querySelectorAll('.nav-pills .nav-link').forEach(tab => {
+      tab.addEventListener('shown.bs.tab', e => {
+        localStorage.setItem('lastTab-' + '<%= guild.id ;%>', '#' + e.target.id);
+      });
+    });
+
+    // Live status fetcher
+    async function fetchGuildLiveStatus() {
+      try {
+        const response = await fetch(`/api/guilds/<%= guild.id ;%>/livestatus`);
+        const data = await response.json();
+        const container = document.getElementById("live-status-container");
+        container.innerHTML = data.length > 0 ? data.map(s => {
+          const game = s.live_platforms[0]?.game || "N/A";
+          return `<div class="live-streamer-card"><img src="${s.avatar_url}" class="live-avatar"> <div class="live-info"><strong>${s.username}</strong><span>${game}</span></div></div>`
+        }).join('') : '<p class="text-center small text-muted">No one is live.</p>';
+      } catch (error) {
+        document.getElementById("live-status-container").innerHTML = '<p class="text-danger text-center small">Failed to load status.</p>';
+      }
+    }
+
+    fetchGuildLiveStatus();
+    setInterval(fetchGuildLiveStatus, 60000);
+
+    // Modal data population
+    const modal = document.getElementById("streamerSettingsModal");
+    modal.addEventListener("show.bs.modal", event => {
+      const btn = event.relatedTarget;
+      modal.querySelector("#modal-streamer-name").textContent = btn.dataset.streamerName;
+      Object.keys(btn.dataset).forEach(key => {
+        const input = modal.querySelector(`#edit-${key.replace(/([A-Z])/g, "-$1").toLowerCase()}`);
+        if (input) input.value = btn.dataset[key];
+      });
+      modal.querySelector("#edit-channel-override").value = btn.dataset.channelOverride || ""; // Handle empty value for default
+    });
+  });
+</script>
+</body>
+</html>
