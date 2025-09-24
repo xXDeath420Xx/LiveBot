@@ -58,7 +58,7 @@ const dashboard = {
 
         const isBotReady = (req, res, next) => {
             if (dashboard.client && dashboard.getStatus().state === "ONLINE") return next();
-            res.status(503).render("status", {user: req.user, isAuthenticated: req.isAuthenticated(), botStatus: dashboard.getStatus()});
+            res.status(503).render("status", {user: req.user, isAuthenticated: req.isAuthenticated(), botStatus: dashboard.getStatus(), statusData: null});
         };
 
         const checkAuth = (req, res, next) => {
@@ -84,9 +84,9 @@ const dashboard = {
         app.get("/", (req, res) => res.render("landing", {user: req.user, client_id: process.env.DISCORD_CLIENT_ID}));
         app.get("/donate", (req, res) => res.render("donate", {user: req.user}));
         app.get("/api/status", (req, res) => res.json(dashboard.getStatus()));
-        app.get("/status", (req, res) => res.render("status", {user: req.user, isAuthenticated: req.isAuthenticated(), botStatus: dashboard.getStatus()}));
 
-        app.get("/api/status-data", async (req, res) => {
+        // Restored server-side rendering for the status page
+        app.get("/status", async (req, res) => {
             try {
                 const [totalStreamersResult] = await db.execute("SELECT COUNT(DISTINCT streamer_id) as count FROM streamers");
                 const [totalGuildsResult] = await db.execute("SELECT COUNT(DISTINCT guild_id) as count FROM guilds");
@@ -98,21 +98,27 @@ const dashboard = {
                     return acc;
                 }, {});
 
-                res.json({
+                const statusData = {
                     liveCount: liveStreamersRaw.length,
                     totalStreamers: totalStreamersResult[0].count,
                     totalGuilds: totalGuildsResult[0].count,
                     totalAnnouncements: totalAnnouncementsResult[0].count,
                     liveStreamers: liveStreamersRaw.map(s => ({...s, avatar_url: s.profile_image_url || "/images/default-icon.png"})),
                     platformDistribution: Object.entries(platformDistribution).map(([platform, count]) => ({platform, count})),
-                    app: {status: dashboard.getStatus().state, uptime: process.uptime()},
+                    app: {status: dashboard.getStatus().state, uptime: formatUptime(process.uptime())},
                     db: {status: "ok"},
-                });
+                };
+
+                res.render("status", {user: req.user, isAuthenticated: req.isAuthenticated(), botStatus: dashboard.getStatus(), statusData});
+
             } catch (error) {
-                logger.error("[Dashboard API] Error fetching status data:", error);
-                res.status(500).json({error: "Failed to fetch status data."});
+                logger.error("[Dashboard] Error loading status page:", error);
+                res.status(500).render("status", {user: req.user, isAuthenticated: req.isAuthenticated(), botStatus: dashboard.getStatus(), statusData: null, error: "Failed to load status data."});
             }
         });
+
+        // This API endpoint is no longer needed for the status page
+        // app.get("/api/status-data", ...);
 
         app.get("/api/authenticated-logs", checkAuth, async (req, res) => {
             const logFilePath = path.join(__dirname, "../combined.log");

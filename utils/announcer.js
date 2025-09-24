@@ -1,6 +1,6 @@
 const {EmbedBuilder, WebhookClient} = require("discord.js");
-const db = require("./db");
-const logger = require("./logger"); // Import the logger
+const { pool: db } = require("./db");
+const logger = require("./logger");
 
 const platformColors = {
   twitch: "#9146FF", youtube: "#FF0000", kick: "#52E252",
@@ -36,7 +36,7 @@ async function getOrCreateWebhook(client, channelId, defaultAvatarUrl) {
     logger.debug(`[Announcer] Webhook obtained for channel ${channelId}: ${webhook.id}`);
     return new WebhookClient({id: webhook.id, token: webhook.token});
   } catch (e) {
-    logger.error(`[Announcer] Failed to get or create webhook for channel ${channelId}:`, {error: e.message, stack: e.stack});
+    logger.error(`[Announcer] Failed to get or create webhook for channel ${channelId}:`, e);
     return null;
   }
 }
@@ -52,7 +52,7 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
       logger.debug(`[Announcer] Updating profile image for ${subContext.username}.`);
       await db.execute("UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?", [liveData.profileImageUrl, subContext.streamer_id]);
     } catch (dbError) {
-      logger.error(`[Announcer] Failed to update profile image for ${subContext.username}:`, {error: dbError});
+      logger.error(`[Announcer] Failed to update profile image for ${subContext.username}:`, dbError);
     }
   }
 
@@ -133,10 +133,9 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
     const messageOptions = {username: finalNickname, avatarURL: finalAvatarURL, content, embeds: [embed]};
     let finalMessage = null;
 
-    // --- Start Duplicate Message Cleanup ---
     const [duplicateAnnouncements] = await db.execute(
       "SELECT announcement_id, message_id FROM announcements WHERE streamer_id = ? AND channel_id = ? AND announcement_id != ?",
-      [subContext.streamer_id, channelId, existingAnnouncement?.announcement_id || 0] // Exclude the current existing one
+      [subContext.streamer_id, channelId, existingAnnouncement?.announcement_id || 0]
     );
 
     for (const dup of duplicateAnnouncements) {
@@ -149,51 +148,47 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
       await db.execute("DELETE FROM announcements WHERE announcement_id = ?", [dup.announcement_id]);
       logger.debug(`[Announcer] Deleted duplicate announcement record ${dup.announcement_id} from DB.`);
     }
-    // --- End Duplicate Message Cleanup ---
 
     if (existingAnnouncement?.message_id) {
       logger.info(`[Announcer] Attempting to edit existing message ${existingAnnouncement.message_id} for ${subContext.username}.`);
       try {
         const editedMessage = await webhookClient.editMessage(existingAnnouncement.message_id, messageOptions);
-        logger.debug(`[Announcer] Result of editMessage for ${subContext.username}:`, {editedMessageId: editedMessage?.id, editedMessageChannelId: editedMessage?.channel?.id});
         if (editedMessage && editedMessage.id) {
           finalMessage = editedMessage;
         } else {
-          logger.error(`[Announcer] Edited message did not return a valid message object with an ID for ${subContext.username}. Full response:`, editedMessage);
+          logger.error(`[Announcer] Edited message did not return a valid message object for ${subContext.username}.`, { editedMessage });
         }
       } catch (e) {
-        logger.error(`[Announcer] Failed to edit message ${existingAnnouncement.message_id} for ${subContext.username}:`, {error: e.message, stack: e.stack});
+        logger.error(`[Announcer] Failed to edit message ${existingAnnouncement.message_id} for ${subContext.username}:`, e);
         logger.info(`[Announcer] Attempting to send new message for ${subContext.username} instead.`);
         try {
           const newMessage = await webhookClient.send(messageOptions);
-          logger.debug(`[Announcer] Result of send (after edit failure) for ${subContext.username}:`, {newMessageId: newMessage?.id, newMessageChannelId: newMessage?.channel?.id});
           if (newMessage && newMessage.id) {
             await db.execute("UPDATE announcements SET message_id = ? WHERE announcement_id = ?", [newMessage.id, existingAnnouncement.announcement_id]);
             finalMessage = newMessage;
           } else {
-            logger.error(`[Announcer] New message (after edit failure) did not return a valid message object with an ID for ${subContext.username}. Full response:`, newMessage);
+            logger.error(`[Announcer] New message (after edit failure) did not return a valid message object for ${subContext.username}.`, { newMessage });
           }
         } catch (sendError) {
-          logger.error(`[Announcer] Failed to send new message after edit failure for ${subContext.username}:`, {error: sendError.message, stack: sendError.stack});
+          logger.error(`[Announcer] Failed to send new message after edit failure for ${subContext.username}:`, sendError);
         }
       }
     } else {
       logger.info(`[Announcer] Sending new announcement message for ${subContext.username}.`);
       try {
         const newMessage = await webhookClient.send(messageOptions);
-        logger.debug(`[Announcer] Result of send for ${subContext.username}:`, {newMessageId: newMessage?.id, newMessageChannelId: newMessage?.channel?.id});
         if (newMessage && newMessage.id) {
           finalMessage = newMessage;
         } else {
-          logger.error(`[Announcer] New message did not return a valid message object with an ID for ${subContext.username}. Full response:`, newMessage);
+          logger.error(`[Announcer] New message did not return a valid message object for ${subContext.username}.`, { newMessage });
         }
       } catch (sendError) {
-        logger.error(`[Announcer] Failed to send new announcement message for ${subContext.username}:`, {error: sendError.message, stack: sendError.stack});
+        logger.error(`[Announcer] Failed to send new announcement message for ${subContext.username}:`, sendError);
       }
     }
     return finalMessage;
   } catch (error) {
-    logger.error(`[Announcer] Critical failure in updateAnnouncement for ${liveData.username} in #${channelId}:`, {error: error.message, stack: error.stack});
+    logger.error(`[Announcer] Critical failure in updateAnnouncement for ${liveData.username} in #${channelId}:`, error);
     return null;
   }
 }
