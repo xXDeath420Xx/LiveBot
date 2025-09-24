@@ -6,7 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const { pool: db } = require("../utils/db");
 const { logAuditEvent } = require("../utils/audit-log.js");
-const { PermissionsBitField, Collection } = require("discord.js");
+const { PermissionsBitField, Collection, ChannelType } = require("discord.js");
 const logger = require("../utils/logger");
 const apiChecks = require("../utils/api_checks");
 const initCycleTLS = require("cycletls");
@@ -229,6 +229,7 @@ const dashboard = {
                     channelsData[channelId] = { id: channelId, name: c ? c.name : `Unknown Channel`, individualStreamers: [], teams: [] };
                 }
                 roles = [...req.guildObject.roles.cache.values()];
+                const channels = [...req.guildObject.channels.cache.filter(c => c.type === ChannelType.GuildText).values()];
 
                 const [teamSubscriptionsRaw] = await db.execute("SELECT * FROM twitch_teams WHERE guild_id = ?", [req.params.guildId]);
                 const [subscribedStreamersRaw] = await db.execute("SELECT s.streamer_id, s.username, s.platform, s.profile_image_url, s.kick_username, sub.subscription_id, sub.announcement_channel_id, sub.discord_user_id, sub.override_nickname, sub.custom_message, sub.override_avatar_url FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ?", [req.params.guildId]);
@@ -247,12 +248,19 @@ const dashboard = {
                 }
 
                 const [activeAnnouncements] = await db.execute("SELECT a.stream_title, a.platform, a.stream_thumbnail_url, s.username FROM announcements a JOIN streamers s ON a.streamer_id = s.streamer_id WHERE a.guild_id = ?", [req.params.guildId]);
+                
+                const totalSubscriptions = subscribedStreamersRaw.length;
 
                 res.render("manage", {
                     user: req.user, isAuthenticated: req.isAuthenticated(), guild: req.guildObject, guildSettings: guildSettings[0] || {},
+                    channels,
                     roles, commands: [...dashboard.client.commands.values()].map(c=>c.data),
-                    analyticsData: { totalStreamers: subscribedStreamersRaw.length, totalSubscriptions: subscribedStreamersRaw.length + teamSubscriptionsRaw.length, activeAnnouncements: activeAnnouncements.length },
+                    analyticsData: { totalStreamers: subscribedStreamersRaw.length, activeAnnouncements: activeAnnouncements.length },
                     channelsData: Object.values(channelsData).filter(d => d.individualStreamers.length > 0 || d.teams.length > 0),
+                    teamSubscriptions: teamSubscriptionsRaw,
+                    subscribedStreamers: subscribedStreamersRaw,
+                    activeAnnouncements,
+                    totalSubscriptions
                 });
             } catch (e) {
                 logger.error(`[Dashboard] Error loading manage page for guild ${req.params.guildId}:`, e);
