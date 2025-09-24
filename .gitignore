@@ -7,3 +7,4 @@ uploads/
 sessions/*.json
 .vscode
 .idea
+user-data-dir/*
