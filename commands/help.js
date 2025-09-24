@@ -12,11 +12,12 @@ module.exports = {
       .setDescription('Here is a list of all available commands. Most commands require `Manage Server` permissions, unless otherwise noted.')
       .addFields(
         {
-          name: '🌟 Core Setup',
-          value: '`/setchannel` - Sets the default channel where all live announcements will be posted.\n' +
-                 '`/setliverole` - Sets a role to be given to linked Discord users when they go live.\n' +
-                 '`/customize-bot` - Changes the bot\'s default nickname or announcement avatar for this server.\n' +
-                 '`/setup-requests` - **(Admin Only)** Creates a panel for members to request their own streams.'
+          name: '⚙️ Configuration (The All-in-One Command)',
+          value: '`/config channel` - Sets the default channel where all live announcements will be posted.\n' +
+                 '`/config liverole` - Sets a role to be given to linked Discord users when they go live.\n' +
+                 '`/config customize bot` - Changes the bot\'s default nickname or announcement avatar for this server.\n' +
+                 '`/config customize channel` - Sets a default webhook name/avatar for *all* announcements in a specific channel.\n' +
+                 '`/config customize streamer` - **The power tool!** Sets a unique webhook name, avatar, or message for a streamer in a *specific channel*.\n'
         },
         {
           name: '👤 Streamer Management',
@@ -24,11 +25,6 @@ module.exports = {
                  '`/removestreamer` - Removes a streamer from this server\'s notification list and purges their announcements.\n' +
                  '`/liststreamers` - Shows all streamers being tracked on this server and their status.\n' +
                  '`/check-live` - Instantly lists all currently live streamers for this server.'
-        },
-        {
-            name: '🎨 Fine-Tuning & Customization',
-            value: '`/customize-streamer` - **The power tool!** Sets a unique webhook name, avatar, or message for a streamer in a *specific channel*.\n' +
-                   '`/customize-channel` - Sets a default webhook name/avatar for *all* announcements in a specific channel.'
         },
         {
           name: '🚀 Bulk & Team Actions',
@@ -42,6 +38,10 @@ module.exports = {
                  '`/importcsv` - Adds or updates streamers in bulk by uploading a `.csv` file.\n' +
                  '`/exportcsv` - Exports all tracked streamers on this server to a `.csv` file.\n' +
                  '`/clearstreamers` - **(Admin Only)** Removes **ALL** streamers and purges **ALL** announcements from the server.'
+        },
+        {
+            name: '👋 Member-Facing Features',
+            value: '`/setup-requests` - **(Admin Only)** Creates a panel for members to request their own streams be announced.'
         },
         {
             name: '🌐 Full Web Dashboard',

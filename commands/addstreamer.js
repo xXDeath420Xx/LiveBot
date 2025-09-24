@@ -1,4 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, StringSelectMenuBuilder, ActionRowBuilder, MessageFlags } = require('discord.js');
+const { getAvatarUploadChannel } = require('../utils/channel-helpers.js');
+const logger = require('../utils/logger');
 
 // This map will temporarily store the initial command data
 const pendingInteractions = new Map();
@@ -36,25 +38,16 @@ module.exports = {
              if (!avatar.contentType?.startsWith('image/')) {
                 return interaction.editReply({ content: 'The provided avatar must be an image file (PNG, JPG, GIF).' });
             }
-            const tempUploadChannelId = process.env.TEMP_UPLOAD_CHANNEL_ID;
-            if (!tempUploadChannelId) {
-                return interaction.editReply({ content: "Temporary upload channel ID is not configured. Please set TEMP_UPLOAD_CHANNEL_ID in your .env file." });
-            }
+            
+            const uploadChannel = await getAvatarUploadChannel(interaction);
+            if (!uploadChannel) return; // Error is handled by the helper function
+
             try {
-                const tempChannel = await interaction.client.channels.fetch(tempUploadChannelId);
-                if (!tempChannel) { // Channel not found or bot doesn't have access
-                    throw new Error("Temporary upload channel not found. Check TEMP_UPLOAD_CHANNEL_ID and bot's permissions.");
-                }
-                if (!tempChannel.isTextBased()) { // Added check for text-based channel
-                    throw new Error("Temporary upload channel is not a text channel. Check TEMP_UPLOAD_CHANNEL_ID in your .env file.");
-                }
-                const tempMessage = await tempChannel.send({ files: [{ attachment: avatar.url, name: avatar.name }] });
+                const tempMessage = await uploadChannel.send({ files: [{ attachment: avatar.url, name: avatar.name }] });
                 avatarUrl = tempMessage.attachments.first().url;
-                // IMPORTANT: Do NOT delete this message if you need a permanent CDN URL for the attachment.
-                // Ensure any follow-up process that uses this URL is aware of its dependency on this message's existence.
             } catch (uploadError) {
-                console.error('[Add Streamer Command] Error uploading temporary avatar to Discord:', uploadError);
-                return interaction.editReply({ content: `Failed to upload custom avatar: ${uploadError.message || 'An unknown error occurred'}. Please check bot's permissions or TEMP_UPLOAD_CHANNEL_ID.` });
+                logger.error('[Add Streamer Command] Error uploading temporary avatar to Discord:', { error: uploadError });
+                return interaction.editReply({ content: `Failed to upload custom avatar: ${uploadError.message || 'An unknown error occurred'}.` });
             }
         }
 
@@ -66,9 +59,6 @@ module.exports = {
             guildId: interaction.guild.id
         });
 
-        // Set a timeout to clear the pending interaction data.
-        // The follow-up interaction handler (for the select menu with customId 'addstreamer_platforms_${interactionId}')
-        // must check if this data has expired and inform the user if it has, as the select menu itself can remain active longer.
         setTimeout(() => pendingInteractions.delete(interactionId), INTERACTION_TIMEOUT_MS);
 
         const platformSelect = new StringSelectMenuBuilder()

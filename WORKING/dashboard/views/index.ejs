@@ -1,0 +1,24 @@
+<%- include('partials/header-landing', { client_id: client_id, user: user }) %>
+<div class="container">
+    <div class="hero">
+        <img src="https://cdn.discordapp.com/app-icons/1409904443125665875/e2810a3002f2321487f54c9d54e58b14.png?size=128" alt="Bot Logo" class="hero-logo">
+        <h1>CertiFried Announcer</h1>
+        <p>The only multi-platform stream announcement bot you'll ever need. Reliable, fast, and fully customizable.</p>
+        <div class="hero-buttons">
+            <a href="https://discord.com/api/oauth2/authorize?client_id=<%= client_id %>&permissions=8&scope=bot%20applications.commands" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Invite to Server</a>
+            <a href="/dashboard" class="btn btn-secondary">Open Dashboard</a>
+        </div>
+    </div>
+    <div class="center-title">
+         <h2 class="section-title">Features</h2>
+    </div>
+    <div class="features-grid">
+        <div class="feature-card"><h3>Multi-Platform Support</h3><p>Get instant notifications for Twitch, YouTube, Kick, Trovo, and TikTok.</p></div>
+        <div class="feature-card"><h3>Custom Messages</h3><p>Customize announcements per-streamer using placeholders like <code>{username}</code>.</p></div>
+        <div class="feature-card"><h3>Web Dashboard</h3><p>Manage everything from a simple and intuitive web dashboard. No more commands!</p></div>
+        <div class="feature-card"><h3>Bulk Management</h3><p>Use CSV import/export or mass add/remove commands to manage your streamers in seconds.</p></div>
+        <div class="feature-card"><h3>Live Role</h3><p>Automatically assign a "Live" role to linked Discord users when they go live.</p></div>
+        <div class="feature-card"><h3>Reliable & Fast</h3><p>Built with efficiency in mind to deliver announcements as quickly as possible.</p></div>
+    </div>
+</div>
+<%- include('partials/footer-landing') %>

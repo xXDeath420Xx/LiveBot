@@ -1,0 +1,12 @@
+<div class="content-card">
+    <h2><i class="fas fa-cogs me-2"></i>Core Server Settings</h2>
+    <p class="text-muted">Manage the main announcement channel and live role. These are the default settings unless overridden.</p>
+    <hr>
+    <form action="/manage/<%= guild.id %>/settings" method="POST">
+        <div class="row">
+            <div class="col-md-6 mb-3"><label class="form-label">Default Announce Channel</label><select name="channelId" class="form-select"><% channels.forEach(c => { %><option value="<%= c.id %>" <%= settings.announcement_channel_id == c.id ? 'selected' : '' %> >#<%= c.name %></option><% }) %></select></div>
+            <div class="col-md-6 mb-3"><label class="form-label">Live Role</label><select name="roleId" class="form-select"><option value="">Disabled</option><% roles.forEach(r => { %><option value="<%= r.id %>" <%= settings.live_role_id == r.id ? 'selected' : '' %>>@<%= r.name %></option><% }) %></select></div>
+        </div>
+        <button type="submit" class="btn btn-primary w-100 mt-3"><i class="fas fa-save me-2"></i>Save Core Settings</button>
+    </form>
+</div>

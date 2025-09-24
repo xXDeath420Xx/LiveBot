@@ -1,6 +1,7 @@
 const passport = require('passport');
 const { Strategy } = require('passport-discord');
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+const db = require('../utils/db');
+require('dotenv-flow').config(); // Corrected
 
 passport.serializeUser((user, done) => {
     done(null, user);
@@ -15,7 +16,13 @@ passport.use(new Strategy({
     clientSecret: process.env.DASHBOARD_CLIENT_SECRET,
     callbackURL: process.env.DASHBOARD_CALLBACK_URL,
     scope: ['identify', 'guilds']
-}, (accessToken, refreshToken, profile, done) => {
-    // process.nextTick is generally not needed here for a simple return
-    return done(null, profile);
+}, async (accessToken, refreshToken, profile, done) => {
+    try {
+        const [[streamerCheck]] = await db.execute('SELECT 1 FROM streamers WHERE discord_user_id = ? LIMIT 1', [profile.id]);
+        profile.isStreamer = !!streamerCheck;
+        return done(null, profile);
+    } catch (error) {
+        console.error('[Passport Auth Error]', error);
+        return done(error, null);
+    }
 }));
