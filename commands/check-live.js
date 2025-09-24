@@ -127,7 +127,7 @@ module.exports = {
         try {
           await closeBrowser();
         } catch (e) {
-          console.error('Error closing browser:', e);
+          console.error("Error closing browser:", e);
         }
       }
     }

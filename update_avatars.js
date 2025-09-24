@@ -64,7 +64,7 @@ async function migrateAvatars() {
       }
     }
     await db.end();
-    console.log('[MIGRATE] Script finished.');
+    console.log("[MIGRATE] Script finished.");
   }
 }
 
