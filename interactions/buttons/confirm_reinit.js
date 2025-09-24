@@ -1,8 +1,7 @@
 const { EmbedBuilder } = require("discord.js");
-const { pool: db } = require("../../utils/db"); // Correctly import the pool
+const { pool: db } = require("../../utils/db");
 const logger = require("../../utils/logger");
 
-// Helper function to clean up invalid roles, adapted from index.js
 async function cleanupInvalidRole(guildId, roleId) {
     if (!guildId || !roleId) return;
     logger.info(`[Reinit Cleanup] Aggressively purging invalid role ID ${roleId} for guild ${guildId}.`);
@@ -27,7 +26,6 @@ module.exports = {
             .setTitle("Reinitialization in Progress...");
 
         try {
-            // --- 1. Purge Announcements ---
             statusEmbed.setDescription("Step 1/2: Purging all announcement messages for this server...");
             await interaction.editReply({ embeds: [statusEmbed] });
 
@@ -39,22 +37,19 @@ module.exports = {
                     const channel = await client.channels.fetch(ann.channel_id).catch(() => null);
                     if (channel) {
                         await channel.messages.delete(ann.message_id).catch(err => {
-                            // It's okay if the message is already gone (10008: Unknown Message)
                             if (err.code !== 10008) {
                                 logger.warn(`[Reinit] Could not delete message ${ann.message_id} in channel ${ann.channel_id}:`, err);
                             }
                         });
                     }
                 } catch (e) {
-                    logger.error(`[Reinit] Error fetching channel or deleting message for announcement ${ann.announcement_id}:`, e);
+                    logger.error(`[Reinit] Error processing announcement ${ann.announcement_id} for deletion:`, e);
                 }
             }
 
-            // Once messages are deleted (or attempted), wipe them from the DB
             await db.execute("DELETE FROM announcements WHERE guild_id = ?", [guildId]);
             logger.info(`[Reinit] Finished purging announcements from DB for guild ${guildId}.`);
 
-            // --- 2. Validate Roles ---
             statusEmbed.setDescription("Step 2/2: Validating all configured roles for this server...");
             await interaction.editReply({ embeds: [statusEmbed] });
 
@@ -74,11 +69,10 @@ module.exports = {
             }
             logger.info(`[Reinit] Finished validating roles for guild ${guildId}.`);
 
-            // --- Completion ---
             const successEmbed = new EmbedBuilder()
                 .setColor(0x00FF00)
                 .setTitle("✅ Reinitialization Complete")
-                .setDescription("The server has been successfully reinitialized. The bot will now build a fresh set of announcements for any currently live streams on its next cycle.");
+                .setDescription("The server has been successfully reinitialized. The bot will now build a fresh set of announcements on its next cycle.");
 
             await interaction.editReply({ embeds: [successEmbed], components: [] });
 
