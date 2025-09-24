@@ -11,6 +11,7 @@ const manager = new ShardingManager(path.join(__dirname, "index.js"), {
 
 manager.on("shardCreate", shard => {
   logger.info(`[ShardingManager] Launched shard #${shard.id}`);
+  shard.on("message", (msg) => logger.info(msg));
   shard.on("death", () => logger.error(`[Shard #${shard.id}] Died`));
   shard.on("disconnect", () => logger.warn(`[Shard #${shard.id}] Disconnected`));
   shard.on("reconnecting", () => logger.info(`[Shard #${shard.id}] Reconnecting...`));
