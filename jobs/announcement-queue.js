@@ -1,15 +1,15 @@
-const { Queue } = require('bullmq');
-const logger = require('../utils/logger');
+const {Queue} = require("bullmq");
+const logger = require("../utils/logger");
 
-const announcementQueue = new Queue('announcements', {
-    connection: {
-        host: process.env.REDIS_HOST || '127.0.0.1',
-        port: process.env.REDIS_PORT || 6379
-    }
+const announcementQueue = new Queue("announcements", {
+  connection: {
+    host: process.env.REDIS_HOST || "127.0.0.1",
+    port: process.env.REDIS_PORT || 6379
+  }
 });
 
-announcementQueue.on('error', err => {
-    logger.error('[BullMQ] Queue Error:', { error: err });
+announcementQueue.on("error", err => {
+  logger.error("[BullMQ] Queue Error:", {error: err});
 });
 
-module.exports = { announcementQueue };
+module.exports = {announcementQueue};

@@ -1,5 +1,5 @@
 module.exports = {
-  apps : [{
+  apps: [{
     name: "LiveBot",
     script: "index.js",
     instances: 1,
