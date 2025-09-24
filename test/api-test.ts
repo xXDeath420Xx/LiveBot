@@ -1,6 +1,6 @@
 // api-final-test.ts
 
-import axios from "axios";
+const axios = require('axios');
 
 // --- Interfaces for Kick Public API v1 ---
 interface KickPublicStream {
