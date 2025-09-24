@@ -6,7 +6,8 @@ const logger = require("./utils/logger");
 const dashboard = require(path.join(__dirname, "dashboard", "server.js"));
 const {handleInteraction} = require("./core/interaction-handler");
 const {setStatus, getStatus} = require("./core/status-manager");
-const db = require("./utils/db");
+// Correctly import the new database module structure
+const { pool: db, testConnection, end: endDb } = require("./utils/db");
 const cache = require("./utils/cache");
 const axios = require("axios");
 const {announcementQueue} = require("./jobs/announcement-queue");
@@ -19,8 +20,13 @@ const apiChecks = require("./utils/api_checks"); // Import the api_checks module
 // --- BEGIN: MAIN APPLICATION STARTUP ---
 async function main() {
   try {
+    // Test the database connection first
+    logger.info("[Startup] Testing database connection...");
+    await testConnection();
+    logger.info("[Startup] Database connection successful.");
+
     setStatus("STARTING", "Initializing Dashboard...");
-    dashboard.start(null, getStatus);
+    await dashboard.start(null, getStatus);
 
     const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration], partials: [Partials.User, Partials.GuildMember]});
 
@@ -37,7 +43,7 @@ async function main() {
       setStatus("MAINTENANCE", "Bot is shutting down.");
       intervals.forEach(clearInterval);
       await client.destroy();
-      await db.end();
+      await endDb(); // Use the new end function
       await cache.redis.quit();
       process.exit(0);
     }
@@ -45,7 +51,7 @@ async function main() {
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGINT", () => shutdown("SIGINT"));
 
-    // Load Commands (assuming command files are not corrupted)
+    // Load Commands
     client.commands = new Collection();
     const commandsPath = path.join(__dirname, "commands");
     const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"));
@@ -56,12 +62,12 @@ async function main() {
           client.commands.set(command.data.name, command);
         }
       } catch (e) {
-        logger.error(`[CMD Load Error] ${file}:`, {error: e.message, stack: e.stack});
+        logger.error(`[CMD Load Error] ${file}:`, e);
       }
     }
     logger.info(`[Startup] ${client.commands.size} commands loaded.`);
 
-    // Load Interaction Handlers (assuming interaction files are not corrupted)
+    // Load Interaction Handlers
     function getFilesRecursively(directory) {
       let files = [];
       const items = fs.readdirSync(directory, {withFileTypes: true});
@@ -98,7 +104,7 @@ async function main() {
             }
           }
         } catch (e) {
-          logger.error(`[Interaction Load Error] ${file}:`, {error: e.message, stack: e.stack});
+          logger.error(`[Interaction Load Error] ${file}:`, e);
         }
       }
     }
@@ -123,7 +129,7 @@ async function main() {
 
     await client.login(process.env.DISCORD_TOKEN);
   } catch (error) {
-    logger.error("[Main Error]", {error});
+    logger.error("[Main Error] A fatal error occurred during bot startup:", error);
     process.exit(1);
   }
 }
@@ -235,7 +241,7 @@ async function startupCleanup(client) {
             title: ann.stream_title,
             game: ann.stream_game,
             thumbnailUrl: ann.stream_thumbnail_url,
-            url: ann.platform === "twitch" ? `https://twitch.tv/${ann.username}` : ann.platform === "kick" ? `https://kick.com/${ann.username}` : `#` // Basic URL reconstruction
+            url: ann.platform === "twitch" ? `https://twitch.tv/${ann.username}` : ann.platform === "kick" ? `https://kick.com/${ann.username}` : "#" // Basic URL reconstruction
           };
 
           const repostedMessage = await updateAnnouncement(client, subContext, liveData, null, guildSettings, channelSettings, teamSettings);
@@ -248,15 +254,13 @@ async function startupCleanup(client) {
           }
         }
       } catch (e) {
-        logger.error(`[Startup Cleanup] Error processing announcement ${ann.announcement_id}:`, {error: e.message, stack: e.stack});
+        logger.error(`[Startup Cleanup] Error processing announcement ${ann.announcement_id}:`, e);
       }
     }
     logger.info("[Startup Cleanup] Stage 2: Deleted announcement message check complete.");
 
     // --- STAGE 3: Load Existing Announcements for Persistence ---
     logger.info("[Startup Cleanup] Stage 3: Loading existing announcements for persistence...");
-    // The announcementsMap is already populated in checkStreams, so we just need to ensure no TRUNCATE happens here.
-    // Removed: await db.execute('TRUNCATE TABLE announcements');
 
   } catch (e) {
     logger.error("[Startup Cleanup] A CRITICAL ERROR occurred:", e);
@@ -288,7 +292,6 @@ async function checkStreams(client) {
   logger.info(`[Check] ---> Starting stream check @ ${new Date().toLocaleTimeString()}`);
   let cycleTLS = null;
   try {
-    // Fetch all subscriptions and join with streamers to get streamer's Discord ID
     const [subscriptionsWithStreamerInfo] = await db.execute(
       "SELECT sub.*, s.discord_user_id AS streamer_discord_user_id, s.platform_user_id, s.username, s.platform, s.kick_username FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id"
     );
@@ -308,7 +311,6 @@ async function checkStreams(client) {
 
     for (const streamer of uniqueStreamers) {
       try {
-        // Check primary platform
         let primaryLiveData = null;
         if (streamer.platform === "twitch") {
           primaryLiveData = await apiChecks.checkTwitch(streamer);
@@ -330,7 +332,6 @@ async function checkStreams(client) {
           liveStatusMap.set(streamer.streamer_id, primaryLiveData);
         }
 
-        // Check for linked Kick account if it exists, regardless of primary platform status
         if (streamer.platform === "twitch" && streamer.kick_username) {
           const [[kickInfo]] = await db.execute("SELECT streamer_id, profile_image_url FROM streamers WHERE platform=\"kick\" AND username=?", [streamer.kick_username]);
           if (kickInfo) {
@@ -350,9 +351,9 @@ async function checkStreams(client) {
     }
 
     const desiredAnnouncementKeys = new Set();
-    const successfulAnnouncements = new Map(); // streamer_id -> platform
+    const successfulAnnouncements = new Map();
 
-    for (const sub of subscriptionsWithStreamerInfo) { // Use subscriptionsWithStreamerInfo
+    for (const sub of subscriptionsWithStreamerInfo) {
       const liveData = liveStatusMap.get(sub.streamer_id);
       if (!liveData) {
         continue;
@@ -372,8 +373,7 @@ async function checkStreams(client) {
       try {
         const sentMessage = await updateAnnouncement(client, sub, liveData, existing, guildSettings, channelSettings, teamSettings);
 
-        // Corrected check for sentMessage and its properties
-        if (sentMessage && sentMessage.id && sentMessage.channel_id) { // Check for top-level channel_id
+        if (sentMessage && sentMessage.id && sentMessage.channel_id) {
           if (!existing) {
             logger.info(`[Announce] CREATED new announcement for ${sub.username} in channel ${targetChannelId}`);
             const [announcementResult] = await db.execute("INSERT INTO announcements (subscription_id, streamer_id, guild_id, message_id, channel_id, stream_game, stream_title, platform, stream_thumbnail_url) VALUES (?,?,?,?,?,?,?,?,?)", [sub.subscription_id, sub.streamer_id, sub.guild_id, sentMessage.id, sentMessage.channel_id, liveData.game || null, liveData.title || null, liveData.platform, liveData.thumbnailUrl || null]);
@@ -392,17 +392,14 @@ async function checkStreams(client) {
             await db.execute("UPDATE announcements SET message_id = ? WHERE announcement_id = ?", [sentMessage.id, existing.announcement_id]);
           }
         } else {
-          logger.error(`[Announce] updateAnnouncement did not return a valid message object with ID and channel ID for job for ${sub.username}. Sent message:`, sentMessage);
+          logger.error(`[Announce] updateAnnouncement did not return a valid message object for ${sub.username}. Sent message:`, sentMessage);
         }
       } catch (error) {
-        // --- THIS IS THE FIX ---
-        // Add a specific check for ECONNREFUSED to give a more helpful error message.
         if (error.code === "ECONNREFUSED") {
-          logger.error(`[FATAL DB Error] Connection to the database was refused for streamer ${sub.username}. Please ensure the database is running and check its 'wait_timeout' setting.`, error);
+          logger.error(`[FATAL DB Error] Connection refused for ${sub.username}.`, error);
         } else {
           logger.error(`[Announce] Error processing announcement for ${sub.username}:`, error);
         }
-        // --- END OF FIX ---
       }
     }
 
@@ -426,8 +423,7 @@ async function checkStreams(client) {
     }
 
     const usersToUpdate = new Map();
-    for (const sub of subscriptionsWithStreamerInfo) { // Use subscriptionsWithStreamerInfo
-      // Use the streamer's Discord ID for role management
+    for (const sub of subscriptionsWithStreamerInfo) {
       if (!sub.streamer_discord_user_id) {
         continue;
       }
@@ -435,73 +431,47 @@ async function checkStreams(client) {
       if (!usersToUpdate.has(key)) {
         usersToUpdate.set(key, {guildId: sub.guild_id, userId: sub.streamer_discord_user_id, livePlatforms: new Set()});
       }
-      if (liveStatusMap.has(sub.streamer_id)) { // Check liveStatusMap for the streamer_id
-        usersToUpdate.get(key).livePlatforms.add(sub.platform); // Add the platform of the live stream
+      if (liveStatusMap.has(sub.streamer_id)) {
+        usersToUpdate.get(key).livePlatforms.add(sub.platform);
       }
     }
 
     logger.info(`[Role Management] Processing ${usersToUpdate.size} users for role updates.`);
     for (const [key, userState] of usersToUpdate.entries()) {
       const {guildId, userId, livePlatforms} = userState;
-      logger.debug(`[Role Management] User: ${userId}, Guild: ${guildId}, Live Platforms: ${[...livePlatforms].join(", ")}`);
-
-      const member = await client.guilds.fetch(guildId).then(g => g.members.fetch(userId)).catch(e => {
-        logger.warn(`[Role Management] Could not fetch member ${userId} in guild ${guildId}: ${e.message}`);
-        return null;
-      });
+      const member = await client.guilds.fetch(guildId).then(g => g.members.fetch(userId)).catch(() => null);
       if (!member) {
-        logger.debug(`[Role Management] Skipping role update for ${userId} in ${guildId} as member not found.`);
         continue;
       }
-      logger.debug(`[Role Management] Member ${member.user.tag} fetched for guild ${guildId}.`);
 
       const guildSettings = guildSettingsMap.get(guildId);
-      // Filter userSubscriptions to only include those relevant to this specific streamer's Discord ID
       const streamerSubscriptions = subscriptionsWithStreamerInfo.filter(s => s.streamer_discord_user_id === userId && s.guild_id === guildId);
       const allTeamConfigsForGuild = teamConfigs.filter(t => t.guild_id === guildId && t.live_role_id);
 
-      logger.debug(`[Role Management] Guild settings for ${guildId}: ${JSON.stringify(guildSettings)}`);
-      logger.debug(`[Role Management] Streamer subscriptions for ${userId} in ${guildId}: ${streamerSubscriptions.length} found.`);
-      logger.debug(`[Role Management] Team configs for ${guildId}: ${allTeamConfigsForGuild.length} found.`);
-
       const desiredRoles = new Set();
-
-      // Determine guild-wide role
       if (guildSettings?.live_role_id && livePlatforms.size > 0) {
         desiredRoles.add(guildSettings.live_role_id);
-        logger.debug(`[Role Management] Added guild-wide role ${guildSettings.live_role_id} to desiredRoles.`);
       }
 
-      // Determine team-specific roles
       for (const teamConfig of allTeamConfigsForGuild) {
-        // Check if this streamer is part of this team's subscriptions
         const isStreamerInTeam = streamerSubscriptions.some(sub =>
-          sub.announcement_channel_id === teamConfig.announcement_channel_id && sub.platform === "twitch" // Assuming teams are Twitch-specific
+          sub.announcement_channel_id === teamConfig.announcement_channel_id && sub.platform === "twitch"
         );
         if (isStreamerInTeam && livePlatforms.size > 0) {
           desiredRoles.add(teamConfig.live_role_id);
-          logger.debug(`[Role Management] Added team-specific role ${teamConfig.live_role_id} to desiredRoles for team ${teamConfig.team_name}.`);
         }
       }
 
       const allManagedRoles = new Set([guildSettings?.live_role_id, ...allTeamConfigsForGuild.map(t => t.live_role_id)].filter(Boolean));
-      logger.debug(`[Role Management] All managed roles for ${guildId}: ${[...allManagedRoles].join(", ")}`);
-      logger.debug(`[Role Management] Final desired roles for ${userId} in ${guildId}: ${[...desiredRoles].join(", ")}`);
 
       for (const roleId of allManagedRoles) {
         if (desiredRoles.has(roleId)) {
           if (!member.roles.cache.has(roleId)) {
-            logger.info(`[Role Management] Adding role ${roleId} to member ${userId} in guild ${guildId}.`);
             await handleRole(member, [roleId], "add", guildId);
-          } else {
-            logger.debug(`[Role Management] Member ${userId} already has desired role ${roleId}.`);
           }
         } else {
           if (member.roles.cache.has(roleId)) {
-            logger.info(`[Role Management] Removing role ${roleId} from member ${userId} in guild ${guildId}.`);
             await handleRole(member, [roleId], "remove", guildId);
-          } else {
-            logger.debug(`[Role Management] Member ${userId} does not have un-desired role ${roleId}.`);
           }
         }
       }
@@ -514,6 +484,7 @@ async function checkStreams(client) {
       try {
         await cycleTLS.exit();
       } catch (e) {
+        // Ignore exit errors
       }
     }
     isChecking = false;
@@ -527,112 +498,70 @@ async function checkTeams(client) {
   }
   isCheckingTeams = true;
   logger.info(`[Team Sync] ---> Starting team sync @ ${new Date().toLocaleTimeString()}`);
-  let cycleTLS = null; // Initialize cycleTLS for Kick API calls if needed
+  let cycleTLS = null;
   try {
     const [teamSubscriptions] = await db.execute("SELECT * FROM twitch_teams");
     if (teamSubscriptions.length === 0) {
-      logger.info("[Team Sync] No teams are subscribed for syncing.");
-      isCheckingTeams = false;
       return;
     }
 
-    logger.info(`[Team Sync] Found ${teamSubscriptions.length} team subscription(s) to process.`);
     for (const sub of teamSubscriptions) {
       try {
         const apiMembers = await apiChecks.getTwitchTeamMembers(sub.team_name);
         if (!apiMembers) {
           continue;
         }
-        const apiMemberIds = new Set(apiMembers.map(m => m.user_id));
 
-        // Fetch existing subscriptions for this guild/channel/platform to determine what to remove
-        const [dbTwitchSubs] = await db.execute(`SELECT s.streamer_id, s.platform_user_id
-                                                 FROM subscriptions sub
-                                                          JOIN streamers s ON sub.streamer_id = s.streamer_id
-                                                 WHERE sub.guild_id = ?
-                                                   AND sub.announcement_channel_id = ?
-                                                   AND s.platform = 'twitch'`, [sub.guild_id, sub.announcement_channel_id]);
-        const [dbKickSubs] = await db.execute(`SELECT s.streamer_id, s.platform_user_id
-                                               FROM subscriptions sub
-                                                        JOIN streamers s ON sub.streamer_id = s.streamer_id
-                                               WHERE sub.guild_id = ?
-                                                 AND sub.announcement_channel_id = ?
-                                                 AND s.platform = 'kick'`, [sub.guild_id, sub.announcement_channel_id]);
+        const [dbTwitchSubs] = await db.execute(`SELECT s.streamer_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? AND sub.announcement_channel_id = ? AND s.platform = 'twitch'`, [sub.guild_id, sub.announcement_channel_id]);
+        const [dbKickSubs] = await db.execute(`SELECT s.streamer_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? AND sub.announcement_channel_id = ? AND s.platform = 'kick'`, [sub.guild_id, sub.announcement_channel_id]);
 
         const currentTwitchStreamerIds = new Set();
         const currentKickStreamerIds = new Set();
 
         for (const member of apiMembers) {
-          // --- Handle Twitch Streamer ---
-          // DO NOT update discord_user_id here. It should be set manually or via a linking command.
-          await db.execute(`INSERT INTO streamers (platform, platform_user_id, username, profile_image_url)
-                            VALUES ('twitch', ?, ?, ?)
-                            ON DUPLICATE KEY UPDATE username=VALUES(username),
-                                                    profile_image_url=VALUES(profile_image_url)`, [member.user_id, member.user_login, member.profile_image_url || null]);
+          await db.execute(`INSERT INTO streamers (platform, platform_user_id, username, profile_image_url) VALUES ('twitch', ?, ?, ?) ON DUPLICATE KEY UPDATE username=VALUES(username), profile_image_url=VALUES(profile_image_url)`, [member.user_id, member.user_login, member.profile_image_url || null]);
           const [[ts]] = await db.execute("SELECT streamer_id, kick_username FROM streamers WHERE platform=? AND platform_user_id=?", ["twitch", member.user_id]);
           if (ts) {
             currentTwitchStreamerIds.add(ts.streamer_id);
             await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [sub.guild_id, ts.streamer_id, sub.announcement_channel_id]);
 
-            // --- Handle Linked Kick Streamer if exists ---
             if (ts.kick_username) {
-              // Ensure cycleTLS is initialized if we need to call Kick API for profile_pic
               if (!cycleTLS) {
                 cycleTLS = await initCycleTLS({timeout: 60000});
               }
-
-              // Get Kick user info to ensure we have the correct ID and profile pic
-              // Only update username and profile_image_url, DO NOT update discord_user_id here.
               const kickUser = await apiChecks.getKickUser(cycleTLS, ts.kick_username);
               if (kickUser && kickUser.id) {
-                await db.execute(`INSERT INTO streamers (platform, platform_user_id, username, profile_image_url)
-                                  VALUES ('kick', ?, ?, ?)
-                                  ON DUPLICATE KEY UPDATE username=VALUES(username),
-                                                          profile_image_url=VALUES(profile_image_url)`, [kickUser.id.toString(), kickUser.user.username, kickUser.user.profile_pic || null]);
+                await db.execute(`INSERT INTO streamers (platform, platform_user_id, username, profile_image_url) VALUES ('kick', ?, ?, ?) ON DUPLICATE KEY UPDATE username=VALUES(username), profile_image_url=VALUES(profile_image_url)`, [kickUser.id.toString(), kickUser.user.username, kickUser.user.profile_pic || null]);
                 const [[kickStreamer]] = await db.execute("SELECT streamer_id FROM streamers WHERE platform=? AND platform_user_id=?", ["kick", kickUser.id.toString()]);
                 if (kickStreamer) {
                   currentKickStreamerIds.add(kickStreamer.streamer_id);
                   await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [sub.guild_id, kickStreamer.streamer_id, sub.announcement_channel_id]);
                 }
               } else {
-                logger.warn(`[Team Sync] Could not find Kick user details for linked username ${ts.kick_username} for Twitch member ${member.user_login}.`);
+                logger.warn(`[Team Sync] Could not find Kick user details for ${ts.kick_username}.`);
               }
             }
           }
         }
 
-        // --- Remove old Twitch subscriptions ---
         const twitchToRemove = dbTwitchSubs.filter(dbSub => !currentTwitchStreamerIds.has(dbSub.streamer_id));
         if (twitchToRemove.length > 0) {
-          const idsToRemove = twitchToRemove.map(s => s.streamer_id);
-          await db.execute(`DELETE
-                            FROM subscriptions
-                            WHERE streamer_id IN (?)
-                              AND guild_id = ?
-                              AND announcement_channel_id = ?
-                              AND platform = 'twitch'`, [idsToRemove, sub.guild_id, sub.announcement_channel_id]);
+          await db.execute(`DELETE FROM subscriptions WHERE streamer_id IN (?) AND guild_id = ? AND announcement_channel_id = ?`, [twitchToRemove.map(s => s.streamer_id), sub.guild_id, sub.announcement_channel_id]);
           logger.info(`[Team Sync] Removed ${twitchToRemove.length} old Twitch subscriptions.`);
         }
 
-        // --- Remove old Kick subscriptions (if any were managed by this team sync) ---
         const kickToRemove = dbKickSubs.filter(dbSub => !currentKickStreamerIds.has(dbSub.streamer_id));
         if (kickToRemove.length > 0) {
-          const idsToRemove = kickToRemove.map(s => s.streamer_id);
-          await db.execute(`DELETE
-                            FROM subscriptions
-                            WHERE streamer_id IN (?)
-                              AND guild_id = ?
-                              AND announcement_channel_id = ?
-                              AND platform = 'kick'`, [idsToRemove, sub.guild_id, sub.announcement_channel_id]);
+          await db.execute(`DELETE FROM subscriptions WHERE streamer_id IN (?) AND guild_id = ? AND announcement_channel_id = ?`, [kickToRemove.map(s => s.streamer_id), sub.guild_id, sub.announcement_channel_id]);
           logger.info(`[Team Sync] Removed ${kickToRemove.length} old Kick subscriptions.`);
         }
 
       } catch (e) {
-        logger.error(`[Team Sync] Error processing team ${sub.team_name}:`, {error: e.message});
+        logger.error(`[Team Sync] Error processing team ${sub.team_name}:`, e);
       }
     }
   } catch (error) {
-    logger.error("[Team Sync] CRITICAL ERROR:", {error: error});
+    logger.error("[Team Sync] CRITICAL ERROR:", error);
   } finally {
     if (cycleTLS) {
       try {
@@ -652,34 +581,28 @@ async function handleRole(member, roleIds, action, guildId) {
   }
   for (const roleId of roleIds) {
     if (!roleId) {
-      logger.warn(`[handleRole] Attempted to ${action} a null/undefined roleId for member ${member.id} in guild ${guildId}.`);
       continue;
     }
     try {
       if (action === "add" && !member.roles.cache.has(roleId)) {
-        logger.debug(`[handleRole] Attempting to add role ${roleId} to member ${member.id} in guild ${guildId}.`);
         await member.roles.add(roleId);
-        logger.info(`[handleRole] Successfully added role ${roleId} to member ${member.id} in guild ${guildId}.`);
       } else if (action === "remove" && member.roles.cache.has(roleId)) {
-        logger.debug(`[handleRole] Attempting to remove role ${roleId} from member ${member.id} in guild ${guildId}.`);
         await member.roles.remove(roleId);
-        logger.info(`[handleRole] Successfully removed role ${roleId} from member ${member.id} in guild ${guildId}.`);
-      } else {
-        logger.debug(`[handleRole] No action needed for role ${roleId} on member ${member.id} (action: ${action}, hasRole: ${member.roles.cache.has(roleId)}).`);
       }
     } catch (e) {
       if (e.code === 10011 || (e.message && e.message.includes("Unknown Role"))) {
-        logger.warn(`[handleRole] Discord API Error: Role ${roleId} is unknown or invalid for member ${member.id} in guild ${guildId}. Initiating cleanup.`);
+        logger.warn(`[handleRole] Invalid role ${roleId} for guild ${guildId}. Cleaning up.`);
         await cleanupInvalidRole(guildId, roleId);
-      } else if (e.code === 50013) { // Missing Permissions
-        logger.error(`[handleRole] Discord API Error: Missing permissions to ${action} role ${roleId} for member ${member.id} in guild ${guildId}. Ensure bot has 'Manage Roles' permission and role hierarchy is correct.`, {error: e.message});
+      } else if (e.code === 50013) {
+        logger.error(`[handleRole] Missing permissions to ${action} role ${roleId} in guild ${guildId}.`, e);
       } else {
-        logger.error(`[handleRole] Failed to ${action} role ${roleId} for member ${member.id} in guild ${guildId}: ${e.message}`, {error: e});
+        logger.error(`[handleRole] Failed to ${action} role ${roleId} for member ${member.id}:`, e);
       }
     }
   }
 }
 
-// --- END: FUNCTIONS FROM WORKING/index.js ---
-
-main();
+main().catch(error => {
+    logger.error("Unhandled rejection during main execution:", error);
+    process.exit(1);
+});

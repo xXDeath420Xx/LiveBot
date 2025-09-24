@@ -1,7 +1,7 @@
 module.exports = {
   apps: [{
     name: "LiveBot",
-    script: "index.js",
+    script: "sharding.js", // Changed from index.js to sharding.js
     instances: 1,
     autorestart: true,
     watch: false,
