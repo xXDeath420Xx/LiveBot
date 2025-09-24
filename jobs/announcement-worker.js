@@ -75,7 +75,8 @@ client.once(Events.ClientReady, async () => {
   });
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => logger.info("[Announcement Worker] Logged in"));
 
 async function shutdown(signal) {
   logger.warn(`[Announcement Worker] Received ${signal}. Shutting down...`);
