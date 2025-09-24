@@ -152,7 +152,7 @@ function start(botClient) {
                                                WHERE sub.guild_id = ?
                                                  AND sub.announcement_channel_id = ?
                                                  AND s.platform = 'twitch'`, [guildId, teamSub.announcement_channel_id]);
-        const members = rawMembers.map(rawMember => {
+        teamSub.members = rawMembers.map(rawMember => {
           let kickUsername = rawMember.kick_username;
           if (rawMember.discord_user_id) {
             const linked = linkedStreamerMap.get(`discord-${rawMember.discord_user_id}`);
@@ -177,7 +177,6 @@ function start(botClient) {
           }
           return {...rawMember, twitch_username: rawMember.username, kick_username: kickUsername};
         });
-        teamSub.members = members;
         teamSubscriptions.push(teamSub);
         if (!channelsData[teamSub.announcement_channel_id]) {
           channelsData[teamSub.announcement_channel_id] = {name: allChannelsMap.get(teamSub.announcement_channel_id) || "Unknown", individualStreamers: [], teams: []};
