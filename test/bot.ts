@@ -1,9 +1,9 @@
 // bot.ts
 import 'dotenv/config'; // Use 'dotenv/config' for direct loading
 import axios from 'axios';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as WebSocket from 'ws';
+import fs from 'fs';
+import path from 'path';
+import WebSocket from 'ws';
 
 // --- Interfaces ---
 interface KickUser {
