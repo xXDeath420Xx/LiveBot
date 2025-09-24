@@ -170,7 +170,7 @@ module.exports = {
       footerText.push(`Avatar URL provided`);
     }
     if (footerText.length > 0) {
-      embed.setFooter({text: `Applied to all successful entries: ${footerText.join(' | ')}`});
+      embed.setFooter({text: `Applied to all successful entries: ${footerText.join(" | ")}`});
     }
 
     await interaction.editReply({embeds: [embed]});

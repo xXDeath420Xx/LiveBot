@@ -149,7 +149,7 @@ async function startupCleanup(client) {
   } catch (e) {
     logger.error("[Startup Cleanup] A CRITICAL ERROR occurred:", {error: e});
   }
-  logger.info('[Startup Cleanup] Full-stage purge process has finished.');
+  logger.info("[Startup Cleanup] Full-stage purge process has finished.");
 }
 
 module.exports = {startupCleanup};

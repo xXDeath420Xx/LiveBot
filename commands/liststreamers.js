@@ -35,7 +35,7 @@ async function sendPaginatedEmbed(interaction, pages) {
     // Log the error if updating components fails on end
     message.edit({components: [createButtons(true)]}).catch(e => console.error(`Error updating pagination buttons for interaction ${interaction.id} on collector end (reason: ${reason}):`, e));
   });
-};
+}
 
 module.exports = {
   data: new SlashCommandBuilder().setName("liststreamers").setDescription("Lists all tracked streamers and their live status.").setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild),
@@ -107,7 +107,7 @@ module.exports = {
     } catch (e) {
       console.error("Error in /liststreamers:", e);
       // interaction.editReply() is safe to call after deferReply, no need for !interaction.replied check
-      await interaction.editReply({content: "An error occurred."}).catch(error => console.error('Failed to send error reply:', error));
+      await interaction.editReply({content: "An error occurred."}).catch(error => console.error("Failed to send error reply:", error));
     }
   },
 };

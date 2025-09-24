@@ -238,10 +238,10 @@ async function checkTeams(client) {
       }
     }
   } catch (error) {
-    logger.error('[Team Sync] CRITICAL ERROR:', {error: error});
+    logger.error("[Team Sync] CRITICAL ERROR:", {error: error});
   } finally {
     isCheckingTeams = false;
-    logger.info('[Team Sync] ---> Finished team sync.');
+    logger.info("[Team Sync] ---> Finished team sync.");
   }
 }
 
