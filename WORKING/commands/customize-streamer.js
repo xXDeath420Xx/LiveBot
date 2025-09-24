@@ -144,7 +144,7 @@ module.exports = {
         .setTitle(`Customization updated for ${username}`)
         .setDescription(`Settings for announcements ${channel ? `in ${channel}` : "in the server default channel"} have been updated.`);
 
-      if (finalAvatarUrl && finalAvatarUrl !== null) {
+      if (finalAvatarUrl !== null) {
         embed.setThumbnail(finalAvatarUrl);
       } else if (finalAvatarUrl === null) {
         embed.setDescription(embed.data.description + "\n_Avatar has been reset to default._");
