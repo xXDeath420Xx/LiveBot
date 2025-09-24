@@ -212,7 +212,7 @@
 
             } catch (error) {
                 console.error('Error fetching bot status:', error);
-                botStatusDisplay.textContent = 'Could not connect to the bot's status endpoint.';
+                botStatusDisplay.textContent = 'Could not connect to the bot\'s status endpoint.';
                 botStatusDisplay.className = 'alert mt-3 text-center alert-danger';
                 // If bot status cannot be fetched, assume offline for data display
                 currentBotStatus = { state: 'OFFLINE', message: 'Could not connect to bot.' };
