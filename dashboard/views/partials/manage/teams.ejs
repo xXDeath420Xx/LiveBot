@@ -1,34 +1,58 @@
 <div class="row">
-    <div class="col-lg-6"><div class="content-card h-100">
+    <div class="col-lg-6">
+        <div class="content-card h-100">
             <h2><i class="fab fa-twitch me-2"></i>Subscribe to Team</h2>
-            <p class="text-muted">Sync a channel with a Twitch Team. Bot checks for changes every 15 minutes.</p><hr>
-            <form action="/manage/<%= guild.id %>/subscribe-team" method="POST">
+            <p class="text-muted">Sync a channel with a Twitch Team. Bot checks for changes every 15 minutes.</p>
+            <hr>
+            <form action="/manage/<%= guild.id ;%>/subscribe-team" method="POST">
                 <div class="mb-3"><label class="form-label">Twitch Team Name</label><input type="text" name="teamName" class="form-control" placeholder="e.g. reeferrealm" required></div>
-                <div class="mb-3"><label class="form-label">Channel to Sync</label><select name="channelId" class="form-select" required><option value="" disabled selected>-- Select --</option><% channels.forEach(c => { %><option value="<%= c.id %>">#<%= c.name %></option><% }) %></select></div>
+                <div class="mb-3"><label class="form-label">Channel to Sync</label><select name="channelId" class="form-select" required>
+                        <option value="" disabled selected>-- Select --</option>
+                        <% channels.forEach(c => { %>
+                            <option value="<%= c.id ;%>">#<%= c.name ;%></option>
+                        <% }); %>
+                    </select></div>
                 <button type="submit" class="btn btn-primary w-100"><i class="fas fa-sync-alt me-2"></i>Subscribe</button>
             </form>
-        </div></div>
-    <div class="col-lg-6"><%# Placeholder for future team tools %></div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <%# Placeholder for future team tools %>
+    </div>
 </div>
-<% if (teamSubscriptions.length > 0) { %><div class="content-card mt-4">
-    <h2>Active Team Subscriptions</h2>
-    <div class="accordion" id="activeTeamsAccordion"><% teamSubscriptions.forEach(sub => { %>
-            <div class="accordion-item mb-2"><h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-team-<%= sub.id %>"><strong><%= sub.team_name %></strong>&nbsp;→ #<%= channels.find(c=>c.id===sub.announcement_channel_id)?.name || 'Unknown' %></button></h2>
-                <div id="collapse-team-<%= sub.id %>" class="accordion-collapse collapse" data-bs-parent="#activeTeamsAccordion"><div class="accordion-body">
-                        <form action="/manage/<%= guild.id %>/update-team" method="POST" class="row g-3 mb-3">
-                            <input type="hidden" name="teamSubscriptionId" value="<%= sub.id %>">
-                            <div class="col-md-4"><label class="form-label">Live Role</label><select name="liveRoleId" class="form-select"><option value="">-- None --</option><% roles.forEach(r => { %><option value="<%= r.id %>" <%= sub.live_role_id == r.id ? 'selected' : '' %>>@<%= r.name %></option><% }); %></select></div>
-                            <div class="col-md-4"><label class="form-label">Webhook Name</label><input type="text" name="webhookName" class="form-control" value="<%= sub.webhook_name || '' %>"></div>
-                            <div class="col-md-4"><label class="form-label">Webhook Avatar</label><input type="url" name="webhookAvatarUrl" class="form-control" value="<%= sub.webhook_avatar_url || '' %>"></div>
-                            <div class="col-12 d-flex justify-content-end"><button type="submit" class="btn btn-sm btn-primary">Save Team</button></div>
-                        </form>
-                        <hr>
-                        <form action="/manage/<%= guild.id %>/removeteam" method="POST" onsubmit="return confirm('Unsubscribe from team \'<%= sub.team_name %>\'? This also removes its members from this channel.')" class="d-flex justify-content-end">
-                            <input type="hidden" name="teamSubscriptionId" value="<%= sub.id %>">
-                            <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash-alt me-2"></i>Unsubscribe & Purge</button>
-                        </form>
-                    </div></div>
-            </div>
-        <% }); %></div>
-</div><% } %>
+<% if (teamSubscriptions.length > 0) { %>
+    <div class="content-card mt-4">
+        <h2>Active Team Subscriptions</h2>
+        <div class="accordion" id="activeTeamsAccordion">
+            <% teamSubscriptions.forEach(sub => { %>
+                <div class="accordion-item mb-2">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-team-<%= sub.id ;%>"><strong><%= sub.team_name ;%></strong>&nbsp;→ #<%= channels.find(c => c.id === sub.announcement_channel_id)?.name || "Unknown" ;%></button>
+                    </h2>
+                    <div id="collapse-team-<%= sub.id ;%>" class="accordion-collapse collapse" data-bs-parent="#activeTeamsAccordion">
+                        <div class="accordion-body">
+                            <form action="/manage/<%= guild.id ;%>/update-team" method="POST" class="row g-3 mb-3">
+                                <input type="hidden" name="teamSubscriptionId" value="<%= sub.id ;%>">
+                                <div class="col-md-4"><label class="form-label">Live Role</label><select name="liveRoleId" class="form-select">
+                                        <option value="">-- None --</option>
+                                        <% roles.forEach(r => { %>
+                                            <option value="<%= r.id ;%>" <%= sub.live_role_id == r.id ? "selected" : "" ;%>>@<%= r.name ;%></option>
+                                        <% }); %>
+                                    </select></div>
+                                <div class="col-md-4"><label class="form-label">Webhook Name</label><input type="text" name="webhookName" class="form-control" value="<%= sub.webhook_name || "" ;%>"></div>
+                                <div class="col-md-4"><label class="form-label">Webhook Avatar</label><input type="url" name="webhookAvatarUrl" class="form-control" value="<%= sub.webhook_avatar_url || "" ;%>"></div>
+                                <div class="col-12 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-sm btn-primary">Save Team</button>
+                                </div>
+                            </form>
+                            <hr>
+                            <form action="/manage/<%= guild.id ;%>/removeteam" method="POST" onsubmit="return confirm('Unsubscribe from team \'<%= sub.team_name ;%>\'? This also removes its members from this channel.')" class="d-flex justify-content-end">
+                                <input type="hidden" name="teamSubscriptionId" value="<%= sub.id ;%>">
+                                <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash-alt me-2"></i>Unsubscribe & Purge</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            <% }); %>
+        </div>
+    </div><% } %>

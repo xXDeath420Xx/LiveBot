@@ -58,11 +58,11 @@ module.exports = {
                                                     profile_image_url=VALUES(profile_image_url)`, [platform, streamerInfo.puid, streamerInfo.dbUsername, data.discordUserId, pfp || null, data.discordUserId]);
           const [[streamer]] = await db.execute("SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?", [platform, streamerInfo.puid]);
           for (const channelId of channelIds) {
-            const [res] = await db.execute(`INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, override_nickname, override_avatar_url, custom_message)
-                                            VALUES (?, ?, ?, ?, ?, ?)
-                                            ON DUPLICATE KEY UPDATE override_nickname=VALUES(override_nickname),
-                                                                    override_avatar_url=VALUES(override_avatar_url),
-                                                                    custom_message=VALUES(custom_message)`, [data.guildId, streamer.streamer_id, channelId, nickname, data.avatarUrl, customMessage]);
+            const [res] = await db.execute(
+              `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, override_nickname, override_avatar_url, custom_message) VALUES (?, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE override_nickname=VALUES(override_nickname), override_avatar_url=VALUES(override_avatar_url), custom_message=VALUES(custom_message)`,
+              [data.guildId, streamer.streamer_id, channelId, nickname, data.avatarUrl, customMessage]
+            );
             if (res.affectedRows > 1) {
               updated.push(`${streamerInfo.dbUsername} on ${platform}`);
             } else {

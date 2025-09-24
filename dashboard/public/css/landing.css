@@ -82,11 +82,25 @@ a:hover {
     cursor: pointer;
 }
 
-.btn-primary { background-color: var(--brand-color); color: #fff; }
-.btn-primary:hover { background-color: var(--brand-color-hover); transform: translateY(-2px); }
+.btn-primary {
+    background-color: var(--brand-color);
+    color: #fff;
+}
 
-.btn-secondary { background-color: var(--background-tertiary); color: var(--text-normal); }
-.btn-secondary:hover { background-color: var(--background-tertiary-hover); transform: translateY(-2px); }
+.btn-primary:hover {
+    background-color: var(--brand-color-hover);
+    transform: translateY(-2px);
+}
+
+.btn-secondary {
+    background-color: var(--background-tertiary);
+    color: var(--text-normal);
+}
+
+.btn-secondary:hover {
+    background-color: var(--background-tertiary-hover);
+    transform: translateY(-2px);
+}
 
 .hero {
     text-align: center;
@@ -183,34 +197,152 @@ a:hover {
     border-top: 1px solid var(--border-color);
 }
 
-.platform-pills { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start; margin-top: 1rem; }
-.platform-pill { padding: 5px 12px; border-radius: 5px; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-.platform-pill.platform-twitch { background-color: var(--twitch-color); color: #fff; }
-.platform-pill.platform-kick { background-color: var(--success-color); color: #000; }
-.platform-pill.platform-youtube { background-color: var(--youtube-color); color: #fff; }
-.platform-pill.platform-tiktok { background-color: var(--tiktok-color); color: #000; }
-.platform-pill.platform-trovo { background-color: var(--trovo-color); color: #000; }
+.platform-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-start;
+    margin-top: 1rem;
+}
 
-.featured-streamer-card { display: flex; align-items: center; background-color: var(--background-tertiary); border-left: 4px solid var(--success-color); padding: 15px; border-radius: 8px; margin-bottom: 12px; text-align: left; }
+.platform-pill {
+    padding: 5px 12px;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.platform-pill.platform-twitch {
+    background-color: var(--twitch-color);
+    color: #fff;
+}
+
+.platform-pill.platform-kick {
+    background-color: var(--success-color);
+    color: #000;
+}
+
+.platform-pill.platform-youtube {
+    background-color: var(--youtube-color);
+    color: #fff;
+}
+
+.platform-pill.platform-tiktok {
+    background-color: var(--tiktok-color);
+    color: #000;
+}
+
+.platform-pill.platform-trovo {
+    background-color: var(--trovo-color);
+    color: #000;
+}
+
+.featured-streamer-card {
+    display: flex;
+    align-items: center;
+    background-color: var(--background-tertiary);
+    border-left: 4px solid var(--success-color);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    text-align: left;
+}
 
 /* *** THIS SECTION IS NEW: SETS BORDER COLORS *** */
-.featured-streamer-card.platform-twitch { border-left-color: var(--twitch-color); }
-.featured-streamer-card.platform-kick { border-left-color: var(--success-color); }
-.featured-streamer-card.platform-youtube { border-left-color: var(--youtube-color); }
-.featured-streamer-card.platform-tiktok { border-left-color: var(--tiktok-color); }
-.featured-streamer-card.platform-trovo { border-left-color: var(--trovo-color); }
+.featured-streamer-card.platform-twitch {
+    border-left-color: var(--twitch-color);
+}
+
+.featured-streamer-card.platform-kick {
+    border-left-color: var(--success-color);
+}
+
+.featured-streamer-card.platform-youtube {
+    border-left-color: var(--youtube-color);
+}
+
+.featured-streamer-card.platform-tiktok {
+    border-left-color: var(--tiktok-color);
+}
+
+.featured-streamer-card.platform-trovo {
+    border-left-color: var(--trovo-color);
+}
 
 
-.featured-avatar { width: 48px; height: 48px; border-radius: 50%; margin-right: 15px; flex-shrink: 0; }
-.featured-info { overflow: hidden; flex-grow: 1; }
-.featured-info .username { display: block; font-weight: 700; font-size: 1.1em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
-.featured-info .pills-container { display: flex; gap: 6px; margin-bottom: 4px; }
-.featured-info .live-platform-pill { font-size: 0.7em; font-weight: 900; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
+.featured-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    margin-right: 15px;
+    flex-shrink: 0;
+}
 
-.featured-info .live-platform-pill.platform-twitch { background-color: var(--twitch-color); color: #fff; }
-.featured-info .live-platform-pill.platform-kick { background-color: var(--success-color); color: #000; }
-.featured-info .live-platform-pill.platform-youtube { background-color: var(--youtube-color); color: #fff; }
-.featured-info .live-platform-pill.platform-tiktok { background-color: var(--tiktok-color); color: #000; }
-.featured-info .live-platform-pill.platform-trovo { background-color: var(--trovo-color); color: #000; }
+.featured-info {
+    overflow: hidden;
+    flex-grow: 1;
+}
 
-.featured-info .game { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9em; color: var(--text-muted); }
+.featured-info .username {
+    display: block;
+    font-weight: 700;
+    font-size: 1.1em;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+.featured-info .pills-container {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.featured-info .live-platform-pill {
+    font-size: 0.7em;
+    font-weight: 900;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+.featured-info .live-platform-pill.platform-twitch {
+    background-color: var(--twitch-color);
+    color: #fff;
+}
+
+.featured-info .live-platform-pill.platform-kick {
+    background-color: var(--success-color);
+    color: #000;
+}
+
+.featured-info .live-platform-pill.platform-youtube {
+    background-color: var(--youtube-color);
+    color: #fff;
+}
+
+.featured-info .live-platform-pill.platform-tiktok {
+    background-color: var(--tiktok-color);
+    color: #000;
+}
+
+.featured-info .live-platform-pill.platform-trovo {
+    background-color: var(--trovo-color);
+    color: #000;
+}
+
+.featured-info .game {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9em;
+    color: var(--text-muted);
+}
