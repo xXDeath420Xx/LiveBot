@@ -1,0 +1,31 @@
+services:
+  db:
+    image: mariadb:latest
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db:/docker-entrypoint-initdb.d/db
+    healthcheck:
+      test: [ "CMD-SHELL", "mysqladmin ping --host=localhost --user=$${DB_HOST} --password=$${DB_PASSWORD}" ]
+      interval: 10s
+      timeout: 15s
+      retries: 5
+
+  certifried:
+    build: .
+    command: [ "npm", "run", "clean-start" ]
+    depends_on:
+      - db
+    restart: no
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /usr/src/certifried-announcer
+          ignore:
+            - node_modules/
+
+volumes:
+  db_data:
