@@ -1,7 +1,6 @@
 const axios = require("axios");
-const initCycleTLS = require("cycletls");
 const {getBrowser} = require("./browserManager");
-const logger = require("./logger"); // Import the logger
+const logger = require("./logger"); // Corrected path
 
 let twitchToken = null;
 let tokenExpires = 0;

@@ -5,79 +5,220 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Status - CertiFried Announcer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.0.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.0.2">
     <style>
-        .stat-card .stat-value { font-size: 2.2rem; font-weight: 800; }
-        .stat-card .stat-label { font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; }
-        .streamer-avatar { width: 50px; height: 50px; border-radius: 50%; border: 2px solid var(--success-color); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes shimmer { 100% { transform: translateX(100%); } }
+        .stat-card { animation: fadeIn 0.5s ease-out forwards; }
+        .stat-card .stat-value { font-size: 2.2rem; font-weight: 800; line-height: 1; color: var(--header-primary); }
+        .stat-card .stat-label { font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+        .stat-icon { font-size: 2rem; color: var(--brand-color); background-color: var(--background-tertiary); height: 64px; width: 64px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; }
+        .streamer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; }
+        .streamer-card { background-color: var(--background-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); padding: 1rem; display: flex; align-items: center; gap: 1rem; transition: all 0.2s ease; }
+        .streamer-card:hover { border-color: var(--brand-color); transform: scale(1.02); }
+        .streamer-avatar { width: 50px; height: 50px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--success-color); }
+        .streamer-info h5 { margin: 0; font-size: 1.1rem; color: var(--header-primary); }
+        .platform-badge { display: inline-block; padding: .2em .5em; margin: .35rem .25rem 0 0; font-size: .75rem; font-weight: 600; line-height: 1; border-radius: 4px; text-decoration: none; color: white; opacity: .9; }
+        .platform-twitch { background-color: #9146FF; } .platform-youtube { background-color: #FF0000; } .platform-kick { background-color: #52E252; color: #1A1B1E !important; } .platform-tiktok { background-color: #00f2ea; } .platform-trovo { background-color: #21d464; }
+        .health-panel .health-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); }
+        .status-badge { font-weight: bold; } .status-ok { color: var(--success-color); } .status-error { color: var(--danger-color); }
+        .platform-bar { height: 1.5rem; background-color: var(--background-tertiary); border-radius: 4px; margin-bottom: 0.5rem; display: flex; align-items: center; font-size: 0.8rem; color: white; overflow: hidden; }
+        .platform-bar .bar-fill { height: 100%; text-indent: 8px; white-space: nowrap; }
+        .skeleton { background-color: var(--background-tertiary); position: relative; overflow: hidden; border-radius: 5px;}
+        .skeleton::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent); animation: shimmer 1.5s infinite; }
     </style>
 </head>
 <body>
 <%- include('partials/header') %>
-<main class="container py-5">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="display-4">System Status</h1>
-        <% if (statusData && !error) { %>
-            <p class="text-muted small mb-0">Last Updated: <%= new Date().toLocaleTimeString() %></p>
+<main class="page-container">
+    <div class="page-header"><h1 class="display-4">System Status</h1><p id="lastUpdated" class="text-muted small">Fetching latest data...</p></div>
+    <div id="stats-container" class="row g-4 mb-5">
+        <% for(let i=0; i < 4; i++) { %>
+            <div class="col-md-3"><div class="stat-card d-flex align-items-center gap-3 p-3"><div class="skeleton" style="height:64px;width:64px;border-radius:12px"></div><div class="w-100"><div class="skeleton mb-2" style="height:2rem;width:50%;"></div><div class="skeleton" style="height:1rem;width:80%;"></div></div></div></div>
         <% } %>
     </div>
-
-    <% 
-    const statusClasses = {
-        OFFLINE: 'alert-dark',
-        STARTING: 'alert-info',
-        ONLINE: 'alert-success',
-        MAINTENANCE: 'alert-warning',
-        ERROR: 'alert-danger'
-    }; 
-    const status = botStatus || { state: 'ERROR', message: 'Could not retrieve bot status.' };
-    %>
-    <div class="alert text-center <%= statusClasses[status.state] || 'alert-secondary' %>" role="alert">
-        <%= status.message %>
-    </div>
-
-    <% if (error) { %>
-        <div class="alert alert-danger text-center" role="alert">
-            <%= error %>
-        </div>
-    <% } else if (statusData) { %>
-        <div class="row g-4 mb-5">
-            <div class="col-md-3"><div class="stat-card card card-body"><div class="stat-label">Live Now</div><div class="stat-value"><%= statusData.liveCount %></div></div></div>
-            <div class="col-md-3"><div class="stat-card card card-body"><div class="stat-label">Total Tracked</div><div class="stat-value"><%= statusData.totalStreamers %></div></div></div>
-            <div class="col-md-3"><div class="stat-card card card-body"><div class="stat-label">Total Guilds</div><div class="stat-value"><%= statusData.totalGuilds %></div></div></div>
-            <div class="col-md-3"><div class="stat-card card card-body"><div class="stat-label">Announcements</div><div class="stat-value"><%= statusData.totalAnnouncements %></div></div></div>
-        </div>
-
-        <div>
-            <h2 class="mb-3">Live Now (<%= statusData.liveCount %>)</h2>
-            <div class="row g-3">
-                <% if (statusData.liveStreamers && statusData.liveStreamers.length > 0) { %>
-                    <% statusData.liveStreamers.forEach(streamer => { %>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card card-body d-flex flex-row align-items-center">
-                                <img src="<%= streamer.avatar_url || '/images/default-icon.png' %>" class="streamer-avatar me-3">
-                                <div>
-                                    <h5 class="mb-0"><%= streamer.username %></h5>
-                                    <span class="badge bg-secondary"><%= streamer.platform %></span>
-                                </div>
-                            </div>
-                        </div>
-                    <% }); %>
-                <% } else { %>
-                    <div class="col"><p class="text-muted">No one is live right now.</p></div>
-                <% } %>
+    <% if (isAuthenticated) { %>
+        <div id="admin-health-panel" class="mb-5" style="display:none;">
+            <h2 class="mb-3">Admin Health Panel</h2>
+            <div class="row g-4">
+                <div class="col-lg-8"><div id="log-panel" class="content-card h-100"><div class="d-flex justify-content-between align-items-center mb-2"><h4><i class="fas fa-terminal me-2"></i>System Logs</h4><button id="copyLogsBtn" class="btn btn-sm btn-secondary"><i class="fas fa-copy"></i></button></div><pre id="logContent" class="p-2 small" style="background-color: var(--background-primary); border-radius: 5px; max-height: 250px; overflow-y: auto;">Loading logs...</pre></div></div>
+                <div class="col-lg-4"><div id="system-health-panel" class="content-card h-100"><h4><i class="fas fa-heart-pulse me-2"></i>System Health</h4><div id="health-items"><div class="skeleton w-100" style="height: 150px"></div></div><button id="reinitBtn" class="btn btn-warning btn-sm mt-3"><i class="fas fa-sync-alt me-2"></i>Re-initialize Bot</button></div></div>
             </div>
-        </div>
-    <% } else { %>
-        <div class="text-center p-5">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="text-muted mt-2">Loading system data...</p>
         </div>
     <% } %>
+    <div class="row g-5">
+        <div class="col-lg-8">
+            <h2 class="mb-3">Live Now</h2>
+            <div id="liveStreamersGrid" class="streamer-grid"><% for(let i=0; i < 6; i++) { %><div class="streamer-card skeleton"><div style="height:50px;width:50px;border-radius:50%;" class="skeleton"></div><div class="w-100"><div class="skeleton" style="height:1rem;width:60%"></div><div class="skeleton" style="height:0.8rem;width:40%;margin-top:0.5rem;"></div></div></div><% } %></div>
+        </div>
+        <div class="col-lg-4">
+            <div class="content-card"><h4 class="mb-3">Platform Distribution</h4><div id="platform-bars"><div class="skeleton w-100" style="height: 120px;"></div></div></div>
+        </div>
+    </div>
 </main>
 <%- include('partials/footer') %>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const isAuthenticated = <%- isAuthenticated %>;
+
+        // --- UPDATE FUNCTIONS ---
+        function updateStats(data) {
+            const container = document.getElementById('stats-container');
+            if (!container) return;
+            container.innerHTML = `
+                <div class="col-md-6 col-lg-3"><div class="stat-card d-flex align-items-center gap-3 p-3"><div class="stat-icon"><i class="fas fa-satellite-dish"></i></div><div><div class="stat-value">${data.liveCount ?? 0}</div><div class="stat-label">Live Now</div></div></div></div>
+                <div class="col-md-6 col-lg-3"><div class="stat-card d-flex align-items-center gap-3 p-3" style="animation-delay: 50ms"><div class="stat-icon"><i class="fas fa-users"></i></div><div><div class="stat-value">${data.totalStreamers ?? 0}</div><div class="stat-label">Total Tracked</div></div></div></div>
+                <div class="col-md-6 col-lg-3"><div class="stat-card d-flex align-items-center gap-3 p-3" style="animation-delay: 100ms"><div class="stat-icon"><i class="fas fa-server"></i></div><div><div class="stat-value">${data.totalGuilds ?? 0}</div><div class="stat-label">Total Guilds</div></div></div></div>
+                <div class="col-md-6 col-lg-3"><div class="stat-card d-flex align-items-center gap-3 p-3" style="animation-delay: 150ms"><div class="stat-icon"><i class="fas fa-bullhorn"></i></div><div><div class="stat-value">${data.totalAnnouncements ?? 0}</div><div class="stat-label">Announcements</div></div></div></div>`;
+        }
+
+        function updateLiveStreamers(liveStreamers) {
+            const container = document.getElementById('liveStreamersGrid');
+            if (!container) return;
+            if (!Array.isArray(liveStreamers) || liveStreamers.length === 0) {
+                container.innerHTML = '<div class="text-muted">No one is live right now.</div>';
+                return;
+            }
+            container.innerHTML = liveStreamers.map(s => {
+                if (!s || !s.username) return ''; // Skip invalid streamer data
+
+                let platformsInfo = [];
+                if (Array.isArray(s.live_platforms)) {
+                    const uniqueGames = new Set(s.live_platforms.map(p => p.game));
+                    if (uniqueGames.size === 1) {
+                        // All platforms playing the same game
+                        const commonGame = uniqueGames.values().next().value;
+                        const platformNames = s.live_platforms.map(p => 
+                            `<a href="${p.url}" target="_blank" class="text-decoration-none text-white" title="${p.platform}">${p.platform}</a>`
+                        ).join(', ');
+                        platformsInfo.push(`${platformNames}: ${commonGame}`);
+                    } else {
+                        // Platforms playing different games
+                        s.live_platforms.forEach(p => {
+                            platformsInfo.push(
+                                `<a href="${p.url}" target="_blank" class="text-decoration-none text-white" title="${p.platform}">${p.platform}: ${p.game}</a>`
+                            );
+                        });
+                    }
+                }
+                const platformsText = platformsInfo.join(' | ');
+
+                return `
+                <div class="streamer-card">
+                    <img src="${s.avatar_url || '/images/default-icon.png'}" alt="${s.username}" class="streamer-avatar">
+                    <div class="streamer-info">
+                        <h5>${s.username}</h5>
+                        <span class="badge bg-secondary live-platforms-pill">${platformsText}</span>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function updatePlatformDistribution(dist, total) {
+            const container = document.getElementById('platform-bars');
+            if (!container || !Array.isArray(dist)) return;
+            // Filter out any invalid entries before mapping
+            container.innerHTML = dist.filter(p => p && p.platform).map(p => {
+                const percentage = total > 0 ? ((p.count / total) * 100).toFixed(1) : "0.0";
+                const platformName = p.platform;
+                return `<div class="mb-2">
+                            <span class="text-muted small">${platformName.charAt(0).toUpperCase() + platformName.slice(1)} (${p.count})</span>
+                            <div class="platform-bar">
+                                <div class="bar-fill platform-${platformName.toLowerCase()}" style="width:${percentage}%;">${percentage}%</div>
+                            </div>
+                        </div>`;
+            }).join('');
+        }
+
+        function updateAdminPanel(data) {
+            const panel = document.getElementById('admin-health-panel');
+            if (!panel) return;
+            panel.style.display = 'block';
+            const healthContainer = document.getElementById('health-items');
+            const statusHtml = (status) => status === 'ok' || status === 'online' ? '<span class="status-badge status-ok">Online</span>' : `<span class="status-badge status-error">${status || 'Error'}</span>`;
+            if (healthContainer) {
+                healthContainer.innerHTML = `
+                    <div class="health-item"><span>App Status</span>${statusHtml(data.app?.status)}</div>
+                    <div class="health-item"><span>App Uptime</span><span class="text-muted">${data.app?.uptime || 'N/A'}</span></div>
+                    <div class="health-item"><span>Database</span>${statusHtml(data.db?.status)}</div>
+                    <div class="health-item"><span>Twitch API</span>${statusHtml(data.api?.twitch)}</div>`;
+            }
+            fetchLogs();
+        }
+
+        async function fetchLogs() {
+            const logEl = document.getElementById('logContent');
+            if (!logEl) return;
+            try {
+                const resp = await fetch('/api/authenticated-logs');
+                if (!resp.ok) {
+                    logEl.textContent = 'Error fetching logs.';
+                    return;
+                }
+                const data = await resp.json();
+                logEl.textContent = data.error ? `Error: ${data.error}` : data.logs;
+            } catch(e) { logEl.textContent = 'Failed to load logs.'; }
+        }
+
+        // --- MAIN FETCH LOGIC ---
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/status-data');
+                if (!response.ok) throw new Error(`API returned status ${response.status}`);
+                const data = await response.json();
+
+                updateStats(data);
+                updateLiveStreamers(data.liveStreamers);
+                updatePlatformDistribution(data.platformDistribution, data.totalStreamers);
+
+                if (isAuthenticated) {
+                    updateAdminPanel(data);
+                }
+
+                document.getElementById('lastUpdated').textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error('Error fetching or rendering status data:', error);
+                document.getElementById('lastUpdated').textContent = `Error updating data. Please check console.`;
+            }
+        }
+
+        if (isAuthenticated) {
+            const copyBtn = document.getElementById('copyLogsBtn');
+            if(copyBtn) {
+                copyBtn.addEventListener('click', () => {
+                    navigator.clipboard.writeText(document.getElementById('logContent').textContent);
+                });
+            }
+
+            const reinitBtn = document.getElementById('reinitBtn');
+            if(reinitBtn) {
+                reinitBtn.addEventListener('click', async () => {
+                    if (confirm('Are you sure you want to re-initialize the bot? This will restart the application.')) {
+                        reinitBtn.disabled = true;
+                        reinitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Restarting...';
+                        try {
+                            const response = await fetch('/api/reinit', { method: 'POST' });
+                            const result = await response.json();
+                            if (response.ok && result.success) {
+                                alert('Bot re-initialization command sent successfully.');
+                            } else {
+                                alert(`Error: ${result.message || 'An unknown error occurred.'}`);
+                            }
+                        } catch (error) {
+                            alert('Failed to send re-initialization request.');
+                        } finally {
+                            reinitBtn.disabled = false;
+                            reinitBtn.innerHTML = '<i class="fas fa-sync-alt me-2"></i>Re-initialize Bot';
+                        }
+                    }
+                });
+            }
+        }
+
+        fetchData();
+        setInterval(fetchData, 30000);
+    });
+</script>
 </body>
 </html>
