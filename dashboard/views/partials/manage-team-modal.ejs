@@ -1,0 +1,50 @@
+<!-- Team Settings Modal -->
+<div class="modal fade" id="teamSettingsModal" tabindex="-1" aria-labelledby="teamSettingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="teamSettingsModalLabel">Edit Team: <span id="modal-team-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/update-team" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="teamSubscriptionId" id="edit-team-subscription-id">
+                    
+                    <div class="mb-3">
+                        <label for="edit-team-channel-id" class="form-label">Announcement Channel</label>
+                        <select class="form-select" id="edit-team-channel-id" name="channelId">
+                            <option value="">Use Server Default</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>"><%= channel.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-team-live-role-id" class="form-label">Live Role</label>
+                        <select class="form-select" id="edit-team-live-role-id" name="liveRoleId">
+                            <option value="">None</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"><%= role.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-team-webhook-name" class="form-label">Webhook Name Override</label>
+                        <input type="text" class="form-control" id="edit-team-webhook-name" name="webhookName" placeholder="Leave blank for default">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="edit-team-webhook-avatar-url" class="form-label">Webhook Avatar URL Override</label>
+                        <input type="url" class="form-control" id="edit-team-webhook-avatar-url" name="webhookAvatarUrl" placeholder="Leave blank for default">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
