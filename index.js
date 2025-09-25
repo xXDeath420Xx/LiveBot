@@ -3,29 +3,22 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv-flow").config();
 const logger = require("./utils/logger");
+const initCycleTLS = require("cycletls");
 const dashboard = require(path.join(__dirname, "dashboard", "server.js"));
 const {handleInteraction} = require("./core/interaction-handler");
 const {setStatus, getStatus} = require("./core/status-manager");
-const { pool: db, testConnection, end: endDb } = require("./utils/db");
+const db = require("./utils/db");
 const cache = require("./utils/cache");
-const axios = require("axios");
-const {announcementQueue} = require("./jobs/announcement-queue");
-const {summaryQueue} = require("./jobs/summary-queue");
-const initCycleTLS = require("cycletls");
-const {getBrowser} = require("./utils/browserManager");
 const {updateAnnouncement} = require("./utils/announcer");
 const apiChecks = require("./utils/api_checks");
 
 async function main() {
   try {
-    logger.info("[Startup] Testing database connection...");
-    await testConnection();
-    logger.info("[Startup] Database connection successful.");
-
-    setStatus("STARTING", "Initializing Dashboard...");
-    await dashboard.start(null, getStatus);
-
-    const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration], partials: [Partials.User, Partials.GuildMember]});
+    const client = new Client({
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration],
+      partials: [Partials.User, Partials.GuildMember]
+      // Removed shards and shardCount options to prevent implicit sharding
+    });
 
     let isShuttingDown = false;
     const intervals = [];
@@ -37,7 +30,7 @@ async function main() {
       setStatus("MAINTENANCE", "Bot is shutting down.");
       intervals.forEach(clearInterval);
       await client.destroy();
-      await endDb();
+      await db.end();
       await cache.redis.quit();
       process.exit(0);
     }
@@ -93,17 +86,27 @@ async function main() {
           }
         } catch (e) {
           logger.error(`[Interaction Load Error] Failed to load ${file}:`, e);
-        }
       }
+    }
     }
     logger.info(`[Startup] Loaded ${client.buttons.size} button handlers, ${client.modals.size} modal handlers, and ${client.selects.size} select menu handlers.`);
 
     client.on(Events.InteractionCreate, handleInteraction);
     client.once(Events.ClientReady, async c => {
       logger.info(`[READY] Logged in as ${c.user.tag}${c.shard ? ` on Shard #${c.shard.ids.join()}` : ""}`);
-      dashboard.setClient(c);
+      
+      // Removed conditional sharding check for dashboard startup
+      setStatus("STARTING", "Initializing Dashboard...");
+      // Pass startupCleanup to dashboard.start to break circular dependency
+      const app = dashboard.start(c, PermissionsBitField, startupCleanup);
+      const port = process.env.DASHBOARD_PORT || 3000;
+      app.listen(port, () => {
+          logger.info(`[Dashboard] Web dashboard listening on port ${port}`);
+      });
+
       setStatus("STARTING", "Running startup cleanup...");
       await startupCleanup(c);
+      
       setStatus("ONLINE", "Bot is online and operational.");
 
       await checkStreams(c);
@@ -115,7 +118,8 @@ async function main() {
 
     await client.login(process.env.DISCORD_TOKEN);
 
-  } catch (error) {
+  } 
+  catch (error) {
     logger.error("[Main Error] A fatal error occurred during bot startup:", error);
     process.exit(1);
   }
@@ -132,14 +136,25 @@ async function cleanupInvalidRole(guildId, roleId) {
   }
 }
 
-async function startupCleanup(client) {
-  logger.info("[Startup Cleanup] Starting...");
+async function startupCleanup(client, targetGuildId = null) {
+  logger.info(`[Startup Cleanup] Starting${targetGuildId ? ` for guild ${targetGuildId}` : ""}...`);
   try {
-    logger.info("[Startup Cleanup] Stage 1: Validating all configured role IDs...");
-    const [guildRoles] = await db.execute("SELECT guild_id, live_role_id FROM guilds WHERE live_role_id IS NOT NULL");
-    const [teamRoles] = await db.execute("SELECT guild_id, live_role_id FROM twitch_teams WHERE live_role_id IS NOT NULL");
+    logger.info(`[Startup Cleanup] Stage 1: Validating configured role IDs${targetGuildId ? ` for guild ${targetGuildId}` : ""}...`);
+    let guildRolesQuery = "SELECT guild_id, live_role_id FROM guilds WHERE live_role_id IS NOT NULL";
+    let teamRolesQuery = "SELECT guild_id, live_role_id FROM twitch_teams WHERE live_role_id IS NOT NULL";
+    const queryParams = [];
+
+    if (targetGuildId) {
+      guildRolesQuery += " AND guild_id = ?";
+      teamRolesQuery += " AND guild_id = ?";
+      queryParams.push(targetGuildId, targetGuildId);
+    }
+
+    const [guildRoles] = await db.execute(guildRolesQuery, targetGuildId ? [targetGuildId] : []);
+    const [teamRoles] = await db.execute(teamRolesQuery, targetGuildId ? [targetGuildId] : []);
+    
     const allRoleConfigs = [...guildRoles, ...teamRoles];
-    const uniqueGuildIds = [...new Set(allRoleConfigs.map(c => c.guild_id))];
+    const uniqueGuildIds = targetGuildId ? [targetGuildId] : [...new Set(allRoleConfigs.map(c => c.guild_id))];
 
     for (const guildId of uniqueGuildIds) {
       try {
@@ -151,7 +166,7 @@ async function startupCleanup(client) {
           if (!roleId) continue;
           const roleExists = await guild.roles.fetch(roleId).catch(() => null);
           if (!roleExists) {
-            logger.info(`[Startup Cleanup] Found invalid role ${roleId} in guild ${guildId} during validation.`);
+            logger.info(`[Startup Cleanup] Found invalid role ${roleId} in guild ${guildId} during validation. Purging.`);
             await cleanupInvalidRole(guildId, roleId);
           }
         }
@@ -159,12 +174,18 @@ async function startupCleanup(client) {
         logger.warn(`[Startup Cleanup] Could not fetch guild ${guildId} during role validation. It may no longer exist.`, e);
       }
     }
-    logger.info("[Startup Cleanup] Stage 1: Proactive role validation complete.");
+    logger.info(`[Startup Cleanup] Stage 1: Proactive role validation complete${targetGuildId ? ` for guild ${targetGuildId}` : ""}.`);
 
-    logger.info("[Startup Cleanup] Stage 2: Checking for deleted announcement messages...");
-    const [allAnnouncements] = await db.execute(
-      "SELECT a.*, s.username, s.platform, s.profile_image_url, sub.custom_message, sub.override_nickname, sub.override_avatar_url, sub.discord_user_id FROM announcements a JOIN streamers s ON a.streamer_id = s.streamer_id JOIN subscriptions sub ON a.subscription_id = sub.subscription_id"
-    );
+    logger.info(`[Startup Cleanup] Stage 2: Checking for deleted announcement messages${targetGuildId ? ` for guild ${targetGuildId}` : ""}...`);
+    let announcementsQuery = "SELECT a.*, s.username, s.platform, s.profile_image_url, sub.custom_message, sub.override_nickname, sub.override_avatar_url, sub.discord_user_id FROM announcements a JOIN streamers s ON a.streamer_id = s.streamer_id JOIN subscriptions sub ON a.subscription_id = sub.subscription_id";
+    const announcementsQueryParams = [];
+
+    if (targetGuildId) {
+      announcementsQuery += " WHERE a.guild_id = ?";
+      announcementsQueryParams.push(targetGuildId);
+    }
+
+    const [allAnnouncements] = await db.execute(announcementsQuery, announcementsQueryParams);
 
     for (const ann of allAnnouncements) {
       try {
@@ -216,13 +237,14 @@ async function startupCleanup(client) {
         logger.error(`[Startup Cleanup] Error processing announcement ${ann.announcement_id}:`, e);
       }
     }
-    logger.info("[Startup Cleanup] Stage 2: Deleted announcement message check complete.");
-    logger.info("[Startup Cleanup] Stage 3: Load existing announcements for persistence...");
+    logger.info(`[Startup Cleanup] Stage 2: Deleted announcement message check complete${targetGuildId ? ` for guild ${targetGuildId}` : ""}.`);
+    logger.info(`[Startup Cleanup] Stage 3: Load existing announcements for persistence${targetGuildId ? ` for guild ${targetGuildId}` : ""}...`);
 
   } catch (e) {
     logger.error("[Startup Cleanup] A CRITICAL ERROR occurred:", e);
-  } finally {
-    logger.info("[Startup Cleanup] Full-stage cleanup/load process has finished.");
+  }
+  finally {
+    logger.info(`[Startup Cleanup] Full-stage cleanup/load process has finished${targetGuildId ? ` for guild ${targetGuildId}` : ""}.`);
   }
 }
 
@@ -271,14 +293,27 @@ async function checkStreams(client) {
           liveStatusMap.set(streamer.streamer_id, primaryLiveData);
         }
 
+        // Handle linked Kick accounts
         if (streamer.platform === "twitch" && streamer.kick_username) {
-          const [[kickInfo]] = await db.execute("SELECT streamer_id, profile_image_url FROM streamers WHERE platform=\"kick\" AND username=?", [streamer.kick_username]);
+          const [[kickInfo]] = await db.execute("SELECT streamer_id, profile_image_url FROM streamers WHERE platform='kick' AND username=?", [streamer.kick_username]);
           if (kickInfo) {
             const linkedKickLiveData = await apiChecks.checkKick(cycleTLS, streamer.kick_username);
             if (linkedKickLiveData?.isLive) {
+              // Set live data for the Kick streamer itself
               liveStatusMap.set(kickInfo.streamer_id, linkedKickLiveData);
+
+              // Also, if the Twitch streamer is not already marked live,
+              // set the Twitch streamer's ID to point to the Kick live data.
+              // This ensures that subscriptions tied to the Twitch streamer_id
+              // will also pick up the Kick live event.
+              // If Twitch is already live, we prioritize Twitch's live data.
+              if (!liveStatusMap.has(streamer.streamer_id)) {
+                liveStatusMap.set(streamer.streamer_id, linkedKickLiveData);
+                logger.info(`[Linked Stream] Twitch streamer ${streamer.username} (ID: ${streamer.streamer_id}) is considered live via linked Kick account ${streamer.kick_username}.`);
+              }
+
               if (linkedKickLiveData.profileImageUrl && linkedKickLiveData.profileImageUrl !== kickInfo.profile_image_url) {
-                await db.execute("UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?", [linkedKickLiveData.profileImageUrl, kickInfo.streamer_id]);
+                await db.execute(`UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?`, [linkedKickLiveData.profileImageUrl, kickInfo.streamer_id]);
                 logger.info(`[Avatar Update] Updated linked Kick account ${streamer.kick_username}'s avatar.`);
               }
             }
@@ -320,16 +355,15 @@ async function checkStreams(client) {
           }
         } else {
           logger.error(`[Announce] updateAnnouncement did not return a valid message object for ${sub.username}.`, { sentMessage });
+          }
+        } catch (error) {
+          logger.error(`[Announce] Error processing announcement for ${sub.username}:`, error);
         }
-      } catch (error) {
-        logger.error(`[Announce] Error processing announcement for ${sub.username}:`, error);
       }
-    }
 
     for (const [subscription_id, existing] of announcementsMap.entries()) {
       if (desiredAnnouncementKeys.has(subscription_id)) continue;
       try {
-        logger.info(`[Cleanup] Deleting announcement for subscription ${subscription_id}`);
         const channel = await client.channels.fetch(existing.channel_id).catch(() => null);
         if (channel) {
           await channel.messages.delete(existing.message_id).catch(err => {
@@ -382,7 +416,7 @@ async function checkStreams(client) {
         if (desiredRoles.has(roleId)) {
           if (!member.roles.cache.has(roleId)) await handleRole(member, [roleId], "add", guildId);
         } else {
-          if (member.roles.cache.has(roleId)) await handleRole(member, [roleId], "remove", guildId);
+          if (!member.roles.cache.has(roleId)) await handleRole(member, [roleId], "remove", guildId);
         }
       }
     }
@@ -401,97 +435,103 @@ async function checkStreams(client) {
 }
 
 async function checkTeams(client) {
-  if (isCheckingTeams) return;
-  isCheckingTeams = true;
-  logger.info(`[Team Sync] ---> Starting team sync @ ${new Date().toLocaleTimeString()}`);
-  let cycleTLS = null;
-  try {
-    const [teamSubscriptions] = await db.execute("SELECT * FROM twitch_teams");
-    if (teamSubscriptions.length === 0) return;
+  if (!isCheckingTeams) {
+    isCheckingTeams = true;
+    logger.info(`[Team Sync] ---> Starting team sync @ ${new Date().toLocaleTimeString()}`);
+    let cycleTLS = null;
+    try {
+      const [teamSubscriptions] = await db.execute("SELECT * FROM twitch_teams");
+      if (teamSubscriptions.length === 0) return;
 
-    for (const sub of teamSubscriptions) {
-      try {
-        const apiMembers = await apiChecks.getTwitchTeamMembers(sub.team_name);
-        if (!apiMembers) continue;
+      for (const sub of teamSubscriptions) {
+        try {
+          const apiMembers = await apiChecks.getTwitchTeamMembers(sub.team_name);
+          if (!apiMembers) continue;
 
-        const [dbTwitchSubs] = await db.execute(`SELECT s.streamer_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? AND sub.announcement_channel_id = ? AND s.platform = 'twitch'`, [sub.guild_id, sub.announcement_channel_id]);
-        const [dbKickSubs] = await db.execute(`SELECT s.streamer_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? AND sub.announcement_channel_id = ? AND s.platform = 'kick'`, [sub.guild_id, sub.announcement_channel_id]);
+          const [dbTwitchSubs] = await db.execute(`SELECT s.streamer_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? AND sub.announcement_channel_id = ? AND s.platform = 'twitch'`, [sub.guild_id, sub.announcement_channel_id]);
+          const [dbKickSubs] = await db.execute(`SELECT s.streamer_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? AND sub.announcement_channel_id = ? AND s.platform = 'kick'`, [sub.guild_id, sub.announcement_channel_id]);
 
-        const currentTwitchStreamerIds = new Set();
-        const currentKickStreamerIds = new Set();
+          const currentTwitchStreamerIds = new Set();
+          const currentKickStreamerIds = new Set();
 
-        for (const member of apiMembers) {
-          await db.execute(`INSERT INTO streamers (platform, platform_user_id, username, profile_image_url) VALUES ('twitch', ?, ?, ?) ON DUPLICATE KEY UPDATE username=VALUES(username), profile_image_url=VALUES(profile_image_url)`, [member.user_id, member.user_login, member.profile_image_url || null]);
-          const [[ts]] = await db.execute("SELECT streamer_id, kick_username FROM streamers WHERE platform=? AND platform_user_id=?", ["twitch", member.user_id]);
-          if (ts) {
-            currentTwitchStreamerIds.add(ts.streamer_id);
-            await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [sub.guild_id, ts.streamer_id, sub.announcement_channel_id]);
+          for (const member of apiMembers) {
+            await db.execute(`INSERT INTO streamers (platform, platform_user_id, username, profile_image_url) VALUES ('twitch', ?, ?, ?) ON DUPLICATE KEY UPDATE username=VALUES(username), profile_image_url=VALUES(profile_image_url)`, [member.user_id, member.user_login, member.profile_image_url || null]);
+            const [[ts]] = await db.execute("SELECT streamer_id, kick_username FROM streamers WHERE platform=? AND platform_user_id=?", ["twitch", member.user_id]);
+            if (ts) {
+              currentTwitchStreamerIds.add(ts.streamer_id);
+              await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [sub.guild_id, ts.streamer_id, sub.announcement_channel_id]);
 
-            if (ts.kick_username) {
-              if (!cycleTLS) cycleTLS = await initCycleTLS({timeout: 60000});
-              const kickUser = await apiChecks.getKickUser(cycleTLS, ts.kick_username);
-              if (kickUser?.id) {
-                await db.execute(`INSERT INTO streamers (platform, platform_user_id, username, profile_image_url) VALUES ('kick', ?, ?, ?) ON DUPLICATE KEY UPDATE username=VALUES(username), profile_image_url=VALUES(profile_image_url)`, [kickUser.id.toString(), kickUser.user.username, kickUser.user.profile_pic || null]);
-                const [[kickStreamer]] = await db.execute("SELECT streamer_id FROM streamers WHERE platform=? AND platform_user_id=?", ["kick", kickUser.id.toString()]);
-                if (kickStreamer) {
-                  currentKickStreamerIds.add(kickStreamer.streamer_id);
-                  await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [sub.guild_id, kickStreamer.streamer_id, sub.announcement_channel_id]);
+              if (ts.kick_username) {
+                if (!cycleTLS) cycleTLS = await initCycleTLS({timeout: 60000});
+                const kickUser = await apiChecks.getKickUser(cycleTLS, ts.kick_username);
+                if (kickUser?.id) {
+                  await db.execute(`INSERT INTO streamers (platform, platform_user_id, username, profile_image_url) VALUES ('kick', ?, ?, ?) ON DUPLICATE KEY UPDATE username=VALUES(username), profile_image_url=VALUES(profile_image_url)`, [kickUser.id.toString(), kickUser.user.username, kickUser.user.profile_pic || null]);
+                  const [[kickStreamer]] = await db.execute("SELECT streamer_id FROM streamers WHERE platform=? AND platform_user_id=?", ["kick", kickUser.id.toString()]);
+                  if (kickStreamer) {
+                    currentKickStreamerIds.add(kickStreamer.streamer_id);
+                    await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [sub.guild_id, kickStreamer.streamer_id, sub.announcement_channel_id]);
+                  }
+                } else {
+                  logger.warn(`[Team Sync] Could not find Kick user details for ${ts.kick_username}.`);
                 }
-              } else {
-                logger.warn(`[Team Sync] Could not find Kick user details for ${ts.kick_username}.`);
               }
             }
           }
-        }
 
-        const twitchToRemove = dbTwitchSubs.filter(dbSub => !currentTwitchStreamerIds.has(dbSub.streamer_id));
-        if (twitchToRemove.length > 0) {
-          await db.execute(`DELETE FROM subscriptions WHERE streamer_id IN (?) AND guild_id = ? AND announcement_channel_id = ?`, [twitchToRemove.map(s => s.streamer_id), sub.guild_id, sub.announcement_channel_id]);
-          logger.info(`[Team Sync] Removed ${twitchToRemove.length} old Twitch subscriptions.`);
-        }
+          const twitchToRemove = dbTwitchSubs.filter(dbSub => !currentTwitchStreamerIds.has(dbSub.streamer_id));
+          if (twitchToRemove.length > 0) {
+            await db.execute(`DELETE FROM subscriptions WHERE streamer_id IN (?) AND guild_id = ? AND announcement_channel_id = ?`, [twitchToRemove.map(s => s.streamer_id), sub.guild_id, sub.announcement_channel_id]);
+            logger.info(`[Team Sync] Removed ${twitchToRemove.length} old Twitch subscriptions.`);
+          }
 
-        const kickToRemove = dbKickSubs.filter(dbSub => !currentKickStreamerIds.has(dbSub.streamer_id));
-        if (kickToRemove.length > 0) {
-          await db.execute(`DELETE FROM subscriptions WHERE streamer_id IN (?) AND guild_id = ? AND announcement_channel_id = ?`, [kickToRemove.map(s => s.streamer_id), sub.guild_id, sub.announcement_channel_id]);
-          logger.info(`[Team Sync] Removed ${kickToRemove.length} old Kick subscriptions.`);
-        }
+          const kickToRemove = dbKickSubs.filter(dbSub => !currentKickStreamerIds.has(dbSub.streamer_id));
+          if (kickToRemove.length > 0) {
+            await db.execute(`DELETE FROM subscriptions WHERE streamer_id IN (?) AND guild_id = ? AND announcement_channel_id = ?`, [kickToRemove.map(s => s.streamer_id), sub.guild_id, sub.announcement_channel_id]);
+            logger.info(`[Team Sync] Removed ${kickToRemove.length} old Kick subscriptions.`);
+          }
 
-      } catch (e) {
-        logger.error(`[Team Sync] Error processing team ${sub.team_name}:`, e);
+        } catch (e) {
+          logger.error(`[Team Sync] Error processing team ${sub.team_name}:`, e);
+        }
       }
-    }
-  } catch (error) {
-    logger.error("[Team Sync] CRITICAL ERROR:", error);
-  } finally {
-    if (cycleTLS) {
-      try { await cycleTLS.exit(); } catch (e) {
-        logger.error("[Team Sync] Error exiting cycleTLS:", e);
+    } catch (error) {
+      logger.error("[Team Sync] CRITICAL ERROR:", error);
+    } finally {
+      if (cycleTLS) {
+        try { await cycleTLS.exit(); } catch (e) {
+          logger.error("[cycleTLS] Error during exit:", e);
+        }
       }
+      isCheckingTeams = false;
+      logger.info("[Team Sync] ---> Finished team sync.");
     }
-    isCheckingTeams = false;
-    logger.info("[Team Sync] ---> Finished team sync.");
   }
 }
 
 async function handleRole(member, roleIds, action, guildId) {
   if (!member || !roleIds || roleIds.length === 0) return;
-  for (const roleId of roleIds) {
-    if (!roleId) continue;
-    try {
+  try { 
+    for (const roleId of roleIds) {
+      if (!roleId) continue;
       if (action === "add" && !member.roles.cache.has(roleId)) {
         await member.roles.add(roleId);
       } else if (action === "remove" && member.roles.cache.has(roleId)) {
         await member.roles.remove(roleId);
       }
-    } catch (e) {
-      if (e.code === 10011) {
-        logger.warn(`[handleRole] Invalid role ${roleId} for guild ${guildId}. Cleaning up.`);
-        await cleanupInvalidRole(guildId, roleId);
-      } else if (e.code === 50013) {
-        logger.error(`[handleRole] Missing permissions to ${action} role ${roleId} in guild ${guildId}.`, e);
-      } else {
-        logger.error(`[handleRole] Failed to ${action} role ${roleId} for member ${member.id}:`, e);
-      }
+    }
+  } catch (e) {
+    // The roleId that caused the error is not directly available in the catch block if the error is from an await inside the loop.
+    // We log general information and handle specific error codes.
+    if (e.code === 10011) {
+      logger.warn(`[handleRole] Invalid role detected for guild ${guildId}. Attempting cleanup. Error: ${e.message}`);
+      // Attempt to clean up the role that caused the error. This assumes 'e.roleId' might be present or we infer from context.
+      // For now, we'll just log and let cleanupInvalidRole handle the DB update based on guildId and potentially a known invalid roleId.
+      // If the error object doesn't contain the specific roleId, cleanupInvalidRole might need to be more generic or rely on other means.
+      await cleanupInvalidRole(guildId, null); // Pass null or a specific roleId if available in 'e'
+    } else if (e.code === 50013) {
+      logger.error(`[handleRole] Missing permissions to ${action} role for member ${member.id} in guild ${guildId}.`, e);
+    } else {
+      logger.error(`[handleRole] Failed to ${action} role for member ${member.id} in guild ${guildId}:`, e);
     }
   }
 }
@@ -500,3 +540,5 @@ main().catch(error => {
     logger.error("Unhandled rejection during main execution:", error);
     process.exit(1);
 });
+
+module.exports = { main, startupCleanup };

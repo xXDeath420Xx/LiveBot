@@ -1,5 +1,5 @@
 const {EmbedBuilder, WebhookClient} = require("discord.js");
-const { pool: db } = require("./db");
+const db = require("./db");
 const logger = require("./logger");
 
 const platformColors = {
@@ -133,13 +133,46 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
     const messageOptions = {username: finalNickname, avatarURL: finalAvatarURL, content, embeds: [embed]};
     let finalMessage = null;
 
-    const [duplicateAnnouncements] = await db.execute(
-      "SELECT announcement_id, message_id FROM announcements WHERE streamer_id = ? AND channel_id = ? AND announcement_id != ?",
-      [subContext.streamer_id, channelId, existingAnnouncement?.announcement_id || 0]
-    );
+    let duplicateAnnouncementsQuery;
+    let duplicateAnnouncementsParams;
+
+    if (subContext.streamer_discord_user_id) {
+      // If the streamer is linked to a Discord user, check for duplicates based on Discord user ID and platform
+      duplicateAnnouncementsQuery = `
+        SELECT a.announcement_id, a.message_id
+        FROM announcements a
+        JOIN streamers s ON a.streamer_id = s.streamer_id
+        WHERE a.channel_id = ?
+          AND a.platform = ?
+          AND s.discord_user_id = ?
+          AND a.announcement_id != ?`;
+      duplicateAnnouncementsParams = [
+        channelId,
+        liveData.platform,
+        subContext.streamer_discord_user_id,
+        existingAnnouncement?.announcement_id || 0
+      ];
+    } else {
+      // If no Discord user is linked, fall back to checking duplicates based on streamer_id and platform
+      duplicateAnnouncementsQuery = `
+        SELECT announcement_id, message_id
+        FROM announcements
+        WHERE streamer_id = ?
+          AND channel_id = ?
+          AND platform = ?
+          AND announcement_id != ?`;
+      duplicateAnnouncementsParams = [
+        subContext.streamer_id,
+        channelId,
+        liveData.platform,
+        existingAnnouncement?.announcement_id || 0
+      ];
+    }
+
+    const [duplicateAnnouncements] = await db.execute(duplicateAnnouncementsQuery, duplicateAnnouncementsParams);
 
     for (const dup of duplicateAnnouncements) {
-      logger.info(`[Announcer] Deleting duplicate message ${dup.message_id} for ${subContext.username} in channel ${channelId}.`);
+      logger.info(`[Announcer] Deleting duplicate message ${dup.message_id} for ${subContext.username} (platform: ${liveData.platform}) in channel ${channelId}.`);
       try {
         await webhookClient.deleteMessage(dup.message_id);
       } catch (e) {
