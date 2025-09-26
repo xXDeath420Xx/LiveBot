@@ -36,23 +36,36 @@ async function getOrCreateWebhook(client, channelId, defaultAvatarUrl) {
     logger.debug(`[Announcer] Webhook obtained for channel ${channelId}: ${webhook.id}`);
     return new WebhookClient({id: webhook.id, token: webhook.token});
   } catch (e) {
-    logger.error(`[Announcer] Failed to get or create webhook for channel ${channelId}:`, e);
+    logger.error(`[Announcer] Failed to get or create webhook for channel ${channelId}: ${e.message}`, {error: e});
     return null;
   }
 }
 
 async function updateAnnouncement(client, subContext, liveData, existingAnnouncement, guildSettings, channelSettings, teamSettings) {
+  // subContext contains: sub.subscription_id, sub.guild_id, sub.streamer_id, s.discord_user_id, s.platform_user_id, s.username, s.platform, s.kick_username, s.profile_image_url
   if (!liveData || typeof liveData.platform !== "string") {
     logger.error(`[Announcer] Invalid liveData for ${subContext.username}. Aborting.`, {liveData});
     return null;
   }
 
+  // Update streamer's profile image if the live data provides a new one
   if (liveData.profileImageUrl && liveData.profileImageUrl !== subContext.profile_image_url) {
     try {
-      logger.debug(`[Announcer] Updating profile image for ${subContext.username}.`);
-      await db.execute("UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?", [liveData.profileImageUrl, subContext.streamer_id]);
+        logger.info(`[Avatar][Announcer] New avatar found for ${subContext.username} on ${subContext.platform}.`);
+        if (subContext.platform === 'twitch') {
+            logger.info(`[Avatar][Announcer] ${subContext.username} is a Twitch streamer. Updating as source of truth.`);
+            await db.execute("UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?", [liveData.profileImageUrl, subContext.streamer_id]);
+            if (subContext.discord_user_id) {
+                logger.info(`[Avatar][Announcer] Propagating Twitch avatar for ${subContext.username} to linked accounts (Discord ID: ${subContext.discord_user_id}).`);
+                await db.execute("UPDATE streamers SET profile_image_url = ? WHERE discord_user_id = ? AND (profile_image_url IS NULL OR profile_image_url != ?)", [liveData.profileImageUrl, subContext.discord_user_id, liveData.profileImageUrl]);
+            }
+        } else {
+            logger.info(`[Avatar][Announcer] ${subContext.username} is not a Twitch streamer. Updating only if current avatar is NULL.`);
+            await db.execute("UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ? AND profile_image_url IS NULL", [liveData.profileImageUrl, subContext.streamer_id]);
+        }
+        subContext.profile_image_url = liveData.profileImageUrl; // Update in-memory for consistent display
     } catch (dbError) {
-      logger.error(`[Announcer] Failed to update profile image for ${subContext.username}:`, dbError);
+        logger.error(`[Announcer] Failed to update profile image for ${subContext.username}: ${dbError.message}`, {error: dbError});
     }
   }
 
@@ -81,7 +94,7 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
   if (liveData.gameArtUrl) {
     embed.setImage(liveData.gameArtUrl);
     if (liveData.thumbnailUrl) {
-      embed.setThumbnail(liveData.thumbnailUrl);
+      embed.setThumbnail(`${liveData.thumbnailUrl}?t=${Date.now()}`); 
     }
   } else if (liveData.thumbnailUrl) {
     embed.setImage(`${liveData.thumbnailUrl}?t=${Date.now()}`);
@@ -121,6 +134,11 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
     if (subContext.override_avatar_url) {
       finalAvatarURL = subContext.override_avatar_url;
     }
+    
+    if (!finalAvatarURL) {
+      finalAvatarURL = client.user.displayAvatarURL();
+    }
+
 
     logger.debug(`[Announcer] Final webhook settings for ${subContext.username}: Nickname=${finalNickname}, Avatar=${finalAvatarURL}`);
 
@@ -133,57 +151,27 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
     const messageOptions = {username: finalNickname, avatarURL: finalAvatarURL, content, embeds: [embed]};
     let finalMessage = null;
 
-    let duplicateAnnouncementsQuery;
-    let duplicateAnnouncementsParams;
-
-    if (subContext.streamer_discord_user_id) {
-      // If the streamer is linked to a Discord user, check for duplicates based on Discord user ID and platform
-      duplicateAnnouncementsQuery = `
-        SELECT a.announcement_id, a.message_id
-        FROM announcements a
-        JOIN streamers s ON a.streamer_id = s.streamer_id
-        WHERE a.channel_id = ?
-          AND a.platform = ?
-          AND s.discord_user_id = ?
-          AND a.announcement_id != ?`;
-      duplicateAnnouncementsParams = [
-        channelId,
-        liveData.platform,
-        subContext.streamer_discord_user_id,
-        existingAnnouncement?.announcement_id || 0
-      ];
-    } else {
-      // If no Discord user is linked, fall back to checking duplicates based on streamer_id and platform
-      duplicateAnnouncementsQuery = `
-        SELECT announcement_id, message_id
-        FROM announcements
-        WHERE streamer_id = ?
-          AND channel_id = ?
-          AND platform = ?
-          AND announcement_id != ?`;
-      duplicateAnnouncementsParams = [
-        subContext.streamer_id,
-        channelId,
-        liveData.platform,
-        existingAnnouncement?.announcement_id || 0
-      ];
-    }
-
-    const [duplicateAnnouncements] = await db.execute(duplicateAnnouncementsQuery, duplicateAnnouncementsParams);
+    const [duplicateAnnouncements] = await db.execute(
+        `SELECT announcement_id, message_id
+         FROM announcements
+         WHERE subscription_id = ? 
+           AND announcement_id != ?`,
+        [subContext.subscription_id, existingAnnouncement?.announcement_id || 0]
+    );
 
     for (const dup of duplicateAnnouncements) {
-      logger.info(`[Announcer] Deleting duplicate message ${dup.message_id} for ${subContext.username} (platform: ${liveData.platform}) in channel ${channelId}.`);
+      logger.info(`[Announcer] Deleting redundant announcement message ${dup.message_id} for subscription ${subContext.subscription_id} in channel ${channelId}.`);
       try {
         await webhookClient.deleteMessage(dup.message_id);
       } catch (e) {
         logger.warn(`[Announcer] Failed to delete Discord message ${dup.message_id} (might already be deleted): ${e.message}`);
       }
       await db.execute("DELETE FROM announcements WHERE announcement_id = ?", [dup.announcement_id]);
-      logger.debug(`[Announcer] Deleted duplicate announcement record ${dup.announcement_id} from DB.`);
+      logger.debug(`[Announcer] Deleted redundant announcement record ${dup.announcement_id} from DB.`);
     }
 
     if (existingAnnouncement?.message_id) {
-      logger.info(`[Announcer] Attempting to edit existing message ${existingAnnouncement.message_id} for ${subContext.username}.`);
+      logger.info(`[Announcer] Attempting to edit existing message ${existingAnnouncement.message_id} for ${subContext.username} (Subscription: ${subContext.subscription_id}).`);
       try {
         const editedMessage = await webhookClient.editMessage(existingAnnouncement.message_id, messageOptions);
         if (editedMessage && editedMessage.id) {
@@ -192,8 +180,8 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
           logger.error(`[Announcer] Edited message did not return a valid message object for ${subContext.username}.`, { editedMessage });
         }
       } catch (e) {
-        logger.error(`[Announcer] Failed to edit message ${existingAnnouncement.message_id} for ${subContext.username}:`, e);
-        logger.info(`[Announcer] Attempting to send new message for ${subContext.username} instead.`);
+        logger.error(`[Announcer] Failed to edit message ${existingAnnouncement.message_id} for ${subContext.username}: ${e.message}`, {error: e});
+        logger.info(`[Announcer] Attempting to send new message for ${subContext.username} (Subscription: ${subContext.subscription_id}) instead.`);
         try {
           const newMessage = await webhookClient.send(messageOptions);
           if (newMessage && newMessage.id) {
@@ -203,11 +191,11 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
             logger.error(`[Announcer] New message (after edit failure) did not return a valid message object for ${subContext.username}.`, { newMessage });
           }
         } catch (sendError) {
-          logger.error(`[Announcer] Failed to send new message after edit failure for ${subContext.username}:`, sendError);
+          logger.error(`[Announcer] Failed to send new message after edit failure for ${subContext.username}: ${sendError.message}`, {error: sendError});
         }
       }
     } else {
-      logger.info(`[Announcer] Sending new announcement message for ${subContext.username}.`);
+      logger.info(`[Announcer] Sending new announcement message for ${subContext.username} (Subscription: ${subContext.subscription_id}).`);
       try {
         const newMessage = await webhookClient.send(messageOptions);
         if (newMessage && newMessage.id) {
@@ -216,12 +204,12 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
           logger.error(`[Announcer] New message did not return a valid message object for ${subContext.username}.`, { newMessage });
         }
       } catch (sendError) {
-        logger.error(`[Announcer] Failed to send new announcement message for ${subContext.username}:`, sendError);
+        logger.error(`[Announcer] Failed to send new announcement message for ${subContext.username}: ${sendError.message}`, {error: sendError});
       }
     }
     return finalMessage;
   } catch (error) {
-    logger.error(`[Announcer] Critical failure in updateAnnouncement for ${liveData.username} in #${channelId}:`, error);
+    logger.error(`[Announcer] Critical failure in updateAnnouncement for ${liveData.username} in #${channelId}: ${error.message}`, {error});
     return null;
   }
 }

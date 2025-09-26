@@ -18,7 +18,12 @@ module.exports = {
     const nickname = interaction.fields.getTextInputValue("nickname") || null;
     const customMessage = interaction.fields.getTextInputValue("message") || null;
     const added = [], updated = [], failed = [];
+    const allTouchedUsernames = new Set();
     let cycleTLS = null;
+
+    if (data.discordUserId && !/^\d{17,19}$/.test(data.discordUserId)) {
+        return interaction.editReply({ content: "Invalid Discord User ID provided. It must be a numeric ID.", components: [] });
+    }
 
     try {
       if (data.platforms.includes("kick")) {
@@ -51,12 +56,23 @@ module.exports = {
             failed.push(`${data.username} on ${platform} (Not Found)`);
             continue;
           }
-          await db.execute(`INSERT INTO streamers (platform, platform_user_id, username, discord_user_id, profile_image_url)
-                            VALUES (?, ?, ?, ?, ?)
-                            ON DUPLICATE KEY UPDATE username=VALUES(username),
-                                                    discord_user_id=IF(? IS NOT NULL, VALUES(discord_user_id), discord_user_id),
-                                                    profile_image_url=VALUES(profile_image_url)`, [platform, streamerInfo.puid, streamerInfo.dbUsername, data.discordUserId, pfp || null, data.discordUserId]);
+
+          if (platform === 'twitch' && data.username.toLowerCase() === 'xxdeath420xx' && streamerInfo.dbUsername.toLowerCase() === 'xxdeath420xx') {
+            logger.info("[Auto-Link] Skipping Kick auto-link for xXDeath420Xx as per special instruction.");
+          } else {
+            await db.execute(
+              `INSERT INTO streamers (platform, platform_user_id, username, discord_user_id, profile_image_url) VALUES (?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE
+                  username=VALUES(username),
+                  discord_user_id=COALESCE(streamers.discord_user_id, VALUES(discord_user_id)),
+                  profile_image_url=IF(VALUES(platform) = 'twitch', VALUES(profile_image_url), COALESCE(streamers.profile_image_url, VALUES(profile_image_url)))`,
+              [platform, streamerInfo.puid, streamerInfo.dbUsername, data.discordUserId, pfp || null]
+            );
+          }
+
           const [[streamer]] = await db.execute("SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?", [platform, streamerInfo.puid]);
+          allTouchedUsernames.add(streamerInfo.dbUsername.toLowerCase());
+
           for (const channelId of channelIds) {
             const [res] = await db.execute(
               `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, override_nickname, override_avatar_url, custom_message) VALUES (?, ?, ?, ?, ?, ?)
@@ -81,6 +97,27 @@ module.exports = {
         } catch (e) {
         }
       }
+    }
+
+    if (allTouchedUsernames.size > 0) {
+        const usernames = Array.from(allTouchedUsernames);
+        const [allAccounts] = await db.execute(`SELECT discord_user_id, profile_image_url, platform FROM streamers WHERE LOWER(username) IN (?)`, [usernames]);
+
+        const finalTwitchAccount = allAccounts.find(a => a.platform === 'twitch');
+        const ultimateDiscordId = allAccounts.find(a => a.discord_user_id)?.discord_user_id || null;
+        const ultimateAvatar = finalTwitchAccount?.profile_image_url || allAccounts.find(a => a.profile_image_url)?.profile_image_url || null;
+
+        if (ultimateDiscordId || ultimateAvatar) {
+            const updateFields = [];
+            const updateValues = [];
+            if (ultimateDiscordId) { updateFields.push("discord_user_id = ?"); updateValues.push(ultimateDiscordId); }
+            if (ultimateAvatar) { updateFields.push("profile_image_url = ?"); updateValues.push(ultimateAvatar); }
+
+            await db.execute(
+                `UPDATE streamers SET ${updateFields.join(", ")} WHERE LOWER(username) IN (?)`,
+                [...updateValues, usernames]
+            );
+        }
     }
 
     let summary = `**Report for ${data.username}**\n`;

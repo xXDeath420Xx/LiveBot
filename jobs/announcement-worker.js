@@ -1,13 +1,18 @@
+// Monkey-patch BigInt to allow serialization
+BigInt.prototype.toJSON = function() { return this.toString(); };
+
 const {Worker} = require("bullmq");
 const path = require("path");
 require("dotenv-flow").config({path: path.resolve(__dirname, "..")}); // Corrected path
 const {Client, GatewayIntentBits, Partials, Events} = require("discord.js");
 const logger = require("../utils/logger");
 const db = require("../utils/db");
-const cache = require("../utils/cache"); // ADDED: Import the cache module
+const cache = require("../utils/cache");
 const {updateAnnouncement} = require("../utils/announcer");
+const {handleRole} = require("../core/role-manager"); // Import handleRole
 
-const client = new Client({
+// This is the worker's own Discord client instance.
+const workerClient = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
@@ -18,17 +23,17 @@ const client = new Client({
 
 let worker;
 
-client.once(Events.ClientReady, async () => {
+// The worker will only start processing jobs once its own client is ready.
+workerClient.once(Events.ClientReady, async () => {
   logger.info(`[Announcement Worker] Discord client is ready. Worker is active.`);
 
   worker = new Worker("announcements", async job => {
     const {sub, liveData, existing, guildSettings, channelSettings, teamSettings} = job.data;
     logger.info(`[Worker] Processing job ${job.id} for ${sub.username}`);
     try {
-      const sentMessage = await updateAnnouncement(client, sub, liveData, existing, guildSettings, channelSettings, teamSettings);
+      const sentMessage = await updateAnnouncement(workerClient, sub, liveData, existing, guildSettings, channelSettings, teamSettings);
 
-      // Corrected check for sentMessage and its properties
-      if (sentMessage && sentMessage.id && sentMessage.channel_id) { // Check for top-level channel_id
+      if (sentMessage && sentMessage.id && sentMessage.channel_id) {
         if (!existing) {
           logger.info(`[Worker] CREATED new announcement for ${sub.username}`);
           const [announcementResult] = await db.execute("INSERT INTO announcements (subscription_id, streamer_id, guild_id, message_id, channel_id, stream_game, stream_title, platform, stream_thumbnail_url) VALUES (?,?,?,?,?,?,?,?,?)", [sub.subscription_id, sub.streamer_id, sub.guild_id, sentMessage.id, sentMessage.channel_id, liveData.game || null, liveData.title || null, liveData.platform, liveData.thumbnailUrl || null]);
@@ -42,18 +47,28 @@ client.once(Events.ClientReady, async () => {
             logger.info(`[Stats] Started tracking new stream session for announcement ID: ${newAnnouncementId}`);
           }
 
+          // Apply live role if configured and streamer has a Discord ID
+          if (guildSettings?.live_role_id && sub.discord_user_id) {
+            try {
+              const guild = await workerClient.guilds.fetch(sub.guild_id);
+              const member = await guild.members.fetch(sub.discord_user_id);
+              await handleRole(member, [guildSettings.live_role_id], "add", sub.guild_id);
+              logger.info(`[Worker] Applied live role ${guildSettings.live_role_id} to ${member.user.tag} in guild ${sub.guild_id}.`);
+            } catch (roleError) {
+              logger.error(`[Worker] Failed to apply live role to ${sub.username} (${sub.discord_user_id}) in guild ${sub.guild_id}: ${roleError.message}`);
+            }
+          }
+
         } else if (existing && sentMessage.id !== existing.message_id) {
           logger.info(`[Worker] UPDATED message ID for ${sub.username}`);
           await db.execute("UPDATE announcements SET message_id = ? WHERE announcement_id = ?", [sentMessage.id, existing.announcement_id]);
         }
       } else {
         logger.error(`[Worker] updateAnnouncement did not return a valid message object with ID and channel ID for job ${job.id} for ${sub.username}. Sent message:`, sentMessage);
-        // If the message is critical, you might want to throw an error here to trigger retry logic
-        // throw new Error('Invalid message object returned from updateAnnouncement');
       }
     } catch (error) {
       logger.error(`[Worker] Job ${job.id} failed for ${sub.username}:`, {error});
-      throw error; // Throw error to let BullMQ handle retry logic
+      throw error;
     }
   }, {
     connection: {
@@ -75,15 +90,15 @@ client.once(Events.ClientReady, async () => {
   });
 });
 
-client.login(process.env.DISCORD_TOKEN)
+workerClient.login(process.env.DISCORD_TOKEN)
   .then(() => logger.info("[Announcement Worker] Logged in"));
 
 async function shutdown(signal) {
   logger.warn(`[Announcement Worker] Received ${signal}. Shutting down...`);
   if (worker) {
     await worker.close();
-  } // Close worker if it was initialized
-  await client.destroy();
+  }
+  await workerClient.destroy();
   await db.end();
   await cache.redis.quit();
   logger.info("[Announcement Worker] Shutdown complete.");

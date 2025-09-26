@@ -6,14 +6,22 @@
     <title>Manage <%= guild.name %></title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.0.0">
+    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.0.7">
+    <style>
+        .platform-icon-twitch { color: #9146FF; }
+        .platform-icon-youtube { color: #FF0000; }
+        .platform-icon-tiktok { color: #00f2ea; }
+        .platform-icon-trovo { color: #21d464; }
+        .platform-img-icon { width: 1em; height: 1em; vertical-align: -0.125em; margin-right: 0.25rem; }
+        .linked-platforms-display .badge { margin-right: 5px; }
+    </style>
 </head>
 <body class="manage-page">
 <%- include('partials/header') %>
 <div class="manage-container">
     <aside class="manage-sidebar">
         <div class="sidebar-card text-center">
-            <% if (guild.icon) { %><img src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png?size=128" alt="<%= guild.name %> Icon" style="width:90px; height: 90px; border-radius:50%"><% } else { %><div class="d-flex justify-content-center align-items-center" style="width:90px; height:90px; border-radius:50%; background-color: var(--background-tertiary);"><h2 class="m-0"><%= guild.name.charAt(0) %></h2></div><% } %>
+            <% if (guild.icon) { %><img src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png?size=128" alt="<%= guild.name %> Icon" class="sidebar-guild-icon"><% } else { %><div class="sidebar-guild-icon-placeholder"><h2 class="m-0"><%= guild.name.charAt(0) %></h2></div><% } %>
             <h4 class="mt-2 mb-1"><%= guild.name %></h4>
             <a href="/dashboard" class="btn btn-sm btn-secondary mt-2">Change Server</a>
         </div>
@@ -41,138 +49,57 @@
             <div class="tab-pane fade show active" id="streamers-tab" role="tabpanel">
                 <%- include('partials/manage/add-streamer', {guild, channels}) %>
                 <div class="content-card mt-4">
-                    <h2><i class="fas fa-stream me-2"></i>Tracked Streamers (<%= totalSubscriptions %>)</h2>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h2><i class="fas fa-stream me-2"></i>Tracked Individuals (<%= totalSubscriptions %>)</h2>
+                        <button class="btn btn-primary" id="bulk-actions-btn" data-bs-toggle="modal" data-bs-target="#bulk-actions-modal" disabled>Bulk Actions</button>
+                    </div>
+                    <p class="text-muted small">This list shows all subscribed streamers, including those from team syncs.</p>
                     <div class="accordion" id="channelsAccordion">
                         <% Object.entries(channelsData).forEach(([channelId, data], index) => {
-                            const totalMembers = data.individualStreamers.length + data.teams.reduce((s,t)=>s+t.members.length,0);
-                            if (totalMembers === 0) return; // Skip if no streamers or team members
+                            const totalMembers = data.streamers.length;
+                            if (totalMembers === 0) return;
                         %>
-                            <div class="accordion-item mb-2">
-                                <h2 class="accordion-header"><button class="accordion-button <%= index > 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= channelId %>"><%= data.name %><span class="badge bg-secondary ms-auto me-2"><%= totalMembers %> total</span></button></h2>
-                                <div id="collapse-<%= channelId %>" class="accordion-collapse collapse <%= index === 0 ? 'show' : '' %>" data-bs-parent="#channelsAccordion">
-                                    <div class="accordion-body">
-                                        <% if(data.teams.length>0) { %><h6 class="text-uppercase small text-muted mb-2">Synced Teams</h6><% data.teams.forEach(team=>{ %> 
-                                            <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                                                <div>
-                                                    <strong><%=team.team_name%></strong> (<%=team.members.length%> members)
-                                                </div>
-                                                <div>
-                                                    <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#teamSettingsModal" 
-                                                        data-team-id="<%= team.id %>" 
-                                                        data-team-name="<%= team.team_name %>" 
-                                                        data-channel-id="<%= team.announcement_channel_id || '' %>"
-                                                        data-live-role-id="<%= team.live_role_id || '' %>"
-                                                        data-webhook-name="<%= team.webhook_name || '' %>"
-                                                        data-webhook-avatar-url="<%= team.webhook_avatar_url || '' %>">
-                                                        <i class="fas fa-cog"></i>
-                                                    </button>
-                                                    <form action="/manage/<%= guild.id %>/removeteam" method="POST" class="d-inline" onsubmit="return confirm('Remove team <%= team.team_name %>?')">
-                                                        <input type="hidden" name="teamSubscriptionId" value="<%= team.id %>">
-                                                        <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button>
-                                                    </form>
-                                                </div>
-                                            </div>
-                                            <% team.members.forEach(userGroup => { %>
-                                                <div class="list-group-item d-flex flex-column align-items-start ps-4 py-1">
-                                                    <div class="d-flex justify-content-between align-items-center w-100">
-                                                        <div class="d-flex align-items-center">
-                                                            <img src="<%= userGroup.primaryAvatarUrl || '/images/default-icon.png' %>" alt="<%= userGroup.primaryDisplayName %>" style="width:24px; height:24px; border-radius:50%;" class="me-2">
-                                                            <strong class="me-2"><%= userGroup.primaryDisplayName %></strong>
-                                                            <% if (userGroup.discord_user_id) { %><span class="badge bg-info ms-2">Discord: <%= userGroup.discord_user_id %></span><% } %>
-                                                            <% if (userGroup.linkedPlatforms && userGroup.linkedPlatforms.length > 0) { %>
-                                                                <% 
-                                                                    const linkedPlatformsText = userGroup.linkedPlatforms.map(p => {
-                                                                        return `${p.platform}: ${p.username}`;
-                                                                    }).join(', ');
-                                                                %>
-                                                                <span class="badge bg-secondary ms-2"><%= linkedPlatformsText %></span>
-                                                            <% } %>
-                                                        </div>
-                                                        <div>
-                                                            <% userGroup.subscriptions.forEach(sub => {
-                                                                let platformIconClass = '';
-                                                                if (sub.platform === 'twitch') platformIconClass = 'fab fa-twitch';
-                                                                else if (sub.platform === 'kick') platformIconClass = 'fab fa-kickstarter';
-                                                                else if (sub.platform === 'youtube') platformIconClass = 'fab fa-youtube';
-                                                                else if (sub.platform === 'tiktok') platformIconClass = 'fab fa-tiktok';
-                                                                else if (sub.platform === 'trovo') platformIconClass = 'fas fa-gamepad';
-                                                                else platformIconClass = 'fas fa-globe';
-                                                            %>
-                                                                <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" 
-                                                                    data-subscription-id="<%= sub.subscription_id %>" 
-                                                                    data-streamer-name="<%= sub.username %>" 
-                                                                    data-discord-user-id="<%= sub.discord_user_id || '' %>" 
-                                                                    data-kick-username="<%= sub.kick_username || '' %>" 
-                                                                    data-channel-override="<%= sub.announcement_channel_id || '' %>" 
-                                                                    data-override-nickname="<%= sub.override_nickname || '' %>" 
-                                                                    data-custom-message="<%= sub.custom_message || '' %>" 
-                                                                    data-override-avatar-url="<%= sub.override_avatar_url || '' %>">
-                                                                    <i class="<%= platformIconClass %>"></i>
-                                                                </button>
-                                                                <form action="/manage/<%= guild.id %>/remove-subscription" method="POST" class="d-inline" onsubmit="return confirm('Remove <%= sub.username %> on <%= sub.platform %>?')">
-                                                                    <input type="hidden" name="subscription_id" value="<%= sub.subscription_id %>">
-                                                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button>
-                                                                </form>
-                                                            <% }); %>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            <% }); %>
-                                        <% }); %><% } %>
-
-                                        <% if(data.individualStreamers.length>0) { %><h6 class="text-uppercase small text-muted mt-3 mb-2">Individual Streamers</h6><% data.individualStreamers.forEach(userGroup=>{ %>
+                        <div class="accordion-item mb-2">
+                            <h2 class="accordion-header"><button class="accordion-button <%= index > 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= channelId %>"><%= data.name %><span class="badge bg-secondary ms-auto me-2"><%= totalMembers %> user(s)</span></button></h2>
+                            <div id="collapse-<%= channelId %>" class="accordion-collapse collapse <%= index === 0 ? 'show' : '' %>" data-bs-parent="#channelsAccordion">
+                                <div class="accordion-body">
+                                    <% data.streamers.forEach(userGroup => { %>
                                         <div class="list-group-item d-flex flex-column align-items-start px-0 py-2">
                                             <div class="d-flex justify-content-between align-items-center w-100">
-                                                <div class="d-flex align-items-center">
+                                                <div class="d-flex align-items-center flex-wrap">
+                                                    <input class="form-check-input me-3" type="checkbox" value="<%= userGroup.discord_user_id || userGroup.primaryDisplayName %>" data-subscriptions="<%= userGroup.subscriptions.map(s => s.subscription_id).join(',') %>">
                                                     <img src="<%= userGroup.primaryAvatarUrl || '/images/default-icon.png' %>" alt="<%= userGroup.primaryDisplayName %>" style="width:32px; height:32px; border-radius:50%;" class="me-2">
                                                     <strong class="me-2"><%= userGroup.primaryDisplayName %></strong>
-                                                    <% if (userGroup.discord_user_id) { %><span class="badge bg-info ms-2">Discord: <%= userGroup.discord_user_id %></span><% } %>
-                                                    <% if (userGroup.linkedPlatforms && userGroup.linkedPlatforms.length > 0) { %>
-                                                        <% 
-                                                            const linkedPlatformsText = userGroup.linkedPlatforms.map(p => {
-                                                                return `${p.platform}: ${p.username}`;
-                                                            }).join(', ');
-                                                        %>
-                                                        <span class="badge bg-secondary ms-2"><%= linkedPlatformsText %></span>
-                                                    <% } %>
+                                                    <% if (userGroup.discord_user_id) { %><span class="badge bg-info ms-2">ID: <%= userGroup.discord_user_id %></span><% } %>
+                                                    <div class="linked-platforms-display ms-2">
+                                                        <% userGroup.linkedPlatforms.forEach(p => { %>
+                                                            <a href="<%= p.url %>" target="_blank" class="badge bg-dark text-decoration-none">
+                                                                <% if (p.platform === 'kick') { %>
+                                                                    <img src="/uploads/kick.png" class="platform-img-icon" alt="Kick">
+                                                                <% } else { %>
+                                                                    <i class="fab fa-<%= p.platform %> platform-icon-<%= p.platform %>"></i>
+                                                                <% } %>
+                                                                <%= p.username %>
+                                                            </a>
+                                                        <% }); %>
+                                                    </div>
                                                 </div>
                                                 <div>
-                                                    <% userGroup.subscriptions.forEach(sub => {
-                                                        // Determine the correct platform icon based on the individual subscription's platform
-                                                        let platformIconClass = '';
-                                                        if (sub.platform === 'twitch') platformIconClass = 'fab fa-twitch';
-                                                        else if (sub.platform === 'kick') platformIconClass = 'fab fa-kickstarter'; // Assuming a Kick icon class exists
-                                                        else if (sub.platform === 'youtube') platformIconClass = 'fab fa-youtube';
-                                                        else if (sub.platform === 'tiktok') platformIconClass = 'fab fa-tiktok';
-                                                        else if (sub.platform === 'trovo') platformIconClass = 'fas fa-gamepad'; // Generic icon for Trovo if no specific one
-                                                        else platformIconClass = 'fas fa-globe'; // Default icon
-                                                    %>
-                                                        <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" 
-                                                            data-subscription-id="<%= sub.subscription_id %>" 
-                                                            data-streamer-name="<%= sub.username %>" 
-                                                            data-discord-user-id="<%= sub.discord_user_id || '' %>" 
-                                                            data-kick-username="<%= sub.kick_username || '' %>" 
-                                                            data-channel-override="<%= sub.announcement_channel_id || '' %>" 
-                                                            data-override-nickname="<%= sub.override_nickname || '' %>" 
-                                                            data-custom-message="<%= sub.custom_message || '' %>" 
-                                                            data-override-avatar-url="<%= sub.override_avatar_url || '' %>">
-                                                            <i class="<%= platformIconClass %>"></i>
+                                                    <% if (isBotOwner) { %>
+                                                        <button class="btn btn-sm btn-info" title="Copy User to another Server" data-bs-toggle="modal" data-bs-target="#copyUserModal"
+                                                                data-discord-user-id="<%= userGroup.discord_user_id || '' %>"
+                                                                data-normalized-username="<%= userGroup.primaryDisplayName %>">
+                                                            <i class="fas fa-copy"></i>
                                                         </button>
-                                                        <form action="/manage/<%= guild.id %>/remove-subscription" method="POST" class="d-inline" onsubmit="return confirm('Remove <%= sub.username %> on <%= sub.platform %>?')">
-                                                            <input type="hidden" name="subscription_id" value="<%= sub.subscription_id %>">
-                                                            <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-times"></i></button>
-                                                        </form>
-                                                    <% }); %>
+                                                    <% } %>
+                                                    <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" data-user-group='<%= JSON.stringify(userGroup) %>'><i class="fas fa-cog"></i></button>
                                                 </div>
                                             </div>
-                                            <% if (userGroup.subscriptions.length > 1) { %>
-                                                <div class="w-100 mt-2 ps-4 small text-muted">Multiple subscriptions for this user.</div>
-                                            <% } %>
                                         </div>
-                                        <% }) %><% } %>
-                                    </div>
+                                    <% }); %>
                                 </div>
                             </div>
+                        </div>
                         <% }); %>
                     </div>
                 </div>
@@ -180,84 +107,317 @@
         </div>
     </main>
 </div>
-<%- include('partials/manage-modal', { guild, channels }) %>
+
+<%- include('partials/manage/edit-streamer-modal', { channels }) %>
 <%- include('partials/manage-team-modal', { guild, channels, roles }) %>
+<%- include('partials/manage/bulk-actions-modal', { channels }) %>
+
+<% if (isBotOwner) { %>
+    <div class="modal fade" id="copyUserModal" tabindex="-1" aria-labelledby="copyUserModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="copyUserModalLabel">Copy User Subscriptions</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Copy all platform subscriptions for <strong id="copy-user-name"></strong> to a new server.</p>
+                    <input type="hidden" id="copy-user-discord-id">
+                    <input type="hidden" id="copy-user-normalized-username">
+                    <div class="mb-3">
+                        <label for="copy-target-guild" class="form-label">1. Destination Server</label>
+                        <select id="copy-target-guild" class="form-select">
+                            <option selected disabled value="">Choose a server...</option>
+                            <% manageableGuilds.forEach(g => { %>
+                                <% if (g.id !== guild.id) { %>
+                                    <option value="<%= g.id %>"><%= g.name %></option>
+                                <% } %>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="copy-target-channel" class="form-label">2. Announcement Channel</label>
+                        <select id="copy-target-channel" class="form-select" disabled>
+                            <option>Select a server first</option>
+                        </select>
+                    </div>
+                    <div id="copy-user-status" class="mt-3"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="executeCopyUserBtn" disabled>Execute Copy</button>
+                </div>
+            </div>
+        </div>
+    </div>
+<% } %>
+
 <%- include('partials/footer') %>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Bulk actions
+        const bulkActionsBtn = document.getElementById('bulk-actions-btn');
+        const userCheckboxes = document.querySelectorAll('input[type="checkbox"][data-subscriptions]');
+        const executeBulkUpdateBtn = document.getElementById('execute-bulk-update');
+
+        userCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                const anyChecked = Array.from(userCheckboxes).some(c => c.checked);
+                bulkActionsBtn.disabled = !anyChecked;
+            });
+        });
+
+        executeBulkUpdateBtn.addEventListener('click', async () => {
+            const selectedSubscriptions = Array.from(userCheckboxes).filter(c => c.checked).map(c => c.dataset.subscriptions).join(',').split(',').filter(Boolean);
+            const selectedChannels = Array.from(document.getElementById('bulk-channels-select').selectedOptions).map(o => o.value);
+            const statusDiv = document.getElementById('bulk-actions-status');
+
+            if (selectedSubscriptions.length === 0) {
+                statusDiv.innerHTML = `<div class="alert alert-danger">No users selected.</div>`;
+                return;
+            }
+
+            executeBulkUpdateBtn.disabled = true;
+            executeBulkUpdateBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Applying...';
+            statusDiv.innerHTML = '';
+
+            try {
+                const response = await fetch(`/api/manage/<%= guild.id %>/bulk-update-channels`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subscriptionIds: selectedSubscriptions, channelIds: selectedChannels })
+                });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    statusDiv.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${result.message || 'An unknown error occurred.'}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<div class="alert alert-danger">A network error occurred.</div>';
+            } finally {
+                executeBulkUpdateBtn.disabled = false;
+                executeBulkUpdateBtn.innerHTML = 'Apply Changes';
+            }
+        });
+
         // Tab persistence
         const lastTab = localStorage.getItem('lastTab-' + '<%= guild.id %>');
         if (lastTab) {
-            document.querySelector(lastTab).click();
+            const tabEl = document.querySelector(lastTab);
+            if(tabEl) tabEl.click();
         }
         document.querySelectorAll('.nav-pills .nav-link').forEach(tab => {
-            tab.addEventListener('shown.bs.tab', e => {
-                localStorage.setItem('lastTab-' + '<%= guild.id %>', '#' + e.target.id);
-            });
+            tab.addEventListener('shown.bs.tab', e => localStorage.setItem('lastTab-' + '<%= guild.id %>', '#' + e.target.id));
         });
 
         // Live status fetcher
         async function fetchGuildLiveStatus() {
             try {
                 const response = await fetch(`/api/guilds/<%= guild.id %>/livestatus`);
+                if (!response.ok) {
+                    let errorText = `API request failed: ${response.status}`;
+                    try {
+                        const errorJson = await response.json();
+                        errorText = errorJson.message || errorJson.error || errorText;
+                    } catch(e) { /* ignore */ }
+                    throw new Error(errorText);
+                }
                 const data = await response.json();
                 const container = document.getElementById("live-status-container");
-                container.innerHTML = data.length > 0 ? data.map(s => {
-                    let platformsInfo = [];
-                    if (Array.isArray(s.live_platforms)) {
-                        const uniqueGames = new Set(s.live_platforms.map(p => p.game));
-                        if (uniqueGames.size === 1) {
-                            // All platforms playing the same game
-                            const commonGame = uniqueGames.values().next().value;
-                            const platformNames = s.live_platforms.map(p => 
-                                `<a href="${p.url}" target="_blank" class="text-decoration-none text-white" title="${p.platform}">${p.platform}</a>`
-                            ).join(', ');
-                            platformsInfo.push(`${platformNames}: ${commonGame}`);
-                        } else {
-                            // Platforms playing different games
-                            s.live_platforms.forEach(p => {
-                                platformsInfo.push(
-                                    `<a href="${p.url}" target="_blank" class="text-decoration-none text-white" title="${p.platform}">${p.platform}: ${p.game}</a>`
-                                );
-                            });
-                        }
-                    }
-                    const platformsText = platformsInfo.join(' | ');
 
-                    return `<div class="live-streamer-card"><img src="${s.avatar_url}" class="live-avatar"> <div class="live-info"><strong>${s.username}</strong><span class="badge bg-secondary live-platforms-pill">${platformsText}</span></div></div>`
-                }).join('') : '<p class="text-center small text-muted">No one is live.</p>';
+                if (data.length > 0) {
+                    container.innerHTML = data.map(s => {
+                        if (!s.username) return '';
+                        let platformsHtml = '';
+                        if (s.live_platforms && s.live_platforms.length > 0) {
+                            platformsHtml = s.live_platforms.map(p => {
+                                const icon = p.platform === 'kick'
+                                    ? `<img src="/uploads/kick.png" class="platform-img-icon" alt="Kick">`
+                                    : `<i class="fab fa-${p.platform.toLowerCase()} platform-icon-${p.platform.toLowerCase()}"></i>`;
+                                return `<a href="${p.url}" target="_blank" title="${s.username} on ${p.platform}" class="badge bg-dark text-decoration-none me-1">
+                                            ${icon} ${p.username}
+                                        </a>`;
+                            }).join(' ');
+                        }
+
+                        return `
+                        <div class="live-streamer-card">
+                            <img src="${s.avatar_url}" class="live-avatar">
+                            <div class="live-info">
+                                <strong>${s.username}</strong>
+                                <div class="linked-platforms-display ms-0 mt-1">
+                                    ${platformsHtml}
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('');
+                } else {
+                    container.innerHTML = '<p class="text-center small text-muted">No one is live.</p>';
+                }
             } catch (error) {
-                document.getElementById("live-status-container").innerHTML = '<p class="text-danger text-center small">Failed to load status.</p>';
+                console.error("Failed to load guild live status:", error);
+                document.getElementById("live-status-container").innerHTML = `<p class="text-danger text-center small" title="${error.message}">Failed to load status.</p>`;
             }
         }
         fetchGuildLiveStatus();
         setInterval(fetchGuildLiveStatus, 60000);
 
-        // Streamer Settings Modal data population
+        // Modal data population
         const streamerSettingsModal = document.getElementById("streamerSettingsModal");
         streamerSettingsModal.addEventListener("show.bs.modal", event => {
             const btn = event.relatedTarget;
-            streamerSettingsModal.querySelector("#modal-streamer-name").textContent = btn.dataset.streamerName;
-            Object.keys(btn.dataset).forEach(key => {
-                const input = streamerSettingsModal.querySelector(`#edit-${key.replace(/([A-Z])/g, "-$1").toLowerCase()}`);
-                if(input) input.value = btn.dataset[key];
+            const userGroup = JSON.parse(btn.dataset.userGroup);
+            
+            document.getElementById('modal-streamer-name').textContent = userGroup.primaryDisplayName;
+            document.getElementById('edit-discord-user-id').value = userGroup.discord_user_id;
+            document.getElementById('edit-avatar-url').value = userGroup.primaryAvatarUrl;
+
+            const linkedAccountsContainer = document.getElementById('linked-accounts-container');
+            linkedAccountsContainer.innerHTML = '';
+            userGroup.linkedPlatforms.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'd-flex justify-content-between align-items-center mb-2';
+                div.innerHTML = `
+                    <span><i class="fab fa-${p.platform} me-2"></i>${p.username}</span>
+                    <button class="btn btn-sm btn-danger" data-platform="${p.platform}" data-username="${p.username}">Unlink</button>
+                `;
+                linkedAccountsContainer.appendChild(div);
             });
-            streamerSettingsModal.querySelector("#edit-channel-override").value = btn.dataset.channelOverride || ""; // Handle empty value for default
+
+            const channelSelect = document.getElementById('edit-channels-select');
+            const selectedChannels = new Set(userGroup.subscriptions.map(s => s.announcement_channel_id || 'default'));
+            Array.from(channelSelect.options).forEach(option => {
+                option.selected = selectedChannels.has(option.value);
+            });
+
+            document.getElementById('edit-custom-message').value = userGroup.subscriptions[0]?.custom_message || '';
         });
 
-        // Team Settings Modal data population
-        const teamSettingsModal = document.getElementById("teamSettingsModal");
-        if (teamSettingsModal) {
-            teamSettingsModal.addEventListener("show.bs.modal", event => {
-                const btn = event.relatedTarget;
-                teamSettingsModal.querySelector("#modal-team-name").textContent = btn.dataset.teamName;
-                teamSettingsModal.querySelector("#edit-team-subscription-id").value = btn.dataset.teamId;
-                teamSettingsModal.querySelector("#edit-team-channel-id").value = btn.dataset.channelId || "";
-                teamSettingsModal.querySelector("#edit-team-live-role-id").value = btn.dataset.liveRoleId || "";
-                teamSettingsModal.querySelector("#edit-team-webhook-name").value = btn.dataset.webhookName || "";
-                teamSettingsModal.querySelector("#edit-team-webhook-avatar-url").value = btn.dataset.webhookAvatarUrl || "";
+        // Team Resync Button Handler
+        document.querySelectorAll('.resync-team-btn').forEach(button => {
+            button.addEventListener('click', async (event) => {
+                const btn = event.currentTarget;
+                const teamId = btn.dataset.teamId;
+                const teamName = btn.dataset.teamName;
+                const statusDiv = document.getElementById(`team-status-${teamId}`);
+
+                if (!confirm(`Are you sure you want to resync the team '${teamName}'?`)) return;
+
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
+                statusDiv.innerHTML = '';
+
+                try {
+                    const response = await fetch(`/api/manage/<%= guild.id %>/resync-team`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ teamId })
+                    });
+                    const result = await response.json();
+                    if (response.ok && result.success) {
+                        statusDiv.innerHTML = `<div class="alert alert-success alert-sm">${result.message}</div>`;
+                    } else {
+                        statusDiv.innerHTML = `<div class="alert alert-danger alert-sm">Error: ${result.message || 'Unknown error'}</div>`;
+                    }
+                } catch (error) {
+                    statusDiv.innerHTML = `<div class="alert alert-danger alert-sm">Network error during sync.</div>`;
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-sync-alt"></i> Resync Members';
+                }
             });
-        }
+        });
+
+        <% if (isBotOwner) { %>
+        const copyUserModal = document.getElementById('copyUserModal');
+        const targetGuildSelect = document.getElementById('copy-target-guild');
+        const targetChannelSelect = document.getElementById('copy-target-channel');
+        const executeCopyBtn = document.getElementById('executeCopyUserBtn');
+
+        copyUserModal.addEventListener('show.bs.modal', event => {
+            const button = event.relatedTarget;
+            document.getElementById('copy-user-name').textContent = button.getAttribute('data-normalized-username');
+            document.getElementById('copy-user-discord-id').value = button.getAttribute('data-discord-user-id');
+            document.getElementById('copy-user-normalized-username').value = button.getAttribute('data-normalized-username');
+
+            document.getElementById('copy-user-status').innerHTML = '';
+            targetGuildSelect.selectedIndex = 0;
+            targetChannelSelect.innerHTML = '<option>Select a server first</option>';
+            targetChannelSelect.disabled = true;
+            executeCopyBtn.disabled = true;
+        });
+
+        targetGuildSelect.addEventListener('change', async () => {
+            const guildId = targetGuildSelect.value;
+            targetChannelSelect.disabled = true;
+            targetChannelSelect.innerHTML = '<option>Loading channels...</option>';
+            executeCopyBtn.disabled = true;
+
+            if (!guildId) return;
+
+            try {
+                const response = await fetch(`/api/guilds/${guildId}/channels`);
+                if (!response.ok) throw new Error(`Failed to fetch channels (${response.status})`);
+                const channels = await response.json();
+
+                targetChannelSelect.innerHTML = '<option value="default">Server Default</option>';
+                if(channels && channels.length > 0){
+                    channels.forEach(channel => {
+                        targetChannelSelect.innerHTML += `<option value="${channel.id}">${channel.name}</option>`;
+                    });
+                }
+                targetChannelSelect.disabled = false;
+                executeCopyBtn.disabled = false;
+            } catch (error) {
+                console.error('Error fetching channels:', error);
+                targetChannelSelect.innerHTML = '<option>Error loading channels</option>';
+                document.getElementById('copy-user-status').innerHTML = `<div class="alert alert-danger small">${error.message}</div>`;
+            }
+        });
+
+        executeCopyBtn.addEventListener('click', async function() {
+            const btn = this;
+            const statusDiv = document.getElementById('copy-user-status');
+            const payload = {
+                sourceGuildId: '<%= guild.id %>',
+                targetGuildId: targetGuildSelect.value,
+                targetChannelId: targetChannelSelect.value,
+                discordUserId: document.getElementById('copy-user-discord-id').value,
+                normalizedUsername: document.getElementById('copy-user-normalized-username').value
+            };
+
+            if (!payload.targetGuildId || !payload.targetChannelId) {
+                statusDiv.innerHTML = '<div class="alert alert-danger">Please select a destination server and channel.</div>';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Copying...';
+            statusDiv.innerHTML = '';
+
+            try {
+                const response = await fetch('/api/copy-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    statusDiv.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+                } else {
+                    statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${result.message || 'An unknown error occurred.'}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<div class="alert alert-danger">A network error occurred.</div>';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Execute Copy';
+            }
+        });
+        <% } %>
+
     });
 </script>
 </body>

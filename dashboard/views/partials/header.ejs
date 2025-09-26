@@ -20,6 +20,9 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="/dashboard"><i class="fas fa-server fa-fw me-2"></i>My Servers</a></li>
+                            <% if (user.id === "365905620060340224") { %>
+                                <li><a class="dropdown-item" href="/super-admin"><i class="fas fa-user-shield fa-fw me-2"></i>Super Admin</a></li>
+                            <% } %>
                             <li>
                                 <hr class="dropdown-divider">
                             </li>

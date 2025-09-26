@@ -41,8 +41,10 @@ async function handleRole(member, roleIds, action, guildId) {
       if (e.code === 10011 || (e.message && e.message.includes("Unknown Role"))) {
         logger.warn(`[Role Manager] Role ${roleId} for guild ${guildId} is unknown/invalid. Initiating cleanup.`);
         await cleanupInvalidRole(guildId, roleId);
+      } else if (e.code === 50013) {
+        logger.error(`[Role Manager] Missing permissions to ${action} role ${roleId} for member ${member.user.tag} (${member.id}) in guild ${guildId}. Check bot's role hierarchy and permissions.`, {error: e});
       } else {
-        logger.error(`[Role Manager] Failed to ${action} role ${roleId} for ${member.id} in ${guildId}: ${e.message}`, {error: e});
+        logger.error(`[Role Manager] Failed to ${action} role ${roleId} for ${member.user.tag} (${member.id}) in ${guildId}: ${e.message}`, {error: e});
       }
     }
   }
