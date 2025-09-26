@@ -44,6 +44,11 @@ module.exports = {
           value: "`/setup-requests` - **(Admin Only)** Creates a panel for members to request their own streams be announced."
         },
         {
+          name: "👑 Bot Owner Commands",
+          value: "`/global-reinit` - Restarts the entire bot application.\n" +
+                 "`/reset-database` - Wipes the entire bot database. **EXTREMELY DESTRUCTIVE!**"
+        },
+        {
           name: "🌐 Full Web Dashboard",
           value: "For easier management, you can access the **[Web Dashboard](https://bot.certifriedannouncer.online)** to control everything visually."
         }

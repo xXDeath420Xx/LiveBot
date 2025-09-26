@@ -18,8 +18,9 @@ passport.use(new Strategy({
   scope: ["identify", "guilds"]
 }, async (accessToken, refreshToken, profile, done) => {
   try {
-    const [[streamerCheck]] = await db.execute("SELECT 1 FROM streamers WHERE discord_user_id = ? LIMIT 1", [profile.id]);
-    profile.isStreamer = !!streamerCheck;
+    // Check if the user is linked to any streamer accounts
+    const [streamerCheck] = await db.execute("SELECT 1 FROM streamers WHERE discord_user_id = ? LIMIT 1", [profile.id]);
+    profile.isStreamer = streamerCheck.length > 0;
     return done(null, profile);
   } catch (error) {
     console.error("[Passport Auth Error]", error);

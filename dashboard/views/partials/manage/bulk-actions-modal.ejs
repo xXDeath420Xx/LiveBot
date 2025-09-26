@@ -1,0 +1,28 @@
+<div class="modal fade" id="bulk-actions-modal" tabindex="-1" aria-labelledby="bulkActionsModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkActionsModalLabel">Bulk Actions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Perform actions on all selected users.</p>
+                <div class="mb-3">
+                    <label for="bulk-channels-select" class="form-label">Resynchronize subscriptions to channels:</label>
+                    <select id="bulk-channels-select" class="form-select" multiple>
+                        <option value="default">Server Default</option>
+                        <% channels.forEach(c => { %>
+                            <option value="<%= c.id %>">#<%= c.name %></option>
+                        <% }); %>
+                    </select>
+                    <div class="form-text">This will replace existing channel subscriptions for the selected users.</div>
+                </div>
+                <div id="bulk-actions-status"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="execute-bulk-update">Apply Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
