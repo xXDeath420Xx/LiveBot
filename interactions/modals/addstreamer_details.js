@@ -75,9 +75,9 @@ module.exports = {
 
           for (const channelId of channelIds) {
             const [res] = await db.execute(
-              `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, override_nickname, override_avatar_url, custom_message) VALUES (?, ?, ?, ?, ?, ?)
-               ON DUPLICATE KEY UPDATE override_nickname=VALUES(override_nickname), override_avatar_url=VALUES(override_avatar_url), custom_message=VALUES(custom_message)`,
-              [data.guildId, streamer.streamer_id, channelId, nickname, data.avatarUrl, customMessage]
+              `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, override_nickname, override_avatar_url, custom_message, youtube_vod_notifications, tiktok_vod_notifications) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON DUPLICATE KEY UPDATE override_nickname=VALUES(override_nickname), override_avatar_url=VALUES(override_avatar_url), custom_message=VALUES(custom_message), youtube_vod_notifications=VALUES(youtube_vod_notifications), tiktok_vod_notifications=VALUES(tiktok_vod_notifications)`,
+              [data.guildId, streamer.streamer_id, channelId, nickname, data.avatarUrl, customMessage, data.youtubeVODs, data.tiktokVODs]
             );
             if (res.affectedRows > 1) {
               updated.push(`${streamerInfo.dbUsername} on ${platform}`);
@@ -123,7 +123,7 @@ module.exports = {
     let summary = `**Report for ${data.username}**\n`;
     if (added.length > 0) {
       summary += `✅ Added: ${[...new Set(added)].join(", ")}\n`;
-    }
+    } 
     if (updated.length > 0) {
       summary += `🔄 Updated: ${[...new Set(updated)].join(", ")}\n`;
     }

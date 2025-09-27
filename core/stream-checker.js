@@ -24,16 +24,20 @@ async function checkStreams(client) {
     isChecking = true;
     logger.info(`[Check] ---> Starting stream check @ ${new Date().toLocaleTimeString()}`);
     try {
-        const [subscriptions] = await db.execute("SELECT sub.*, s.*, s.discord_user_id AS streamer_discord_user_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id");
-        const [announcementsInDb] = await db.execute(`
-            SELECT a1.* FROM announcements a1
-                                 JOIN (SELECT subscription_id, MAX(announcement_id) as max_announcement_id FROM announcements GROUP BY subscription_id) a2
-                                      ON a1.subscription_id = a2.subscription_id AND a1.announcement_id = a2.max_announcement_id
-        `);
-        const announcementsMap = new Map(announcementsInDb.map(a => [a.subscription_id, a]));
+        const [subscriptions, announcementsInDb, guildSettingsList, teamSettingsList] = await Promise.all([
+            db.execute("SELECT sub.*, s.*, s.discord_user_id AS streamer_discord_user_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id").then(res => res[0]),
+            db.execute(`
+                SELECT a1.* FROM announcements a1
+                JOIN (SELECT subscription_id, MAX(announcement_id) as max_announcement_id FROM announcements GROUP BY subscription_id) a2
+                ON a1.subscription_id = a2.subscription_id AND a1.announcement_id = a2.max_announcement_id
+            `).then(res => res[0]),
+            fetchAndCache("db:guilds", () => db.execute("SELECT * FROM guilds").then(res => res[0]), 300),
+            fetchAndCache("db:twitch_teams", () => db.execute("SELECT * FROM twitch_teams").then(res => res[0]), 300),
+        ]);
 
-        const guildSettingsList = await fetchAndCache("db:guilds", () => db.execute("SELECT * FROM guilds").then(res => res[0]), 300);
+        const announcementsMap = new Map(announcementsInDb.map(a => [a.subscription_id, a]));
         const guildSettingsMap = new Map(guildSettingsList.map(g => [g.guild_id, g]));
+        const teamSettingsMap = new Map(teamSettingsList.map(t => [t.id, t]));
 
         if (!cycleTLS) {
             logger.info("[CycleTLS] Shared instance not found for stream check, initializing...");
@@ -53,25 +57,6 @@ async function checkStreams(client) {
                     return { isLive: false, profileImageUrl: null };
                 }, 75);
 
-                if (fetchedLiveData?.profileImageUrl && fetchedLiveData.profileImageUrl !== streamer.profile_image_url) {
-                    logger.info(`[Avatar] New avatar found for ${streamer.username} on ${streamer.platform}. URL: ${fetchedLiveData.profileImageUrl}`);
-                    if (streamer.platform === 'twitch') {
-                        logger.info(`[Avatar] ${streamer.username} is a Twitch streamer. Updating as source of truth.`);
-                        // If it's a Twitch avatar, it's the source of truth. Update it.
-                        await db.execute("UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?", [fetchedLiveData.profileImageUrl, streamer.streamer_id]);
-                        // If a discord_user_id is present, propagate this avatar to all their linked accounts.
-                        if (streamer.discord_user_id) {
-                            logger.info(`[Avatar] Propagating Twitch avatar for ${streamer.username} to all linked accounts (Discord ID: ${streamer.discord_user_id}).`);
-                            await db.execute("UPDATE streamers SET profile_image_url = ? WHERE discord_user_id = ?", [fetchedLiveData.profileImageUrl, streamer.discord_user_id]);
-                        }
-                    } else {
-                        // For non-Twitch platforms, only update the avatar if it's currently NULL.
-                        // This prevents overwriting a valid (potentially Twitch) avatar with a Kick/YouTube one.
-                        logger.info(`[Avatar] ${streamer.username} is not a Twitch streamer. Updating only if current avatar is NULL.`);
-                        await db.execute("UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ? AND profile_image_url IS NULL", [fetchedLiveData.profileImageUrl, streamer.streamer_id]);
-                    }
-                }
-
                 if (fetchedLiveData?.isLive) {
                     liveStatusMap.set(streamer.streamer_id, fetchedLiveData);
                 }
@@ -86,26 +71,63 @@ async function checkStreams(client) {
             if (!liveData) continue;
 
             const guildSettings = guildSettingsMap.get(sub.guild_id);
-            const targetChannelId = sub.announcement_channel_id || guildSettings?.announcement_channel_id;
+            const teamSettings = sub.team_subscription_id ? teamSettingsMap.get(sub.team_subscription_id) : null;
+
+            if (liveData.platform === 'youtube') {
+                const visibilitySetting = sub.youtube_visibility_level || guildSettings?.youtube_visibility_level || 'public';
+                if (visibilitySetting === 'public' && liveData.visibility === 'members-only') {
+                    logger.info(`[Check] Skipping members-only YouTube stream for ${sub.username} in guild ${sub.guild_id} as per settings.`);
+                    continue;
+                }
+            }
+
+            const targetChannelId = sub.announcement_channel_id || teamSettings?.announcement_channel_id || guildSettings?.announcement_channel_id;
             if (!targetChannelId) continue;
 
             desiredAnnouncementKeys.add(sub.subscription_id);
             const existing = announcementsMap.get(sub.subscription_id);
-            await announcementQueue.add(`announcement-${sub.subscription_id}`, { sub, liveData, existing, guildSettings }, { jobId: `announcement-${sub.subscription_id}`, removeOnComplete: true, removeOnFail: 50 });
+            await announcementQueue.add(`announcement-${sub.subscription_id}`, { sub, liveData, existing, guildSettings, teamSettings }, { jobId: `announcement-${sub.subscription_id}`, removeOnComplete: true, removeOnFail: 50 });
         }
 
+        // --- BATCH OFFLINE PROCESSING ---
+        const endedAnnouncements = [];
         for (const [subscription_id, existing] of announcementsMap.entries()) {
             if (!desiredAnnouncementKeys.has(subscription_id)) {
-                await db.execute("UPDATE stream_sessions SET end_time = NOW() WHERE announcement_id = ? AND end_time IS NULL", [existing.announcement_id]);
+                endedAnnouncements.push(existing);
+            }
+        }
+
+        if (endedAnnouncements.length > 0) {
+            const endedAnnouncementIds = endedAnnouncements.map(a => a.announcement_id);
+            logger.info(`[Check] Found ${endedAnnouncementIds.length} streams that have ended. Processing cleanup.`);
+
+            // Batch update stream sessions
+            await db.execute(`UPDATE stream_sessions SET end_time = NOW() WHERE announcement_id IN (?) AND end_time IS NULL`, [endedAnnouncementIds]);
+
+            // Handle summaries or message deletions in parallel
+            const cleanupPromises = endedAnnouncements.map(existing => {
                 const guildSettings = guildSettingsMap.get(existing.guild_id);
                 if (guildSettings?.enable_stream_summaries) {
-                    await summaryQueue.add(`summary-${existing.announcement_id}`, { announcementId: existing.announcement_id });
+                    return summaryQueue.add(`summary-${existing.announcement_id}`, { announcementId: existing.announcement_id });
                 } else {
-                    const channel = await client.channels.fetch(existing.channel_id).catch(() => null);
-                    if (channel) await channel.messages.delete(existing.message_id).catch(() => {});
+                    return client.channels.fetch(existing.channel_id)
+                        .then(channel => {
+                            if (channel) {
+                                return channel.messages.delete(existing.message_id).catch(err => {
+                                    if (err.code !== 10008) { // Ignore "Unknown Message" errors
+                                        logger.warn(`[Check] Could not delete announcement message ${existing.message_id}: ${err.message}`);
+                                    }
+                                });
+                            }
+                        })
+                        .catch(() => { /* Ignore channel fetch errors */ });
                 }
-                await db.execute("DELETE FROM announcements WHERE announcement_id = ?", [existing.announcement_id]);
-            }
+            });
+            await Promise.all(cleanupPromises);
+
+            // Batch delete announcements from the DB
+            await db.execute(`DELETE FROM announcements WHERE announcement_id IN (?)`, [endedAnnouncementIds]);
+            logger.info(`[Check] Cleaned up ${endedAnnouncementIds.length} ended stream announcements from the database.`);
         }
 
     } catch (e) {
@@ -136,10 +158,9 @@ async function checkTeams(client) {
         if (teamSubscriptions.length === 0) {
             logger.info("[Team Sync] No teams are subscribed for syncing.");
         } else {
-            logger.info(`[Team Sync] Found ${teamSubscriptions.length} teams to sync.`);
-            for (const sub of teamSubscriptions) {
-                await syncTwitchTeam(sub.id, db, apiChecks, logger, cycleTLS, client); // Pass client here
-            }
+            logger.info(`[Team Sync] Found ${teamSubscriptions.length} teams to sync. Running in parallel...`);
+            const syncPromises = teamSubscriptions.map(sub => syncTwitchTeam(sub.id, db, apiChecks, logger, cycleTLS));
+            await Promise.all(syncPromises);
         }
     } catch (error) {
         logger.error("[Team Sync] CRITICAL ERROR during hourly sync:", { error: error });

@@ -34,18 +34,67 @@
 </main>
 <%- include('partials/footer') %>
 <script>
-    document.getElementById('reinitBotBtn')?.addEventListener('click', async () => {
-        if (!confirm('Are you sure you want to re-initialize the bot? This will restart the application.')) return;
-        // API call to re-initialize
-    });
+    document.addEventListener('DOMContentLoaded', function() {
+        const reinitBtn = document.getElementById('reinitBotBtn');
+        const resetBtn = document.getElementById('fullResetBtn');
+        const statusDiv = document.getElementById('admin-action-status');
 
-    document.getElementById('fullResetBtn')?.addEventListener('click', async () => {
-        const confirmation = prompt('This is an irreversible action that will wipe all bot data. To confirm, type the word RESET below:');
-        if (confirmation !== 'RESET') {
-            alert('Database reset cancelled.');
-            return;
+        if(reinitBtn) {
+            reinitBtn.addEventListener('click', async () => {
+                if (!confirm('Are you sure you want to re-initialize the bot? This will restart the application.')) return;
+
+                reinitBtn.disabled = true;
+                reinitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Restarting...';
+                statusDiv.innerHTML = '';
+
+                try {
+                    const response = await fetch('/api/reinit', { method: 'POST' });
+                    const result = await response.json();
+                    if (response.ok && result.success) {
+                        statusDiv.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+                        alert('Bot is re-initializing.');
+                    } else {
+                        throw new Error(result.message || 'An unknown error occurred.');
+                    }
+                } catch (error) {
+                    statusDiv.innerHTML = `<div class="alert alert-danger">Failed to send re-initialization request: ${error.message}</div>`;
+                } finally {
+                    reinitBtn.disabled = false;
+                    reinitBtn.innerHTML = '<i class="fas fa-sync-alt me-2"></i>Re-initialize Bot';
+                }
+            });
         }
-        // API call to reset database
+
+        if(resetBtn) {
+            resetBtn.addEventListener('click', async () => {
+                const confirmation = prompt('This is an irreversible action that will wipe all bot data. To confirm, type the word RESET below:');
+                if (confirmation !== 'RESET') {
+                    alert('Database reset cancelled.');
+                    return;
+                }
+
+                resetBtn.disabled = true;
+                resetBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Resetting...';
+                statusDiv.innerHTML = '';
+
+                try {
+                    const response = await fetch('/api/admin/reset-database', { method: 'POST' });
+                    const result = await response.json();
+                     if (response.ok && result.success) {
+                        statusDiv.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+                        alert('Database reset successfully. The page will now reload.');
+                        location.reload();
+                    } else {
+                        throw new Error(result.message || 'An unknown error occurred.');
+                    }
+                } catch (error) {
+                     statusDiv.innerHTML = `<div class="alert alert-danger">Database reset failed: ${error.message}</div>`;
+                } finally {
+                    resetBtn.disabled = false;
+                    resetBtn.innerHTML = '<i class="fas fa-skull-crossbones me-2"></i>Reset Entire Database';
+                }
+            });
+        }
     });
 </script>
 </body>

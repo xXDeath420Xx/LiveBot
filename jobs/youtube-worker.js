@@ -4,6 +4,7 @@ require("dotenv-flow").config({path: path.resolve(__dirname, "..")}); // Correct
 const {Client, GatewayIntentBits, Partials, EmbedBuilder, Events} = require("discord.js");
 const logger = require("../utils/logger");
 const db = require("../utils/db");
+const cache = require("../utils/cache"); // Import cache for Redis connection
 const axios = require("axios");
 
 const client = new Client({
@@ -94,7 +95,7 @@ client.once(Events.ClientReady, () => {
 });
 
 client.login(process.env.DISCORD_TOKEN)
-  .then(() => logger.info("[Summary Worker] Successfully logged in"));
+  .then(() => logger.info("[YouTube Worker] Successfully logged in"));
 
 async function shutdown(signal) {
   logger.warn(`[YouTube Worker] Received ${signal}. Shutting down...`);
@@ -103,6 +104,7 @@ async function shutdown(signal) {
   }
   await client.destroy();
   await db.end();
+  await cache.redis.quit(); // Gracefully close the Redis connection
   logger.info("[YouTube Worker] Shutdown complete.");
   process.exit(0);
 }

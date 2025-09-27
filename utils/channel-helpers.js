@@ -1,5 +1,6 @@
 const {PermissionsBitField} = require("discord.js");
 const db = require("./db");
+const logger = require("./logger"); // Import the centralized logger
 
 async function getAvatarUploadChannel(interaction) {
   const [[guildSettings]] = await db.execute("SELECT avatar_upload_channel_id FROM guilds WHERE guild_id = ?", [interaction.guild.id]);
@@ -23,7 +24,7 @@ async function getAvatarUploadChannel(interaction) {
     }
     return channel;
   } catch (error) {
-    console.error("Error fetching avatar upload channel:", error);
+    logger.error(`[Channel Helper] Error fetching avatar upload channel ${channelId} for guild ${interaction.guild.id}:`, {error});
     await interaction.editReply({content: "The configured avatar upload channel could not be found or is invalid. An administrator may need to set a new one.", ephemeral: true});
     return null;
   }

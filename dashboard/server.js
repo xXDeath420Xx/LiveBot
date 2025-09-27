@@ -215,7 +215,7 @@ function start(clientInstance, discordPermissionsBitField) {
                 channelsData: Object.fromEntries(Object.entries(channelsData).filter(([, data]) => data.streamers.length > 0)),
                 totalSubscriptions: userGroups.size,
                 user: req.user,
-                settings: guildSettingsResult || {},
+                settings: guildSettingsResult[0] || {},
                 roles: allRoles.filter(r => !r.managed && r.name !== "@everyone"),
                 channels: allChannels.filter(c => c.isTextBased()),
                 teamSubscriptions: teamSubscriptionsWithMembers,
@@ -237,9 +237,6 @@ function start(clientInstance, discordPermissionsBitField) {
 
     app.post("/manage/:guildId/add", checkAuth, checkGuildAdmin, async (req, res) => {
         const { platform, username, discord_user_id, announcement_channel_id } = req.body;
-        if (discord_user_id && !/^\d{17,19}$/.test(discord_user_id)) {
-            return res.status(400).render("error", { user: req.user, error: "Invalid Discord User ID provided. It must be a numeric ID." });
-        }
         let cycleTLS;
         try {
             cycleTLS = await initCycleTLS({ timeout: 15000 });
@@ -257,14 +254,38 @@ function start(clientInstance, discordPermissionsBitField) {
             }
             if (!streamerInfo.puid) return res.status(400).render("error", { user: req.user, error: `Could not find streamer "${username}" on ${platform}.` });
     
-            await db.execute(
-                `INSERT INTO streamers (platform, platform_user_id, username, discord_user_id, profile_image_url) VALUES (?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE
-                    username = VALUES(username),
-                    discord_user_id = COALESCE(streamers.discord_user_id, VALUES(discord_user_id)),
-                    profile_image_url = IF(VALUES(platform) = 'twitch', VALUES(profile_image_url), COALESCE(streamers.profile_image_url, VALUES(profile_image_url)))`,
-                [platform, streamerInfo.puid, streamerInfo.dbUsername, discord_user_id || null, streamerInfo.pfp]
-            );
+            const potentialUsernames = [...new Set([username, streamerInfo.dbUsername].filter(Boolean).map(u => u.toLowerCase()))];
+            if (potentialUsernames.length > 0) {
+                const usernamePlaceholders = potentialUsernames.map(() => '?').join(',');
+                
+                let queryParams = [...potentialUsernames];
+                let discordIdClause = '';
+                if (discord_user_id) {
+                    discordIdClause = 'OR discord_user_id = ?';
+                    queryParams.push(discord_user_id);
+                }
+        
+                const [existingAccounts] = await db.execute(`SELECT discord_user_id FROM streamers WHERE LOWER(username) IN (${usernamePlaceholders}) ${discordIdClause}`, queryParams);
+                const canonicalDiscordId = discord_user_id || existingAccounts.find(a => a.discord_user_id)?.discord_user_id || null;
+        
+                await db.execute(
+                    `INSERT INTO streamers (platform, platform_user_id, username, discord_user_id, profile_image_url) VALUES (?, ?, ?, ?, ?) 
+                     ON DUPLICATE KEY UPDATE 
+                        username = VALUES(username), 
+                        discord_user_id = COALESCE(streamers.discord_user_id, VALUES(discord_user_id)), 
+                        profile_image_url = VALUES(profile_image_url)`,
+                    [platform, streamerInfo.puid, streamerInfo.dbUsername, canonicalDiscordId, streamerInfo.pfp]
+                );
+            } else {
+                await db.execute(
+                    `INSERT INTO streamers (platform, platform_user_id, username, discord_user_id, profile_image_url) VALUES (?, ?, ?, ?, ?) 
+                     ON DUPLICATE KEY UPDATE 
+                        username = VALUES(username), 
+                        discord_user_id = COALESCE(streamers.discord_user_id, VALUES(discord_user_id)), 
+                        profile_image_url = VALUES(profile_image_url)`,
+                    [platform, streamerInfo.puid, streamerInfo.dbUsername, discord_user_id, streamerInfo.pfp]
+                );
+            }
     
             const [[streamer]] = await db.execute("SELECT streamer_id, discord_user_id FROM streamers WHERE platform = ? AND platform_user_id = ?", [platform, streamerInfo.puid]);
             if (!streamer) return res.status(500).render("error", { user: req.user, error: "Failed to retrieve streamer ID." });
@@ -274,57 +295,50 @@ function start(clientInstance, discordPermissionsBitField) {
                 await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [req.params.guildId, streamer.streamer_id, channelId || null]);
             }
     
-            // Auto-link Kick account, with the specific exception for xXDeath420Xx
-            if (platform === 'twitch' && username.toLowerCase() === 'xxdeath420xx') {
-                logger.info("[Auto-Link] Skipping Kick auto-link for xXDeath420Xx as per special instruction.");
-            } else if (platform !== 'kick') {
+            let kickUsername = null;
+            if (platform !== 'kick') {
                 try {
                     logger.info(`[Auto-Link] Checking for matching Kick account for ${username}`);
                     const kickUser = await apiChecks.getKickUser(cycleTLS, username);
                     if (kickUser && kickUser.user) {
-                        if (username.toLowerCase() === 'xxdeath420xx' && kickUser.user.username.toLowerCase() === 'xxdeath420xx') {
-                            logger.info(`[Auto-Link] Explicitly blocking link between Twitch and Kick for xXDeath420Xx.`);
-                            return;
-                        }
-                        logger.info(`[Auto-Link] Found matching Kick user: ${kickUser.user.username}`);
+                        kickUsername = kickUser.user.username;
+                        logger.info(`[Auto-Link] Found matching Kick user: ${kickUsername}`);
+                        
+                        const finalDiscordId = streamer.discord_user_id;
+    
                         await db.execute(
-                            `INSERT INTO streamers (platform, platform_user_id, username, discord_user_id, profile_image_url) VALUES (?, ?, ?, ?, ?)
-                             ON DUPLICATE KEY UPDATE
-                                username=VALUES(username),
-                                discord_user_id=COALESCE(streamers.discord_user_id, VALUES(discord_user_id)),
-                                profile_image_url=COALESCE(streamers.profile_image_url, VALUES(profile_image_url))`,
-                            ['kick', kickUser.id.toString(), kickUser.user.username, streamer.discord_user_id, kickUser.user.profile_pic]
+                            `INSERT INTO streamers (platform, platform_user_id, username, discord_user_id, profile_image_url) VALUES (?, ?, ?, ?, ?) 
+                             ON DUPLICATE KEY UPDATE 
+                                username=VALUES(username), 
+                                discord_user_id=COALESCE(streamers.discord_user_id, VALUES(discord_user_id)), 
+                                profile_image_url=VALUES(profile_image_url)`,
+                            ['kick', kickUser.id.toString(), kickUsername, finalDiscordId, kickUser.user.profile_pic]
                         );
                         const [[kickStreamer]] = await db.execute("SELECT streamer_id FROM streamers WHERE platform = 'kick' AND platform_user_id = ?", [kickUser.id.toString()]);
                         if (kickStreamer) {
                             for (const channelId of ids) {
                                 await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [req.params.guildId, kickStreamer.streamer_id, channelId || null]);
                             }
-                            logger.info(`[Auto-Link] Successfully linked and subscribed to Kick account ${kickUser.user.username}.`);
+                            logger.info(`[Auto-Link] Successfully linked and subscribed to Kick account ${kickUsername}.`);
                         }
                     }
                 } catch (kickError) {
                     logger.error(`[Auto-Link] Error while searching for or adding Kick user for ${username}:`, kickError);
                 }
             }
-
-            // Final data synchronization step
-            const allRelatedUsernames = [...new Set([username, streamerInfo.dbUsername].filter(Boolean).map(u => u.toLowerCase()))];
-            const [allAccounts] = await db.execute(`SELECT discord_user_id, profile_image_url, platform FROM streamers WHERE LOWER(username) IN (?)`, [allRelatedUsernames]);
-            const finalTwitchAccount = allAccounts.find(a => a.platform === 'twitch');
-            const ultimateDiscordId = streamer.discord_user_id || allAccounts.find(a => a.discord_user_id)?.discord_user_id || null;
-            const ultimateAvatar = finalTwitchAccount?.profile_image_url || allAccounts.find(a => a.profile_image_url)?.profile_image_url || null;
-
-            if (ultimateDiscordId || ultimateAvatar) {
-                const updateFields = [];
-                const updateValues = [];
-                if (ultimateDiscordId) { updateFields.push("discord_user_id = ?"); updateValues.push(ultimateDiscordId); }
-                if (ultimateAvatar) { updateFields.push("profile_image_url = ?"); updateValues.push(ultimateAvatar); }
-
-                await db.execute(
-                    `UPDATE streamers SET ${updateFields.join(", ")} WHERE LOWER(username) IN (?)`,
-                    [...updateValues, allRelatedUsernames]
-                );
+    
+            const allRelatedUsernames = [...new Set([username, streamerInfo.dbUsername, kickUsername].filter(Boolean).map(u => u.toLowerCase()))];
+            if (allRelatedUsernames.length > 0) {
+                const allUsernamesPlaceholders = allRelatedUsernames.map(() => '?').join(',');
+                const [allAccountsForUser] = await db.execute(`SELECT discord_user_id FROM streamers WHERE LOWER(username) IN (${allUsernamesPlaceholders})`, allRelatedUsernames);
+                const ultimateDiscordId = streamer.discord_user_id || allAccountsForUser.find(a => a.discord_user_id)?.discord_user_id || null;
+    
+                if (ultimateDiscordId) {
+                    await db.execute(
+                        `UPDATE streamers SET discord_user_id = ? WHERE LOWER(username) IN (${allUsernamesPlaceholders}) AND (discord_user_id IS NULL OR discord_user_id != ?)`,
+                        [ultimateDiscordId, ...allRelatedUsernames, ultimateDiscordId]
+                    );
+                }
             }
     
             res.redirect(`/manage/${req.params.guildId}?success=add`);
@@ -355,67 +369,10 @@ function start(clientInstance, discordPermissionsBitField) {
         res.redirect(`/manage/${req.params.guildId}?success=team_removed#v-pills-teams-tab`);
     });
 
-    app.post("/api/manage/:guildId/edit-streamer", checkAuth, checkGuildAdmin, async (req, res) => {
-        const { discordUserId, newChannels, customMessage, avatarUrl, unlink, removeAll } = req.body;
-
-        try {
-            if (unlink) {
-                await db.execute(`DELETE FROM subscriptions WHERE guild_id = ? AND streamer_id = (SELECT streamer_id FROM streamers WHERE platform = ? AND username = ?)`, [req.params.guildId, unlink.platform, unlink.username]);
-                return res.json({ success: true, message: `Unlinked ${unlink.username} from this server.` });
-            }
-
-            if (removeAll) {
-                const [streamers] = await db.execute(`SELECT streamer_id FROM streamers WHERE discord_user_id = ?`, [discordUserId]);
-                const streamerIds = streamers.map(s => s.streamer_id);
-                await db.execute(`DELETE FROM subscriptions WHERE guild_id = ? AND streamer_id IN (?)`, [req.params.guildId, streamerIds]);
-                return res.json({ success: true, message: "All subscriptions for this user have been removed." });
-            }
-
-            const [streamers] = await db.execute(`SELECT streamer_id FROM streamers WHERE discord_user_id = ?`, [discordUserId]);
-            const streamerIds = streamers.map(s => s.streamer_id);
-
-            await db.execute(`DELETE FROM subscriptions WHERE guild_id = ? AND streamer_id IN (?) AND team_subscription_id IS NULL`, [req.params.guildId, streamerIds]);
-
-            for (const streamerId of streamerIds) {
-                for (const channelId of newChannels) {
-                    await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id, custom_message, override_avatar_url) VALUES (?, ?, ?, ?, ?)", [req.params.guildId, streamerId, channelId === 'default' ? null : channelId, customMessage, avatarUrl]);
-                }
-            }
-
-            res.json({ success: true, message: "Streamer settings updated successfully." });
-        } catch (error) {
-            logger.error("[Edit Streamer Error]", { error });
-            res.status(500).json({ success: false, message: "An internal server error occurred." });
-        }
-    });
-
-    app.post("/api/manage/:guildId/bulk-update-channels", checkAuth, checkGuildAdmin, async (req, res) => {
-        const { subscriptionIds, channelIds } = req.body;
-        if (!subscriptionIds || !channelIds || !Array.isArray(subscriptionIds) || !Array.isArray(channelIds) || subscriptionIds.length === 0) {
-            return res.status(400).json({ success: false, message: "Invalid request body." });
-        }
-
-        try {
-            const subPlaceholders = subscriptionIds.map(() => '?').join(',');
-            const [streamers] = await db.execute(`SELECT DISTINCT streamer_id FROM subscriptions WHERE subscription_id IN (${subPlaceholders})`, subscriptionIds);
-            const streamerIds = streamers.map(s => s.streamer_id);
-
-            if (streamerIds.length > 0) {
-                const streamerPlaceholders = streamerIds.map(() => '?').join(',');
-                await db.execute(`DELETE FROM subscriptions WHERE guild_id = ? AND streamer_id IN (${streamerPlaceholders}) AND team_subscription_id IS NULL`, [req.params.guildId, ...streamerIds]);
-
-                for (const streamerId of streamerIds) {
-                    for (const channelId of channelIds) {
-                        await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [req.params.guildId, streamerId, channelId === 'default' ? null : channelId]);
-                    }
-                }
-            }
-
-            res.json({ success: true, message: "Subscriptions updated successfully." });
-        } catch (error) {
-            logger.error("[Bulk Update Error]", { error });
-            res.status(500).json({ success: false, message: "An internal server error occurred." });
-        }
+    app.post("/api/manage/:guildId/resync-team", checkAuth, checkGuildAdmin, async (req, res) => {
+        const { teamId } = req.body;
+        const result = await syncTwitchTeam(teamId, db, apiChecks, logger);
+        res.status(result.success ? 200 : 500).json(result);
     });
 
     app.post("/api/copy-user", checkAuth, checkBotOwner, async (req, res) => {
@@ -428,54 +385,24 @@ function start(clientInstance, discordPermissionsBitField) {
             if (discordUserId) {
                 [userStreamerAccounts] = await db.execute("SELECT * FROM streamers WHERE discord_user_id = ?", [discordUserId]);
             } else {
-                const normalized = normalizedUsername.toLowerCase();
-                [userStreamerAccounts] = await db.execute("SELECT * FROM streamers WHERE LOWER(username) = ? OR LOWER(kick_username) = ?", [normalized, normalized]);
+                [userStreamerAccounts] = await db.execute("SELECT * FROM streamers WHERE ? IN (LOWER(username), LOWER(kick_username))", [normalizedUsername.toLowerCase()]);
             }
             if (!userStreamerAccounts || userStreamerAccounts.length === 0) {
                 return res.status(404).json({ success: false, message: "No streamer accounts found for this user." });
             }
             const streamerIds = userStreamerAccounts.map(s => s.streamer_id);
-            const streamerIdPlaceholders = streamerIds.map(() => '?').join(',');
-
-            const [sourceSubscriptions] = await db.execute(
-                `SELECT streamer_id, announcement_channel_id, team_subscription_id FROM subscriptions WHERE guild_id = ? AND streamer_id IN (${streamerIdPlaceholders})`,
-                [sourceGuildId, ...streamerIds]
-            );
-
+            const placeholders = streamerIds.map(() => '?').join(',');
+            const [sourceSubscriptions] = await db.execute(`SELECT DISTINCT streamer_id FROM subscriptions WHERE guild_id = ? AND streamer_id IN (${placeholders})`, [sourceGuildId, ...streamerIds]);
             if (sourceSubscriptions.length === 0) {
                 return res.status(404).json({ success: false, message: "This user has no active subscriptions in the source server to copy." });
             }
-
             const finalChannelId = targetChannelId === 'default' ? null : targetChannelId;
             let copiedCount = 0;
-
             for (const sub of sourceSubscriptions) {
-                await db.execute(
-                    "INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id, team_subscription_id) VALUES (?, ?, ?, ?)",
-                    [targetGuildId, sub.streamer_id, finalChannelId, null]
-                );
-                copiedCount++;
+                const [result] = await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)", [targetGuildId, sub.streamer_id, finalChannelId]);
+                if (result.affectedRows > 0) copiedCount++;
             }
-
-            const twitchAccount = userStreamerAccounts.find(a => a.platform === 'twitch');
-            const ultimateDiscordId = discordUserId || userStreamerAccounts.find(s => s.discord_user_id)?.discord_user_id || null;
-            const ultimateProfileImageUrl = twitchAccount?.profile_image_url || userStreamerAccounts.find(s => s.profile_image_url)?.profile_image_url || null;
-
-            if (ultimateDiscordId || ultimateProfileImageUrl) {
-                const updateFields = [];
-                const updateValues = [];
-                if (ultimateDiscordId) { updateFields.push("discord_user_id = ?"); updateValues.push(ultimateDiscordId); }
-                if (ultimateProfileImageUrl) { updateFields.push("profile_image_url = ?"); updateValues.push(ultimateProfileImageUrl); }
-
-                if (updateFields.length > 0) {
-                    await db.execute(
-                        `UPDATE streamers SET ${updateFields.join(", ")} WHERE streamer_id IN (${streamerIdPlaceholders})`,
-                        [...updateValues, ...streamerIds]
-                    );
-                }
-            }
-
-            res.json({ success: true, message: `Successfully copied ${copiedCount} platform subscriptions and synchronized user data.` });
+            res.json({ success: true, message: `Successfully copied ${copiedCount} platform subscriptions.` });
         } catch (error) {
             logger.error("[SuperAdmin Copy User Error]", { error });
             res.status(500).json({ success: false, message: `An internal server error occurred: ${error.message}` });
@@ -536,7 +463,7 @@ function start(clientInstance, discordPermissionsBitField) {
         }
     });
 
-    app.get("/api/guilds/:guildId/livestatus", async (req, res) => {
+    app.get("/api/guilds/:guildId/livestatus", checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const [liveRows] = await db.execute(`SELECT s.username, s.discord_user_id, s.profile_image_url, s.platform_user_id, a.platform, a.stream_game
                                                  FROM announcements a
@@ -581,19 +508,26 @@ function start(clientInstance, discordPermissionsBitField) {
     });
 
     app.post("/api/reinit", checkAuth, checkBotOwner, (req, res) => {
-        logger.info("[Dashboard] Received request for global bot re-initialization.");
-        pm2.restart("LiveBot", (err) => res.json({ success: !err, message: err ? "Failed to restart." : "Bot is re-initializing." }));
+        try {
+            logger.info("[Dashboard] Received request for global bot re-initialization.");
+            pm2.restart("LiveBot", (err) => {
+                if (err) {
+                    logger.error("[PM2] Restart failed:", err);
+                    // Note: This response might not be sent if the server is already down.
+                    return res.status(500).json({ success: false, message: "Failed to send restart command to PM2." });
+                }
+                return res.json({ success: true, message: "Bot is re-initializing." });
+            });
+        } catch (e) {
+            logger.error("[API Reinit] Synchronous error:", e);
+            res.status(500).json({ success: false, message: `An internal server error occurred: ${e.message}` });
+        }
     });
 
     app.post("/api/manage/:guildId/reinit-guild", checkAuth, checkGuildAdmin, async (req, res) => {
         logger.info(`[Dashboard] Received request to re-initialize guild ${req.params.guildId}.`);
-        try {
-            await botStartupCleanup(clientInstance, req.params.guildId);
-            res.json({ success: true, message: "Guild re-initialization triggered successfully." });
-        } catch (error) {
-            logger.error(`[Dashboard] Error re-initializing guild ${req.params.guildId}:`, error);
-            res.status(500).json({ success: false, message: error.message || "Failed to re-initialize guild." });
-        }
+        await botStartupCleanup(clientInstance, req.params.guildId);
+        res.json({ success: true, message: "Guild re-initialization triggered." });
     });
 
     app.use((req, res) => {

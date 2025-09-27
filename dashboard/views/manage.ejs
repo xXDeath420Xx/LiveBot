@@ -55,7 +55,9 @@
                     </div>
                     <p class="text-muted small">This list shows all subscribed streamers, including those from team syncs.</p>
                     <div class="accordion" id="channelsAccordion">
-                        <% Object.entries(channelsData).forEach(([channelId, data], index) => {
+                        <% 
+                        const userGroupData = {};
+                        Object.entries(channelsData).forEach(([channelId, data], index) => {
                             const totalMembers = data.streamers.length;
                             if (totalMembers === 0) return;
                         %>
@@ -63,11 +65,14 @@
                             <h2 class="accordion-header"><button class="accordion-button <%= index > 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= channelId %>"><%= data.name %><span class="badge bg-secondary ms-auto me-2"><%= totalMembers %> user(s)</span></button></h2>
                             <div id="collapse-<%= channelId %>" class="accordion-collapse collapse <%= index === 0 ? 'show' : '' %>" data-bs-parent="#channelsAccordion">
                                 <div class="accordion-body">
-                                    <% data.streamers.forEach(userGroup => { %>
+                                    <% data.streamers.forEach(userGroup => {
+                                        const userGroupId = userGroup.discord_user_id || userGroup.primaryDisplayName;
+                                        userGroupData[userGroupId] = userGroup;
+                                    %> 
                                         <div class="list-group-item d-flex flex-column align-items-start px-0 py-2">
                                             <div class="d-flex justify-content-between align-items-center w-100">
                                                 <div class="d-flex align-items-center flex-wrap">
-                                                    <input class="form-check-input me-3" type="checkbox" value="<%= userGroup.discord_user_id || userGroup.primaryDisplayName %>" data-subscriptions="<%= userGroup.subscriptions.map(s => s.subscription_id).join(',') %>">
+                                                    <input class="form-check-input me-3" type="checkbox" value="<%= userGroupId %>" data-subscriptions="<%= userGroup.subscriptions.map(s => s.subscription_id).join(',') %>">
                                                     <img src="<%= userGroup.primaryAvatarUrl || '/images/default-icon.png' %>" alt="<%= userGroup.primaryDisplayName %>" style="width:32px; height:32px; border-radius:50%;" class="me-2">
                                                     <strong class="me-2"><%= userGroup.primaryDisplayName %></strong>
                                                     <% if (userGroup.discord_user_id) { %><span class="badge bg-info ms-2">ID: <%= userGroup.discord_user_id %></span><% } %>
@@ -92,7 +97,7 @@
                                                             <i class="fas fa-copy"></i>
                                                         </button>
                                                     <% } %>
-                                                    <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" data-user-group='<%= JSON.stringify(userGroup) %>'><i class="fas fa-cog"></i></button>
+                                                    <button class="btn btn-sm btn-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" data-user-group-id="<%= userGroupId %>"><i class="fas fa-cog"></i></button>
                                                 </div>
                                             </div>
                                         </div>
@@ -154,6 +159,8 @@
 
 <%- include('partials/footer') %>
 <script>
+    const userGroupData = <%- JSON.stringify(userGroupData) %>;
+
     document.addEventListener('DOMContentLoaded', function() {
         // Bulk actions
         const bulkActionsBtn = document.getElementById('bulk-actions-btn');
@@ -264,35 +271,134 @@
         fetchGuildLiveStatus();
         setInterval(fetchGuildLiveStatus, 60000);
 
-        // Modal data population
+        // Streamer Settings Modal
         const streamerSettingsModal = document.getElementById("streamerSettingsModal");
+        let currentUserGroup = null;
+
+        async function handleStreamerAction(payload, button = null) {
+            if (button) button.disabled = true;
+            const statusDiv = document.getElementById('edit-streamer-status');
+            statusDiv.innerHTML = '';
+            try {
+                const response = await fetch(`/api/manage/<%= guild.id %>/edit-streamer`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    statusDiv.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${result.message || 'An unknown error occurred.'}</div>`;
+                    if (button) button.disabled = false;
+                }
+            } catch (error) {
+                console.error("Streamer action failed:", error);
+                statusDiv.innerHTML = '<div class="alert alert-danger">A network error occurred. Please check the console for details.</div>';
+                if (button) button.disabled = false;
+            }
+        }
+
         streamerSettingsModal.addEventListener("show.bs.modal", event => {
             const btn = event.relatedTarget;
-            const userGroup = JSON.parse(btn.dataset.userGroup);
+            const userGroupId = btn.dataset.userGroupId;
+            currentUserGroup = userGroupData[userGroupId];
             
-            document.getElementById('modal-streamer-name').textContent = userGroup.primaryDisplayName;
-            document.getElementById('edit-discord-user-id').value = userGroup.discord_user_id;
-            document.getElementById('edit-avatar-url').value = userGroup.primaryAvatarUrl;
+            document.getElementById('modal-streamer-name').textContent = currentUserGroup.primaryDisplayName;
+            document.getElementById('edit-discord-user-id').value = currentUserGroup.discord_user_id;
+            document.getElementById('edit-avatar-url').value = currentUserGroup.subscriptions[0]?.override_avatar_url || currentUserGroup.primaryAvatarUrl;
 
             const linkedAccountsContainer = document.getElementById('linked-accounts-container');
             linkedAccountsContainer.innerHTML = '';
-            userGroup.linkedPlatforms.forEach(p => {
+            currentUserGroup.linkedPlatforms.forEach(p => {
                 const div = document.createElement('div');
                 div.className = 'd-flex justify-content-between align-items-center mb-2';
                 div.innerHTML = `
                     <span><i class="fab fa-${p.platform} me-2"></i>${p.username}</span>
-                    <button class="btn btn-sm btn-danger" data-platform="${p.platform}" data-username="${p.username}">Unlink</button>
+                    <button class="btn btn-sm btn-danger unlink-btn" data-streamer-id="${p.streamer_id}" data-username="${p.username}" data-platform="${p.platform}">Unlink</button>
                 `;
                 linkedAccountsContainer.appendChild(div);
             });
 
             const channelSelect = document.getElementById('edit-channels-select');
-            const selectedChannels = new Set(userGroup.subscriptions.map(s => s.announcement_channel_id || 'default'));
+            const selectedChannels = new Set(currentUserGroup.subscriptions.map(s => s.announcement_channel_id || 'default'));
             Array.from(channelSelect.options).forEach(option => {
                 option.selected = selectedChannels.has(option.value);
             });
 
-            document.getElementById('edit-custom-message').value = userGroup.subscriptions[0]?.custom_message || '';
+            const hasYoutubePlatform = currentUserGroup.linkedPlatforms.some(p => p.platform === 'youtube');
+            const youtubeSettingsContainer = document.getElementById('youtube-settings-container');
+            if (hasYoutubePlatform) {
+                youtubeSettingsContainer.style.display = 'block';
+                const youtubeSub = currentUserGroup.subscriptions.find(s => s.platform === 'youtube');
+                document.getElementById('edit-youtube-content-preference').value = youtubeSub?.youtube_content_preference || 'default';
+            } else {
+                youtubeSettingsContainer.style.display = 'none';
+            }
+
+            document.getElementById('edit-custom-message').value = currentUserGroup.subscriptions[0]?.custom_message || '';
+            document.getElementById('edit-streamer-status').innerHTML = '';
+        });
+
+        document.getElementById('linked-accounts-container').addEventListener('click', e => {
+            if (e.target.classList.contains('unlink-btn')) {
+                if (!confirm('Are you sure you want to unlink this platform for this user on this server?')) return;
+                const payload = {
+                    unlink: { 
+                        streamer_id: e.target.dataset.streamerId,
+                        username: e.target.dataset.username,
+                        platform: e.target.dataset.platform
+                    }
+                };
+                handleStreamerAction(payload, e.target);
+            }
+        });
+
+        document.getElementById('save-streamer-settings').addEventListener('click', (e) => {
+            const payload = {
+                discordUserId: currentUserGroup.discord_user_id,
+                primaryUsername: currentUserGroup.primaryDisplayName,
+                newChannels: Array.from(document.getElementById('edit-channels-select').selectedOptions).map(o => o.value),
+                youtubeContentPreference: document.getElementById('edit-youtube-content-preference').value,
+                customMessage: document.getElementById('edit-custom-message').value,
+                avatarUrl: document.getElementById('edit-avatar-url').value
+            };
+            handleStreamerAction(payload, e.target);
+        });
+
+        document.getElementById('remove-streamer-btn').addEventListener('click', (e) => {
+            if (!confirm('Are you sure you want to remove ALL subscriptions for this user from this server?')) return;
+            const payload = {
+                discordUserId: currentUserGroup.discord_user_id,
+                primaryUsername: currentUserGroup.primaryDisplayName,
+                removeAll: true
+            };
+            handleStreamerAction(payload, e.target);
+        });
+
+        document.getElementById('reinitGuildButton')?.addEventListener('click', async (event) => {
+            const btn = event.currentTarget;
+            if (!confirm('Are you sure you want to re-initialize this server? This can help resolve issues with roles or announcements.')) return;
+
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Re-initializing...';
+
+            try {
+                const response = await fetch(`/api/manage/<%= guild.id %>/reinit-guild`, { method: 'POST' });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    alert(result.message);
+                } else {
+                    alert(`Error: ${result.message || 'An unknown error occurred.'}`);
+                }
+            } catch (error) {
+                alert('A network error occurred.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
         });
 
         // Team Resync Button Handler

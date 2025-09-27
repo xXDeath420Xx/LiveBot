@@ -1,9 +1,18 @@
 const axios = require("axios");
 const {getBrowser} = require("./browserManager");
-const logger = require("./logger"); // Corrected path
+const logger = require("./logger");
 
 let twitchToken = null;
 let tokenExpires = 0;
+
+// Helper to break an array into smaller chunks
+function chunkArray(array, size) {
+    const chunks = [];
+    for (let i = 0; i < array.length; i += size) {
+        chunks.push(array.slice(i, i + size));
+    }
+    return chunks;
+}
 
 async function getYouTubeChannelId(identifier) {
   if (!process.env.YOUTUBE_API_KEY) {
@@ -69,6 +78,7 @@ async function getTwitchAccessToken() {
     const response = await axios.post("https://id.twitch.tv/oauth2/token", `client_id=${process.env.TWITCH_CLIENT_ID}&client_secret=${process.env.TWITCH_CLIENT_SECRET}&grant_type=client_credentials`);
     twitchToken = response.data.access_token;
     tokenExpires = Date.now() + (response.data.expires_in * 1000);
+    logger.info("[Twitch Auth] Successfully refreshed Twitch API access token.");
     return twitchToken;
   } catch (error) {
     logger.error("[Twitch Auth Error]", {error: error.response ? error.response.data : error.message});
@@ -77,25 +87,39 @@ async function getTwitchAccessToken() {
 }
 
 async function getTwitchUser(identifier) {
-  const token = await getTwitchAccessToken();
-  if (!token) {
-    return null;
-  }
-  const param = /^[0-9]+$/.test(identifier) ? "id" : "login";
-  try {
-    const res = await axios.get(`https://api.twitch.tv/helix/users?${param}=${identifier.toLowerCase()}`, {headers: {"Client-ID": process.env.TWITCH_CLIENT_ID, "Authorization": `Bearer ${token}`}});
-    return res.data.data?.[0];
-  } catch (e) {
-    logger.error(`[Twitch User Check Error] for "${identifier}":`, {error: e.response ? e.response.data : e.message});
-    return null;
-  }
+    const users = await getTwitchUsers([identifier]);
+    return users?.[0] || null;
+}
+
+async function getTwitchUsers(identifiers) {
+    const token = await getTwitchAccessToken();
+    if (!token) return null;
+
+    const allUsers = [];
+    const idChunks = chunkArray(identifiers.filter(id => /^[0-9]+$/.test(id)), 100);
+    const loginChunks = chunkArray(identifiers.filter(id => !/^[0-9]+$/.test(id)), 100);
+
+    const headers = { "Client-ID": process.env.TWITCH_CLIENT_ID, "Authorization": `Bearer ${token}` };
+
+    try {
+        for (const chunk of idChunks) {
+            const res = await axios.get(`https://api.twitch.tv/helix/users`, { headers, params: { id: chunk } });
+            if (res.data.data) allUsers.push(...res.data.data);
+        }
+        for (const chunk of loginChunks) {
+            const res = await axios.get(`https://api.twitch.tv/helix/users`, { headers, params: { login: chunk } });
+            if (res.data.data) allUsers.push(...res.data.data);
+        }
+        return allUsers;
+    } catch (e) {
+        logger.error(`[Twitch Users Check Error]:`, { error: e.response ? e.response.data : e.message });
+        return null;
+    }
 }
 
 async function getTwitchTeamMembers(teamName) {
   const token = await getTwitchAccessToken();
-  if (!token) {
-    return null;
-  }
+  if (!token) return null;
   try {
     const res = await axios.get(`https://api.twitch.tv/helix/teams?name=${teamName.toLowerCase()}`, {headers: {"Client-ID": process.env.TWITCH_CLIENT_ID, "Authorization": `Bearer ${token}`}});
     return res.data.data?.[0]?.users || null;
@@ -125,47 +149,57 @@ async function checkKick(cycleTLS, username) {
 }
 
 async function checkTwitch(streamer) {
-  const defaultResponse = {isLive: false, profileImageUrl: null};
+  const defaultResponse = { isLive: false, profileImageUrl: streamer.profile_image_url };
   const token = await getTwitchAccessToken();
-  if (!token) {
-    return defaultResponse;
-  }
-  let profileImageUrl = null;
-  try {
-    const userRes = await axios.get(`https://api.twitch.tv/helix/users?id=${streamer.platform_user_id}`, {headers: {"Client-ID": process.env.TWITCH_CLIENT_ID, "Authorization": `Bearer ${token}`}});
-    profileImageUrl = userRes.data.data?.[0]?.profile_image_url || null;
-  } catch (e) { /* Ignore */
-  }
+  if (!token) return defaultResponse;
 
   try {
     const streamRes = await axios.get(`https://api.twitch.tv/helix/streams?user_id=${streamer.platform_user_id}`, {headers: {"Client-ID": process.env.TWITCH_CLIENT_ID, "Authorization": `Bearer ${token}`}});
     const streamData = streamRes.data.data[0];
-    if (streamData) {
-      const uptimeSeconds = Math.floor((Date.now() - new Date(streamData.started_at).getTime()) / 1000);
-      let gameArtUrl = null;
-      if (streamData.game_id) {
-        try {
-          const gameRes = await axios.get(`https://api.twitch.tv/helix/games?id=${streamData.game_id}`, {headers: {"Client-ID": process.env.TWITCH_CLIENT_ID, "Authorization": `Bearer ${token}`}});
-          gameArtUrl = gameRes.data.data?.[0]?.box_art_url.replace("{width}", "285").replace("{height}", "380") || null;
-        } catch (gameError) { /* Ignore */
-        }
-      }
-      return {
-        isLive: true, platform: "twitch", username: streamData.user_name, url: `https://www.twitch.tv/${streamData.user_login}`,
-        title: streamData.title || "Untitled Stream", game: streamData.game_name || "N/A",
-        thumbnailUrl: streamData.thumbnail_url?.replace("{width}", "1280").replace("{height}", "720"),
-        viewers: streamData.viewer_count, profileImageUrl, uptime: uptimeSeconds, gameArtUrl
-      };
+
+    if (!streamData) {
+      return defaultResponse; // Stream is not live
     }
-    return {isLive: false, profileImageUrl};
+
+    // Stream is live, gather data
+    const uptimeSeconds = Math.floor((Date.now() - new Date(streamData.started_at).getTime()) / 1000);
+    let gameArtUrl = null;
+
+    if (streamData.game_id) {
+      try {
+        const gameRes = await axios.get(`https://api.twitch.tv/helix/games?id=${streamData.game_id}`, {headers: {"Client-ID": process.env.TWITCH_CLIENT_ID, "Authorization": `Bearer ${token}`}});
+        gameArtUrl = gameRes.data.data?.[0]?.box_art_url.replace("{width}", "285").replace("{height}", "380") || null;
+      } catch (gameError) {
+        logger.warn(`[Twitch Game Check] Failed to get game art for game ID ${streamData.game_id}.`, { error: gameError.message });
+      }
+    }
+
+    // The announcer will handle avatar updates, but we can pass along the latest if we get it.
+    // The user endpoint is still the most reliable source for the avatar.
+    const userRes = await getTwitchUser(streamer.platform_user_id);
+
+    return {
+      isLive: true,
+      platform: "twitch",
+      username: streamData.user_name,
+      url: `https://www.twitch.tv/${streamData.user_login}`,
+      title: streamData.title || "Untitled Stream",
+      game: streamData.game_name || "N/A",
+      thumbnailUrl: streamData.thumbnail_url?.replace("{width}", "1280").replace("{height}", "720"),
+      viewers: streamData.viewer_count,
+      profileImageUrl: userRes?.profile_image_url || streamer.profile_image_url, // Use new avatar if found, otherwise keep old
+      uptime: uptimeSeconds,
+      gameArtUrl
+    };
+
   } catch (e) {
     logger.error(`[Check Twitch Error] for user ID "${streamer.platform_user_id}":`, {error: e.message});
-    return {...defaultResponse, profileImageUrl};
+    return defaultResponse;
   }
 }
 
 async function checkYouTube(channelId) {
-  const defaultResponse = {isLive: false, profileImageUrl: null};
+  const defaultResponse = {isLive: false, profileImageUrl: null, visibility: 'public'};
   let page = null;
   try {
     const browser = await getBrowser();
@@ -179,10 +213,12 @@ async function checkYouTube(channelId) {
     if (page.url().includes("/watch")) {
       const isLiveBadge = await page.locator("span.ytp-live-badge").isVisible({timeout: 5000});
       if (isLiveBadge) {
+        const isMembersOnly = await page.locator('ytd-sponsorships-offer-renderer').isVisible({ timeout: 2000 }).catch(() => false);
         const title = await page.title().then(t => t.replace(" - YouTube", "").trim());
         return {
           isLive: true, platform: "youtube", username: title, url: page.url(), title, profileImageUrl,
-          thumbnailUrl: await page.locator("meta[property=\"og:image\"]").getAttribute("content").catch(() => null), game: "N/A", viewers: "N/A"
+          thumbnailUrl: await page.locator("meta[property=\"og:image\"]").getAttribute("content").catch(() => null), game: "N/A", viewers: "N/A",
+          visibility: isMembersOnly ? 'members-only' : 'public'
         };
       }
     }
@@ -206,4 +242,4 @@ async function checkTrovo(username) {
   return {isLive: false};
 }
 
-module.exports = {getYouTubeChannelId, getTwitchUser, getKickUser, checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo, getTwitchTeamMembers};
+module.exports = {getYouTubeChannelId, getTwitchUser, getKickUser, checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo, getTwitchTeamMembers, getTwitchUsers};

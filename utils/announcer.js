@@ -41,14 +41,12 @@ async function getOrCreateWebhook(client, channelId, defaultAvatarUrl) {
   }
 }
 
-async function updateAnnouncement(client, subContext, liveData, existingAnnouncement, guildSettings, channelSettings, teamSettings) {
-  // subContext contains: sub.subscription_id, sub.guild_id, sub.streamer_id, s.discord_user_id, s.platform_user_id, s.username, s.platform, s.kick_username, s.profile_image_url
+async function updateAnnouncement(client, subContext, liveData, existingAnnouncement, guildSettings, teamSettings) {
   if (!liveData || typeof liveData.platform !== "string") {
     logger.error(`[Announcer] Invalid liveData for ${subContext.username}. Aborting.`, {liveData});
     return null;
   }
 
-  // Update streamer's profile image if the live data provides a new one
   if (liveData.profileImageUrl && liveData.profileImageUrl !== subContext.profile_image_url) {
     try {
         logger.info(`[Avatar][Announcer] New avatar found for ${subContext.username} on ${subContext.platform}.`);
@@ -63,13 +61,13 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
             logger.info(`[Avatar][Announcer] ${subContext.username} is not a Twitch streamer. Updating only if current avatar is NULL.`);
             await db.execute("UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ? AND profile_image_url IS NULL", [liveData.profileImageUrl, subContext.streamer_id]);
         }
-        subContext.profile_image_url = liveData.profileImageUrl; // Update in-memory for consistent display
+        subContext.profile_image_url = liveData.profileImageUrl;
     } catch (dbError) {
         logger.error(`[Announcer] Failed to update profile image for ${subContext.username}: ${dbError.message}`, {error: dbError});
     }
   }
 
-  const channelId = subContext.announcement_channel_id || guildSettings?.announcement_channel_id;
+  const channelId = subContext.announcement_channel_id || teamSettings?.announcement_channel_id || guildSettings?.announcement_channel_id;
   if (!channelId) {
     logger.warn(`[Announcer] No announcement channel configured for ${subContext.username} in guild ${subContext.guild_id}.`);
     return null;
@@ -113,32 +111,8 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
   }
 
   try {
-    let finalNickname = guildSettings?.bot_nickname || WEBHOOK_NAME_PREFIX;
-    let finalAvatarURL = guildSettings?.webhook_avatar_url || client.user.displayAvatarURL();
-
-    if (channelSettings?.override_nickname) {
-      finalNickname = channelSettings.override_nickname;
-    }
-    if (channelSettings?.override_avatar_url) {
-      finalAvatarURL = channelSettings.override_avatar_url;
-    }
-    if (teamSettings?.webhook_name) {
-      finalNickname = teamSettings.webhook_name;
-    }
-    if (teamSettings?.webhook_avatar_url) {
-      finalAvatarURL = teamSettings.webhook_avatar_url;
-    }
-    if (subContext.override_nickname) {
-      finalNickname = subContext.override_nickname;
-    }
-    if (subContext.override_avatar_url) {
-      finalAvatarURL = subContext.override_avatar_url;
-    }
-    
-    if (!finalAvatarURL) {
-      finalAvatarURL = client.user.displayAvatarURL();
-    }
-
+    const finalNickname = subContext.override_nickname || teamSettings?.webhook_name || guildSettings?.bot_nickname || WEBHOOK_NAME_PREFIX;
+    const finalAvatarURL = subContext.override_avatar_url || teamSettings?.webhook_avatar_url || guildSettings?.webhook_avatar_url || client.user.displayAvatarURL();
 
     logger.debug(`[Announcer] Final webhook settings for ${subContext.username}: Nickname=${finalNickname}, Avatar=${finalAvatarURL}`);
 
