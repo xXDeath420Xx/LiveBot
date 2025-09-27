@@ -14,7 +14,7 @@ module.exports = {
     .setDescription("Adds a streamer to the notification list using an interactive form.")
     .addStringOption(option =>
       option.setName("username")
-        .setDescription("The streamer's username or channel ID. Must be the same on all chosen platforms.")
+        .setDescription("The streamer\'s username or channel ID. Must be the same on all chosen platforms.")
         .setRequired(true))
     .addUserOption(option =>
       option.setName("user")
@@ -22,7 +22,15 @@ module.exports = {
         .setRequired(false))
     .addAttachmentOption(option =>
       option.setName("avatar")
-        .setDescription("Optional: A custom avatar for this streamer's webhook announcements.")
+        .setDescription("Optional: A custom avatar for this streamer\'s webhook announcements.")
+        .setRequired(false))
+    .addBooleanOption(option =>
+      option.setName("youtube-vod-notifications")
+        .setDescription("Enable notifications for new YouTube VODs.")
+        .setRequired(false))
+    .addBooleanOption(option =>
+      option.setName("tiktok-vod-notifications")
+        .setDescription("Enable notifications for new TikTok VODs.")
         .setRequired(false))
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild),
 
@@ -32,6 +40,8 @@ module.exports = {
     const username = interaction.options.getString("username");
     const discordUser = interaction.options.getUser("user");
     const avatar = interaction.options.getAttachment("avatar");
+    const youtubeVODs = interaction.options.getBoolean("youtube-vod-notifications") ?? false;
+    const tiktokVODs = interaction.options.getBoolean("tiktok-vod-notifications") ?? false;
 
     let avatarUrl = null;
     if (avatar) {
@@ -58,7 +68,9 @@ module.exports = {
       username,
       discordUserId: discordUser?.id || null,
       avatarUrl,
-      guildId: interaction.guild.id
+      guildId: interaction.guild.id,
+      youtubeVODs,
+      tiktokVODs
     });
 
     setTimeout(() => pendingInteractions.delete(interactionId), INTERACTION_TIMEOUT_MS);

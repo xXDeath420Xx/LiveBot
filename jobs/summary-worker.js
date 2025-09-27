@@ -4,6 +4,7 @@ require("dotenv-flow").config({path: path.resolve(__dirname, "..")}); // Correct
 const {Client, GatewayIntentBits, Partials, EmbedBuilder, Events} = require("discord.js");
 const logger = require("../utils/logger");
 const db = require("../utils/db");
+const cache = require("../utils/cache"); // Import cache for Redis connection
 
 const client = new Client({
   intents: [
@@ -51,7 +52,9 @@ client.once(Events.ClientReady, () => {
       }
 
       const message = await channel.messages.fetch(announcement.message_id).catch((err) => {
-        logger.error(`[Summary Worker] Failed to fetch message ${announcement.message_id} in channel ${announcement.channel_id}:`, {error: err.message});
+        if (err.code !== 10008) { // Ignore "Unknown Message"
+            logger.error(`[Summary Worker] Failed to fetch message ${announcement.message_id} in channel ${announcement.channel_id}:`, {error: err.message});
+        }
         return null;
       });
       if (!message || !message.embeds[0]) {
@@ -63,7 +66,7 @@ client.once(Events.ClientReady, () => {
       const summaryText = `Stream ended. Total duration: **${formatDuration(durationSeconds)}**.`;
 
       const originalEmbed = message.embeds[0];
-      const summaryEmbed = new EmbedBuilder(originalEmbed)
+      const summaryEmbed = new EmbedBuilder(originalEmbed.toJSON())
         .setAuthor(null)
         .setTitle(`Summary of ${originalEmbed.author?.name || announcement.stream_title || "Stream"}`)
         .setDescription(summaryText)
@@ -102,6 +105,7 @@ async function shutdown(signal) {
   }
   await client.destroy();
   await db.end();
+  await cache.redis.quit(); // Gracefully close the Redis connection
   logger.info("[Summary Worker] Shutdown complete.");
   process.exit(0);
 }

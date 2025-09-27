@@ -31,6 +31,15 @@
                     <label for="edit-avatar-url" class="form-label">Manual Avatar URL</label>
                     <input type="url" id="edit-avatar-url" class="form-control">
                 </div>
+                <div class="mb-3" id="youtube-settings-container" style="display: none;">
+                    <label for="edit-youtube-content-preference" class="form-label">YouTube Content Preference</label>
+                    <select id="edit-youtube-content-preference" class="form-select">
+                        <option value="default" selected>Server Default</option>
+                        <option value="public">Public Only</option>
+                        <option value="all">Include Members-Only</option>
+                    </select>
+                    <div class="form-text">Overrides the server's default setting for announcing Members-Only content.</div>
+                </div>
                 <div id="edit-streamer-status"></div>
             </div>
             <div class="modal-footer">

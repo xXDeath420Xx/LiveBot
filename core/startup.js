@@ -53,9 +53,8 @@ async function startupCleanup(client, targetGuildId = null) {
         const roleIdsToClear = new Set([...(guildLiveRole[0]?.live_role_id ? [guildLiveRole[0].live_role_id] : []), ...teamLiveRoles.map(t => t.live_role_id)].filter(Boolean));
 
         if (roleIdsToClear.size > 0) {
-          const members = await guild.members.fetch().catch(e => { logger.error(`Failed to fetch members for guild ${guildId}: ${e.message}`); return new Map(); });
           for (const roleId of roleIdsToClear) {
-            const role = guild.roles.cache.get(roleId);
+            const role = await guild.roles.fetch(roleId).catch(() => null);
             if (role) {
               for (const member of role.members.values()) {
                 await handleRole(member, [roleId], "remove", guildId).catch(e => logger.warn(`Failed to remove role from ${member.user.tag}: ${e.message}`));
@@ -64,7 +63,7 @@ async function startupCleanup(client, targetGuildId = null) {
           }
         }
 
-        // Purge Announcements (existing logic)
+        // Purge Announcements
         const [announcements] = await db.execute("SELECT announcement_id, message_id, channel_id FROM announcements WHERE guild_id = ?", [guildId]);
         for (const ann of announcements) {
           const channel = await client.channels.fetch(ann.channel_id).catch(() => null);
@@ -96,12 +95,11 @@ async function startupCleanup(client, targetGuildId = null) {
             const channel = await client.channels.fetch(channelId).catch(() => null);
             if (channel && channel.isTextBased() && channel.guild.members.me.permissionsIn(channel).has(PermissionsBitField.Flags.ManageMessages | PermissionsBitField.Flags.ReadMessageHistory)) {
                 logger.info(`[Startup Process] Deleting bot/webhook messages in channel ${channel.name} (${channelId}) for guild ${guildId}.`);
-                let fetchedMessages;
                 let lastId;
                 let messagesDeletedInChannel = 0;
 
                 while (true) {
-                    fetchedMessages = await channel.messages.fetch({
+                    const fetchedMessages = await channel.messages.fetch({
                         limit: 100,
                         before: lastId
                     }).catch(e => { logger.warn(`Failed to fetch messages in channel ${channelId}: ${e.message}`); return null; });
@@ -150,13 +148,12 @@ async function startupCleanup(client, targetGuildId = null) {
         }
         const [streamersToUpdate] = await db.execute(query, targetGuildId ? [targetGuildId] : []);
 
-        // Filter out any non-numeric Discord user IDs before using them in the IN clause
         const discordUserIds = [...new Set(streamersToUpdate.map(s => s.discord_user_id).filter(id => id && /^\d+$/.test(id)))];
         let allRelevantAccounts = [...streamersToUpdate];
 
         if (discordUserIds.length > 0) {
-            logger.debug(`[Startup Process] DEBUG: discordUserIds for IN clause (filtered):`, discordUserIds);
-            const [linkedAccounts] = await db.execute(`SELECT * FROM streamers WHERE discord_user_id IN (?)`, [discordUserIds]);
+            const placeholders = discordUserIds.map(() => '?').join(',');
+            const [linkedAccounts] = await db.execute(`SELECT * FROM streamers WHERE discord_user_id IN (${placeholders})`, discordUserIds);
             allRelevantAccounts = [...new Map([...allRelevantAccounts, ...linkedAccounts].map(item => [item.streamer_id, item])).values()];
         }
 
@@ -191,6 +188,33 @@ async function startupCleanup(client, targetGuildId = null) {
 
     } catch (e) {
         logger.error(`[Startup Process] CRITICAL ERROR in Stage 3 (Avatar Caching):`, { error: e });
+    }
+
+    // --- STAGE 4: Enforce Owner Account Unlink ---
+    if (!targetGuildId) { // Only run on global startup
+        logger.info("[Startup Process] Stage 4: Enforcing owner-specific account rules.");
+        try {
+            const kickUsername = "xxdeath420xx";
+            const [[kickAccountToDelete]] = await db.execute("SELECT streamer_id FROM streamers WHERE platform = 'kick' AND username = ?", [kickUsername]);
+
+            if (kickAccountToDelete) {
+                const streamerIdToDelete = kickAccountToDelete.streamer_id;
+                logger.warn(`[Startup Purge] Found owner's Kick account ('${kickUsername}') with streamer_id ${streamerIdToDelete}. Purging...`);
+
+                const [subDeletionResult] = await db.execute("DELETE FROM subscriptions WHERE streamer_id = ?", [streamerIdToDelete]);
+                if (subDeletionResult.affectedRows > 0) {
+                    logger.info(`[Startup Purge] Deleted ${subDeletionResult.affectedRows} subscriptions for Kick account '${kickUsername}'.`);
+                }
+
+                const [streamerDeletionResult] = await db.execute("DELETE FROM streamers WHERE streamer_id = ?", [streamerIdToDelete]);
+                if (streamerDeletionResult.affectedRows > 0) {
+                    logger.info(`[Startup Purge] Deleted streamer entry for Kick account '${kickUsername}'.`);
+                }
+            }
+        } catch(e) {
+            logger.error("[Startup Process] Error during owner account purge:", e);
+        }
+        logger.info("[Startup Process] Stage 4: Owner account rules enforcement complete.");
     }
 
   } catch (e) {

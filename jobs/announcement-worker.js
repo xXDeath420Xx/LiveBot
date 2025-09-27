@@ -28,10 +28,10 @@ workerClient.once(Events.ClientReady, async () => {
   logger.info(`[Announcement Worker] Discord client is ready. Worker is active.`);
 
   worker = new Worker("announcements", async job => {
-    const {sub, liveData, existing, guildSettings, channelSettings, teamSettings} = job.data;
+    const {sub, liveData, existing, guildSettings, teamSettings} = job.data;
     logger.info(`[Worker] Processing job ${job.id} for ${sub.username}`);
     try {
-      const sentMessage = await updateAnnouncement(workerClient, sub, liveData, existing, guildSettings, channelSettings, teamSettings);
+      const sentMessage = await updateAnnouncement(workerClient, sub, liveData, existing, guildSettings, teamSettings);
 
       if (sentMessage && sentMessage.id && sentMessage.channel_id) {
         if (!existing) {
@@ -47,17 +47,32 @@ workerClient.once(Events.ClientReady, async () => {
             logger.info(`[Stats] Started tracking new stream session for announcement ID: ${newAnnouncementId}`);
           }
 
-          // Apply live role if configured and streamer has a Discord ID
-          if (guildSettings?.live_role_id && sub.discord_user_id) {
+          // --- REFACTORED ROLE LOGIC ---
+          // Determine the correct live role ID to apply. Team roles take precedence.
+          const roleIdToApply = (sub.team_subscription_id && teamSettings?.live_role_id)
+            ? teamSettings.live_role_id
+            : guildSettings?.live_role_id;
+
+          // Apply live role if a role is configured and the streamer has a Discord ID
+          if (roleIdToApply && sub.discord_user_id) {
             try {
               const guild = await workerClient.guilds.fetch(sub.guild_id);
-              const member = await guild.members.fetch(sub.discord_user_id);
-              await handleRole(member, [guildSettings.live_role_id], "add", sub.guild_id);
-              logger.info(`[Worker] Applied live role ${guildSettings.live_role_id} to ${member.user.tag} in guild ${sub.guild_id}.`);
+              const member = await guild.members.fetch(sub.discord_user_id).catch(e => {
+                if (e.code === 10007) return null; // Ignore "Unknown Member" errors
+                throw e;
+              });
+
+              if (member) {
+                await handleRole(member, [roleIdToApply], "add", sub.guild_id);
+                logger.info(`[Worker] Applied live role ${roleIdToApply} to ${member.user.tag} in guild ${sub.guild_id}.`);
+              } else {
+                logger.warn(`[Worker] Could not find member ${sub.discord_user_id} in guild ${sub.guild_id} to apply live role.`);
+              }
             } catch (roleError) {
               logger.error(`[Worker] Failed to apply live role to ${sub.username} (${sub.discord_user_id}) in guild ${sub.guild_id}: ${roleError.message}`);
             }
           }
+          // --- END REFACTORED ROLE LOGIC ---
 
         } else if (existing && sentMessage.id !== existing.message_id) {
           logger.info(`[Worker] UPDATED message ID for ${sub.username}`);
