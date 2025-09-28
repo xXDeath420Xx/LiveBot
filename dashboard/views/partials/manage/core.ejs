@@ -1,36 +1,58 @@
 <div class="content-card">
     <h2><i class="fas fa-cogs me-2"></i>Core Server Settings</h2>
-    <p class="text-muted">Manage the main announcement channel and live role. These are the default settings unless overridden.</p>
+    <p class="text-muted">Manage the main announcement channel, live role, and other server-wide defaults.</p>
     <hr>
     <form action="/manage/<%= guild.id %>/settings" method="POST">
         <div class="row">
             <div class="col-md-6 mb-3">
                 <label class="form-label">Default Announce Channel</label>
-                <select name="channelId" class="form-select">
+                <select name="announcement_channel_id" class="form-select">
                     <option value="" <%= !settings.announcement_channel_id ? 'selected' : '' %>>-- None --</option>
                     <% channels.forEach(c => { %>
                         <option value="<%= c.id %>" <%= settings.announcement_channel_id == c.id ? 'selected' : '' %> >#<%= c.name %></option>
                     <% }); %>
                 </select>
+                <small class="text-muted">The default channel for all announcements.</small>
             </div>
             <div class="col-md-6 mb-3">
-                <label class="form-label">Live Role</label>
-                <select name="roleId" class="form-select">
-                    <option value="" <%= !settings.live_role_id ? 'selected' : '' %>>Disabled</option>
+                <label class="form-label">Default Live Role</label>
+                <select name="live_role_id" class="form-select">
+                    <option value="" <%= !settings.live_role_id ? 'selected' : '' %>>-- Disabled --</option>
                     <% roles.forEach(r => { %>
                         <option value="<%= r.id %>" <%= settings.live_role_id == r.id ? 'selected' : '' %>>@<%= r.name %></option>
                     <% }); %>
                 </select>
+                <small class="text-muted">The default role to assign when a user is live.</small>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Stream End Behavior</label>
+                <select name="enable_stream_summaries" class="form-select">
+                    <option value="0" <%= !settings.enable_stream_summaries ? 'selected' : '' %>>Delete Announcement on Stream End</option>
+                    <option value="1" <%= settings.enable_stream_summaries ? 'selected' : '' %>>Convert Announcement to Summary</option>
+                </select>
+                <small class="text-muted">Choose what happens to the announcement message when a stream ends.</small>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Avatar Upload Channel</label>
+                <select name="avatar_upload_channel_id" class="form-select">
+                    <option value="" <%= !settings.avatar_upload_channel_id ? 'selected' : '' %>>-- None (Feature Disabled) --</option>
+                    <% channels.forEach(c => { %>
+                        <option value="<%= c.id %>" <%= settings.avatar_upload_channel_id == c.id ? 'selected' : '' %> >#<%= c.name %></option>
+                    <% }); %>
+                </select>
+                <small class="text-muted">A private channel the bot can use to store custom avatars.</small>
             </div>
         </div>
         <div class="row">
             <div class="col-md-6 mb-3">
                 <label class="form-label">Default YouTube Content Level</label>
-                <select name="youtube_content_level" class="form-select">
-                    <option value="public" <%= settings.youtube_content_level === 'public' ? 'selected' : '' %>>Public Only</option>
-                    <option value="all" <%= settings.youtube_content_level === 'all' ? 'selected' : '' %>>Public & Members-Only</option>
+                <select name="youtube_visibility_level" class="form-select">
+                    <option value="public" <%= !settings.youtube_visibility_level || settings.youtube_visibility_level === 'public' ? 'selected' : '' %>>Public Only</option>
+                    <option value="all" <%= settings.youtube_visibility_level === 'all' ? 'selected' : '' %>>Public & Members-Only</option>
                 </select>
-                <small class="text-muted">Default setting for announcing YouTube streams. Can be overridden per-streamer.</small>
+                <small class="text-muted">Default for announcing YouTube streams. Can be overridden per-streamer.</small>
             </div>
         </div>
         <button type="submit" class="btn btn-primary w-100 mt-3"><i class="fas fa-save me-2"></i>Save Core Settings</button>

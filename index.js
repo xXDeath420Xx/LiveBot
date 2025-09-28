@@ -1,7 +1,7 @@
 // Monkey-patch BigInt to allow serialization
 BigInt.prototype.toJSON = function() { return this.toString(); };
 
-const {Client, GatewayIntentBits, Collection, Events, Partials} = require("discord.js");
+const {Client, GatewayIntentBits, Collection, Events, Partials, PermissionsBitField} = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 require("dotenv-flow").config();
@@ -78,7 +78,7 @@ client.once(Events.ClientReady, async c => {
 
   setStatus(Status.STARTING, "Initializing Dashboard...");
   try {
-    const app = dashboard.start(c);
+    const app = dashboard.start(c, PermissionsBitField);
     const port = process.env.DASHBOARD_PORT || 3000;
     app.listen(port, () => {
         logger.info(`[Dashboard] Web dashboard listening on port ${port}`);

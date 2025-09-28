@@ -10,8 +10,8 @@ const dbConfig = {
     connectionLimit: 15,
     queueLimit: 100,
     connectTimeout: 10000,
-    timezone: 'Z'
-    // The authMethod was for a previous MySQL version and is no longer needed.
+    timezone: 'Z',
+    multipleStatements: true // Allow multiple statements for the dump.sql execution
 };
 
 const pool = mysql.createPool(dbConfig);
