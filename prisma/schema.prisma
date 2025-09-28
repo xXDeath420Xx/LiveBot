@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./db"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model announcements {
+  announcement_id      Int            @id @default(autoincrement())
+  guild_id             String?        @db.VarChar(255)
+  streamer_id          Int
+  message_id           String         @db.VarChar(255)
+  channel_id           String?        @db.VarChar(255)
+  stream_title         String?        @db.VarChar(255)
+  stream_thumbnail_url String?        @db.Text
+  stream_game          String?        @db.VarChar(255)
+  platform             String         @db.VarChar(20)
+  subscription_id      Int?
+  subscriptions        subscriptions? @relation(fields: [subscription_id], references: [subscription_id], onUpdate: Restrict, map: "subscription_id_twitch")
+
+  @@unique([guild_id, streamer_id, channel_id], map: "unique_guild_streamer_channel_id")
+  @@index([subscription_id], map: "subscription_id_twitch")
+}
+
+model channel_settings {
+  channel_id          String  @db.VarChar(25)
+  guild_id            String  @db.VarChar(25)
+  override_nickname   String? @db.VarChar(80)
+  override_avatar_url String? @db.VarChar(255)
+
+  @@id([channel_id, guild_id])
+  @@index([guild_id], map: "guild_id")
+}
+
+model guilds {
+  guild_id                 String          @id @db.VarChar(255)
+  announcement_channel_id  String?         @db.VarChar(255)
+  live_role_id             String?         @db.VarChar(255)
+  bot_nickname             String?         @db.VarChar(32)
+  webhook_avatar_url       String?         @db.VarChar(255)
+  audit_log_channel_id     String?         @db.VarChar(255)
+  avatar_upload_channel_id String?         @db.VarChar(255)
+  subscriptions            subscriptions[]
+}
+
+model stream_sessions {
+  session_id      Int       @id @default(autoincrement())
+  announcement_id Int
+  streamer_id     Int
+  guild_id        String    @db.VarChar(255)
+  start_time      DateTime? @default(now()) @db.DateTime(0)
+  end_time        DateTime? @db.DateTime(0)
+  game_name       String?   @db.VarChar(255)
+
+  @@index([announcement_id], map: "announcement_id")
+  @@index([guild_id], map: "guild_id")
+  @@index([streamer_id], map: "streamer_id")
+}
+
+model streamers {
+  streamer_id       Int       @id @default(autoincrement())
+  platform          String?   @db.VarChar(255)
+  username          String    @db.VarChar(255)
+  platform_user_id  String    @db.VarChar(255)
+  last_checked      DateTime? @default(now()) @db.Timestamp(0)
+  discord_user_id   String?   @db.VarChar(255)
+  profile_image_url String?   @db.Text
+  kick_username     String?   @db.VarChar(255)
+
+  @@unique([platform, platform_user_id], map: "unique_platform_user_id")
+}
+
+model subscriptions {
+  subscription_id         Int             @id @default(autoincrement())
+  guild_id                String?         @db.VarChar(255)
+  streamer_id             Int
+  custom_message          String?         @db.Text
+  announcement_channel_id String?         @db.VarChar(255)
+  override_nickname       String?         @db.VarChar(80)
+  override_avatar_url     String?         @db.VarChar(255)
+  discord_user_id         String?         @db.VarChar(255)
+  platform                String?         @db.VarChar(255)
+  announcements           announcements[]
+  guilds                  guilds?         @relation(fields: [guild_id], references: [guild_id], onDelete: Cascade, map: "subscriptions_ibfk_1")
+
+  @@unique([guild_id, streamer_id, announcement_channel_id], map: "guild_streamer_channel")
+  @@unique([guild_id, streamer_id, announcement_channel_id], map: "unique_guild_streamer_channel")
+  @@index([streamer_id], map: "streamer_id")
+}
+
+model twitch_teams {
+  id                      Int     @id @default(autoincrement())
+  guild_id                String? @db.VarChar(255)
+  announcement_channel_id String? @db.VarChar(255)
+  team_name               String  @db.VarChar(255)
+  live_role_id            String? @db.VarChar(255)
+  webhook_name            String? @db.VarChar(255)
+  webhook_avatar_url      String? @db.VarChar(2048)
+
+  @@unique([guild_id, announcement_channel_id, team_name], map: "guild_channel_team")
+}
+
+model youtube_subscriptions {
+  subscription_id    Int       @id @default(autoincrement())
+  guild_id           String    @db.VarChar(255)
+  discord_channel_id String    @db.VarChar(255)
+  youtube_channel_id String    @db.VarChar(255)
+  channel_name       String?   @db.VarChar(255)
+  last_video_id      String?   @db.VarChar(255)
+  custom_message     String?   @db.Text
+  created_at         DateTime? @default(now()) @db.Timestamp(0)
+
+  @@unique([guild_id, youtube_channel_id, discord_channel_id], map: "guild_id_youtube_channel_id_discord_channel_id")
+}

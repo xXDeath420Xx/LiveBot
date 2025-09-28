@@ -8,3 +8,6 @@ sessions/*.json
 .vscode
 .idea
 user-data-dir/*
+/prisma/db
+
+/prisma/db

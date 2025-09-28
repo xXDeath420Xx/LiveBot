@@ -1,7 +1,9 @@
-const {ShardingManager} = require("discord.js");
-const path = require("path");
-require("dotenv-flow").config();
-const logger = require("../utils/logger");
+import {ShardingManager} from "discord.js";
+import path from "path";
+import dotenv from "dotenv";
+import {logger} from "../utils/logger";
+
+dotenv.config();
 
 // --- ASCII Art Startup Banner ---
 // True Color (RGB) escape code for #1591fd and the reset code

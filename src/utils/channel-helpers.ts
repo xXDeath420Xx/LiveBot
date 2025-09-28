@@ -1,8 +1,8 @@
-const {PermissionsBitField} = require("discord.js");
-const db = require("./db");
+import {PermissionsBitField} from "discord.js";
+import {db} from "./db";
 
 async function getAvatarUploadChannel(interaction) {
-  const [[guildSettings]] = await db.execute("SELECT avatar_upload_channel_id FROM guilds WHERE guild_id = ?", [interaction.guild.id]);
+  const [[guildSettings]] = await db.execute("SELECT avatar_upload_channel_id FROM guilds WHERE guild_id = ? LIMIT 1", [interaction.guild?.id]);
   const channelId = guildSettings?.avatar_upload_channel_id;
 
   if (!channelId) {
@@ -29,4 +29,4 @@ async function getAvatarUploadChannel(interaction) {
   }
 }
 
-module.exports = {getAvatarUploadChannel};
+export {getAvatarUploadChannel};
