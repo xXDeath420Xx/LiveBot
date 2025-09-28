@@ -3,8 +3,14 @@ const db = require("./db");
 const logger = require("./logger");
 
 const platformColors = {
-  twitch: "#9146FF", youtube: "#FF0000", kick: "#52E252",
-  tiktok: "#00f2ea", trovo: "#21d464", default: "#36393f"
+  twitch: "#9146FF", 
+  youtube: "#FF0000", 
+  kick: "#52E252",
+  tiktok: "#00f2ea", 
+  trovo: "#21d464", 
+  facebook: "#1877F2",
+  instagram: "#E4405F",
+  default: "#36393f"
 };
 
 const WEBHOOK_NAME_PREFIX = "CertiFried Announcer";

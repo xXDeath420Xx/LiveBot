@@ -1,7 +1,0 @@
-.env
-node_modules
-dashboard/sessions/*.json
-uploads/
-*.sql
-*.save
-sessions/*.json

@@ -71,6 +71,7 @@ function start(clientInstance, discordPermissionsBitField) {
         process.exit(1);
     }
 
+    app.set('trust proxy', 1); // Enable trust proxy to fix HTTPS redirects
     app.use(session({ secret: process.env.SESSION_SECRET, resave: false, saveUninitialized: false, cookie: { maxAge: 1000 * 60 * 60 * 24 } }));
     app.use(passport.initialize());
     app.use(passport.session());
@@ -230,9 +231,21 @@ function start(clientInstance, discordPermissionsBitField) {
 
     // --- ACTION & API ROUTES ---
     app.post("/manage/:guildId/settings", checkAuth, checkGuildAdmin, async (req, res) => {
-        const { channelId, roleId } = req.body;
-        await db.execute("INSERT INTO guilds (guild_id, announcement_channel_id, live_role_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE announcement_channel_id = ?, live_role_id = ?", [req.params.guildId, channelId || null, roleId || null, channelId || null, roleId || null]);
-        res.redirect(`/manage/${req.params.guildId}?success=settings`);
+        const { announcement_channel_id, live_role_id, enable_stream_summaries, avatar_upload_channel_id, youtube_visibility_level } = req.body;
+        const guildId = req.params.guildId;
+
+        await db.execute(
+            `INSERT INTO guilds (guild_id, announcement_channel_id, live_role_id, enable_stream_summaries, avatar_upload_channel_id, youtube_visibility_level)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                announcement_channel_id = VALUES(announcement_channel_id),
+                live_role_id = VALUES(live_role_id),
+                enable_stream_summaries = VALUES(enable_stream_summaries),
+                avatar_upload_channel_id = VALUES(avatar_upload_channel_id),
+                youtube_visibility_level = VALUES(youtube_visibility_level)`,
+            [guildId, announcement_channel_id || null, live_role_id || null, enable_stream_summaries === '1', avatar_upload_channel_id || null, youtube_visibility_level]
+        );
+        res.redirect(`/manage/${guildId}?success=settings#v-pills-core-tab`);
     });
 
     app.post("/manage/:guildId/add", checkAuth, checkGuildAdmin, async (req, res) => {
@@ -347,6 +360,105 @@ function start(clientInstance, discordPermissionsBitField) {
             res.status(500).render("error", { user: req.user, error: `An error occurred: ${error.message}` });
         } finally {
             if (cycleTLS) await cycleTLS.exit().catch(logger.error);
+        }
+    });
+
+    app.post("/manage/:guildId/mass-add", checkAuth, checkGuildAdmin, async (req, res) => {
+        const { usernames, platform, announcement_channel_ids, live_role_id } = req.body;
+        const guildId = req.params.guildId;
+        const usernameList = usernames.split(/[\s,]+/).filter(Boolean);
+        let cycleTLS;
+
+        try {
+            cycleTLS = await initCycleTLS({ timeout: 15000 });
+            for (const username of usernameList) {
+                // This logic is a simplified version of the single /add route
+                let streamerInfo = { puid: null, dbUsername: username, pfp: null };
+
+                if (platform === "twitch") {
+                    const u = await apiChecks.getTwitchUser(username);
+                    if (u) streamerInfo = { puid: u.id, dbUsername: u.login, pfp: u.profile_image_url };
+                } else if (platform === "youtube") {
+                    const c = await apiChecks.getYouTubeChannelId(username);
+                    if (c?.channelId) streamerInfo = { puid: c.channelId, dbUsername: c.channelName || username };
+                } else if (platform === "kick") {
+                    const u = await apiChecks.getKickUser(cycleTLS, username);
+                    if (u) streamerInfo = { puid: u.id.toString(), dbUsername: u.user.username, pfp: u.user.profile_pic };
+                } else {
+                    // For platforms without a lookup, the username is the ID
+                    streamerInfo.puid = username;
+                }
+
+                if (!streamerInfo.puid) {
+                    logger.warn(`[Mass Add] Could not find ${username} on ${platform}. Skipping.`);
+                    continue;
+                }
+
+                await db.execute(
+                    `INSERT INTO streamers (platform, platform_user_id, username, profile_image_url) VALUES (?, ?, ?, ?) 
+                     ON DUPLICATE KEY UPDATE username = VALUES(username), profile_image_url = VALUES(profile_image_url)`,
+                    [platform, streamerInfo.puid, streamerInfo.dbUsername, streamerInfo.pfp]
+                );
+
+                const [[streamer]] = await db.execute("SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?", [platform, streamerInfo.puid]);
+                if (!streamer) continue;
+
+                const channelIds = Array.isArray(announcement_channel_ids) ? announcement_channel_ids : [announcement_channel_ids];
+                for (const channelId of channelIds) {
+                    await db.execute("INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id, live_role_id) VALUES (?, ?, ?, ?)", [guildId, streamer.streamer_id, channelId || null, live_role_id || null]);
+                }
+            }
+            res.redirect(`/manage/${guildId}?success=mass_add#v-pills-csv-tab`);
+        } catch (error) {
+            logger.error("[Dashboard Mass Add Error]", { error });
+            res.status(500).render("error", { user: req.user, error: `An error occurred during mass add: ${error.message}` });
+        } finally {
+            if (cycleTLS) await cycleTLS.exit().catch(logger.error);
+        }
+    });
+
+    app.post("/api/manage/:guildId/edit-streamer", checkAuth, checkGuildAdmin, async (req, res) => {
+        const { discordUserId, subscriptions, removeSubscriptions, removeAll, primaryUsername } = req.body;
+        const guildId = req.params.guildId;
+
+        try {
+            if (removeAll) {
+                const [accounts] = await db.execute("SELECT streamer_id FROM streamers WHERE discord_user_id = ? OR username = ?", [discordUserId, primaryUsername]);
+                if (accounts.length > 0) {
+                    const streamerIds = accounts.map(a => a.streamer_id);
+                    await db.execute(`DELETE FROM subscriptions WHERE guild_id = ? AND streamer_id IN (?)`, [guildId, streamerIds]);
+                }
+                return res.json({ success: true, message: "All subscriptions for this user have been removed." });
+            }
+
+            if (removeSubscriptions) {
+                await db.execute(`DELETE FROM subscriptions WHERE guild_id = ? AND subscription_id IN (?)`, [guildId, removeSubscriptions]);
+                return res.json({ success: true, message: "Subscription removed from the channel." });
+            }
+
+            if (subscriptions) {
+                for (const sub of subscriptions) {
+                    const placeholders = sub.subscription_ids.map(() => '?').join(',');
+                    await db.execute(
+                        `UPDATE subscriptions SET custom_message = ?, override_nickname = ?, override_avatar_url = ?, live_role_id = ? WHERE subscription_id IN (${placeholders}) AND guild_id = ?`,
+                        [sub.custom_message || null, sub.override_nickname || null, sub.override_avatar_url || null, sub.live_role_id || null, ...sub.subscription_ids, guildId]
+                    );
+                }
+            }
+
+            if (discordUserId) {
+                const [accounts] = await db.execute("SELECT streamer_id FROM streamers WHERE username = ?", [primaryUsername]);
+                if (accounts.length > 0) {
+                    const streamerIds = accounts.map(a => a.streamer_id);
+                    await db.execute(`UPDATE streamers SET discord_user_id = ? WHERE streamer_id IN (?)`, [discordUserId, streamerIds]);
+                }
+            }
+
+            res.json({ success: true, message: "Streamer settings updated successfully!" });
+
+        } catch (error) {
+            logger.error(`[API Edit Streamer Error] for guild ${guildId}:`, { error });
+            res.status(500).json({ success: false, message: `An internal server error occurred: ${error.message}` });
         }
     });
 
@@ -496,15 +608,20 @@ function start(clientInstance, discordPermissionsBitField) {
 
     app.post("/api/admin/reset-database", checkAuth, checkBotOwner, async (req, res) => {
         logger.warn(`[ADMIN] Database reset initiated by ${req.user.username}`);
-        try {
-            const dumpSql = fs.readFileSync(path.join(__dirname, '../dump.sql'), 'utf8');
-            await db.query(dumpSql);
+        const dumpFilePath = path.join(__dirname, '../dump.sql');
+        const command = `mysql -u ${process.env.DB_USER} -p${process.env.DB_PASSWORD} ${process.env.DB_NAME} < ${dumpFilePath}`;
+
+        exec(command, (error, stdout, stderr) => {
+            if (error) {
+                logger.error(`[ADMIN] Database reset failed: ${error.message}`);
+                return res.status(500).json({ success: false, message: `Database reset failed: ${error.message}` });
+            }
+            if (stderr) {
+                logger.warn(`[ADMIN] Database reset stderr: ${stderr}`);
+            }
             logger.info("[ADMIN] Database has been successfully reset.");
             res.json({ success: true, message: "Database has been reset successfully." });
-        } catch (error) {
-            logger.error("[ADMIN] Database reset failed:", error);
-            res.status(500).json({ success: false, message: `Database reset failed: ${error.message}` });
-        }
+        });
     });
 
     app.post("/api/reinit", checkAuth, checkBotOwner, (req, res) => {

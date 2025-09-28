@@ -79,13 +79,15 @@ module.exports = {
       .setCustomId(`addstreamer_platforms_${interactionId}`)
       .setPlaceholder("Select the platform(s) to add this streamer on")
       .setMinValues(1)
-      .setMaxValues(5)
+      .setMaxValues(7)
       .addOptions([
         {label: "Twitch", value: "twitch", emoji: "🟣"},
         {label: "Kick", value: "kick", emoji: "🟢"},
         {label: "YouTube", value: "youtube", emoji: "🔴"},
         {label: "TikTok", value: "tiktok", emoji: "⚫"},
         {label: "Trovo", value: "trovo", emoji: "🟢"},
+        {label: "Facebook", value: "facebook", emoji: "🔵"},
+        {label: "Instagram", value: "instagram", emoji: "📸"}
       ]);
 
     const row = new ActionRowBuilder().addComponents(platformSelect);

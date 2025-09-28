@@ -174,8 +174,6 @@ async function checkTwitch(streamer) {
       }
     }
 
-    // The announcer will handle avatar updates, but we can pass along the latest if we get it.
-    // The user endpoint is still the most reliable source for the avatar.
     const userRes = await getTwitchUser(streamer.platform_user_id);
 
     return {
@@ -187,7 +185,7 @@ async function checkTwitch(streamer) {
       game: streamData.game_name || "N/A",
       thumbnailUrl: streamData.thumbnail_url?.replace("{width}", "1280").replace("{height}", "720"),
       viewers: streamData.viewer_count,
-      profileImageUrl: userRes?.profile_image_url || streamer.profile_image_url, // Use new avatar if found, otherwise keep old
+      profileImageUrl: userRes?.profile_image_url || streamer.profile_image_url,
       uptime: uptimeSeconds,
       gameArtUrl
     };
@@ -203,9 +201,7 @@ async function checkYouTube(channelId) {
   let page = null;
   try {
     const browser = await getBrowser();
-    if (!browser) {
-      return defaultResponse;
-    }
+    if (!browser) return defaultResponse;
     page = await browser.newPage();
     const url = `https://www.youtube.com/channel/${channelId}/live`;
     await page.goto(url, {waitUntil: "domcontentloaded", timeout: 45000});
@@ -227,19 +223,153 @@ async function checkYouTube(channelId) {
     logger.error(`[Check YouTube Error] for channel ID "${channelId}":`, {error: e.message});
     return defaultResponse;
   } finally {
-    if (page) {
-      await page.close().catch(() => {
-      });
-    }
+    if (page) await page.close().catch(() => {});
   }
 }
 
 async function checkTikTok(username) {
-  return {isLive: false};
+    const defaultResponse = { isLive: false, profileImageUrl: null };
+    let page = null;
+    try {
+        const browser = await getBrowser();
+        if (!browser) return defaultResponse;
+        page = await browser.newPage();
+        const url = `https://www.tiktok.com/@${username}/live`;
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+
+        const isLiveIndicator = await page.locator("*[class*='LiveRoom-liveBadge']").isVisible({ timeout: 7000 });
+
+        if (isLiveIndicator) {
+            const title = await page.locator("*[class*='LiveRoom-title']").textContent().catch(() => "Untitled Stream");
+            const profileImageUrl = await page.locator("*[class*='LiveRoom-creatorAvatar'] img").getAttribute("src").catch(() => null);
+            return {
+                isLive: true,
+                platform: "tiktok",
+                username: username,
+                url: url,
+                title: title,
+                game: "N/A",
+                viewers: "N/A",
+                profileImageUrl: profileImageUrl
+            };
+        }
+        return defaultResponse;
+    } catch (e) {
+        logger.debug(`[Check TikTok] Non-fatal error for "${username}" (likely not live): ${e.message}`);
+        return defaultResponse;
+    } finally {
+        if (page) await page.close().catch(() => {});
+    }
 }
 
 async function checkTrovo(username) {
-  return {isLive: false};
+    const defaultResponse = { isLive: false, profileImageUrl: null };
+    try {
+        const response = await axios.post('https://api-web.trovo.live/graphql', 
+            {
+                "operationName": "live_getLiveInfo",
+                "variables": {"params":{"userName":username}},
+                "query": "query live_getLiveInfo($params: LiveInfoRequest) {\n  live_getLiveInfo(params: $params) {\n    isLive\n    liveInfo {\n      streamerInfo {\n        userName\n        nickName\n        profilePic\n      }\n      programInfo {\n        id\n        title\n        coverUrl\n        thumbnailUrl\n      }\n      categoryInfo {\n        shortName\n      }\n      viewers\n      followers\n    }\n  }\n}\n"
+            },
+            {
+                headers: { 'Content-Type': 'application/json' }
+            }
+        );
+
+        const liveData = response.data?.data?.live_getLiveInfo;
+        if (liveData && liveData.isLive) {
+            const info = liveData.liveInfo;
+            return {
+                isLive: true,
+                platform: "trovo",
+                username: info.streamerInfo.userName,
+                url: `https://trovo.live/s/${info.streamerInfo.userName}`,
+                title: info.programInfo.title || "Untitled Stream",
+                game: info.categoryInfo?.shortName || "N/A",
+                thumbnailUrl: info.programInfo.coverUrl,
+                viewers: info.viewers || 0,
+                profileImageUrl: info.streamerInfo.profilePic
+            };
+        }
+        const profilePic = response.data?.data?.live_getLiveInfo?.liveInfo?.streamerInfo?.profilePic || null;
+        return { ...defaultResponse, profileImageUrl: profilePic };
+
+    } catch (error) {
+        logger.error(`[Check Trovo Error] for "${username}":`, { error: error.response?.data || error.message });
+        return defaultResponse;
+    }
 }
 
-module.exports = {getYouTubeChannelId, getTwitchUser, getKickUser, checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo, getTwitchTeamMembers, getTwitchUsers};
+async function checkFacebook(username) {
+    const defaultResponse = { isLive: false, profileImageUrl: null };
+    let page = null;
+    try {
+        const browser = await getBrowser();
+        if (!browser) return defaultResponse;
+        page = await browser.newPage();
+        const url = `https://www.facebook.com/${username}/live`;
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+
+        const isLiveIndicator = await page.locator('[role="main"] :text("is live now")').or(page.locator('[aria-label="LIVE"]')).first().isVisible({ timeout: 7000 });
+
+        if (isLiveIndicator) {
+            const profileImageUrl = await page.locator('meta[property="og:image"]').getAttribute("content").catch(() => null);
+            const title = await page.title().then(t => t.split('|')[0].trim()).catch(() => "Untitled Stream");
+
+            return {
+                isLive: true,
+                platform: "facebook",
+                username: username,
+                url: page.url(),
+                title: title,
+                game: "N/A",
+                viewers: "N/A",
+                profileImageUrl: profileImageUrl
+            };
+        }
+        return defaultResponse;
+    } catch (e) {
+        logger.debug(`[Check Facebook] Non-fatal error for "${username}" (likely not live or page unavailable): ${e.message}`);
+        return defaultResponse;
+    } finally {
+        if (page) await page.close().catch(() => {});
+    }
+}
+
+async function checkInstagram(username) {
+    const defaultResponse = { isLive: false, profileImageUrl: null };
+    let page = null;
+    try {
+        const browser = await getBrowser();
+        if (!browser) return defaultResponse;
+        page = await browser.newPage({
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Mobile/15E148 Safari/604.1'
+        });
+        const url = `https://www.instagram.com/${username}/`;
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+
+        const isLiveIndicator = await page.locator('a[href*="/live/"] canvas').or(page.locator(':text("Live")')).first().isVisible({ timeout: 7000 });
+
+        if (isLiveIndicator) {
+             const profileImageUrl = await page.locator('meta[property="og:image"]').getAttribute("content").catch(() => null);
+            return {
+                isLive: true,
+                platform: "instagram",
+                username: username,
+                url: `https://www.instagram.com/${username}/live`,
+                title: "Live on Instagram",
+                game: "N/A",
+                viewers: "N/A",
+                profileImageUrl: profileImageUrl
+            };
+        }
+        return defaultResponse;
+    } catch (e) {
+        logger.debug(`[Check Instagram] Non-fatal error for "${username}" (likely not live or private): ${e.message}`);
+        return defaultResponse;
+    } finally {
+        if (page) await page.close().catch(() => {});
+    }
+}
+
+module.exports = {getYouTubeChannelId, getTwitchUser, getKickUser, checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo, getTwitchTeamMembers, getTwitchUsers, checkFacebook, checkInstagram};

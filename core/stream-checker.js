@@ -54,6 +54,8 @@ async function checkStreams(client) {
                     if (streamer.platform === "twitch") return apiChecks.checkTwitch(streamer);
                     if (streamer.platform === "kick" && cycleTLS) return apiChecks.checkKick(cycleTLS, streamer.username);
                     if (streamer.platform === "youtube") return apiChecks.checkYouTube(streamer.platform_user_id);
+                    if (streamer.platform === "facebook") return apiChecks.checkFacebook(streamer.username);
+                    if (streamer.platform === "instagram") return apiChecks.checkInstagram(streamer.username);
                     return { isLive: false, profileImageUrl: null };
                 }, 75);
 
