@@ -1,5 +1,5 @@
-const {Queue} = require("bullmq");
-const logger = require("../utils/logger");
+import {Queue} from "bullmq";
+import {logger} from "../utils/logger";
 
 const summaryQueue = new Queue("stream-summary", {
   connection: {
@@ -12,4 +12,4 @@ summaryQueue.on("error", err => {
   logger.error("[BullMQ] Summary Queue Error:", {error: err});
 });
 
-module.exports = {summaryQueue};
+export {summaryQueue};

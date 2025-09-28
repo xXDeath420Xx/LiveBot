@@ -1,6 +1,7 @@
-const playwright = require("playwright-core");
+import playwright from "playwright-core";
+import {BrowserContext} from "playwright";
 
-let browser = null;
+let browser: BrowserContext|null = null;
 
 async function getBrowser() {
   if (browser) {
@@ -10,7 +11,7 @@ async function getBrowser() {
     console.log("[BrowserManager] Initializing new persistent browser instance...");
     browser = await playwright.chromium.launchPersistentContext("./user-data-dir", {
       headless: true,
-      executablePath: process.env.CHROME_EXECUTABLE_PATH, // Make sure to set this in your .env
+      executablePath: process.env.CHROME_EXECUTABLE_PATH,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
@@ -18,7 +19,7 @@ async function getBrowser() {
         "--disable-accelerated-2d-canvas",
         "--no-first-run",
         "--no-zygote",
-        "--single-process", // Might help on low-resource systems
+        "--single-process",
         "--disable-gpu"
       ],
     });
@@ -51,4 +52,4 @@ async function gracefulShutdown() {
 process.on("SIGINT", gracefulShutdown);
 process.on("SIGTERM", gracefulShutdown);
 
-module.exports = {getBrowser, closeBrowser};
+export {getBrowser, closeBrowser};

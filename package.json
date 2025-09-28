@@ -26,6 +26,7 @@
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "ioredis": "^5.4.1",
+    "mariadb": "^3.4.5",
     "multer": "2.0.2",
     "mysql2": "^3.10.1",
     "papaparse": "^5.4.1",
@@ -37,15 +38,21 @@
     "winston": "^3.11.0"
   },
   "devDependencies": {
+    "@prisma/client": "^6.16.2",
+    "@types/express": "^5.0.3",
+    "@types/express-session": "^1.18.2",
+    "@types/node": "^20.8.4",
+    "@types/passport": "^1.0.17",
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "del-cli": "^5.0.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^8.10.0",
     "prettier": "^2.8.8",
+    "prisma": "^6.16.2",
     "simple-eta": "^3.0.2",
-    "tsx": "^4.7.3",
-    "typescript": "^4.9.5"
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
   },
   "prettier": {
     "trailingComma": "es5",

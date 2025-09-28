@@ -10,8 +10,9 @@
     "strict": true,
     "skipLibCheck": true,
     "sourceMap": true,
-    "sourceRoot": "./src"
-    /* For Sentry */
+    "sourceRoot": "./src",
+    "useUnknownInCatchVariables": false,
+    "lib": ["es5", "es6", "dom", "dom.iterable"]
   },
   "exclude": [
     "./node_modules"
