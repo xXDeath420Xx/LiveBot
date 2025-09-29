@@ -12,6 +12,8 @@
                             <option value="<%= c.id ;%>">#<%= c.name ;%></option>
                         <% }); %>
                     </select></div>
+                <div class="mb-3"><label class="form-label">Webhook Name (Optional)</label><input type="text" name="webhookName" class="form-control" placeholder="e.g. ReeferRealm Announcer"></div>
+                <div class="mb-3"><label class="form-label">Webhook Avatar URL (Optional)</label><input type="url" name="webhookAvatarUrl" class="form-control" placeholder="https://i.imgur.com/....png"></div>
                 <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus me-2"></i>Subscribe</button>
             </form>
         </div>

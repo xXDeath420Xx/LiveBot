@@ -468,8 +468,8 @@ function start(clientInstance, discordPermissionsBitField) {
     });
 
     app.post("/manage/:guildId/subscribe-team", checkAuth, checkGuildAdmin, async (req, res) => {
-        const { teamName, channelId } = req.body;
-        const [result] = await db.execute("INSERT INTO twitch_teams (guild_id, team_name, announcement_channel_id) VALUES (?, ?, ?)", [req.params.guildId, teamName, channelId]);
+        const { teamName, channelId, webhookName, webhookAvatarUrl } = req.body;
+        const [result] = await db.execute("INSERT INTO twitch_teams (guild_id, team_name, announcement_channel_id, webhook_name, webhook_avatar_url) VALUES (?, ?, ?, ?, ?)", [req.params.guildId, teamName, channelId, webhookName || null, webhookAvatarUrl || null]);
         await syncTwitchTeam(result.insertId, db, apiChecks, logger);
         res.redirect(`/manage/${req.params.guildId}?success=team_added#v-pills-teams-tab`);
     });
