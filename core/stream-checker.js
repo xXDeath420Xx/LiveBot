@@ -1,181 +1,171 @@
-const logger = require("../utils/logger");
-const db = require("../utils/db");
-const cache = require("../utils/cache");
-const apiChecks = require("../utils/api_checks.js");
-const { announcementQueue } = require("../jobs/announcement-queue");
-const { summaryQueue } = require("../jobs/summary-queue");
-const initCycleTLS = require("cycletls");
-const { syncTwitchTeam } = require("./team-sync");
-
-let isChecking = false;
-let isCheckingTeams = false;
-let cycleTLS = null;
-
-async function fetchAndCache(key, fetcher, ttl) {
-    let data = await cache.get(key);
-    if (data) return data;
-    data = await fetcher();
-    if (data) await cache.set(key, data, ttl);
-    return data;
-}
+// B:/Code/LiveBot/core/stream-checker.js - Updated on 2025-10-01 - Unique Identifier: STREAM-CHECKER-FINAL-004
+const db = require('../utils/db');
+const apiChecks = require('../utils/api_checks');
+const cache = require('../utils/cache');
+const logger = require('../utils/logger');
+const { Queue } = require('bullmq');
+const { syncTwitchTeam } = require('./team-sync');
+const { handleRole } = require('./role-manager');
 
 async function checkStreams(client) {
-    if (isChecking) return;
-    isChecking = true;
-    logger.info(`[Check] ---> Starting stream check @ ${new Date().toLocaleTimeString()}`);
+    logger.info('[Check] ---> Starting stream check @ ' + new Date().toLocaleTimeString());
     try {
-        const [subscriptions, announcementsInDb, guildSettingsList, teamSettingsList] = await Promise.all([
-            db.execute("SELECT sub.*, s.*, s.discord_user_id AS streamer_discord_user_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id").then(res => res[0]),
-            db.execute(`
-                SELECT a1.* FROM announcements a1
-                JOIN (SELECT subscription_id, MAX(announcement_id) as max_announcement_id FROM announcements GROUP BY subscription_id) a2
-                ON a1.subscription_id = a2.subscription_id AND a1.announcement_id = a2.max_announcement_id
-            `).then(res => res[0]),
-            fetchAndCache("db:guilds", () => db.execute("SELECT * FROM guilds").then(res => res[0]), 300),
-            fetchAndCache("db:twitch_teams", () => db.execute("SELECT * FROM twitch_teams").then(res => res[0]), 300),
-        ]);
+        const [subscriptions] = await db.execute('SELECT sub.*, s.platform_user_id, s.username, s.platform, s.kick_username, s.discord_user_id FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id');
+        const [existingAnnouncements] = await db.execute('SELECT * FROM announcements');
+        const [guildSettings] = await db.execute('SELECT * FROM guilds');
+        const [teamSettings] = await db.execute('SELECT * FROM twitch_teams');
 
-        const announcementsMap = new Map(announcementsInDb.map(a => [a.subscription_id, a]));
-        const guildSettingsMap = new Map(guildSettingsList.map(g => [g.guild_id, g]));
-        const teamSettingsMap = new Map(teamSettingsList.map(t => [t.id, t]));
+        logger.info(`[Check] Fetched ${subscriptions.length} subscriptions, ${existingAnnouncements.length} existing announcements, ${guildSettings.length} guild settings, ${teamSettings.length} team settings.`);
 
-        if (!cycleTLS) {
-            logger.info("[CycleTLS] Shared instance not found for stream check, initializing...");
-            cycleTLS = await initCycleTLS({ timeout: 60000 });
-        }
+        const uniqueStreamers = [...new Map(subscriptions.map(s => [`${s.platform}:${s.username}`, s])).values()];
+        logger.info(`[Check] Identified ${uniqueStreamers.length} unique streamers to check.`);
 
-        const liveStatusMap = new Map();
-        const uniqueStreamers = [...new Map(subscriptions.map(item => [item.streamer_id, item])).values()];
-
+        const liveStatuses = new Map();
         for (const streamer of uniqueStreamers) {
-            try {
-                const cacheKey = `api:${streamer.platform}:${streamer.username}`;
-                const fetchedLiveData = await fetchAndCache(cacheKey, async () => {
-                    if (streamer.platform === "twitch") return apiChecks.checkTwitch(streamer);
-                    if (streamer.platform === "kick" && cycleTLS) return apiChecks.checkKick(cycleTLS, streamer.username);
-                    if (streamer.platform === "youtube") return apiChecks.checkYouTube(streamer.platform_user_id);
-                    if (streamer.platform === "facebook") return apiChecks.checkFacebook(streamer.username);
-                    if (streamer.platform === "instagram") return apiChecks.checkInstagram(streamer.username);
-                    return { isLive: false, profileImageUrl: null };
-                }, 75);
-
-                if (fetchedLiveData?.isLive) {
-                    liveStatusMap.set(streamer.streamer_id, fetchedLiveData);
+            const cacheKey = `api:${streamer.platform}:${streamer.username}`;
+            let status = await cache.get(cacheKey);
+            if (!status) {
+                logger.debug(`[Check] Cache miss for ${streamer.username} on ${streamer.platform}. Calling API.`);
+                switch (streamer.platform) {
+                    case 'twitch': status = await apiChecks.checkTwitch(streamer); break;
+                    case 'kick': status = await apiChecks.checkKick(streamer.username); break;
+                    case 'youtube': status = await apiChecks.checkYouTube(streamer.platform_user_id); break;
+                    case 'tiktok': status = await apiChecks.checkTikTok(streamer.username); break;
+                    case 'trovo': status = await apiChecks.checkTrovo(streamer.username); break;
+                    default: status = { isLive: false };
                 }
-            } catch (e) {
-                logger.error(`[API Check Error] for ${streamer.username} (${streamer.platform}): ${e.message}`);
+                await cache.set(cacheKey, status, 60); // Cache for 60 seconds
+            } else {
+                logger.debug(`[Check] Cache hit for ${streamer.username} on ${streamer.platform}.`);
+            }
+
+            if (status && status.isLive) {
+                logger.info(`[Check] Streamer ${streamer.username} (${streamer.platform}) is LIVE.`);
+                liveStatuses.set(`${streamer.platform}:${streamer.username}`, status);
             }
         }
 
-        const desiredAnnouncementKeys = new Set();
+        const announcementsMap = new Map(existingAnnouncements.map(a => [a.subscription_id, a]));
+        const announcementQueue = [];
+
+        logger.info(`[Check] Iterating through ${subscriptions.length} subscriptions to enqueue announcements.`);
         for (const sub of subscriptions) {
-            const liveData = liveStatusMap.get(sub.streamer_id);
-            if (!liveData) continue;
+            const liveData = liveStatuses.get(`${sub.platform}:${sub.username}`);
+            const existingAnn = announcementsMap.get(sub.subscription_id);
 
-            const guildSettings = guildSettingsMap.get(sub.guild_id);
-            const teamSettings = sub.team_subscription_id ? teamSettingsMap.get(sub.team_subscription_id) : null;
+            if (liveData) {
+                let targetChannelId = sub.announcement_channel_id;
+                if (sub.team_subscription_id) {
+                    const team = teamSettings.find(t => t.id === sub.team_subscription_id);
+                    if (team) targetChannelId = team.announcement_channel_id;
+                }
 
-            if (liveData.platform === 'youtube') {
-                const visibilitySetting = sub.youtube_visibility_level || guildSettings?.youtube_visibility_level || 'public';
-                if (visibilitySetting === 'public' && liveData.visibility === 'members-only') {
-                    logger.info(`[Check] Skipping members-only YouTube stream for ${sub.username} in guild ${sub.guild_id} as per settings.`);
+                if (!targetChannelId) {
+                    logger.warn(`[Check] No announcement channel found for subscription ID ${sub.subscription_id}. Skipping.`);
                     continue;
                 }
-            }
 
-            const targetChannelId = sub.announcement_channel_id || teamSettings?.announcement_channel_id || guildSettings?.announcement_channel_id;
-            if (!targetChannelId) continue;
+                logger.debug(`[Check] Resolved targetChannelId for ${sub.username} (Sub ID: ${sub.subscription_id}): ${targetChannelId}`);
 
-            desiredAnnouncementKeys.add(sub.subscription_id);
-            const existing = announcementsMap.get(sub.subscription_id);
-            await announcementQueue.add(`announcement-${sub.subscription_id}`, { sub, liveData, existing, guildSettings, teamSettings }, { jobId: `announcement-${sub.subscription_id}`, removeOnComplete: true, removeOnFail: 50 });
-        }
+                const jobData = { sub, liveData };
+                announcementQueue.push({ name: `announcement-${sub.subscription_id}`, data: jobData });
+                logger.info(`[Check] Enqueueing announcement job for ${sub.username} (Subscription: ${sub.subscription_id}) to channel ${targetChannelId}. Existing announcement: ${!!existingAnn}`);
 
-        // --- BATCH OFFLINE PROCESSING ---
-        const endedAnnouncements = [];
-        for (const [subscription_id, existing] of announcementsMap.entries()) {
-            if (!desiredAnnouncementKeys.has(subscription_id)) {
-                endedAnnouncements.push(existing);
-            }
-        }
-
-        if (endedAnnouncements.length > 0) {
-            const endedAnnouncementIds = endedAnnouncements.map(a => a.announcement_id);
-            logger.info(`[Check] Found ${endedAnnouncementIds.length} streams that have ended. Processing cleanup.`);
-
-            // Batch update stream sessions
-            await db.execute(`UPDATE stream_sessions SET end_time = NOW() WHERE announcement_id IN (?) AND end_time IS NULL`, [endedAnnouncementIds]);
-
-            // Handle summaries or message deletions in parallel
-            const cleanupPromises = endedAnnouncements.map(existing => {
-                const guildSettings = guildSettingsMap.get(existing.guild_id);
-                if (guildSettings?.enable_stream_summaries) {
-                    return summaryQueue.add(`summary-${existing.announcement_id}`, { announcementId: existing.announcement_id });
-                } else {
-                    return client.channels.fetch(existing.channel_id)
-                        .then(channel => {
-                            if (channel) {
-                                return channel.messages.delete(existing.message_id).catch(err => {
-                                    if (err.code !== 10008) { // Ignore "Unknown Message" errors
-                                        logger.warn(`[Check] Could not delete announcement message ${existing.message_id}: ${err.message}`);
-                                    }
-                                });
-                            }
-                        })
-                        .catch(() => { /* Ignore channel fetch errors */ });
+                if (!existingAnn) {
+                    announcementsMap.set(sub.subscription_id, { temp: true });
+                    logger.debug(`[Check] Optimistically updated announcementsMap for new announcement job for ${sub.username} (Subscription: ${sub.subscription_id}).`);
                 }
-            });
-            await Promise.all(cleanupPromises);
-
-            // Batch delete announcements from the DB
-            await db.execute(`DELETE FROM announcements WHERE announcement_id IN (?)`, [endedAnnouncementIds]);
-            logger.info(`[Check] Cleaned up ${endedAnnouncementIds.length} ended stream announcements from the database.`);
-        }
-
-    } catch (e) {
-        logger.error("[checkStreams] CRITICAL ERROR:", { error: e });
-        if (e && e.message && String(e.message).toLowerCase().includes('cycletls')) {
-            logger.warn("[CycleTLS] Nullifying CycleTLS instance due to stream check error.");
-            if (cycleTLS) {
-                await cycleTLS.exit().catch(() => {});
             }
-            cycleTLS = null;
         }
+
+        const endedStreams = existingAnnouncements.filter(ann => !subscriptions.some(sub => sub.subscription_id === ann.subscription_id && liveStatuses.has(`${sub.platform}:${sub.username}`)));
+        if (endedStreams.length > 0) {
+            logger.info(`[Check] Found ${endedStreams.length} streams that have ended. Processing cleanup.`);
+            const announcementIdsToDelete = [];
+            for (const ann of endedStreams) {
+                const sub = subscriptions.find(s => s.subscription_id === ann.subscription_id);
+                if (sub) {
+                    const rolesToRemove = [];
+                    const guildSetting = guildSettings.find(gs => gs.guild_id === sub.guild_id);
+                    if (guildSetting?.live_role_id) {
+                        rolesToRemove.push(guildSetting.live_role_id);
+                    }
+                    if (sub.team_subscription_id) {
+                        const teamSetting = teamSettings.find(ts => ts.id === sub.team_subscription_id);
+                        if (teamSetting?.live_role_id) {
+                            rolesToRemove.push(teamSetting.live_role_id);
+                        }
+                    }
+                    const uniqueRolesToRemove = [...new Set(rolesToRemove)];
+                    const discordUserId = sub.discord_user_id;
+
+                    if (uniqueRolesToRemove.length > 0 && discordUserId) {
+                        try {
+                            const guild = await client.guilds.fetch(sub.guild_id);
+                            const member = await guild.members.fetch(discordUserId).catch(() => null);
+                            if (member) {
+                                await handleRole(member, uniqueRolesToRemove, "remove", sub.guild_id);
+                                logger.info(`[Check] Removed live roles ${uniqueRolesToRemove.join(', ')} from ${member.user.tag} in guild ${sub.guild_id}.`);
+                            } else {
+                                logger.warn(`[Check] Could not find member ${discordUserId} in guild ${sub.guild_id} to remove live roles.`);
+                            }
+                        } catch (roleError) {
+                            logger.error(`[Check] Failed to remove live roles from ${sub.username} (${discordUserId}) in guild ${sub.guild_id}: ${roleError.message}`);
+                        }
+                    }
+                }
+
+                try {
+                    const channel = await client.channels.fetch(ann.channel_id).catch(() => null);
+                    if (channel) {
+                        await channel.messages.delete(ann.message_id).catch(err => {
+                            if (err.code !== 10008) logger.error(`[Check] Failed to delete message ${ann.message_id} in channel ${ann.channel_id}:`, err.message);
+                        });
+                        logger.info(`[Check] Deleting message for ended announcement ${ann.announcement_id} in channel ${ann.channel_id}.`);
+                    }
+                    announcementIdsToDelete.push(ann.announcement_id);
+                } catch (e) {
+                    logger.error(`[Check] Error during cleanup for announcement ${ann.announcement_id}:`, e.message);
+                    if (e.code === 10003 || e.code === 10008) announcementIdsToDelete.push(ann.announcement_id);
+                }
+            }
+            if (announcementIdsToDelete.length > 0) {
+                await db.execute(`DELETE FROM announcements WHERE announcement_id IN (${announcementIdsToDelete.join(',')})`);
+                logger.info(`[Check] Cleaned up ${announcementIdsToDelete.length} ended stream announcements from the database.`);
+            }
+        }
+
+        if (announcementQueue.length > 0) {
+            const announcementBullQueue = new Queue('announcement-queue', { connection: cache.redis });
+            await announcementBullQueue.addBulk(announcementQueue);
+            await announcementBullQueue.close();
+        }
+
+    } catch (error) {
+        logger.error('[Check] CRITICAL ERROR in checkStreams:', error);
     } finally {
-        isChecking = false;
-        logger.info("[Check] ---> Finished stream check");
+        logger.info('[Check] ---> Finished stream check');
     }
 }
 
 async function checkTeams(client) {
-    if (isCheckingTeams) return;
-    isCheckingTeams = true;
-    logger.info(`[Team Sync] ---> Starting hourly team sync @ ${new Date().toLocaleTimeString()}`);
+    logger.info('[Team Sync] ---> Starting hourly team sync @ ' + new Date().toLocaleTimeString());
     try {
-        if (!cycleTLS) {
-            logger.info("[CycleTLS] Shared instance not found for team sync, initializing...");
-            cycleTLS = await initCycleTLS({ timeout: 60000 });
-        }
-        const [teamSubscriptions] = await db.execute("SELECT id FROM twitch_teams");
-        if (teamSubscriptions.length === 0) {
-            logger.info("[Team Sync] No teams are subscribed for syncing.");
-        } else {
+        const [teamSubscriptions] = await db.execute('SELECT id FROM twitch_teams');
+        logger.debug(`DEBUG (checkTeams): teamSubscriptionsRawResult:`, teamSubscriptions);
+
+        if (teamSubscriptions && teamSubscriptions.length > 0) {
             logger.info(`[Team Sync] Found ${teamSubscriptions.length} teams to sync. Running in parallel...`);
-            const syncPromises = teamSubscriptions.map(sub => syncTwitchTeam(sub.id, db, apiChecks, logger, cycleTLS));
+            const syncPromises = teamSubscriptions.map(team => syncTwitchTeam(team.id, db, logger));
             await Promise.all(syncPromises);
+            logger.info('[Team Sync] All team sync promises resolved.');
+        } else {
+            logger.info('[Team Sync] No teams to sync.');
         }
     } catch (error) {
-        logger.error("[Team Sync] CRITICAL ERROR during hourly sync:", { error: error });
-        if (error && error.message && String(error.message).toLowerCase().includes('cycletls')) {
-            logger.warn("[CycleTLS] Nullifying CycleTLS instance due to team sync error.");
-            if (cycleTLS) {
-                await cycleTLS.exit().catch(() => {});
-            }
-            cycleTLS = null;
-        }
+        logger.error('[Team Sync] CRITICAL ERROR in checkTeams:', error);
     } finally {
-        isCheckingTeams = false;
-        logger.info("[Team Sync] ---> Finished hourly team sync.");
+        logger.info('[Team Sync] ---> Finished hourly team sync.');
     }
 }
 

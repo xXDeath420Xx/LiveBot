@@ -1,33 +1,35 @@
-<div class="modal fade" id="streamerSettingsModal" tabindex="-1">
+<div class="modal fade" id="streamerSettingsModal" tabindex="-1" aria-labelledby="streamerSettingsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form action="/manage/<%= guild.id ;%>/edit-subscription" method="POST">
-                <div class="modal-header"><h5 class="modal-title">Edit Settings for <span id="modal-streamer-name"></span></h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <form action="/manage/<%= guild.id %>/edit-consolidated-streamer" method="POST" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="streamerSettingsModalLabel">Edit Settings for <span id="modal-streamer-name"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" name="subscription_ids" id="edit-subscription-ids">
-                    <input type="hidden" name="original_discord_user_id" id="edit-discord-user-id-original">
+                    <input type="hidden" name="consolidated_streamer_id" id="edit-consolidated-streamer-id">
+                    
                     <h6><i class="fas fa-link fa-fw me-2"></i>Account Linking</h6>
-                    <p class="small text-muted">Link accounts to merge announcements and roles. Clear an input and save to unlink.</p>
-                    <div class="row mb-3">
-                        <div class="col-md-6"><label class="form-label">Linked Discord User ID</label><input type="text" class="form-control" id="edit-discord-user-id" name="discord_user_id"></div>
+                    <p class="small text-muted">Link accounts to merge announcements when live on multiple platforms.</p>
+                    <div class="mb-3">
+                        <label class="form-label">Linked Discord User ID</label>
+                        <input type="text" class="form-control" id="edit-discord-user-id" name="discord_user_id" placeholder="Optional User ID">
                     </div>
-                    <hr>
-                    <h6><i class="fas fa-bullhorn fa-fw me-2"></i>Announcement Customization</h6>
-                    <div class="mb-3"><label class="form-label">Announce In Channel</label><select id="edit-channel-override" name="announcement_channel_id" class="form-select">
-                            <option value="">-- Use Server Default --</option>
-                            <% channels.forEach(c => { %>
-                                <option value="<%= c.id ;%>">#<%= c.name ;%></option>
-                            <% }); %>
-                        </select></div>
-                    <div class="mb-3"><label class="form-label">YouTube Content Visibility</label><select id="edit-youtube-visibility" name="youtube_visibility_level" class="form-select">
-                            <option value="">-- Use Server Default --</option>
-                            <option value="public">Public Only</option>
-                            <option value="members-only">Public & Members-Only</option>
-                        </select></div>
-                    <div class="mb-3"><label class="form-label">Custom Message</label><textarea class="form-control" id="edit-custom-message" name="custom_message" rows="2"></textarea></div>
-                    <div class="mb-3"><label class="form-label">Custom Avatar URL</label><input type="text" class="form-control" id="edit-override-avatar-url" name="override_avatar_url" placeholder="URL or enter 'reset' to clear"></div>
+                    <hr class="my-4">
+
+                    <h6><i class="fas fa-globe fa-fw me-2"></i>Platforms</h6>
+                    <div id="modal-platforms-container" class="mb-4">
+                        <!-- Dynamic platform fields will be injected here by JS -->
+                        <p class="text-muted">Loading platforms...</p>
+                    </div>
+                    <hr class="my-4">
+
+                    <h6><i class="fas fa-bullhorn fa-fw me-2"></i>Subscriptions & Customization</h6>
+                    <div id="modal-subscriptions-container">
+                        <!-- Dynamic subscription fields will be injected here by JS -->
+                        <p class="text-muted">Loading subscriptions...</p>
+                    </div>
+
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

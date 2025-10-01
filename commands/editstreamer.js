@@ -18,8 +18,8 @@ module.exports = {
     const guildId = interaction.guild.id;
 
     try {
-      const [subscriptions] = await db.execute(`
-        SELECT sub.subscription_id, sub.announcement_channel_id, s.platform, s.username
+      const [subscriptions] = await db.pool.execute(`
+        SELECT sub.subscription_id, sub.announcement_channel_id, s.platform, s.username, s.streamer_id
         FROM subscriptions sub
         JOIN streamers s ON sub.streamer_id = s.streamer_id
         WHERE sub.guild_id = ? AND s.username = ? AND sub.team_subscription_id IS NULL
@@ -51,62 +51,70 @@ module.exports = {
         components: [row] 
       });
 
-      // Temporarily store subscription data for the modal step
       const filter = i => i.customId === `editstreamer_select_${interaction.id}` && i.user.id === interaction.user.id;
       const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000 });
 
       collector.on('collect', async i => {
         const subscriptionId = i.values[0];
-        const [subDetails] = await db.execute("SELECT * FROM subscriptions WHERE subscription_id = ?", [subscriptionId]);
+        const [[subDetails]] = await db.pool.execute("SELECT * FROM subscriptions WHERE subscription_id = ?", [subscriptionId]);
 
-        if (!subDetails[0]) {
+        if (!subDetails) {
             return i.update({ content: "Could not find subscription details. Please try again.", components: [] });
         }
 
+        const [[streamerDetails]] = await db.pool.execute("SELECT discord_user_id FROM streamers WHERE streamer_id = ?", [subDetails.streamer_id]);
+
         const modal = new ModalBuilder()
-            .setCustomId(`editstreamer_modal_${subscriptionId}`)
+            .setCustomId(`editstreamer_modal_${subscriptionId}_${subDetails.streamer_id}`)
             .setTitle("Edit Subscription");
 
         const messageInput = new TextInputBuilder()
             .setCustomId('custom_message')
             .setLabel("Custom Announcement Message")
             .setStyle(TextInputStyle.Paragraph)
-            .setValue(subDetails[0].custom_message || '')
+            .setValue(subDetails.custom_message || '')
             .setRequired(false);
 
         const nicknameInput = new TextInputBuilder()
             .setCustomId('override_nickname')
             .setLabel("Custom Webhook Name")
             .setStyle(TextInputStyle.Short)
-            .setValue(subDetails[0].override_nickname || '')
+            .setValue(subDetails.override_nickname || '')
             .setRequired(false);
 
         const avatarInput = new TextInputBuilder()
             .setCustomId('override_avatar_url')
             .setLabel("Custom Webhook Avatar URL")
             .setStyle(TextInputStyle.Short)
-            .setValue(subDetails[0].override_avatar_url || '')
+            .setValue(subDetails.override_avatar_url || '')
+            .setRequired(false);
+
+        const discordUserInput = new TextInputBuilder()
+            .setCustomId('discord_user_id')
+            .setLabel("Discord User ID (Manual Link)")
+            .setStyle(TextInputStyle.Short)
+            .setValue(streamerDetails?.discord_user_id || '')
             .setRequired(false);
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(messageInput),
             new ActionRowBuilder().addComponents(nicknameInput),
-            new ActionRowBuilder().addComponents(avatarInput)
+            new ActionRowBuilder().addComponents(avatarInput),
+            new ActionRowBuilder().addComponents(discordUserInput)
         );
 
         await i.showModal(modal);
-        collector.stop();
       });
 
       collector.on('end', collected => {
         if (collected.size === 0) {
-          interaction.editReply({ content: "Selection timed out.", components: [] });
+          interaction.editReply({ content: 'You did not make a selection in time.', components: [] });
         }
       });
 
     } catch (error) {
-      logger.error("[Edit Streamer Command]", { error });
-      await interaction.editReply({ content: "An error occurred while fetching subscriptions." });
+      logger.error("Error executing editstreamer command:", { error });
+      interaction.editReply({ content: "An error occurred while fetching subscription data." });
     }
   },
 };

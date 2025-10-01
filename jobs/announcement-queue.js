@@ -1,15 +1,14 @@
-const {Queue} = require("bullmq");
+const { Queue } = require("bullmq");
+const { redis } = require("../utils/cache");
 const logger = require("../utils/logger");
 
+// Create a new queue and reuse the existing ioredis client.
 const announcementQueue = new Queue("announcements", {
-  connection: {
-    host: process.env.REDIS_HOST || "127.0.0.1",
-    port: process.env.REDIS_PORT || 6379
-  }
+  connection: redis
 });
 
 announcementQueue.on("error", err => {
-  logger.error("[BullMQ] Queue Error:", {error: err});
+  logger.error("[BullMQ] Queue Error:", { error: err });
 });
 
-module.exports = {announcementQueue};
+module.exports = { announcementQueue };

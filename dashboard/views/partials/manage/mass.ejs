@@ -2,78 +2,31 @@
     <div class="col-lg-6">
         <div class="content-card h-100">
             <h2><i class="fas fa-file-export me-2"></i>Export Subscriptions</h2>
-            <p class="text-muted">Export all individual and team member subscriptions into a single CSV file for backup or migration.</p>
-            <hr>
-            <a href="/manage/<%= guild.id ;%>/export" class="btn btn-secondary w-100"><i class="fas fa-download me-2"></i>Export All as CSV</a>
+            <p class="text-muted">Export all individual and team member subscriptions for this server into a single CSV file. This is useful for backups or migrating to another server.</p>
+            <hr class="my-4">
+            <a href="/manage/<%= guild.id %>/export" class="btn btn-secondary w-100"><i class="fas fa-download me-2"></i>Export All Streamer Subscriptions</a>
         </div>
     </div>
     <div class="col-lg-6">
         <div class="content-card h-100">
             <h2><i class="fas fa-sync-alt me-2"></i>Sync Channel with CSV</h2>
-            <p class="text-muted"><strong>Warning:</strong> This will sync a channel with a CSV, removing anyone from that channel not in the file.</p>
-            <hr>
-            <form action="/manage/<%= guild.id ;%>/import-team" method="POST" enctype="multipart/form-data">
-                <div class="mb-3"><label class="form-label">Channel to Sync</label><select name="channelId" class="form-select" required>
-                        <option value="" disabled selected>-- Select --</option>
-                        <% channels.forEach(c => { %>
-                            <option value="<%= c.id ;%>">#<%= c.name ;%></option>
-                        <% }); %>
-                    </select></div>
-                <div class="mb-3"><label class="form-label">CSV File</label><input class="form-control" type="file" name="csvfile" accept=".csv" required></div>
-                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-sync-alt me-2"></i>Sync from CSV</button>
-            </form>
-        </div>
-    </div>
-</div>
-
-<div class="row mt-4">
-    <div class="col-12">
-        <div class="content-card">
-            <h2><i class="fas fa-users-cog me-2"></i>Mass Add Streamers</h2>
-            <p class="text-muted">Quickly add multiple streamers to your server. Enter a list of usernames, select their platform and settings, and the bot will add them all.</p>
-            <hr>
-            <form action="/manage/<%= guild.id %>/mass-add" method="POST">
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="mass-usernames" class="form-label">Streamer Usernames</label>
-                        <textarea class="form-control" id="mass-usernames" name="usernames" rows="8" placeholder="Enter usernames, one per line or separated by commas/spaces"></textarea>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="mb-3">
-                            <label for="mass-platform" class="form-label">Platform</label>
-                            <select class="form-select" id="mass-platform" name="platform" required>
-                                <option value="twitch">Twitch</option>
-                                <option value="kick">Kick</option>
-                                <option value="youtube">YouTube</option>
-                                <option value="tiktok">TikTok</option>
-                                <option value="trovo">Trovo</option>
-                                <option value="facebook">Facebook</option>
-                                <option value="instagram">Instagram</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label for="mass-channels" class="form-label">Announcement Channels</label>
-                            <select class="form-select" id="mass-channels" name="announcement_channel_ids" multiple required>
-                                <option value="">Server Default</option>
-                                <% channels.forEach(c => { %>
-                                    <option value="<%= c.id %>">#<%= c.name %></option>
-                                <% }); %>
-                            </select>
-                            <div class="form-text">Select one or more channels. Ctrl/Cmd + click to select multiple.</div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="mass-roles" class="form-label">Live Role</label>
-                            <select class="form-select" id="mass-roles" name="live_role_id">
-                                <option value="">Server Default</option>
-                                <% roles.forEach(r => { %>
-                                    <option value="<%= r.id %>">@<%= r.name %></option>
-                                <% }); %>
-                            </select>
-                            <div class="form-text">Optional: Assign a specific live role to these streamers.</div>
-                        </div>
-                    </div>
+            <p class="text-muted">Adds/updates members from a CSV file for a specific channel. <strong>Warning:</strong> This will remove any streamers from that channel who are not in the file.</p>
+            <hr class="my-4">
+            <form action="/manage/<%= guild.id %>/import-team" method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label class="form-label">Channel to Sync</label>
+                    <select name="channelId" class="form-select" required>
+                        <option value="" disabled selected>-- Select a channel --</option>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>">#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
                 </div>
-                <button type="submit" class="btn btn-success w-100 mt-3"><i class="fas fa-plus-circle me-2"></i>Add All Streamers</button>
+                <div class="mb-3">
+                    <label class="form-label">CSV File</label>
+                    <input class="form-control" type="file" name="csvfile" accept=".csv" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-sync-alt me-2"></i>Sync Channel from CSV</button>
             </form>
         </div>
     </div>
