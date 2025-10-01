@@ -169,7 +169,9 @@ function start(botClient) {
                     override_avatar_url: sub.override_avatar_url,
                     platform: streamer.platform, // Link subscription back to its platform
                     streamer_id: streamer.streamer_id, // Link subscription back to its streamer
-                    team_subscription_id: sub.team_subscription_id
+                    team_subscription_id: sub.team_subscription_id,
+                    privacy_setting: sub.privacy_setting,
+                    summary_persistence: sub.summary_persistence
                 });
             }
 
@@ -250,8 +252,11 @@ function start(botClient) {
     });
 
     app.post('/manage/:guildId/settings', checkAuth, checkGuildAdmin, async (req, res) => {
-        const { channelId, roleId } = req.body;
-        await db.execute('INSERT INTO guilds (guild_id, announcement_channel_id, live_role_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE announcement_channel_id = ?, live_role_id = ?', [req.params.guildId, channelId || null, roleId || null, channelId || null, roleId || null]);
+        const { channelId, roleId, privacy_setting, summary_persistence } = req.body;
+        await db.execute(
+            'INSERT INTO guilds (guild_id, announcement_channel_id, live_role_id, privacy_setting, summary_persistence) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE announcement_channel_id = ?, live_role_id = ?, privacy_setting = ?, summary_persistence = ?',
+            [req.params.guildId, channelId || null, roleId || null, privacy_setting, summary_persistence, channelId || null, roleId || null, privacy_setting, summary_persistence]
+        );
         res.redirect(`/manage/${req.params.guildId}?success=settings`);
     });
 
@@ -428,7 +433,7 @@ function start(botClient) {
 
     app.post('/manage/:guildId/channel-appearance/save', checkAuth, checkGuildAdmin, upload.single('avatar'), async (req, res) => {
         try {
-            const { channelId, nickname, avatar_url_text } = req.body;
+            const { channelId, nickname, avatar_url_text, privacy_setting, summary_persistence } = req.body;
             const { guildId } = req.params;
 
             const [[existing]] = await db.execute('SELECT avatar_url FROM channel_settings WHERE guild_id = ? AND channel_id = ?', [guildId, channelId]);
@@ -448,10 +453,12 @@ function start(botClient) {
             }
 
             const finalNickname = (nickname && nickname.toLowerCase() === 'reset') ? null : nickname;
+            const finalPrivacySetting = privacy_setting || null;
+            const finalSummaryPersistence = summary_persistence || null;
 
             await db.execute(
-                'INSERT INTO channel_settings (guild_id, channel_id, nickname, avatar_url) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), avatar_url = VALUES(avatar_url)',
-                [guildId, channelId, finalNickname, finalAvatarUrl]
+                'INSERT INTO channel_settings (guild_id, channel_id, nickname, avatar_url, privacy_setting, summary_persistence) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), avatar_url = VALUES(avatar_url), privacy_setting = VALUES(privacy_setting), summary_persistence = VALUES(summary_persistence)',
+                [guildId, channelId, finalNickname, finalAvatarUrl, finalPrivacySetting, finalSummaryPersistence]
             );
 
             res.redirect(`/manage/${guildId}?success=appearance#appearance-tab`);
@@ -476,12 +483,62 @@ function start(botClient) {
     app.post('/manage/:guildId/edit-consolidated-streamer', checkAuth, checkGuildAdmin, upload.single('avatar'), async (req, res) => {
         try {
             const { guildId } = req.params;
-            const { consolidated_streamer_id, discord_user_id, platforms, subscriptions } = req.body;
+            const { consolidated_streamer_id, discord_user_id, platforms, subscriptions, new_platform, new_platform_username } = req.body;
 
             const [teams] = await db.execute('SELECT id, announcement_channel_id FROM twitch_teams WHERE guild_id = ?', [guildId]);
             const teamChannelMap = new Map(teams.map(t => [t.announcement_channel_id, t.id]));
+
+            // 1. Handle adding a new platform
+            if (new_platform && new_platform_username) {
+                let streamerInfo = null;
+                let pfp = null;
+
+                if (new_platform === 'twitch') {
+                    const u = await apiChecks.getTwitchUser(new_platform_username);
+                    if (u) { streamerInfo = { puid: u.id, dbUsername: u.login }; pfp = u.profile_image_url; }
+                } else if (new_platform === 'kick') {
+                    const u = await apiChecks.getKickUser(new_platform_username);
+                    if (u) { streamerInfo = { puid: u.id.toString(), dbUsername: u.user.username }; pfp = u.user.profile_pic; }
+                } else if (new_platform === 'youtube') {
+                    const c = await apiChecks.getYouTubeChannelId(new_platform_username);
+                    if (c?.channelId) { streamerInfo = { puid: c.channelId, dbUsername: c.channelName || new_platform_username }; }
+                } else if (['tiktok', 'trovo'].includes(new_platform)) {
+                    streamerInfo = { puid: new_platform_username, dbUsername: new_platform_username };
+                }
+
+                if (streamerInfo && streamerInfo.puid) {
+                    await db.execute(
+                        'INSERT INTO streamers (platform, platform_user_id, username, profile_image_url, discord_user_id) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE username = VALUES(username), profile_image_url = VALUES(profile_image_url), discord_user_id = VALUES(discord_user_id)',
+                        [new_platform, streamerInfo.puid, streamerInfo.dbUsername, pfp, discord_user_id || null]
+                    );
+
+                    const [[streamer]] = await db.execute('SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?', [new_platform, streamerInfo.puid]);
+                    const newStreamerId = streamer?.streamer_id;
+
+                    if (newStreamerId) {
+                        const channelsToSubscribe = new Set();
+                        if (subscriptions) {
+                            for (const subId in subscriptions) {
+                                channelsToSubscribe.add(subscriptions[subId].announcement_channel_id || null);
+                            }
+                        }
+
+                        for (const channelId of channelsToSubscribe) {
+                            const teamSubscriptionId = teamChannelMap.get(channelId) || null;
+                            await db.execute(
+                                'INSERT IGNORE INTO subscriptions (guild_id, streamer_id, announcement_channel_id, team_subscription_id) VALUES (?, ?, ?, ?)',
+                                [guildId, newStreamerId, channelId, teamSubscriptionId]
+                            );
+                        }
+                    } else {
+                        logger.warn(`[Dashboard Edit] Could not find or create streamer ID for: ${new_platform_username} on ${new_platform}`);
+                    }
+                } else {
+                    logger.warn(`[Dashboard Edit] Could not validate or find new platform user: ${new_platform_username} on ${new_platform}`);
+                }
+            }
     
-            // 1. Update discord_user_id for all associated streamers
+            // 2. Update discord_user_id for all associated streamers
             if (discord_user_id !== undefined) {
                 let streamerIdsToUpdateDiscord = [];
                 if (consolidated_streamer_id.startsWith('s-')) {
@@ -500,14 +557,13 @@ function start(botClient) {
                 }
             }
     
-            // 2. Handle platform linking (e.g., Kick from Twitch)
+            // 3. Handle platform linking (e.g., Kick from Twitch)
             if (platforms) {
                 for (const streamerId in platforms) {
                     const platformData = platforms[streamerId];
                     const kickUsername = platformData.kick_username ? platformData.kick_username.trim() : null;
     
                     if (platformData.platform === 'twitch' && kickUsername && kickUsername.length > 0) {
-                        // A kick username was entered for a Twitch account, treat as a new linked platform.
                         const [[existingKickStreamer]] = await db.execute('SELECT streamer_id, discord_user_id FROM streamers WHERE platform = \'kick\' AND username = ?', [kickUsername]);
                         let kickStreamerIdToUse = null;
     
@@ -542,13 +598,12 @@ function start(botClient) {
                             }
                         }
     
-                        // Clear the legacy kick_username field from the twitch streamer
                         await db.execute('UPDATE streamers SET kick_username = ? WHERE streamer_id = ?', [null, streamerId]);
                     }
                 }
             }
     
-            // 3. Update individual subscriptions
+            // 4. Update individual subscriptions
             if (subscriptions) {
                 for (const subscriptionId in subscriptions) {
                     const subData = subscriptions[subscriptionId];
@@ -560,10 +615,12 @@ function start(botClient) {
 
                     const newChannelId = subData.announcement_channel_id || null;
                     const teamSubscriptionId = teamChannelMap.get(newChannelId) || null;
+                    const privacySetting = subData.privacy_setting || null;
+                    const summaryPersistence = subData.summary_persistence || null;
     
                     await db.execute(
-                        'UPDATE subscriptions SET announcement_channel_id = ?, override_nickname = ?, custom_message = ?, override_avatar_url = ?, team_subscription_id = ? WHERE subscription_id = ? AND guild_id = ?',
-                        [newChannelId, subData.override_nickname || null, subData.custom_message || null, finalAvatarUrl, teamSubscriptionId, subscriptionId, guildId]
+                        'UPDATE subscriptions SET announcement_channel_id = ?, override_nickname = ?, custom_message = ?, override_avatar_url = ?, team_subscription_id = ?, privacy_setting = ?, summary_persistence = ? WHERE subscription_id = ? AND guild_id = ?',
+                        [newChannelId, subData.override_nickname || null, subData.custom_message || null, finalAvatarUrl, teamSubscriptionId, privacySetting, summaryPersistence, subscriptionId, guildId]
                     );
                 }
             }
@@ -849,7 +906,7 @@ function start(botClient) {
             const live_platforms = [...new Map(userAnnouncements.map(a => [a.platform, {
                 platform: a.platform,
                 game: a.stream_game || 'N/A',
-                url: a.stream_url || '#' // Add stream_url here
+                url: a.stream_url || '#'
             }])).values()];
 
             formattedResult.push({

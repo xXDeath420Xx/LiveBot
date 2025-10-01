@@ -1,4 +1,4 @@
-// B:/Code/LiveBot/utils/api_checks.js - Updated on 2025-10-01 - Unique Identifier: APICHECKS-FINAL-004
+// B:/Code/LiveBot/utils/api_checks.js - Updated on 2025-10-01 - Unique Identifier: APICHECKS-FINAL-005
 const axios = require('axios');
 const initCycleTLS = require('cycletls');
 const { getBrowser } = require('./browserManager');
@@ -51,13 +51,27 @@ async function getYouTubeChannelId(identifier) {
         logger.error("[YouTube API Error] YOUTUBE_API_KEY is not set in the environment variables.");
         return null;
     }
-    if (identifier && identifier.startsWith('UC')) {
+
+    let searchIdentifier = identifier;
+    if (identifier.startsWith('@')) {
+        searchIdentifier = identifier.substring(1);
+    }
+
+    if (identifier.startsWith('UC')) {
         return { channelId: identifier, channelName: null };
     }
+
     try {
         const searchResponse = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-            params: { part: 'snippet', q: identifier, type: 'channel', maxResults: 1, key: process.env.YOUTUBE_API_KEY }
+            params: { 
+                part: 'snippet', 
+                q: searchIdentifier, 
+                type: 'channel', 
+                maxResults: 1, 
+                key: process.env.YOUTUBE_API_KEY 
+            }
         });
+
         if (searchResponse.data.items?.[0]) {
             return {
                 channelId: searchResponse.data.items[0].id.channelId,
@@ -66,17 +80,25 @@ async function getYouTubeChannelId(identifier) {
         }
 
         const channelResponse = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-            params: { part: 'snippet', forUsername: identifier, key: process.env.YOUTUBE_API_KEY }
+            params: { 
+                part: 'snippet', 
+                forUsername: searchIdentifier, 
+                key: process.env.YOUTUBE_API_KEY 
+            }
         });
+
         if (channelResponse.data.items?.[0]) {
             return {
                 channelId: channelResponse.data.items[0].id,
                 channelName: channelResponse.data.items[0].snippet.title
             };
         }
+
+        logger.warn(`[YouTube API Check] Could not find a channel for identifier: "${identifier}"`);
         return null;
     } catch (error) {
-        logger.error(`[YouTube API Check Error] for "${identifier}":`, error.response?.data?.error?.message || error.message);
+        const errorMessage = error.response?.data?.error?.message || error.message;
+        logger.error(`[YouTube API Check Error] for "${identifier}": ${errorMessage}`);
         return null;
     }
 }
@@ -84,39 +106,56 @@ async function getYouTubeChannelId(identifier) {
 async function getKickUser(username) {
     if (typeof username !== 'string' || !username) return null;
     logger.info(`[Kick API] getKickUser started for: ${username}`);
-    try {
-        const cycleTLS = await getCycleTLSInstance();
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 5000; // 5 seconds
 
-        const requestUrl = `https://kick.com/api/v1/channels/${username}`;
-        logger.info(`[Kick API] Initiating cycleTLS request for ${username} to ${requestUrl}`);
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            const cycleTLS = await getCycleTLSInstance();
+            const requestUrl = `https://kick.com/api/v1/channels/${username}`;
+            logger.info(`[Kick API] Initiating cycleTLS request for ${username} to ${requestUrl} (Attempt ${attempt})`);
 
-        const timeoutPromise = new Promise((resolve, reject) =>
-            setTimeout(() => reject(new Error(`CycleTLS request timed out after 30 seconds for ${username}`)), 30000)
-        );
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error(`CycleTLS request timed out after 30 seconds for ${username}`)), 30000)
+            );
 
-        const cycleTLSRequest = cycleTLS(requestUrl, {
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-        });
+            const cycleTLSRequest = cycleTLS(requestUrl, {
+                userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+            });
 
-        const response = await Promise.race([cycleTLSRequest, timeoutPromise]);
+            const response = await Promise.race([cycleTLSRequest, timeoutPromise]);
+            logger.info(`[Kick API] cycleTLS request completed for ${username}. Status: ${response.status}`);
 
-        logger.info(`[Kick API] cycleTLS request completed for ${username}. Status: ${response.status}`);
-        if (response.status === 200 && response.body) {
-            const data = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
-            if (!data || !data.user) {
-                logger.info(`[Kick API] No 'user' object in response for '${username}', assuming non-existent.`);
-                return null;
+            if (response.status === 200 && response.body) {
+                const data = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
+                if (!data || !data.user) {
+                    logger.info(`[Kick API] No 'user' object in response for '${username}', assuming non-existent.`);
+                    return null; // Treat as non-existent, no retry
+                }
+                logger.info(`[Kick API] Successfully retrieved Kick user data for ${username}.`);
+                return data;
             }
-            logger.info(`[Kick API] Successfully retrieved Kick user data for ${username}.`);
-            return data;
+
+            // For Kick, a 404 can be intermittent for live channels. We will retry.
+            if (response.status === 404) {
+                logger.warn(`[Kick API] Received 404 for ${username}. Retrying in ${RETRY_DELAY / 1000}s...`);
+            } else {
+                logger.warn(`[Kick API] Received status ${response.status} for ${username}. Retrying in ${RETRY_DELAY / 1000}s...`);
+            }
+
+        } catch (error) {
+            logger.error(`[Kick API Check Error] for "${username}" on attempt ${attempt}: ${error.message}`);
         }
-        logger.info(`[Kick API] Non-200 status or no body for ${username}.`);
-        return null;
-    } catch (error) {
-        logger.error(`[Kick API Check Error] for "${username}":`, error.message);
-        return null;
+
+        if (attempt < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        }
     }
+
+    logger.error(`[Kick API] All retries failed for ${username}.`);
+    return null;
 }
+
 
 async function getTwitchAccessToken() {
     if (!process.env.TWITCH_CLIENT_ID || !process.env.TWITCH_CLIENT_SECRET) {
@@ -145,6 +184,40 @@ async function getTwitchUser(identifier) {
         return res.data.data?.[0];
     } catch (e) {
         logger.error(`[Twitch User Check Error] for "${identifier}":`, e.response ? e.response.data : e.message);
+        return null;
+    }
+}
+
+async function getTrovoUser(username) {
+    if (typeof username !== 'string' || !username) return null;
+    logger.info(`[Trovo API] getTrovoUser started for: ${username}`);
+    try {
+        const trovoData = await checkTrovo(username);
+        if (trovoData && trovoData.profileImageUrl) {
+            logger.info(`[Trovo API] Successfully validated Trovo user ${username}.`);
+            return { userId: username, username: username, profileImageUrl: trovoData.profileImageUrl };
+        }
+        logger.info(`[Trovo API] Could not validate Trovo user ${username}. They may not exist.`);
+        return null;
+    } catch (error) {
+        logger.error(`[Trovo API Check Error] for "${username}":`, error.message);
+        return null;
+    }
+}
+
+async function getTikTokUser(username) {
+    if (typeof username !== 'string' || !username) return null;
+    logger.info(`[TikTok API] getTikTokUser started for: ${username}`);
+    try {
+        const tiktokData = await checkTikTok(username);
+        if (tiktokData && tiktokData.profileImageUrl) {
+            logger.info(`[TikTok API] Successfully validated TikTok user ${username}.`);
+            return { userId: username, username: username, profileImageUrl: tiktokData.profileImageUrl };
+        }
+        logger.info(`[TikTok API] Could not validate TikTok user ${username}. They may not exist.`);
+        return null;
+    } catch (error) {        
+        logger.error(`[TikTok API Check Error] for "${username}":`, error.message);
         return null;
     }
 }
@@ -360,4 +433,4 @@ async function checkTrovo(username) {
     }
 }
 
-module.exports = { getYouTubeChannelId, getTwitchUser, getKickUser, checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo, getTwitchTeamMembers, getCycleTLSInstance, exitCycleTLSInstance };
+module.exports = { getYouTubeChannelId, getTwitchUser, getKickUser, getTrovoUser, getTikTokUser, checkTwitch, checkYouTube, checkKick, checkTikTok, checkTrovo, getTwitchTeamMembers, getCycleTLSInstance, exitCycleTLSInstance };

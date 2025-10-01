@@ -22,6 +22,28 @@
                         <!-- Dynamic platform fields will be injected here by JS -->
                         <p class="text-muted">Loading platforms...</p>
                     </div>
+
+                    <div class="p-3 border rounded bg-light">
+                        <h6><i class="fas fa-plus-circle fa-fw me-2"></i>Add New Platform</h6>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small">Platform</label>
+                                <select name="new_platform" class="form-select form-select-sm">
+                                    <option value="">-- Select --</option>
+                                    <option value="twitch">Twitch</option>
+                                    <option value="kick">Kick</option>
+                                    <option value="youtube">YouTube</option>
+                                    <option value="trovo">Trovo</option>
+                                    <option value="tiktok">TikTok</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small">Username / ID</label>
+                                <input type="text" name="new_platform_username" class="form-control form-control-sm" placeholder="Enter username or ID for the new platform">
+                            </div>
+                        </div>
+                    </div>
+
                     <hr class="my-4">
 
                     <h6><i class="fas fa-bullhorn fa-fw me-2"></i>Subscriptions & Customization</h6>
@@ -39,3 +61,55 @@
         </div>
     </div>
 </div>
+
+<template id="subscription-template">
+    <div class="border p-3 mb-3 rounded bg-light subscription-instance">
+        <strong class="subscription-title"></strong>
+        <input type="hidden" name="subscription_id" class="subscription-id">
+        <input type="hidden" name="streamer_id" class="streamer-id">
+        <div class="mb-2 mt-2">
+            <label class="form-label small">Announcement Channel</label>
+            <select class="form-select form-select-sm announcement-channel-select" name="announcement_channel_id">
+                <option value="">-- Use Server Default --</option>
+                <% channels.forEach(channel => { %>
+                    <option value="<%= channel.id %>">#<%= channel.name %></option>
+                <% }); %>
+            </select>
+        </div>
+        <div class="mb-2">
+            <label class="form-label small">Custom Webhook Nickname</label>
+            <input type="text" class="form-control form-control-sm override-nickname" name="override_nickname" placeholder="Leave blank to use channel/server default">
+        </div>
+        <div class="mb-2">
+            <label class="form-label small">Custom Announcement Message</label>
+            <textarea class="form-control form-control-sm custom-message" name="custom_message" rows="2" placeholder="e.g. {username} is live with {game}!"></textarea>
+        </div>
+        <div class="mb-2">
+            <label class="form-label small">Override Avatar URL</label>
+            <input type="text" class="form-control form-control-sm override-avatar-url-text" name="override_avatar_url_text" placeholder='URL or type "reset" to clear'>
+        </div>
+        <div class="form-check mb-3">
+            <input class="form-check-input reset-avatar" type="checkbox" name="reset_avatar">
+            <label class="form-check-label" for="reset_avatar">Reset Avatar</label>
+        </div>
+        <hr>
+        <div class="row">
+            <div class="col-md-6">
+                <label class="form-label small">Content Privacy</label>
+                <select class="form-select form-select-sm privacy-setting" name="privacy_setting">
+                    <option value="">Inherit from Channel</option>
+                    <option value="public_only">Announce Public Only</option>
+                    <option value="all">Announce All</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small">Summary Persistence</label>
+                <select class="form-select form-select-sm summary-persistence" name="summary_persistence">
+                    <option value="">Inherit from Channel</option>
+                    <option value="delete_on_offline">Delete on Offline</option>
+                    <option value="keep_on_offline">Keep on Offline</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</template>
