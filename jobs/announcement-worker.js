@@ -1,4 +1,4 @@
-// B:/Code/LiveBot/jobs/announcement-worker.js - Updated on 2025-10-01 - Unique Identifier: WORKER-FINAL-001
+// B:/Code/LiveBot/jobs/announcement-worker.js - Updated on 2025-10-01 - Unique Identifier: WORKER-FINAL-002
 BigInt.prototype.toJSON = function() { return this.toString(); };
 
 const { Worker } = require("bullmq");
@@ -20,7 +20,6 @@ const workerClient = new Client({
     partials: [Partials.User, Partials.GuildMember, Partials.Channel]
 });
 
-// Corrected Queue Name
 const worker = new Worker("announcement-queue", async job => {
     console.log(`[Worker] >>> ENTERING JOB PROCESSING for job ${job.id}`);
 
@@ -47,6 +46,12 @@ const worker = new Worker("announcement-queue", async job => {
         if (!targetChannelId) {
             logger.warn(`[Worker] No announcement channel resolved for subscription ${sub.subscription_id} (${sub.username}). Skipping job ${job.id}.`);
             return;
+        }
+
+        const [channelTeamSettingsArr] = await db.execute('SELECT * FROM twitch_teams WHERE announcement_channel_id = ?', [targetChannelId]);
+        if (channelTeamSettingsArr.length > 0) {
+            teamSettings = channelTeamSettingsArr[0];
+            logger.info(`[Worker] Target channel ${targetChannelId} is a team channel. Using settings for team ID ${teamSettings.id}.`);
         }
 
         const [existingAnnouncementsForStreamerInChannel] = await db.execute(
@@ -86,7 +91,7 @@ const worker = new Worker("announcement-queue", async job => {
             if (guildSettings?.live_role_id) {
                 rolesToApply.push(guildSettings.live_role_id);
             }
-            if (sub.team_subscription_id && teamSettings?.live_role_id) {
+            if (teamSettings?.live_role_id) { // Use the final teamSettings
                 rolesToApply.push(teamSettings.live_role_id);
             }
             const uniqueRolesToApply = [...new Set(rolesToApply)];

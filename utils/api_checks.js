@@ -153,7 +153,7 @@ async function getKickUser(username) {
     }
 
     logger.error(`[Kick API] All retries failed for ${username}.`);
-    return null;
+    throw new Error(`All Kick API retries failed for ${username}.`);
 }
 
 
@@ -237,10 +237,15 @@ async function getTwitchTeamMembers(teamName) {
 async function checkKick(username) {
     logger.info(`[Kick Check] Starting for username: ${username}`);
     const defaultResponse = { isLive: false, profileImageUrl: null };
-    let profileImageUrl = null;
+
     try {
         const kickData = await getKickUser(username);
-        profileImageUrl = kickData?.user?.profile_pic || null;
+
+        if (kickData === null) {
+            return { ...defaultResponse, profileImageUrl: null };
+        }
+
+        const profileImageUrl = kickData?.user?.profile_pic || null;
 
         if (kickData?.livestream && kickData.livestream.id) {
             return {
@@ -257,8 +262,8 @@ async function checkKick(username) {
         }
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
     } catch (error) {
-        logger.error(`[Check Kick Error] for "${username}":`, error.message);
-        return { ...defaultResponse, profileImageUrl: profileImageUrl };
+        logger.warn(`[Check Kick] Could not determine status for "${username}" due to API errors: ${error.message}`);
+        return { isLive: 'unknown', profileImageUrl: null };
     } finally {
         logger.info(`[Kick Check] Finished for username: ${username}`);
     }

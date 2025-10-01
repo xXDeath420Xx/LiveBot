@@ -1,4 +1,4 @@
-// B:/Code/LiveBot/core/stream-checker.js - Updated on 2025-10-01 - Unique Identifier: STREAM-CHECKER-FINAL-004
+// B:/Code/LiveBot/core/stream-checker.js - Updated on 2025-10-01 - Unique Identifier: STREAM-CHECKER-FINAL-005
 const db = require('../utils/db');
 const apiChecks = require('../utils/api_checks');
 const cache = require('../utils/cache');
@@ -20,7 +20,7 @@ async function checkStreams(client) {
         const uniqueStreamers = [...new Map(subscriptions.map(s => [`${s.platform}:${s.username}`, s])).values()];
         logger.info(`[Check] Identified ${uniqueStreamers.length} unique streamers to check.`);
 
-        const liveStatuses = new Map();
+        const statuses = new Map();
         for (const streamer of uniqueStreamers) {
             const cacheKey = `api:${streamer.platform}:${streamer.username}`;
             let status = await cache.get(cacheKey);
@@ -34,14 +34,28 @@ async function checkStreams(client) {
                     case 'trovo': status = await apiChecks.checkTrovo(streamer.username); break;
                     default: status = { isLive: false };
                 }
-                await cache.set(cacheKey, status, 60); // Cache for 60 seconds
+                await cache.set(cacheKey, status, 300); // Cache for 300 seconds (5 minutes)
             } else {
                 logger.debug(`[Check] Cache hit for ${streamer.username} on ${streamer.platform}.`);
             }
 
-            if (status && status.isLive) {
+            const consecutiveFailsCacheKey = `consecutive_fails:${streamer.platform}:${streamer.username}`;
+            let consecutiveFails = await cache.get(consecutiveFailsCacheKey) || 0;
+
+            if (status.isLive === true) {
+                await cache.del(consecutiveFailsCacheKey);
+            } else if (status.isLive === false) {
+                consecutiveFails++;
+                await cache.set(consecutiveFailsCacheKey, consecutiveFails, 900); // cache for 15 mins
+                if (consecutiveFails < 3) {
+                    logger.warn(`[Check] Streamer ${streamer.username} (${streamer.platform}) appeared offline, but it's only been ${consecutiveFails} time(s). Giving grace period.`);
+                    status.isLive = 'unknown'; // Treat as unknown for a few checks
+                }
+            }
+
+            statuses.set(`${streamer.platform}:${streamer.username}`, status);
+            if (status && status.isLive === true) {
                 logger.info(`[Check] Streamer ${streamer.username} (${streamer.platform}) is LIVE.`);
-                liveStatuses.set(`${streamer.platform}:${streamer.username}`, status);
             }
         }
 
@@ -50,10 +64,10 @@ async function checkStreams(client) {
 
         logger.info(`[Check] Iterating through ${subscriptions.length} subscriptions to enqueue announcements.`);
         for (const sub of subscriptions) {
-            const liveData = liveStatuses.get(`${sub.platform}:${sub.username}`);
+            const liveData = statuses.get(`${sub.platform}:${sub.username}`);
             const existingAnn = announcementsMap.get(sub.subscription_id);
 
-            if (liveData) {
+            if (liveData && liveData.isLive === true) {
                 let targetChannelId = sub.announcement_channel_id;
                 if (sub.team_subscription_id) {
                     const team = teamSettings.find(t => t.id === sub.team_subscription_id);
@@ -78,7 +92,19 @@ async function checkStreams(client) {
             }
         }
 
-        const endedStreams = existingAnnouncements.filter(ann => !subscriptions.some(sub => sub.subscription_id === ann.subscription_id && liveStatuses.has(`${sub.platform}:${sub.username}`)));
+        const endedStreams = existingAnnouncements.filter(ann => {
+            const sub = subscriptions.find(s => s.subscription_id === ann.subscription_id);
+            if (!sub) return true;
+
+            const status = statuses.get(`${sub.platform}:${sub.username}`);
+
+            if (status && status.isLive === 'unknown') {
+                return false;
+            }
+
+            return !status || !status.isLive;
+        });
+
         if (endedStreams.length > 0) {
             logger.info(`[Check] Found ${endedStreams.length} streams that have ended. Processing cleanup.`);
             const announcementIdsToDelete = [];
