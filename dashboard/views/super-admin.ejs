@@ -6,9 +6,9 @@
     <title>Super Admin - CertiFried Announcer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.0.6">
+    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.0.7">
 </head>
-<body>
+<body class="manage-page">
 <%- include('partials/header') %>
 <main class="page-container">
     <div class="page-header">
@@ -16,51 +16,140 @@
         <p class="lead">Global bot management and overview.</p>
     </div>
 
-    <div class="content-card">
-        <h2>Welcome, Owner.</h2>
-        <p>This page is exclusively for the bot owner and provides access to critical administrative functions.</p>
-        
-        <div class="border-top pt-3 mt-3">
-            <h4>Global Actions</h4>
-            <p>These actions affect the entire bot across all servers.</p>
-            <button class="btn btn-warning" id="reinitBotBtn"><i class="fas fa-sync-alt me-2"></i>Re-initialize Bot</button>
-            <button class="btn btn-danger" id="fullResetBtn"><i class="fas fa-skull-crossbones me-2"></i>Reset Entire Database</button>
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="content-card h-100">
+                <h3><i class="fas fa-server me-2"></i>Server Actions</h3>
+                <p>Actions that affect the dashboard server.</p>
+                <button class="btn btn-warning" id="reinitServerBtn"><i class="fas fa-sync-alt me-2"></i>Re-initialize Server</button>
+                <div id="server-action-status" class="mt-3"></div>
+            </div>
         </div>
+        <div class="col-lg-6 mb-4">
+            <div class="content-card h-100">
+                <h3><i class="fas fa-robot me-2"></i>Bot Actions</h3>
+                <p>Actions that affect the entire bot across all servers.</p>
+                <button class="btn btn-warning" id="reinitBotBtn"><i class="fas fa-sync-alt me-2"></i>Re-initialize Bot</button>
+                <button class="btn btn-danger ms-2" id="fullResetBtn"><i class="fas fa-skull-crossbones me-2"></i>Reset Entire Database</button>
+                <div id="bot-action-status" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
 
-        <div id="admin-action-status" class="mt-3"></div>
+    <div class="content-card">
+        <h2><i class="fas fa-user-slash me-2"></i>Blacklist Management</h2>
+        <p>Add or remove users from the bot's global blacklist. Blacklisting a user will purge all their data and prevent them from being tracked in the future.</p>
 
+        <div class="row">
+            <div class="col-md-6">
+                <h4>Add to Blacklist</h4>
+                <form id="blacklist-form">
+                    <div class="mb-3">
+                        <label class="form-label">Blacklist Type</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="blacklistType" id="radioDiscordId" value="discord" checked>
+                            <label class="form-check-label" for="radioDiscordId">Discord User ID</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="blacklistType" id="radioPlatformAccount" value="platform">
+                            <label class="form-check-label" for="radioPlatformAccount">Platform Account (Streamer)</label>
+                        </div>
+                    </div>
+
+                    <div id="discord-fields" class="mb-3">
+                        <label for="blacklist-discord-id-input" class="form-label">Discord User ID</label>
+                        <input type="text" id="blacklist-discord-id-input" name="discordId" class="form-control" placeholder="e.g., 365905620060340224">
+                    </div>
+
+                    <div id="platform-fields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="blacklist-platform-select" class="form-label">Platform</label>
+                            <select id="blacklist-platform-select" name="platform" class="form-select">
+                                <option value="">Select Platform</option>
+                                <option value="twitch">Twitch</option>
+                                <option value="kick">Kick</option>
+                                <option value="youtube">YouTube</option>
+                                <option value="tiktok">TikTok</option>
+                                <option value="trovo">Trovo</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="blacklist-username-input" class="form-label">Username on Platform</label>
+                            <input type="text" id="blacklist-username-input" name="username" class="form-control" placeholder="e.g., some_streamer_name">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-danger"><i class="fas fa-user-plus me-2"></i>Blacklist User</button>
+                </form>
+                <div id="blacklist-status" class="mt-3"></div>
+            </div>
+            <div class="col-md-6">
+                <h4>Currently Blacklisted</h4>
+                <div id="blacklisted-users-list" class="list-group">
+                    <p class="text-muted">Loading...</p>
+                </div>
+            </div>
+        </div>
     </div>
 
 </main>
 <%- include('partials/footer') %>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const reinitBtn = document.getElementById('reinitBotBtn');
+        const reinitServerBtn = document.getElementById('reinitServerBtn');
+        const reinitBotBtn = document.getElementById('reinitBotBtn');
         const resetBtn = document.getElementById('fullResetBtn');
-        const statusDiv = document.getElementById('admin-action-status');
+        const serverActionStatus = document.getElementById('server-action-status');
+        const botActionStatus = document.getElementById('bot-action-status');
 
-        if(reinitBtn) {
-            reinitBtn.addEventListener('click', async () => {
-                if (!confirm('Are you sure you want to re-initialize the bot? This will restart the application.')) return;
+        if(reinitServerBtn) {
+            reinitServerBtn.addEventListener('click', async () => {
+                if (!confirm('Are you sure you want to re-initialize the server? This will restart the web server process.')) return;
 
-                reinitBtn.disabled = true;
-                reinitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Restarting...';
-                statusDiv.innerHTML = '';
+                reinitServerBtn.disabled = true;
+                reinitServerBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Restarting Server...';
+                serverActionStatus.innerHTML = '';
 
                 try {
-                    const response = await fetch('/api/reinit', { method: 'POST' });
+                    const response = await fetch('/api/admin/reinit-server', { method: 'POST' });
                     const result = await response.json();
                     if (response.ok && result.success) {
-                        statusDiv.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+                        serverActionStatus.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+                        alert('Server is re-initializing.');
+                    } else {
+                        throw new Error(result.message || 'An unknown error occurred.');
+                    }
+                } catch (error) {
+                    serverActionStatus.innerHTML = `<div class="alert alert-danger">Failed to send server re-initialization request: ${error.message}</div>`;
+                } finally {
+                    reinitServerBtn.disabled = false;
+                    reinitServerBtn.innerHTML = '<i class="fas fa-sync-alt me-2"></i>Re-initialize Server';
+                }
+            });
+        }
+
+        if(reinitBotBtn) {
+            reinitBotBtn.addEventListener('click', async () => {
+                if (!confirm('Are you sure you want to re-initialize the bot? This will restart the bot application.')) return;
+
+                reinitBotBtn.disabled = true;
+                reinitBotBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Restarting Bot...';
+                botActionStatus.innerHTML = '';
+
+                try {
+                    const response = await fetch('/api/admin/reinit-bot', { method: 'POST' });
+                    const result = await response.json();
+                    if (response.ok && result.success) {
+                        botActionStatus.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
                         alert('Bot is re-initializing.');
                     } else {
                         throw new Error(result.message || 'An unknown error occurred.');
                     }
                 } catch (error) {
-                    statusDiv.innerHTML = `<div class="alert alert-danger">Failed to send re-initialization request: ${error.message}</div>`;
+                    botActionStatus.innerHTML = `<div class="alert alert-danger">Failed to send bot re-initialization request: ${error.message}</div>`;
                 } finally {
-                    reinitBtn.disabled = false;
-                    reinitBtn.innerHTML = '<i class="fas fa-sync-alt me-2"></i>Re-initialize Bot';
+                    reinitBotBtn.disabled = false;
+                    reinitBotBtn.innerHTML = '<i class="fas fa-sync-alt me-2"></i>Re-initialize Bot';
                 }
             });
         }
@@ -75,26 +164,170 @@
 
                 resetBtn.disabled = true;
                 resetBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Resetting...';
-                statusDiv.innerHTML = '';
+                botActionStatus.innerHTML = '';
 
                 try {
                     const response = await fetch('/api/admin/reset-database', { method: 'POST' });
                     const result = await response.json();
                      if (response.ok && result.success) {
-                        statusDiv.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+                        botActionStatus.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
                         alert('Database reset successfully. The page will now reload.');
                         location.reload();
                     } else {
                         throw new Error(result.message || 'An unknown error occurred.');
                     }
                 } catch (error) {
-                     statusDiv.innerHTML = `<div class="alert alert-danger">Database reset failed: ${error.message}</div>`;
+                     botActionStatus.innerHTML = `<div class="alert alert-danger">Database reset failed: ${error.message}</div>`;
                 } finally {
                     resetBtn.disabled = false;
                     resetBtn.innerHTML = '<i class="fas fa-skull-crossbones me-2"></i>Reset Entire Database';
                 }
             });
         }
+
+        // Blacklist Management
+        const blacklistForm = document.getElementById('blacklist-form');
+        const blacklistStatus = document.getElementById('blacklist-status');
+        const blacklistedUsersList = document.getElementById('blacklisted-users-list');
+        
+        const radioDiscordId = document.getElementById('radioDiscordId');
+        const radioPlatformAccount = document.getElementById('radioPlatformAccount');
+        const discordFields = document.getElementById('discord-fields');
+        const platformFields = document.getElementById('platform-fields');
+        const blacklistDiscordIdInput = document.getElementById('blacklist-discord-id-input');
+        const blacklistPlatformSelect = document.getElementById('blacklist-platform-select');
+        const blacklistUsernameInput = document.getElementById('blacklist-username-input');
+
+        function toggleBlacklistFields() {
+            if (radioDiscordId.checked) {
+                discordFields.style.display = 'block';
+                blacklistDiscordIdInput.setAttribute('required', 'true');
+                platformFields.style.display = 'none';
+                blacklistPlatformSelect.removeAttribute('required');
+                blacklistUsernameInput.removeAttribute('required');
+            } else {
+                discordFields.style.display = 'none';
+                blacklistDiscordIdInput.removeAttribute('required');
+                platformFields.style.display = 'block';
+                blacklistPlatformSelect.setAttribute('required', 'true');
+                blacklistUsernameInput.setAttribute('required', 'true');
+            }
+        }
+
+        radioDiscordId.addEventListener('change', toggleBlacklistFields);
+        radioPlatformAccount.addEventListener('change', toggleBlacklistFields);
+        toggleBlacklistFields(); // Set initial state
+
+        async function fetchBlacklistedUsers() {
+            try {
+                const response = await fetch('/api/admin/blacklisted-users');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch: ${response.statusText}`);
+                }
+                const users = await response.json();
+                blacklistedUsersList.innerHTML = '';
+                if (users.length > 0) {
+                    users.forEach(user => {
+                        const userEl = document.createElement('div');
+                        userEl.className = 'list-group-item d-flex justify-content-between align-items-center';
+                        
+                        let platformIconHtml = '';
+                        if (user.platform === 'twitch') platformIconHtml = '<i class="fab fa-twitch me-2"></i>';
+                        else if (user.platform === 'kick') platformIconHtml = '<i class="fas fa-k me-2"></i>';
+                        else if (user.platform === 'youtube') platformIconHtml = '<i class="fab fa-youtube me-2"></i>';
+                        else if (user.platform === 'discord') platformIconHtml = '<i class="fab fa-discord me-2"></i>';
+                        else if (user.platform === 'tiktok') platformIconHtml = '<i class="fab fa-tiktok me-2"></i>';
+                        else if (user.platform === 'trovo') platformIconHtml = '<i class="fas fa-t me-2"></i>';
+
+                        userEl.innerHTML = `
+                            <div>
+                                ${platformIconHtml}
+                                <strong>${user.username || user.discord_user_id}</strong>
+                                <small class="text-muted d-block">Platform: ${user.platform}</small>
+                                ${user.platform_user_id && user.platform !== 'discord' ? `<small class="text-muted d-block">Platform User ID: ${user.platform_user_id}</small>` : ''}
+                                ${user.discord_user_id && user.platform !== 'discord' ? `<small class="text-muted d-block">Linked Discord ID: ${user.discord_user_id}</small>` : ''}
+                            </div>
+                            <button class="btn btn-sm btn-outline-secondary unblacklist-btn" data-id="${user.id}">Remove</button>
+                        `;
+                        blacklistedUsersList.appendChild(userEl);
+                    });
+                } else {
+                    blacklistedUsersList.innerHTML = '<p class="text-muted">No users are currently blacklisted.</p>';
+                }
+            } catch (error) {
+                console.error("Blacklist fetch error:", error);
+                blacklistedUsersList.innerHTML = '<p class="text-danger">Failed to load blacklisted users.</p>';
+            }
+        }
+
+        blacklistForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            blacklistStatus.innerHTML = '<div class="alert alert-info">Blacklisting user...</div>';
+
+            let payload = {};
+            if (radioDiscordId.checked) {
+                const discordId = blacklistDiscordIdInput.value.trim();
+                if (!discordId) {
+                    blacklistStatus.innerHTML = '<div class="alert alert-danger">Discord User ID is required.</div>';
+                    return;
+                }
+                payload = { blacklistType: 'discord', identifier: discordId };
+            } else {
+                const platform = blacklistPlatformSelect.value;
+                const username = blacklistUsernameInput.value.trim();
+                if (!platform || !username) {
+                    blacklistStatus.innerHTML = '<div class="alert alert-danger">Platform and Username are required.</div>';
+                    return;
+                }
+                payload = { blacklistType: 'platform', platform: platform, identifier: username };
+            }
+
+            try {
+                const response = await fetch('/api/admin/blacklist-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (response.ok && result.success) {
+                    blacklistStatus.innerHTML = `<div class="alert alert-success">${result.message}</div>`;
+                    blacklistForm.reset();
+                    radioDiscordId.checked = true; // Reset to default selection
+                    toggleBlacklistFields(); // Update form fields state
+                    fetchBlacklistedUsers();
+                } else {
+                    throw new Error(result.message || 'An unknown error occurred.');
+                }
+            } catch (error) {
+                blacklistStatus.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            }
+        });
+
+        blacklistedUsersList.addEventListener('click', async (e) => {
+            if (e.target.classList.contains('unblacklist-btn')) {
+                const id = e.target.dataset.id;
+
+                if (!confirm(`Are you sure you want to remove this user from the blacklist?`)) return;
+
+                try {
+                    const response = await fetch('/api/admin/unblacklist-user', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ id })
+                    });
+                    const result = await response.json();
+                    if (response.ok && result.success) {
+                        fetchBlacklistedUsers();
+                    } else {
+                        throw new Error(result.message || 'An unknown error occurred.');
+                    }
+                } catch (error) {
+                    alert(`Error removing user from blacklist: ${error.message}`);
+                }
+            }
+        });
+
+        fetchBlacklistedUsers();
     });
 </script>
 </body>

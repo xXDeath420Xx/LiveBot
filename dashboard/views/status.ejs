@@ -40,7 +40,7 @@
             <div class="col-md-3"><div class="stat-card d-flex align-items-center gap-3 p-3"><div class="skeleton" style="height:64px;width:64px;border-radius:12px"></div><div class="w-100"><div class="skeleton mb-2" style="height:2rem;width:50%;"></div><div class="skeleton" style="height:1rem;width:80%;"></div></div></div></div>
         <% } %>
     </div>
-    <% if (isAuthenticated) { %>
+    <% if (user && user.isSuperAdmin) { %>
         <div id="admin-health-panel" class="mb-5" style="display:none;">
             <h2 class="mb-3">Admin Health Panel</h2>
             <div class="row g-4">
@@ -62,7 +62,7 @@
 <%- include('partials/footer') %>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        const isAuthenticated = <%- isAuthenticated %>;
+        const isAuthenticated = <%- user ? 'true' : 'false' %>;
 
         // --- UPDATE FUNCTIONS ---
         function updateStats(data) {
@@ -88,11 +88,12 @@
                 let platformsHtml = '';
                 if (s.live_platforms && s.live_platforms.length > 0) {
                     platformsHtml = s.live_platforms.map(p => {
+                        // Use Font Awesome for Kick, consistent with other platforms
                         const icon = p.platform === 'kick'
-                            ? `<img src="uploads/kick.png" class="platform-img-icon" alt="Kick">`
+                            ? `<i class="fas fa-k platform-icon-fa platform-icon-kick"></i>`
                             : `<i class="fab fa-${p.platform.toLowerCase()} platform-icon-${p.platform.toLowerCase()}"></i>`;
                         return `<a href="${p.url}" target="_blank" class="badge bg-dark text-decoration-none me-1" title="${s.username} on ${p.platform}">
-                                    ${icon} ${p.username}
+                                    ${icon} ${p.platform.charAt(0).toUpperCase() + p.platform.slice(1)}
                                  </a>`;
                     }).join('');
                 }
@@ -159,7 +160,12 @@
                     throw new Error(errorText);
                 }
                 const data = await resp.json();
-                logEl.textContent = data.error ? `Server Error: ${data.error}` : (data.logs || 'No logs available.');
+                const logs = data.error ? `Server Error: ${data.error}` : (data.logs || 'No logs available.');
+                if (typeof logs === 'string') {
+                    logEl.textContent = logs.trim().split('\n').reverse().join('\n');
+                } else {
+                    logEl.textContent = logs;
+                }
             } catch(e) {
                 console.error("Log fetch error:", e);
                 logEl.textContent = `Failed to fetch logs. Error: ${e.message}`;
@@ -204,7 +210,7 @@
                         reinitBtn.disabled = true;
                         reinitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Restarting...';
                         try {
-                            const response = await fetch('/api/reinit', { method: 'POST' });
+                            const response = await fetch('/api/admin/reinit-bot', { method: 'POST' });
                             const result = await response.json();
                             alert(result.message || (result.success ? 'Success' : 'Unknown error'));
                         } catch (error) {

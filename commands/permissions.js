@@ -39,14 +39,14 @@ module.exports = {
 
     try {
       if (subcommand === "grant") {
-        await db.execute(
+        await db.pool.execute(
           "INSERT INTO bot_permissions (guild_id, role_id, command) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE command=command",
           [interaction.guild.id, role.id, commandName]
         );
         await logAuditEvent(interaction, "Permission Granted", `The role **${role.name}** has been granted permission to use the \`/${commandName}\` command.`);
         await interaction.editReply({embeds: [new EmbedBuilder().setColor("#57F287").setTitle("✅ Permission Granted").setDescription(`The role ${role} can now use the \`/${commandName}\` command.`)]});
       } else if (subcommand === "revoke") {
-        await db.execute(
+        await db.pool.execute(
           "DELETE FROM bot_permissions WHERE guild_id = ? AND role_id = ? AND command = ?",
           [interaction.guild.id, role.id, commandName]
         );
