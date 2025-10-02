@@ -50,7 +50,7 @@
                     <h2><i class="fas fa-user-plus me-2"></i>Add Streamer</h2>
                     <form action="/manage/<%= guild.id %>/add" method="POST">
                         <div class="row g-3 align-items-end">
-                            <div class="col-md-3"><label class="form-label">Platform</label><select name="platform" class="form-select"><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="youtube">YouTube</option><option value="trovo">Trovo</option><option value="tiktok">TikTok</option></select></div>
+                            <div class="col-md-3"><label class="form-label">Platform</label><select name="platform" class="form-select"><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="youtube">YouTube</option></select></div>
                             <div class="col-md-4"><label class="form-label">Username/ID</label><input type="text" name="username" class="form-control" required></div>
                             <div class="col-md-5"><label class="form-label">Link Discord User</label><input type="text" name="discord_user_id" class="form-control" placeholder="Optional User ID"></div>
                         </div>
@@ -229,10 +229,11 @@
         if (modal) {
             modal.addEventListener("show.bs.modal", function(event) {
                 const button = event.relatedTarget;
+                // Clear previous dynamic content
                 const platformsContainer = modal.querySelector("#modal-platforms-container");
                 const subscriptionsContainer = modal.querySelector("#modal-subscriptions-container");
-                platformsContainer.innerHTML = '';
-                subscriptionsContainer.innerHTML = '';
+                if (platformsContainer) platformsContainer.innerHTML = '';
+                if (subscriptionsContainer) subscriptionsContainer.innerHTML = '';
 
                 modal.querySelector("#modal-streamer-name").textContent = button.getAttribute("data-streamer-name");
                 modal.querySelector("#edit-consolidated-streamer-id").value = button.getAttribute("data-consolidated-streamer-id");
@@ -241,6 +242,7 @@
                 const platforms = JSON.parse(button.getAttribute("data-platforms"));
                 const subscriptions = JSON.parse(button.getAttribute("data-subscriptions"));
 
+                // Populate platforms
                 if (platformsContainer) {
                     platforms.forEach(platform => {
                         const platformHtml = `
@@ -268,44 +270,43 @@
                     });
                 }
 
+                // Populate subscriptions
                 if (subscriptionsContainer) {
-                    const template = document.getElementById('subscription-template');
-                    if (template) {
-                        subscriptions.forEach(sub => {
-                            const clone = template.content.cloneNode(true);
-                            const instance = clone.querySelector('.subscription-instance');
-
-                            instance.querySelectorAll('[name]').forEach(el => {
-                                const originalName = el.getAttribute('name');
-                                el.name = `subscriptions[${sub.subscription_id}][${originalName}]`;
-                            });
-                            
-                            const resetAvatarCheckbox = instance.querySelector('.reset-avatar');
-                            const resetAvatarLabel = instance.querySelector('label[for="reset_avatar"]');
-                            if (resetAvatarCheckbox && resetAvatarLabel) {
-                                const newId = `reset-avatar-${sub.subscription_id}`;
-                                resetAvatarCheckbox.id = newId;
-                                resetAvatarLabel.htmlFor = newId;
-                            }
-
-                            const channelName = sub.announcement_channel_id 
-                                ? (document.querySelector(`option[value="${sub.announcement_channel_id}"]`)?.textContent || 'Unknown Channel').replace(/^#/, '')
-                                : 'Server Default';
-                            instance.querySelector('.subscription-title').textContent = `Subscription for ${sub.platform.charAt(0).toUpperCase() + sub.platform.slice(1)} in ${channelName}`;
-                            
-                            instance.querySelector('.subscription-id').value = sub.subscription_id;
-                            instance.querySelector('.streamer-id').value = sub.streamer_id;
-                            instance.querySelector('.announcement-channel-select').value = sub.announcement_channel_id || '';
-                            instance.querySelector('.override-nickname').value = sub.override_nickname || '';
-                            instance.querySelector('.custom-message').value = sub.custom_message || '';
-                            instance.querySelector('.override-avatar-url-text').value = sub.override_avatar_url || '';
-                            
-                            instance.querySelector('.privacy-setting').value = sub.privacy_setting || '';
-                            instance.querySelector('.summary-persistence').value = sub.summary_persistence || '';
-
-                            subscriptionsContainer.appendChild(instance);
-                        });
-                    }
+                    subscriptions.forEach(sub => {
+                        const subHtml = `
+                            <div class="border p-3 mb-3 rounded bg-light">
+                                <strong>Subscription for ${sub.platform.charAt(0).toUpperCase() + sub.platform.slice(1)} in ${sub.announcement_channel_id ? `#${document.querySelector('option[value="' + sub.announcement_channel_id + '"]').textContent.replace('#','')}` : 'Server Default'}</strong>
+                                <input type="hidden" name="subscriptions[${sub.subscription_id}][subscription_id]" value="${sub.subscription_id}">
+                                <input type="hidden" name="subscriptions[${sub.subscription_id}][streamer_id]" value="${sub.streamer_id}">
+                                <div class="mb-2 mt-2">
+                                    <label class="form-label small">Announcement Channel</label>
+                                    <select class="form-select form-select-sm" name="subscriptions[${sub.subscription_id}][announcement_channel_id]">
+                                        <option value="">-- Use Server Default --</option>
+                                        <% channels.forEach(channel => { %>
+                                            <option value="<%= channel.id %>" ${sub.announcement_channel_id === channel.id ? 'selected' : ''}>#<%= channel.name %></option>
+                                        <% }); %>
+                                    </select>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">Custom Webhook Nickname</label>
+                                    <input type="text" class="form-control form-control-sm" name="subscriptions[${sub.subscription_id}][override_nickname]" value="${sub.override_nickname || ''}" placeholder="Leave blank to use channel/server default">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">Custom Announcement Message</label>
+                                    <textarea class="form-control form-control-sm" name="subscriptions[${sub.subscription_id}][custom_message]" rows="2" placeholder="e.g. {username} is live with {game}!">${sub.custom_message || ''}</textarea>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">Override Avatar URL</label>
+                                    <input type="text" class="form-control form-control-sm" name="subscriptions[${sub.subscription_id}][override_avatar_url_text]" value="${sub.override_avatar_url || ''}" placeholder='URL or type "reset" to clear'>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="subscriptions[${sub.subscription_id}][reset_avatar]" id="reset-avatar-${sub.subscription_id}">
+                                    <label class="form-check-label" for="reset-avatar-${sub.subscription_id}">Reset Avatar</label>
+                                </div>
+                            </div>
+                        `;
+                        subscriptionsContainer.insertAdjacentHTML('beforeend', subHtml);
+                    });
                 }
             });
         }

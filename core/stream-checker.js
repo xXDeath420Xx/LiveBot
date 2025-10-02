@@ -1,4 +1,4 @@
-// B:/Code/LiveBot/core/stream-checker.js - Updated on 2025-10-01 - Unique Identifier: STREAM-CHECKER-FINAL-005
+// B:/Code/LiveBot/core/stream-checker.js - Updated on 2025-10-02 - Unique Identifier: STREAM-CHECKER-FINAL-006
 const db = require('../utils/db');
 const apiChecks = require('../utils/api_checks');
 const cache = require('../utils/cache');
@@ -43,13 +43,21 @@ async function checkStreams(client) {
             let consecutiveFails = await cache.get(consecutiveFailsCacheKey) || 0;
 
             if (status.isLive === true) {
-                await cache.del(consecutiveFailsCacheKey);
-            } else if (status.isLive === false) {
+                // If live, reset the fail counter.
+                await cache.redis.del(consecutiveFailsCacheKey);
+            } else { // This will now catch both `false` and `'unknown'`.
                 consecutiveFails++;
                 await cache.set(consecutiveFailsCacheKey, consecutiveFails, 900); // cache for 15 mins
+
+                // If we have failed less than 3 times, we are in the grace period.
+                // The status remains 'unknown' to prevent premature cleanup.
                 if (consecutiveFails < 3) {
-                    logger.warn(`[Check] Streamer ${streamer.username} (${streamer.platform}) appeared offline, but it's only been ${consecutiveFails} time(s). Giving grace period.`);
-                    status.isLive = 'unknown'; // Treat as unknown for a few checks
+                    logger.warn(`[Check] Streamer ${streamer.username} (${streamer.platform}) appeared offline or had an API error. Grace period active (Attempt ${consecutiveFails}/3).`);
+                    status.isLive = 'unknown';
+                } else {
+                    // If we have failed 3 or more times, we now consider the streamer definitively offline.
+                    logger.warn(`[Check] Streamer ${streamer.username} (${streamer.platform}) is definitively offline after ${consecutiveFails} failed checks.`);
+                    status.isLive = false;
                 }
             }
 
@@ -94,15 +102,13 @@ async function checkStreams(client) {
 
         const endedStreams = existingAnnouncements.filter(ann => {
             const sub = subscriptions.find(s => s.subscription_id === ann.subscription_id);
-            if (!sub) return true;
+            if (!sub) return true; // Subscription was deleted, so end the announcement.
 
             const status = statuses.get(`${sub.platform}:${sub.username}`);
 
-            if (status && status.isLive === 'unknown') {
-                return false;
-            }
-
-            return !status || !status.isLive;
+            // A stream is considered ended only if its status is definitively false.
+            // 'unknown' status means we're in a grace period, so we don't consider it ended.
+            return !status || status.isLive === false;
         });
 
         if (endedStreams.length > 0) {
