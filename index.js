@@ -259,12 +259,12 @@ async function main() {
     client.once(Events.ClientReady, async c => {
         console.log(`[READY] Logged in as ${c.user.tag}`);
         try {
+            dashboard.start(client);
             await apiChecks.getCycleTLSInstance(); // Pre-initialize CycleTLS
-            await checkTeams(client);
-            await checkStreams(client);
+            checkTeams(client);
+            checkStreams(client);
             setInterval(() => checkStreams(client), 180 * 1000);
             setInterval(() => checkTeams(client), 15 * 60 * 1000);
-            dashboard.start(client);
         } catch (e) { console.error('[ClientReady Error]', e); }
     });
 
