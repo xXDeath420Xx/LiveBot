@@ -136,12 +136,13 @@ async function getKickUser(username) {
                 return data;
             }
 
-            // For Kick, a 404 can be intermittent for live channels. We will retry.
             if (response.status === 404) {
-                logger.warn(`[Kick API] Received 404 for ${username}. Retrying in ${RETRY_DELAY / 1000}s...`);
-            } else {
-                logger.warn(`[Kick API] Received status ${response.status} for ${username}. Retrying in ${RETRY_DELAY / 1000}s...`);
+                logger.warn(`[Kick API] Received 404 for ${username}, user likely does not exist. Not retrying.`);
+                return null; // User not found, don't retry.
             }
+
+            // For other errors, retry.
+            logger.warn(`[Kick API] Received status ${response.status} for ${username}. Retrying in ${RETRY_DELAY / 1000}s...`);
 
         } catch (error) {
             logger.error(`[Kick API Check Error] for "${username}" on attempt ${attempt}: ${error.message}`);
