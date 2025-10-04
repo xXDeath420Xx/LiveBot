@@ -26,6 +26,15 @@
                 <input type="text" class="form-control" name="avatar_url_text" placeholder='Optional URL (type "reset" to clear)'>
             </div>
         </div>
+        <div class="mb-3 mt-3">
+            <label class="form-label">Privacy Level</label>
+            <select name="privacyLevel" class="form-select">
+                <option value="">-- Use Server Default --</option>
+                <option value="public">Public</option>
+                <option value="members">Members Only</option>
+                <option value="subscribers">Subscribers Only</option>
+            </select>
+        </div>
         <button type="submit" class="btn btn-primary w-100 mt-4"><i class="fas fa-save me-2"></i>Save Channel Appearance</button>
     </form>
 </div>

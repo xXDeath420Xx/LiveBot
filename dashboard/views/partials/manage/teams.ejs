@@ -85,6 +85,33 @@
                                     <label class="form-label">Webhook Avatar URL</label>
                                     <input type="url" name="webhookAvatarUrl" class="form-control" value="<%= sub.webhook_avatar_url || '' %>" placeholder="Optional">
                                 </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Public Announce Channel</label>
+                                    <select name="publicChannelId" class="form-select">
+                                        <option value="">-- Use Server Default --</option>
+                                        <% channels.forEach(channel => { %>
+                                            <option value="<%= channel.id %>" <%= sub.announcement_channel_id == channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                                        <% }); %>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Members Announce Channel</label>
+                                    <select name="membersChannelId" class="form-select">
+                                        <option value="">-- Use Server Default --</option>
+                                        <% channels.forEach(channel => { %>
+                                            <option value="<%= channel.id %>" <%= sub.members_announcement_channel_id == channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                                        <% }); %>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Subscribers Announce Channel</label>
+                                    <select name="subscribersChannelId" class="form-select">
+                                        <option value="">-- Use Server Default --</option>
+                                        <% channels.forEach(channel => { %>
+                                            <option value="<%= channel.id %>" <%= sub.subscribers_announcement_channel_id == channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                                        <% }); %>
+                                    </select>
+                                </div>
                                 <div class="col-12 d-flex justify-content-end mt-3">
                                      <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save me-2"></i>Update Team</button>
                                 </div>

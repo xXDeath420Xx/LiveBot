@@ -1,10 +1,10 @@
-// B:/Code/LiveBot/jobs/announcement-worker.js - Updated on 2025-10-01 - Unique Identifier: WORKER-FINAL-002
+// B:/Code/LiveBot/jobs/announcement-worker.js - Updated on 2025-10-02 - Unique Identifier: WORKER-FINAL-004
 BigInt.prototype.toJSON = function() { return this.toString(); };
 
 const { Worker } = require("bullmq");
 const path = require("path");
 require("dotenv-flow").config({ path: path.resolve(__dirname, "..") });
-const { Client, GatewayIntentBits, Partials, Events } = require("discord.js");
+const { Client, GatewayIntentBits, Partials, Events, EmbedBuilder } = require("discord.js");
 const logger = require("../utils/logger");
 const db = require("../utils/db");
 const { redis } = require("../utils/cache");
@@ -32,26 +32,38 @@ const worker = new Worker("announcement-queue", async job => {
     logger.info(`[Worker] Processing job ${job.id} for ${sub.username}.`);
 
     try {
-        const [guildSettingsArr] = await db.execute('SELECT * FROM guilds WHERE guild_id = ?', [sub.guild_id]);
-        const guildSettings = guildSettingsArr[0];
+        // 1. Fetch all necessary settings
+        const [[guildSettings]] = await db.execute('SELECT announcement_channel_id, members_announcement_channel_id, subscribers_announcement_channel_id, live_role_id, privacy_level FROM guilds WHERE guild_id = ?', [sub.guild_id]);
+        const [[teamSettings]] = sub.team_subscription_id ? await db.execute('SELECT announcement_channel_id, members_announcement_channel_id, subscribers_announcement_channel_id, live_role_id, privacy_level FROM twitch_teams WHERE id = ?', [sub.team_subscription_id]) : [[]];
+        const [[userPreference]] = sub.discord_user_id ? await db.execute('SELECT privacy_level FROM user_preferences WHERE discord_user_id = ?', [sub.discord_user_id]) : [[]];
+        const [[channelSettings]] = sub.announcement_channel_id ? await db.execute('SELECT privacy_level FROM channel_settings WHERE channel_id = ?', [sub.announcement_channel_id]) : [[]];
 
-        let teamSettings = null;
-        if (sub.team_subscription_id) {
-            const [teamSettingsArr] = await db.execute('SELECT * FROM twitch_teams WHERE id = ?', [sub.team_subscription_id]);
-            teamSettings = teamSettingsArr[0];
+        // 2. Determine effective privacy level (most specific wins)
+        const effectivePrivacyLevel = sub.privacy_level || 
+                                      userPreference?.privacy_level || 
+                                      channelSettings?.privacy_level || 
+                                      teamSettings?.privacy_level || 
+                                      guildSettings?.privacy_level || 
+                                      'public';
+
+        // 3. Determine target channel based on privacy level
+        let targetChannelId = null;
+        switch (effectivePrivacyLevel) {
+            case 'members':
+                targetChannelId = teamSettings?.members_announcement_channel_id || guildSettings?.members_announcement_channel_id;
+                break;
+            case 'subscribers':
+                targetChannelId = teamSettings?.subscribers_announcement_channel_id || guildSettings?.subscribers_announcement_channel_id;
+                break;
+            case 'public':
+            default:
+                targetChannelId = sub.announcement_channel_id || teamSettings?.announcement_channel_id || guildSettings?.announcement_channel_id;
+                break;
         }
-
-        const targetChannelId = sub.announcement_channel_id || teamSettings?.announcement_channel_id || guildSettings?.announcement_channel_id;
 
         if (!targetChannelId) {
-            logger.warn(`[Worker] No announcement channel resolved for subscription ${sub.subscription_id} (${sub.username}). Skipping job ${job.id}.`);
+            logger.warn(`[Worker] No announcement channel configured for privacy level '${effectivePrivacyLevel}' for subscription ${sub.subscription_id}. Skipping job ${job.id}.`);
             return;
-        }
-
-        const [channelTeamSettingsArr] = await db.execute('SELECT * FROM twitch_teams WHERE announcement_channel_id = ?', [targetChannelId]);
-        if (channelTeamSettingsArr.length > 0) {
-            teamSettings = channelTeamSettingsArr[0];
-            logger.info(`[Worker] Target channel ${targetChannelId} is a team channel. Using settings for team ID ${teamSettings.id}.`);
         }
 
         const [existingAnnouncementsForStreamerInChannel] = await db.execute(
@@ -62,7 +74,7 @@ const worker = new Worker("announcement-queue", async job => {
 
         logger.debug(`[Worker] DB lookup for streamer ${sub.streamer_id} (${liveData.platform}) in channel ${targetChannelId} found existing: ${!!existingAnnouncementFromDb}`);
 
-        const sentMessage = await updateAnnouncement(workerClient, sub, liveData, existingAnnouncementFromDb, guildSettings, null, teamSettings);
+        const sentMessage = await updateAnnouncement(workerClient, sub, liveData, existingAnnouncementFromDb, guildSettings, channelSettings, teamSettings, targetChannelId);
 
         if (sentMessage && sentMessage.id && sentMessage.channel_id) {
             if (!existingAnnouncementFromDb) {
@@ -91,7 +103,7 @@ const worker = new Worker("announcement-queue", async job => {
             if (guildSettings?.live_role_id) {
                 rolesToApply.push(guildSettings.live_role_id);
             }
-            if (teamSettings?.live_role_id) { // Use the final teamSettings
+            if (teamSettings?.live_role_id) {
                 rolesToApply.push(teamSettings.live_role_id);
             }
             const uniqueRolesToApply = [...new Set(rolesToApply)];

@@ -345,7 +345,7 @@ async function checkYouTube(channelId) {
         return { ...defaultResponse, profileImageUrl: profileImageUrl };
     } catch (e) {
         logger.error(`[Check YouTube Error] for channel ID "${channelId}":`, e.message);
-        return { ...defaultResponse, profileImageUrl: null };
+        return { isLive: 'unknown', profileImageUrl: null };
     } finally {
         if (page) await page.close().catch(e => logger.error(`[YouTube Check] Error closing page for ${channelId}:`, e));
         logger.info(`[YouTube Check] Finished for channel ID: ${channelId}`);
