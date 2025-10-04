@@ -137,11 +137,12 @@
         </div>
     </main>
 </div>
-<%- include('partials/manage-modal', { guild, channels }) %>
+<%- include('partials/manage-modal', { guild, channels, userPreferences }) %>
 <%- include('partials/footer') %>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const guildId = '<%= guild.id %>';
+        const channels = <%- JSON.stringify(channels.map(c => ({id: c.id, name: c.name}))) %>;
         const liveStatusContainer = document.getElementById("live-status-container");
         const paginationContainer = document.getElementById("live-status-pagination");
         const prevBtn = document.getElementById("live-prev-btn");
@@ -229,11 +230,10 @@
         if (modal) {
             modal.addEventListener("show.bs.modal", function(event) {
                 const button = event.relatedTarget;
-                // Clear previous dynamic content
                 const platformsContainer = modal.querySelector("#modal-platforms-container");
                 const subscriptionsContainer = modal.querySelector("#modal-subscriptions-container");
-                if (platformsContainer) platformsContainer.innerHTML = '';
-                if (subscriptionsContainer) subscriptionsContainer.innerHTML = '';
+                platformsContainer.innerHTML = '';
+                subscriptionsContainer.innerHTML = '';
 
                 modal.querySelector("#modal-streamer-name").textContent = button.getAttribute("data-streamer-name");
                 modal.querySelector("#edit-consolidated-streamer-id").value = button.getAttribute("data-consolidated-streamer-id");
@@ -242,72 +242,94 @@
                 const platforms = JSON.parse(button.getAttribute("data-platforms"));
                 const subscriptions = JSON.parse(button.getAttribute("data-subscriptions"));
 
-                // Populate platforms
-                if (platformsContainer) {
-                    platforms.forEach(platform => {
-                        const platformHtml = `
-                            <div class="mb-2 p-2 border rounded bg-light">
-                                <div class="d-flex align-items-center mb-2">
-                                    ${platform.platform === 'twitch' ? '<i class="fab fa-twitch platform-icon-fa platform-icon-twitch me-2"></i>' : ''}
-                                    ${platform.platform === 'youtube' ? '<i class="fab fa-youtube platform-icon-fa platform-icon-youtube me-2"></i>' : ''}
-                                    ${platform.platform === 'kick' ? '<i class="fas fa-k platform-icon-fa platform-icon-kick me-2"></i>' : ''}
-                                    ${platform.platform === 'tiktok' ? '<i class="fab fa-tiktok platform-icon-fa platform-icon-tiktok me-2"></i>' : ''}
-                                    ${platform.platform === 'trovo' ? '<i class="fas fa-t platform-icon-fa platform-icon-trovo me-2"></i>' : ''}
-                                    <strong>${platform.platform.charAt(0).toUpperCase() + platform.platform.slice(1)}: ${platform.username}</strong>
-                                </div>
-                                <input type="hidden" name="platforms[${platform.streamer_id}][streamer_id]" value="${platform.streamer_id}">
-                                <input type="hidden" name="platforms[${platform.streamer_id}][platform]" value="${platform.platform}">
-                                <input type="hidden" name="platforms[${platform.streamer_id}][username]" value="${platform.username}">
-                                ${platform.platform === 'twitch' ? `
-                                    <div class="mb-1">
-                                        <label class="form-label small">Linked Kick Username</label>
-                                        <input type="text" class="form-control form-control-sm" name="platforms[${platform.streamer_id}][kick_username]" placeholder="Optional Kick Username" value="${platform.kick_username || ''}">
-                                    </div>
-                                ` : ''}
+                platforms.forEach(platform => {
+                    const platformHtml = `
+                        <div class="mb-2 p-2 border rounded bg-light">
+                            <div class="d-flex align-items-center mb-2">
+                                ${platform.platform === 'twitch' ? '<i class="fab fa-twitch platform-icon-fa platform-icon-twitch me-2"></i>' : ''}
+                                ${platform.platform === 'youtube' ? '<i class="fab fa-youtube platform-icon-fa platform-icon-youtube me-2"></i>' : ''}
+                                ${platform.platform === 'kick' ? '<i class="fas fa-k platform-icon-fa platform-icon-kick me-2"></i>' : ''}
+                                ${platform.platform === 'tiktok' ? '<i class="fab fa-tiktok platform-icon-fa platform-icon-tiktok me-2"></i>' : ''}
+                                ${platform.platform === 'trovo' ? '<i class="fas fa-t platform-icon-fa platform-icon-trovo me-2"></i>' : ''}
+                                <strong>${platform.platform.charAt(0).toUpperCase() + platform.platform.slice(1)}: ${platform.username}</strong>
                             </div>
-                        `;
-                        platformsContainer.insertAdjacentHTML('beforeend', platformHtml);
-                    });
-                }
+                            <input type="hidden" name="platforms[${platform.streamer_id}][streamer_id]" value="${platform.streamer_id}">
+                            <input type="hidden" name="platforms[${platform.streamer_id}][platform]" value="${platform.platform}">
+                            <input type="hidden" name="platforms[${platform.streamer_id}][username]" value="${platform.username}">
+                            ${platform.platform === 'twitch' ? `
+                                <div class="mb-1">
+                                    <label class="form-label small">Linked Kick Username</label>
+                                    <input type="text" class="form-control form-control-sm" name="platforms[${platform.streamer_id}][kick_username]" placeholder="Optional Kick Username" value="${platform.kick_username || ''}">
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                    platformsContainer.insertAdjacentHTML('beforeend', platformHtml);
+                });
 
-                // Populate subscriptions
-                if (subscriptionsContainer) {
-                    subscriptions.forEach(sub => {
-                        const subHtml = `
-                            <div class="border p-3 mb-3 rounded bg-light">
-                                <strong>Subscription for ${sub.platform.charAt(0).toUpperCase() + sub.platform.slice(1)} in ${sub.announcement_channel_id ? `#${document.querySelector('option[value="' + sub.announcement_channel_id + '"]').textContent.replace('#','')}` : 'Server Default'}</strong>
-                                <input type="hidden" name="subscriptions[${sub.subscription_id}][subscription_id]" value="${sub.subscription_id}">
-                                <input type="hidden" name="subscriptions[${sub.subscription_id}][streamer_id]" value="${sub.streamer_id}">
-                                <div class="mb-2 mt-2">
-                                    <label class="form-label small">Announcement Channel</label>
-                                    <select class="form-select form-select-sm" name="subscriptions[${sub.subscription_id}][announcement_channel_id]">
-                                        <option value="">-- Use Server Default --</option>
-                                        <% channels.forEach(channel => { %>
-                                            <option value="<%= channel.id %>" ${sub.announcement_channel_id === channel.id ? 'selected' : ''}>#<%= channel.name %></option>
-                                        <% }); %>
-                                    </select>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label small">Custom Webhook Nickname</label>
-                                    <input type="text" class="form-control form-control-sm" name="subscriptions[${sub.subscription_id}][override_nickname]" value="${sub.override_nickname || ''}" placeholder="Leave blank to use channel/server default">
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label small">Custom Announcement Message</label>
-                                    <textarea class="form-control form-control-sm" name="subscriptions[${sub.subscription_id}][custom_message]" rows="2" placeholder="e.g. {username} is live with {game}!">${sub.custom_message || ''}</textarea>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label small">Override Avatar URL</label>
-                                    <input type="text" class="form-control form-control-sm" name="subscriptions[${sub.subscription_id}][override_avatar_url_text]" value="${sub.override_avatar_url || ''}" placeholder='URL or type "reset" to clear'>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" name="subscriptions[${sub.subscription_id}][reset_avatar]" id="reset-avatar-${sub.subscription_id}">
-                                    <label class="form-check-label" for="reset-avatar-${sub.subscription_id}">Reset Avatar</label>
-                                </div>
+                subscriptions.forEach(sub => {
+                    const channelOptions = channels.map(channel =>
+                        `<option value="${channel.id}" ${sub.announcement_channel_id === channel.id ? 'selected' : ''}>#${channel.name}</option>`
+                    ).join('');
+                    const channelName = sub.announcement_channel_id ? `#${channels.find(c => c.id === sub.announcement_channel_id)?.name || 'Unknown'}` : 'Server Default';
+
+                    const subHtml = `
+                        <div class="border p-3 mb-3 rounded bg-light">
+                            <strong>Subscription for ${sub.platform.charAt(0).toUpperCase() + sub.platform.slice(1)} in ${channelName}</strong>
+                            <input type="hidden" name="subscriptions[${sub.subscription_id}][subscription_id]" value="${sub.subscription_id}">
+                            <input type="hidden" name="subscriptions[${sub.subscription_id}][streamer_id]" value="${sub.streamer_id}">
+                            <div class="mb-2 mt-2">
+                                <label class="form-label small">Announcement Channel</label>
+                                <select class="form-select form-select-sm" name="subscriptions[${sub.subscription_id}][announcement_channel_id]">
+                                    <option value="">-- Use Server Default --</option>
+                                    ${channelOptions}
+                                </select>
                             </div>
-                        `;
-                        subscriptionsContainer.insertAdjacentHTML('beforeend', subHtml);
-                    });
-                }
+                            <div class="mb-2">
+                                <label class="form-label small">Custom Webhook Nickname</label>
+                                <input type="text" class="form-control form-control-sm" name="subscriptions[${sub.subscription_id}][override_nickname]" value="${sub.override_nickname || ''}" placeholder="Leave blank to use channel/server default">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small">Custom Announcement Message</label>
+                                <textarea class="form-control form-control-sm" name="subscriptions[${sub.subscription_id}][custom_message]" rows="2" placeholder="e.g. {username} is live with {game}!">${sub.custom_message || ''}</textarea>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small">Override Avatar URL</label>
+                                <input type="text" class="form-control form-control-sm" name="subscriptions[${sub.subscription_id}][override_avatar_url_text]" value="${sub.override_avatar_url || ''}" placeholder='URL or type "reset" to clear'>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="subscriptions[${sub.subscription_id}][reset_avatar]" id="reset-avatar-${sub.subscription_id}">
+                                <label class="form-check-label" for="reset-avatar-${sub.subscription_id}">Reset Avatar</label>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small">Privacy Level</label>
+                                <select class="form-select form-select-sm" name="subscriptions[${sub.subscription_id}][privacy_level]">
+                                    <option value="" ${!sub.privacy_level ? 'selected' : ''}>-- Use Default --</option>
+                                    <option value="public" ${sub.privacy_level === 'public' ? 'selected' : ''}>Public</option>
+                                    <option value="members" ${sub.privacy_level === 'members' ? 'selected' : ''}>Members Only</option>
+                                    <option value="subscribers" ${sub.privacy_level === 'subscribers' ? 'selected' : ''}>Subscribers Only</option>
+                                </select>
+                            </div>
+                            ${sub.platform === 'youtube' ? `
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" name="subscriptions[${sub.subscription_id}][youtube_vod_notifications]" id="youtube-vods-${sub.subscription_id}" ${sub.youtube_vod_notifications ? 'checked' : ''}>
+                                <label class="form-check-label" for="youtube-vods-${sub.subscription_id}">Post YouTube VODs</label>
+                            </div>
+                            ` : ''}
+                            ${sub.platform === 'tiktok' ? `
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" name="subscriptions[${sub.subscription_id}][tiktok_vod_notifications]" id="tiktok-vods-${sub.subscription_id}" ${sub.tiktok_vod_notifications ? 'checked' : ''}>
+                                <label class="form-check-label" for="tiktok-vods-${sub.subscription_id}">Post TikTok VODs</label>
+                            </div>
+                            ` : ''}
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" name="subscriptions[${sub.subscription_id}][keep_summary]" id="keep-summary-${sub.subscription_id}" ${!sub.delete_on_end ? 'checked' : ''}>
+                                <label class="form-check-label" for="keep-summary-${sub.subscription_id}">Keep as summary when stream ends</label>
+                            </div>
+                        </div>
+                    `;
+                    subscriptionsContainer.insertAdjacentHTML('beforeend', subHtml);
+                });
             });
         }
     });

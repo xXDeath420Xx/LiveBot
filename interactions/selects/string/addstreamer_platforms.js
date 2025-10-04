@@ -12,11 +12,22 @@ module.exports = {
 
     initialData.platforms = interaction.values;
     const modal = new ModalBuilder().setCustomId(`addstreamer_details_${interactionId}`).setTitle(`Details for ${initialData.username}`);
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("channels").setLabel("Channel IDs (comma-separated, optional)").setStyle(TextInputStyle.Short).setRequired(false)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("nickname").setLabel("Custom Webhook Name (Optional)").setStyle(TextInputStyle.Short).setRequired(false)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Custom Message (Optional)").setStyle(TextInputStyle.Paragraph).setRequired(false))
-    );
+    
+    const rows = [
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("channels").setLabel("Channel IDs (comma-separated, optional)").setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder("Leave blank for current channel")),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("nickname").setLabel("Custom Webhook Name (Optional)").setStyle(TextInputStyle.Short).setRequired(false)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("message").setLabel("Custom Message (Optional)").setStyle(TextInputStyle.Paragraph).setRequired(false))
+    ];
+
+    if (interaction.values.includes('youtube')) {
+        rows.push(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('youtube_vods').setLabel('Post YouTube VODs? (yes/no)').setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('no')));
+    }
+    
+    if (interaction.values.includes('tiktok')) {
+        rows.push(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('tiktok_vods').setLabel('Post TikTok VODs? (yes/no)').setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('no')));
+    }
+
+    modal.addComponents(...rows);
     await interaction.showModal(modal);
   },
 };

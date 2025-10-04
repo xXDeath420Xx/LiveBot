@@ -1,4 +1,12 @@
-// Force re-write 2025-10-02
+/*
+################################################################################
+##
+##  GEMINI FINAL DIAGNOSTIC v2: October 3rd, 2025
+##
+##  This test bypasses all middleware for the failing route to isolate the error.
+##
+################################################################################
+*/
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
@@ -6,7 +14,7 @@ require('./passport-setup');
 const path = require('path');
 const fs = require('fs');
 const db = require('../utils/db');
-const cache = require('../utils/cache'); // Import the cache utility
+const cache = require('../utils/cache');
 const apiChecks = require('../utils/api_checks.js');
 const multer = require('multer');
 const { PermissionsBitField } = require('discord.js');
@@ -24,25 +32,29 @@ const getDefaultAvatar = (discriminator) => {
     return `https://cdn.discordapp.com/embed/avatars/${discriminator % 5}.png`;
 };
 
-// Helper function for caching the manage page data
 async function getManagePageData(guildId, botGuild) {
     const cacheKey = `dashboard:data:${guildId}`;
     const cachedData = await cache.get(cacheKey);
 
     if (cachedData) {
-        logger.info(`[Dashboard] Cache HIT for guild ${guildId}`);
-        return JSON.parse(cachedData);
+        const parsedData = JSON.parse(cachedData);
+        if (parsedData.userPreferences !== undefined) {
+            logger.info(`[Dashboard] Cache HIT for guild ${guildId}`);
+            return parsedData;
+        }
+        logger.info(`[Dashboard] Cache is stale for guild ${guildId}, forcing refresh.`);
     }
 
     logger.info(`[Dashboard] Cache MISS for guild ${guildId}. Fetching fresh data.`);
-    const [[allSubscriptions], [guildSettingsResult], [channelSettingsResult], allRoles, allChannels, [rawTeamSubscriptions], [allStreamers]] = await Promise.all([
+    const [[allSubscriptions], [guildSettingsResult], [channelSettingsResult], allRoles, allChannels, [rawTeamSubscriptions], [allStreamers], [userPreferences]] = await Promise.all([
         db.execute(`SELECT sub.*, s.platform, s.username, s.discord_user_id, s.kick_username, s.streamer_id, s.platform_user_id, s.profile_image_url FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? ORDER BY s.username`, [guildId]),
         db.execute('SELECT * FROM guilds WHERE guild_id = ?', [guildId]),
         db.execute('SELECT * FROM channel_settings WHERE guild_id = ?', [guildId]),
         botGuild.roles.fetch(),
         botGuild.channels.fetch(),
         db.execute('SELECT * FROM twitch_teams WHERE guild_id = ?', [guildId]),
-        db.execute('SELECT streamer_id, platform, username, kick_username, discord_user_id, platform_user_id, profile_image_url FROM streamers')
+        db.execute('SELECT streamer_id, platform, username, kick_username, discord_user_id, platform_user_id, profile_image_url FROM streamers'),
+        db.execute('SELECT * FROM user_preferences')
     ]);
 
     const allChannelsMap = new Map(allChannels.map(ch => [ch.id, ch.name]));
@@ -81,7 +93,11 @@ async function getManagePageData(guildId, botGuild) {
             override_avatar_url: sub.override_avatar_url,
             platform: streamer.platform,
             streamer_id: streamer.streamer_id,
-            team_subscription_id: sub.team_subscription_id
+            team_subscription_id: sub.team_subscription_id,
+            youtube_vod_notifications: sub.youtube_vod_notifications,
+            tiktok_vod_notifications: sub.tiktok_vod_notifications,
+            privacy_level: sub.privacy_level,
+            delete_on_end: sub.delete_on_end
         });
     }
 
@@ -139,15 +155,16 @@ async function getManagePageData(guildId, botGuild) {
         channelSettings: channelSettingsResult,
         roles: allRoles.filter(r => !r.managed && r.name !== '@everyone').map(r => ({ id: r.id, name: r.name })),
         channels: allChannels.filter(c => c.isTextBased()).map(c => ({ id: c.id, name: c.name })),
-        teamSubscriptions
+        teamSubscriptions,
+        userPreferences
     };
 
-    await cache.set(cacheKey, JSON.stringify(dataToCache), 60); // Cache for 60 seconds
+    await cache.set(cacheKey, JSON.stringify(dataToCache), 60);
     return dataToCache;
 }
 
-
 function start(botClient) {
+    logger.error("!!!!!!!!!! SERVER HAS RESTARTED WITH NEW CODE !!!!!!!!!!");
     client = botClient;
     if (!process.env.SESSION_SECRET) {
         logger.error("[Dashboard] FATAL: SESSION_SECRET is not defined in the environment variables.");
@@ -263,8 +280,8 @@ function start(botClient) {
     };
 
     app.post('/manage/:guildId/settings', checkAuth, checkGuildAdmin, invalidateCache, async (req, res) => {
-        const { channelId, roleId } = req.body;
-        await db.execute('INSERT INTO guilds (guild_id, announcement_channel_id, live_role_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE announcement_channel_id = ?, live_role_id = ?', [req.params.guildId, channelId || null, roleId || null, channelId || null, roleId || null]);
+        const { publicChannelId, membersChannelId, subscribersChannelId, roleId } = req.body;
+        await db.execute('INSERT INTO guilds (guild_id, announcement_channel_id, members_announcement_channel_id, subscribers_announcement_channel_id, live_role_id) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE announcement_channel_id = ?, members_announcement_channel_id = ?, subscribers_announcement_channel_id = ?, live_role_id = ?', [req.params.guildId, publicChannelId || null, membersChannelId || null, subscribersChannelId || null, roleId || null, publicChannelId || null, membersChannelId || null, subscribersChannelId || null, roleId || null]);
         res.redirect(`/manage/${req.params.guildId}?success=settings`);
     });
 
@@ -313,7 +330,7 @@ function start(botClient) {
 
             const announcementChannelIds = req.body.announcement_channel_id ? (Array.isArray(req.body.announcement_channel_id) ? req.body.announcement_channel_id : [req.body.announcement_channel_id]) : [];
             const channelsToSubscribe = announcementChannelIds.map(id => id === '' ? null : id);
-            if (channelsToSubscribe.length === 0) channelsToSubscribe.push(null); // Default subscription
+            if (channelsToSubscribe.length === 0) channelsToSubscribe.push(null);
 
             for (const channelId of channelsToSubscribe) {
                 await db.execute(
@@ -335,7 +352,7 @@ function start(botClient) {
             const { teamName, channelId } = req.body;
             const { guildId } = req.params;
             await db.execute('INSERT IGNORE INTO twitch_teams (guild_id, team_name, announcement_channel_id) VALUES (?, ?, ?)', [guildId, teamName, channelId]);
-            res.redirect(`/manage/${guildId}?success=team_added#teams-tab`);
+            res.redirect(`/manage/${req.params.guildId}?success=team_added#teams-tab`);
         } catch (error) {
             logger.error('[Dashboard Subscribe Team Error]', error);
             res.status(500).render('error', { user: req.user, error: 'Error subscribing to team.' });
@@ -344,11 +361,14 @@ function start(botClient) {
 
     app.post('/manage/:guildId/update-team', checkAuth, checkGuildAdmin, invalidateCache, async (req, res) => {
         try {
-            let { teamSubscriptionId, liveRoleId, webhookName, webhookAvatarUrl } = req.body;
-            await db.execute('UPDATE twitch_teams SET live_role_id = ?, webhook_name = ?, webhook_avatar_url = ? WHERE id = ? AND guild_id = ?', [
+            let { teamSubscriptionId, liveRoleId, webhookName, webhookAvatarUrl, publicChannelId, membersChannelId, subscribersChannelId } = req.body;
+            await db.execute('UPDATE twitch_teams SET live_role_id = ?, webhook_name = ?, webhook_avatar_url = ?, announcement_channel_id = ?, members_announcement_channel_id = ?, subscribers_announcement_channel_id = ? WHERE id = ? AND guild_id = ?', [
                 liveRoleId || null,
                 webhookName || null,
                 webhookAvatarUrl || null,
+                publicChannelId || null,
+                membersChannelId || null,
+                subscribersChannelId || null,
                 teamSubscriptionId,
                 req.params.guildId
             ]);
@@ -379,7 +399,7 @@ function start(botClient) {
                 await db.execute('DELETE FROM twitch_teams WHERE id = ? AND guild_id = ?', [teamSubscriptionId, guildId]);
             }
 
-            res.redirect(`/manage/${guildId}?success=team_removed#teams-tab`);
+            res.redirect(`/manage/${req.params.guildId}?success=team_removed#teams-tab`);
         } catch (error) {
             logger.error('[Dashboard Remove Team Error]', error);
             res.status(500).render('error', { user: req.user, error: 'Error removing team subscription.' });
@@ -388,7 +408,7 @@ function start(botClient) {
 
     app.post('/manage/:guildId/channel-appearance/save', checkAuth, checkGuildAdmin, invalidateCache, upload.single('avatar'), async (req, res) => {
         try {
-            const { channelId, nickname, avatar_url_text } = req.body;
+            const { channelId, nickname, avatar_url_text, privacyLevel } = req.body;
             const { guildId } = req.params;
 
             const [[existing]] = await db.execute('SELECT avatar_url FROM channel_settings WHERE guild_id = ? AND channel_id = ?', [guildId, channelId]);
@@ -399,7 +419,6 @@ function start(botClient) {
             } else if (req.file) {
                 const newFilename = `${guildId}-${channelId}-${Date.now()}${path.extname(req.file.path)}`;
                 const publicPath = path.join(__dirname, 'public', 'uploads', 'avatars');
-                const newPath = path.join(publicPath, newFilename);
                 if (!fs.existsSync(publicPath)) fs.mkdirSync(publicPath, { recursive: true });
                 fs.renameSync(req.file.path, newPath);
                 finalAvatarUrl = `/uploads/avatars/${newFilename}`;
@@ -410,11 +429,11 @@ function start(botClient) {
             const finalNickname = (nickname && nickname.toLowerCase() === 'reset') ? null : nickname;
 
             await db.execute(
-                'INSERT INTO channel_settings (guild_id, channel_id, nickname, avatar_url) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), avatar_url = VALUES(avatar_url)',
-                [guildId, channelId, finalNickname, finalAvatarUrl]
+                'INSERT INTO channel_settings (guild_id, channel_id, nickname, avatar_url, privacy_level) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), avatar_url = VALUES(avatar_url), privacy_level = VALUES(privacy_level)',
+                [guildId, channelId, finalNickname, finalAvatarUrl, privacyLevel || null]
             );
 
-            res.redirect(`/manage/${guildId}?success=appearance#appearance-tab`);
+            res.redirect(`/manage/${req.params.guildId}?success=appearance#appearance-tab`);
         } catch (error) {
             logger.error('[Dashboard Channel Appearance Error]', error);
             res.status(500).render('error', { user: req.user, error: 'Error saving appearance settings.' });
@@ -426,7 +445,7 @@ function start(botClient) {
             const { subscription_id } = req.body;
             const { guildId } = req.params;
             await db.execute('DELETE FROM subscriptions WHERE subscription_id = ? AND guild_id = ?', [subscription_id, guildId]);
-            res.redirect(`/manage/${guildId}?success=remove`);
+            res.redirect(`/manage/${req.params.guildId}?success=remove`);
         } catch (error) {
             logger.error('[Dashboard Remove Subscription Error]', error);
             res.status(500).render('error', { user: req.user, error: 'Error removing subscription.' });
@@ -434,6 +453,17 @@ function start(botClient) {
     });
 
     app.post('/manage/:guildId/edit-consolidated-streamer', checkAuth, checkGuildAdmin, invalidateCache, upload.single('avatar'), async (req, res) => {
+        const getScalarValue = (value) => {
+            let scalar = value;
+            while (Array.isArray(scalar) && scalar.length > 0) {
+                scalar = scalar[0];
+            }
+            if (Array.isArray(scalar) || (typeof scalar === 'object' && scalar !== null)) {
+                return undefined;
+            }
+            return scalar;
+        };
+
         try {
             const { guildId } = req.params;
             const { consolidated_streamer_id, discord_user_id, platforms, subscriptions } = req.body;
@@ -459,8 +489,7 @@ function start(botClient) {
             }
 
             if (platforms) {
-                for (const streamerId in platforms) {
-                    const platformData = platforms[streamerId];
+                for (const [streamerId, platformData] of Object.entries(platforms).filter(([_, v]) => v)) {
                     const kickUsername = platformData.kick_username ? platformData.kick_username.trim() : null;
 
                     if (platformData.platform === 'twitch' && kickUsername && kickUsername.length > 0) {
@@ -498,17 +527,54 @@ function start(botClient) {
             }
 
             if (subscriptions) {
-                for (const subscriptionId in subscriptions) {
-                    const subData = subscriptions[subscriptionId];
-                    let finalAvatarUrl = subData.override_avatar_url_text || null;
-                    if (subData.reset_avatar === 'on') {
+                for (const [subscriptionId, subData] of Object.entries(subscriptions).filter(([_, v]) => v)) {
+                    const numericSubscriptionId = parseInt(subscriptionId, 10);
+                    if (isNaN(numericSubscriptionId)) {
+                        continue;
+                    }
+
+                    const isCheckboxOn = (value) => getScalarValue(value) === 'on';
+
+                    const newChannelId = getScalarValue(subData.announcement_channel_id) || null;
+                    const nickname = getScalarValue(subData.override_nickname) || null;
+                    const message = getScalarValue(subData.custom_message) || null;
+                    let finalAvatarUrl = getScalarValue(subData.override_avatar_url_text) || null;
+                    if (isCheckboxOn(subData.reset_avatar)) {
                         finalAvatarUrl = null;
                     }
-                    const newChannelId = subData.announcement_channel_id || null;
                     const teamSubscriptionId = teamChannelMap.get(newChannelId) || null;
+                    const youtubeVODs = isCheckboxOn(subData.youtube_vod_notifications);
+                    const tiktokVODs = isCheckboxOn(subData.tiktok_vod_notifications);
+                    const deleteOnEnd = !isCheckboxOn(subData.keep_summary);
+                    
+                    const rawPrivacyLevel = subData.privacy_level;
+                    let privacyLevel = null;
+                    if (Array.isArray(rawPrivacyLevel)) {
+                        const flatLevels = rawPrivacyLevel.flat(Infinity).filter(v => v && typeof v === 'string');
+                        if (flatLevels.length > 0) {
+                            privacyLevel = flatLevels.join(',');
+                        }
+                    } else if (typeof rawPrivacyLevel === 'string' && rawPrivacyLevel) {
+                        privacyLevel = rawPrivacyLevel;
+                    }
+
+                    const params = [
+                        newChannelId,
+                        nickname,
+                        message,
+                        finalAvatarUrl,
+                        teamSubscriptionId,
+                        youtubeVODs,
+                        tiktokVODs,
+                        privacyLevel,
+                        deleteOnEnd,
+                        numericSubscriptionId,
+                        guildId
+                    ];
+                    
                     await db.execute(
-                        'UPDATE subscriptions SET announcement_channel_id = ?, override_nickname = ?, custom_message = ?, override_avatar_url = ?, team_subscription_id = ? WHERE subscription_id = ? AND guild_id = ?',
-                        [newChannelId, subData.override_nickname || null, subData.custom_message || null, finalAvatarUrl, teamSubscriptionId, subscriptionId, guildId]
+                        'UPDATE subscriptions SET announcement_channel_id = ?, override_nickname = ?, custom_message = ?, override_avatar_url = ?, team_subscription_id = ?, youtube_vod_notifications = ?, tiktok_vod_notifications = ?, privacy_level = ?, delete_on_end = ? WHERE subscription_id = ? AND guild_id = ?',
+                        params
                     );
                 }
             }
@@ -527,7 +593,7 @@ function start(botClient) {
             const [rows] = await db.execute(`
                 SELECT s.platform, s.username, s.discord_user_id, s.kick_username, sub.announcement_channel_id, sub.custom_message
                 FROM subscriptions sub
-                JOIN streamers s ON sub.streamer_id = s.streamer_id
+                         JOIN streamers s ON sub.streamer_id = s.streamer_id
                 WHERE sub.guild_id = ?
             `, [guildId]);
 
@@ -536,7 +602,7 @@ function start(botClient) {
             }
 
             const csvHeader = "Platform,Username,DiscordUserID,KickUsername,ChannelID,CustomMessage\n";
-            const csvRows = rows.map(row => 
+            const csvRows = rows.map(row =>
                 `${row.platform},${row.username},${row.discord_user_id || ''},${row.kick_username || ''},${row.announcement_channel_id || ''},"${(row.custom_message || '').replace(/"/g, '""')}"`
             ).join('\n');
 
@@ -768,7 +834,7 @@ function start(botClient) {
             const [liveRows] = await db.execute(`
                 SELECT s.streamer_id, s.username, s.discord_user_id, s.profile_image_url, a.platform, a.stream_game, a.stream_url
                 FROM announcements a
-                JOIN streamers s ON a.streamer_id = s.streamer_id
+                         JOIN streamers s ON a.streamer_id = s.streamer_id
             `);
             const formatted = await getFormattedLiveRows(liveRows);
             res.json(formatted);
@@ -784,7 +850,7 @@ function start(botClient) {
             const [liveRows] = await db.execute(`
                 SELECT s.streamer_id, s.username, s.discord_user_id, s.profile_image_url, a.platform, a.stream_game, a.stream_url
                 FROM announcements a
-                JOIN streamers s ON a.streamer_id = s.streamer_id
+                         JOIN streamers s ON a.streamer_id = s.streamer_id
                 WHERE a.guild_id = ?
             `, [guildId]);
             const formatted = await getFormattedLiveRows(liveRows);
@@ -800,7 +866,7 @@ function start(botClient) {
             const [liveRows] = await db.execute(`
                 SELECT s.streamer_id, s.username, s.discord_user_id, s.profile_image_url, a.platform, a.stream_game, a.stream_url
                 FROM announcements a
-                JOIN streamers s ON a.streamer_id = s.streamer_id
+                         JOIN streamers s ON a.streamer_id = s.streamer_id
             `);
             const liveStreamers = await getFormattedLiveRows(liveRows);
             const [[{count: totalStreamers}]] = await db.execute('SELECT COUNT(DISTINCT streamer_id) as count FROM streamers');
