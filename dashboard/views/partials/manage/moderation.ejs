@@ -1,0 +1,61 @@
+<div class="plugin-card mt-4">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-level-up-alt me-2"></i> Infraction Escalation Rules</h4>
+    </div>
+    <div class="plugin-card-body">
+        <p class="text-muted">Automatically take action when a user accumulates a certain number of infractions.</p>
+        
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Condition</th>
+                    <th>Action</th>
+                    <th>Remove</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% if (escalationRules && escalationRules.length > 0) { %>
+                    <% escalationRules.forEach(rule => { %>
+                        <tr>
+                            <td>If a user gets <strong><%= rule.infraction_count %></strong> infractions within <strong><%= rule.time_period_hours %></strong> hours...</td>
+                            <td>...then <strong><%= rule.action %></strong> them <%= rule.action_duration_minutes ? `for ${rule.action_duration_minutes} minutes.` : '.' %></td>
+                            <td>
+                                <form action="/manage/<%= guild.id %>/remove-escalation-rule" method="POST">
+                                    <input type="hidden" name="ruleId" value="<%= rule.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">X</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                <% } else { %>
+                    <tr><td colspan="3" class="text-center text-muted">No escalation rules are set up.</td></tr>
+                <% } %>
+            </tbody>
+        </table>
+
+        <hr class="my-4">
+        <h5>Add New Rule</h5>
+        <form action="/manage/<%= guild.id %>/add-escalation-rule" method="POST">
+            <div class="row align-items-end">
+                <div class="col-md-3 mb-3"><label class="form-label">Infraction Count</label><input type="number" name="infraction_count" class="form-control" min="2" required></div>
+                <div class="col-md-3 mb-3"><label class="form-label">Time Period (Hours)</label><input type="number" name="time_period_hours" class="form-control" min="1" required></div>
+                <div class="col-md-3 mb-3"><label class="form-label">Action</label><select name="action" class="form-select" id="action-select"><option value="mute">Mute</option><option value="kick">Kick</option><option value="ban">Ban</option></select></div>
+                <div class="col-md-3 mb-3" id="duration-container"><label class="form-label">Duration (Minutes)</label><input type="number" name="action_duration_minutes" class="form-control" min="1"></div>
+                <div class="col-12"><button type="submit" class="btn btn-success">Add Rule</button></div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.getElementById('action-select').addEventListener('change', function() {
+        const durationContainer = document.getElementById('duration-container');
+        if (this.value === 'mute') {
+            durationContainer.style.display = 'block';
+        } else {
+            durationContainer.style.display = 'none';
+        }
+    });
+    // Trigger change on load
+    document.getElementById('action-select').dispatchEvent(new Event('change'));
+</script>

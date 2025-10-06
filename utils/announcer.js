@@ -30,7 +30,6 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
         return null;
     }
 
-    // Update streamer profile image URL if it has changed
     if (liveData.profileImageUrl && liveData.profileImageUrl !== subContext.profile_image_url) {
         try {
             await db.execute('UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?', [liveData.profileImageUrl, subContext.streamer_id]);
@@ -52,7 +51,6 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
         .setTimestamp();
     if (liveData.thumbnailUrl) embed.setImage(`${liveData.thumbnailUrl}?t=${Date.now()}`);
 
-    // This section correctly checks for and applies the custom message.
     let content = null;
     if (subContext.custom_message) {
         content = subContext.custom_message
@@ -64,7 +62,6 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
     }
 
     try {
-        // Determine final webhook name and avatar based on precedence
         let finalNickname = guildSettings?.bot_nickname || WEBHOOK_NAME_PREFIX;
         let finalAvatarURL = guildSettings?.webhook_avatar_url || client.user.displayAvatarURL();
 
@@ -82,24 +79,16 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
 
         const messageOptions = { username: finalNickname, avatarURL: finalAvatarURL, content, embeds: [embed] };
 
-        console.log(`[Announcer Debug] Processing ${liveData.username} (Sub ID: ${subContext.subscription_id}) in channel ${channelId}. Existing announcement:`, existingAnnouncement);
-
         if (existingAnnouncement?.message_id) {
             try {
-                console.log(`[Announcer Debug] Attempting to EDIT message ${existingAnnouncement.message_id} for ${liveData.username}.`);
                 const editedMessage = await webhookClient.editMessage(existingAnnouncement.message_id, messageOptions);
-                console.log(`[Announcer Debug] Successfully EDITED message ${editedMessage.id} for ${liveData.username}.`);
                 return editedMessage;
             } catch (e) {
-                console.error(`[Announcer] Failed to EDIT message ${existingAnnouncement.message_id} for ${liveData.username} in #${channelId}:`, e.message);
-                // If editing fails, post a new message and update the DB record.
                 const newMessage = await webhookClient.send(messageOptions);
-                console.log(`[Announcer Debug] Posted NEW message ${newMessage.id} after edit failure for ${liveData.username}.`);
                 await db.execute('UPDATE announcements SET message_id = ?, stream_url = ? WHERE announcement_id = ?', [newMessage.id, liveData.url || null, existingAnnouncement.announcement_id]);
                 return newMessage;
             }
         } else {
-            console.log(`[Announcer Debug] No existing message_id found for ${liveData.username}. Posting NEW message.`);
             return await webhookClient.send(messageOptions);
         }
     } catch (error) {
@@ -109,3 +98,4 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
 }
 
 module.exports = { updateAnnouncement };
+    

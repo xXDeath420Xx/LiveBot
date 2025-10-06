@@ -1,0 +1,46 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-file-alt me-2"></i> Audit Logging</h4>
+    </div>
+    <div class="plugin-card-body">
+        <form action="/manage/<%= guild.id %>/update-logging" method="POST">
+            <p class="text-muted">Select a channel and choose which server events you want the bot to log.</p>
+
+            <div class="mb-4">
+                <label for="log-channel" class="form-label">Log Channel</label>
+                <select class="form-select" id="log-channel" name="log_channel_id">
+                    <option value="">-- Disable Logging --</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= (logConfig && logConfig.log_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <% const enabledLogs = logConfig && logConfig.enabled_logs ? JSON.parse(logConfig.enabled_logs) : []; %>
+            <div class="row">
+                <div class="col-md-4">
+                    <h5>Messages</h5>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="messageDelete" id="log-msg-del" <%= enabledLogs.includes('messageDelete') ? 'checked' : '' %>><label class="form-check-label" for="log-msg-del">Message Deleted</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="messageUpdate" id="log-msg-edit" <%= enabledLogs.includes('messageUpdate') ? 'checked' : '' %>><label class="form-check-label" for="log-msg-edit">Message Edited</label></div>
+                </div>
+                <div class="col-md-4">
+                    <h5>Members</h5>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="memberRoleUpdate" id="log-member-role" <%= enabledLogs.includes('memberRoleUpdate') ? 'checked' : '' %>><label class="form-check-label" for="log-member-role">Roles Updated</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="memberNicknameUpdate" id="log-member-nick" <%= enabledLogs.includes('memberNicknameUpdate') ? 'checked' : '' %>><label class="form-check-label" for="log-member-nick">Nickname Changed</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="voiceStateUpdate" id="log-voice" <%= enabledLogs.includes('voiceStateUpdate') ? 'checked' : '' %>><label class="form-check-label" for="log-voice">Voice Channel Updates</label></div>
+                </div>
+                <div class="col-md-4">
+                    <h5>Server</h5>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="channelCreate" id="log-chan-create" <%= enabledLogs.includes('channelCreate') ? 'checked' : '' %>><label class="form-check-label" for="log-chan-create">Channel Created</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="channelDelete" id="log-chan-del" <%= enabledLogs.includes('channelDelete') ? 'checked' : '' %>><label class="form-check-label" for="log-chan-del">Channel Deleted</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="roleCreate" id="log-role-create" <%= enabledLogs.includes('roleCreate') ? 'checked' : '' %>><label class="form-check-label" for="log-role-create">Role Created</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="roleDelete" id="log-role-del" <%= enabledLogs.includes('roleDelete') ? 'checked' : '' %>><label class="form-check-label" for="log-role-del">Role Deleted</label></div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end mt-4">
+                <button type="submit" class="btn btn-primary">Save Logging Settings</button>
+            </div>
+        </form>
+    </div>
+</div>

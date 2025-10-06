@@ -1,13 +1,14 @@
 const logger = require("../utils/logger");
-const {getStatus} = require("./status-manager");
+const { getStatus } = require("./status-manager");
 const db = require("../utils/db");
-const {PermissionsBitField} = require("discord.js");
+const { PermissionsBitField } = require("discord.js");
+const { handleCustomCommand } = require('./custom-command-handler'); // Import custom command handler
 
 async function handleInteraction(interaction) {
   const botStatus = getStatus();
   if (botStatus.state !== "ONLINE") {
     if (interaction.isRepliable()) {
-      await interaction.reply({content: `The bot is currently ${botStatus.state.toLowerCase()}. Please try again in a moment.`, ephemeral: true});
+      await interaction.reply({ content: `The bot is currently ${botStatus.state.toLowerCase()}. Please try again in a moment.`, ephemeral: true });
     }
     return;
   }
@@ -16,7 +17,11 @@ async function handleInteraction(interaction) {
     if (interaction.isChatInputCommand()) {
       const command = interaction.client.commands.get(interaction.commandName);
       if (!command) {
-        logger.warn(`No command matching ${interaction.commandName} was found.`);
+        // If it's not a built-in command, check if it's a custom command
+        const isCustom = await handleCustomCommand(interaction);
+        if (!isCustom) {
+            logger.warn(`No command matching ${interaction.commandName} was found.`);
+        }
         return;
       }
 
@@ -29,13 +34,12 @@ async function handleInteraction(interaction) {
         if (requiredRoles.length > 0) {
           const hasRole = interaction.member.roles.cache.some(role => requiredRoles.includes(role.id));
           if (!hasRole) {
-            return interaction.reply({content: "You do not have the required role to use this command.", ephemeral: true});
+            return interaction.reply({ content: "You do not have the required role to use this command.", ephemeral: true });
           }
         } else {
-          // Fallback to default permissions if no override is set
           const defaultPermissions = command.data.defaultMemberPermissions;
           if (defaultPermissions && !interaction.member.permissions.has(defaultPermissions)) {
-            return interaction.reply({content: "You do not have the default required permissions to use this command.", ephemeral: true});
+            return interaction.reply({ content: "You do not have the default required permissions to use this command.", ephemeral: true });
           }
         }
       }
@@ -71,11 +75,11 @@ async function handleInteraction(interaction) {
       }
     }
   } catch (error) {
-    logger.error(`Error during interaction handling for custom ID ${interaction.customId}`, {error});
+    logger.error(`Error during interaction handling for custom ID ${interaction.customId}`, { error });
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({content: "There was an error while processing this interaction!", ephemeral: true});
+      await interaction.followUp({ content: "There was an error while processing this interaction!", ephemeral: true });
     } else {
-      await interaction.reply({content: "There was an error while processing this interaction!", ephemeral: true});
+      await interaction.reply({ content: "There was an error while processing this interaction!", ephemeral: true });
     }
   }
 }
@@ -91,4 +95,4 @@ function findHandler(collection, customId) {
   });
 }
 
-module.exports = {handleInteraction};
+module.exports = { handleInteraction };

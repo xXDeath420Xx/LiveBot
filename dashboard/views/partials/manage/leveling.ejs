@@ -1,0 +1,96 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-chart-line me-2"></i> Leveling System Settings</h4>
+    </div>
+    <div class="plugin-card-body">
+        <form action="/manage/<%= guild.id %>/update-leveling" method="POST">
+            <p class="text-muted">Configure how users gain XP and levels in your server.</p>
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" role="switch" id="leveling-enabled" name="leveling_enabled" <%= (settings && settings.leveling_enabled) ? 'checked' : '' %>>
+                <label class="form-check-label" for="leveling-enabled">Enable Leveling System</label>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="xp-rate" class="form-label">XP Per Message</label>
+                    <input type="number" class="form-control" name="leveling_xp_rate" id="xp-rate" value="<%= settings.leveling_xp_rate || 20 %>" min="1">
+                    <div class="form-text">Average XP gained per message (randomized slightly).</div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="xp-cooldown" class="form-label">Cooldown (Seconds)</label>
+                    <input type="number" class="form-control" name="leveling_xp_cooldown" id="xp-cooldown" value="<%= settings.leveling_xp_cooldown || 60 %>" min="1">
+                    <div class="form-text">Time before a user can gain XP again.</div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="ignored-channels" class="form-label">Ignored Channels</label>
+                <select class="form-select" id="ignored-channels" name="leveling_ignored_channels" multiple size="5">
+                     <% const ignoredChannels = settings.leveling_ignored_channels ? JSON.parse(settings.leveling_ignored_channels) : []; %>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= ignoredChannels.includes(channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <label for="ignored-roles" class="form-label">Ignored Roles</label>
+                <select class="form-select" id="ignored-roles" name="leveling_ignored_roles" multiple size="5">
+                     <% const ignoredRoles = settings.leveling_ignored_roles ? JSON.parse(settings.leveling_ignored_roles) : []; %>
+                    <% roles.forEach(role => { %>
+                        <option value="<%= role.id %>" <%= ignoredRoles.includes(role.id) ? 'selected' : '' %>>@<%= role.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+            
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="plugin-card mt-4">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-trophy me-2"></i> Role Rewards</h4>
+    </div>
+    <div class="plugin-card-body">
+         <p class="text-muted">Reward your most active members with roles when they reach a new level.</p>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Level</th>
+                    <th>Role Reward</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% if (roleRewards && roleRewards.length > 0) { %>
+                    <% roleRewards.forEach(reward => { %>
+                        <tr>
+                            <td>Level <strong><%= reward.level %></strong></td>
+                            <td><@&<%= reward.role_id %>></td>
+                            <td>
+                                <form action="/manage/<%= guild.id %>/remove-role-reward" method="POST" class="d-inline">
+                                    <input type="hidden" name="rewardId" value="<%= reward.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                <% } else { %>
+                    <tr><td colspan="3" class="text-center text-muted">No role rewards are set up.</td></tr>
+                <% } %>
+            </tbody>
+        </table>
+        <hr class="my-4">
+        <h5>Add New Role Reward</h5>
+        <form action="/manage/<%= guild.id %>/add-role-reward" method="POST">
+            <div class="row align-items-end">
+                <div class="col-md-5 mb-3"><label class="form-label">Level Required</label><input type="number" class="form-control" name="level" min="1" required></div>
+                <div class="col-md-5 mb-3"><label class="form-label">Role to Grant</label><select class="form-select" name="role_id" required><% roles.forEach(role => { %><option value="<%= role.id %>">@<%= role.name %></option><% }); %></select></div>
+                <div class="col-md-2 mb-3"><button type="submit" class="btn btn-success w-100">Add</button></div>
+            </div>
+        </form>
+    </div>
+</div>

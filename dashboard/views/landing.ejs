@@ -1,127 +1,16 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CertiFried Announcer</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/dashboard-style.css?v=14.0.0">
-</head>
-<body>
-<%- include('partials/header') %>
-<main class="page-container">
-    <header class="page-header">
-        <img src="/images/CertiFried.png" alt="Logo" style="width: 120px; border-radius: 50%;">
-        <h1 class="mt-3">CertiFried Announcer</h1>
-        <p>Your one-stop shop for stream announcements. The ultimate tool for Twitch Teams with seamless Kick, YouTube, TikTok, and Trovo integration.</p>
-        <div class="mt-4 d-flex justify-content-center gap-2">
-            <a href="https://discord.com/oauth2/authorize?client_id=<%= client_id %>&permissions=536873992&scope=bot+applications.commands" class="btn btn-primary btn-lg"><i class="fab fa-discord me-2"></i> Add to Server</a>
-            <a href="/dashboard" class="btn btn-secondary btn-lg"><i class="fas fa-tachometer-alt me-2"></i> Open Dashboard</a>
-        </div>
-    </header>
+<%- include('partials/header', { user: user }) %>
 
-    <div class="row g-4">
-        <div class="col-lg-8">
-            <div class="content-card h-100">
-                <h3 class="mb-4">Features</h3>
-                <div class="row g-4">
-                    <div class="col-md-6">
-                        <h5><i class="fas fa-sync-alt me-2 text-primary"></i>Twitch Team Powerhouse</h5>
-                        <p>Automate your entire Twitch Team. The bot syncs members, assigns roles, and even cross-posts to Kick if they're live there—all automatically.</p>
-                    </div>
-                    <div class="col-md-6">
-                        <h5><i class="fas fa-desktop me-2 text-primary"></i>Full Web Dashboard</h5>
-                        <p>Manage all servers and streamers from a sleek, intuitive web interface. No more wrestling with complicated slash commands.</p>
-                    </div>
-                    <div class="col-md-6">
-                        <h5><i class="fas fa-cogs me-2 text-primary"></i>Unmatched Customization</h5>
-                        <p>From custom webhook avatars to per-streamer messages using placeholders like <code>{username}</code>, tailor every detail.</p>
-                    </div>
-                     <div class="col-md-6">
-                        <h5><i class="fas fa-file-csv me-2 text-primary"></i>Mass Management</h5>
-                        <p>Easily manage hundreds of streamers across different channels and servers using CSV file imports and exports.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4">
-            <div class="content-card h-100">
-                <h3 class="mb-3">Global Live Status</h3>
-                <p class="mb-2 small text-muted">Stream check in: <strong id="stream-countdown">--:--</strong><br>Team sync in: <strong id="team-countdown">--:--</strong></p>
-                <div id="featured-streamers-container" class="live-status-scroll" style="max-height: 300px;"><p class="text-center small">Loading live streamers...</p></div>
-            </div>
-        </div>
+<div class="container text-center py-5">
+    <h1 class="display-4">CertiFried Announcer</h1>
+    <p class="lead">The ultimate, multi-platform live stream announcer bot for Discord.</p>
+    <div class="mt-4">
+        <% if (user) { %>
+            <a href="/dashboard" class="btn btn-primary btn-lg"><i class="fas fa-tachometer-alt me-2"></i>Go to Dashboard</a>
+        <% } else { %>
+            <a href="/login" class="btn btn-primary btn-lg"><i class="fab fa-discord me-2"></i>Login with Discord</a>
+        <% } %>
+         <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.client_id || '#' %>&permissions=8&scope=bot+applications.commands" class="btn btn-secondary btn-lg" target="_blank"><i class="fas fa-plus me-2"></i>Invite Bot</a>
     </div>
-</main>
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const streamCountdownEl = document.getElementById("stream-countdown");
-        const teamCountdownEl = document.getElementById("team-countdown");
-        const streamCheckInterval = 180000;
-        const teamSyncInterval = 900000;
+</div>
 
-        function formatCountdown(ms) {
-            let totalSeconds = Math.floor(ms / 1000);
-            return `${String(Math.floor(totalSeconds/60)).padStart(2,"0")}:${String(totalSeconds%60).padStart(2,"0")}`;
-        }
-
-        function updateCountdowns() {
-            const now = Date.now();
-            if (streamCountdownEl) streamCountdownEl.textContent = formatCountdown(streamCheckInterval - (now % streamCheckInterval));
-            if (teamCountdownEl) teamCountdownEl.textContent = formatCountdown(teamSyncInterval - (now % teamSyncInterval));
-        }
-        updateCountdowns();
-        setInterval(updateCountdowns, 1000);
-
-        const streamersContainer = document.getElementById("featured-streamers-container");
-        async function fetchGlobalLiveStatus() {
-            if (!streamersContainer) return;
-            try {
-                const response = await fetch("/api/global-live-status");
-                const streamersData = await response.json();
-
-                streamersContainer.innerHTML = "";
-
-                if (!response.ok || streamersData.error) {
-                    throw new Error(streamersData.message || "API request failed");
-                }
-                if (!Array.isArray(streamersData) || streamersData.length === 0) {
-                    streamersContainer.innerHTML = '<p class="text-muted text-center small">No one is currently live.</p>';
-                    return;
-                }
-
-                // Shuffle the array for randomness
-                for (let i = streamersData.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [streamersData[i], streamersData[j]] = [streamersData[j], streamersData[i]];
-                }
-
-                // Determine a random number of streamers to show, between 5 and 8, or less if not enough are live
-                const maxStreamers = Math.min(streamersData.length, Math.floor(Math.random() * (8 - 5 + 1)) + 5);
-                const randomStreamers = streamersData.slice(0, maxStreamers);
-
-                randomStreamers.forEach(streamer => {
-                    const card = document.createElement("div");
-                    card.className = "live-streamer-card";
-                    const iconsHtml = streamer.live_platforms.map(p => p.platform === 'kick' ?
-                        '<i class="fas fa-k platform-icon-fa platform-icon-kick"></i>' :
-                        `<i class="fab fa-${p.platform} platform-icon-fa platform-icon-${p.platform}"></i>`
-                    ).join(" ");
-                    const game = streamer.live_platforms && streamer.live_platforms.length > 0 ? streamer.live_platforms[0].game : "N/A";
-
-                    card.innerHTML = `<img src="${streamer.avatar_url || '/images/default-icon.png'}" class="live-avatar"><div class="live-info"><strong>${streamer.username} <span class="platform-icons">${iconsHtml}</span></strong><span>${game || "N/A"}</span></div>`;
-                    streamersContainer.appendChild(card);
-                });
-            } catch (error) {
-                console.error("Global Live Status Error:", error);
-                streamersContainer.innerHTML = `<p class="text-danger text-center small">Error loading live streamers.</p>`;
-            }
-        }
-        fetchGlobalLiveStatus();
-        setInterval(fetchGlobalLiveStatus, 60000);
-    });
-</script>
 <%- include('partials/footer') %>
-</body>
-</html>

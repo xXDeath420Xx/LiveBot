@@ -1,0 +1,30 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-star me-2"></i> Starboard</h4>
+    </div>
+    <div class="plugin-card-body">
+        <form action="/manage/<%= guild.id %>/update-starboard" method="POST">
+            <p class="text-muted">Create a "best-of" channel for your server. When a message gets enough ⭐ reactions, it will be posted to the starboard channel.</p>
+
+            <div class="mb-3">
+                <label for="starboard-channel" class="form-label">Starboard Channel</label>
+                <select class="form-select" id="starboard-channel" name="channel_id">
+                    <option value="">-- Disable Starboard --</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= (starboardConfig && starboardConfig.channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="star-threshold" class="form-label">Star Threshold</label>
+                <input type="number" class="form-control" name="star_threshold" id="star-threshold" value="<%= (starboardConfig && starboardConfig.star_threshold) ? starboardConfig.star_threshold : 3 %>" min="1">
+                <div class="form-text">The number of ⭐ reactions required to post a message.</div>
+            </div>
+
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+            </div>
+        </form>
+    </div>
+</div>

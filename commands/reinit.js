@@ -1,10 +1,10 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionsBitField, ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("reinit")
     .setDescription("Purges all announcements and re-validates roles for this server.")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild),
   async execute(interaction) {
 
     const embed = new EmbedBuilder()
@@ -14,8 +14,8 @@ module.exports = {
         + "**This will:**\n"
         + "- Delete ALL of the bot's active announcement messages from your channels.\n"
         + "- Remove all of this server's announcements from the database.\n"
-        + "- Remove any active live roles from members in this server.\n" // Clarified role removal
-        + "- Validate all configured 'Live Roles' and remove any that are invalid from server settings.\n\n" // Clarified role validation scope
+        + "- Remove any active live roles from members in this server.\n"
+        + "- Validate all configured 'Live Roles' and remove any that are invalid.\n\n"
         + "This action cannot be undone. The bot will automatically post new announcements for any currently live streamers on its next cycle."
       )
       .setColor(0xFFCC00) // Yellow for warning
@@ -25,8 +25,13 @@ module.exports = {
       .setCustomId('confirm_reinit')
       .setLabel("I understand, reinitialize this server")
       .setStyle(ButtonStyle.Danger);
+      
+    const cancelButton = new ButtonBuilder()
+        .setCustomId('cancel_reinit')
+        .setLabel("Cancel")
+        .setStyle(ButtonStyle.Secondary);
 
-    const row = new ActionRowBuilder().addComponents(confirmButton);
+    const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
 
     await interaction.reply({ 
       embeds: [embed],

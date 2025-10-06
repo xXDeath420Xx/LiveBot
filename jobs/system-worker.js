@@ -7,6 +7,7 @@ const db = require("../utils/db");
 const cache = require("../utils/cache");
 const { checkStreams, checkTeams } = require("../core/stream-checker");
 const { syncDiscordUserIds } = require("../core/user-sync");
+const { collectServerStats } = require("../core/stats-manager");
 
 // This worker has its own client to perform its tasks independently.
 const workerClient = new Client({
@@ -31,6 +32,9 @@ workerClient.once(Events.ClientReady, async (c) => {
           break;
         case "sync-users":
           await syncDiscordUserIds(workerClient);
+          break;
+        case "collect-server-stats":
+          await collectServerStats();
           break;
         default:
           logger.warn(`[System Worker] Unknown job name: ${job.name}`);

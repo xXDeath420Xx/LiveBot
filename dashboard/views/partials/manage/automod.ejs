@@ -1,0 +1,127 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-robot me-2"></i> Automod Rules</h4>
+    </div>
+    <div class="plugin-card-body">
+        <p class="text-muted">Create rules to automatically moderate your server. Rules are checked in order. Add ignored roles/channels to a rule by editing it.</p>
+        
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Rule</th>
+                    <th>Action</th>
+                    <th>Configuration</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% if (automodRules && automodRules.length > 0) { %>
+                    <% automodRules.forEach(rule => { %>
+                        <tr>
+                            <td><strong><%= rule.filter_type.replace(/([A-Z])/g, ' $1').trim() %></strong></td>
+                            <td><span class="badge bg-secondary"><%= rule.action %><%= rule.action_duration_minutes ? ` (${rule.action_duration_minutes}m)` : '' %></span></td>
+                            <td>
+                                <% if (rule.config) { %>
+                                    <% const config = JSON.parse(rule.config); %>
+                                    <% if (config.banned_words) { %>
+                                        <small class="text-muted">Words: <%= config.banned_words.slice(0, 3).join(', ') %><% if (config.banned_words.length > 3) { %>...<% } %></small>
+                                    <% } else if (config.limit) { %>
+                                        <small class="text-muted">Limit: <%= config.limit %></small>
+                                    <% } %>
+                                <% } %>
+                            </td>
+                            <td>
+                                <form action="/manage/<%= guild.id %>/delete-automod-rule" method="POST" class="d-inline">
+                                    <input type="hidden" name="ruleId" value="<%= rule.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                <% } else { %>
+                    <tr><td colspan="4" class="text-center text-muted">No automod rules are set up.</td></tr>
+                <% } %>
+            </tbody>
+        </table>
+
+        <hr class="my-4">
+
+        <h5>Add New Automod Rule</h5>
+        <form action="/manage/<%= guild.id %>/add-automod-rule" method="POST">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">If a user...</label>
+                    <select class="form-select" name="filter_type" id="filter-type-select">
+                        <option value="bannedWords">Says a Banned Word</option>
+                        <option value="discordInvites">Posts a Discord Invite</option>
+                        <option value="massMention">Mentions too many users</option>
+                        <option value="allCaps">Uses excessive caps</option>
+                        <option value="antiSpam">Sends messages too quickly (Spam)</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Then take this action...</label>
+                    <select class="form-select" name="action" id="action-select">
+                        <option value="delete">Delete Message</option>
+                        <option value="warn">Warn User</option>
+                        <option value="mute">Mute User</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="config-bannedWords" class="mb-3 config-container">
+                <label class="form-label">Banned Words (comma-separated)</label>
+                <textarea class="form-control" name="config_banned_words" rows="2"></textarea>
+            </div>
+            <div id="config-massMention" class="mb-3 config-container" style="display: none;">
+                <label class="form-label">Mention Limit</label>
+                <input type="number" class="form-control" name="config_massMention_limit" value="5" min="2">
+            </div>
+            <div id="config-allCaps" class="mb-3 config-container" style="display: none;">
+                <label class="form-label">Caps Percentage Threshold (e.g., 70)</label>
+                <input type="number" class="form-control" name="config_allCaps_limit" value="70" min="50" max="100">
+            </div>
+            <div id="config-antiSpam" class="row mb-3 config-container" style="display: none;">
+                <div class="col-md-6">
+                    <label class="form-label">Message Count</label>
+                    <input type="number" class="form-control" name="config_antiSpam_message_limit" value="5" min="2">
+                    <div class="form-text">Number of messages to trigger the action.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Time Period (Seconds)</label>
+                    <input type="number" class="form-control" name="config_antiSpam_time_period" value="10" min="2">
+                    <div class="form-text">The window in which the messages must occur.</div>
+                </div>
+            </div>
+
+            <div class="mb-3" id="duration-container" style="display: none;">
+                <label class="form-label">Mute Duration (Minutes)</label>
+                <input type="number" class="form-control" name="action_duration_minutes" value="10" min="1">
+            </div>
+
+            <button type="submit" class="btn btn-success">Add Rule</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    const filterSelect = document.getElementById('filter-type-select');
+    const actionSelect = document.getElementById('action-select');
+    const durationContainer = document.getElementById('duration-container');
+    const configContainers = document.querySelectorAll('.config-container');
+
+    function toggleOptions() {
+        // Toggle action duration
+        durationContainer.style.display = actionSelect.value === 'mute' ? 'block' : 'none';
+
+        // Toggle config containers
+        const selectedFilter = filterSelect.value;
+        configContainers.forEach(container => {
+            container.style.display = container.id.includes(selectedFilter) ? 'block' : 'none';
+        });
+    }
+
+    filterSelect.addEventListener('change', toggleOptions);
+    actionSelect.addEventListener('change', toggleOptions);
+    document.addEventListener('DOMContentLoaded', toggleOptions);
+</script>

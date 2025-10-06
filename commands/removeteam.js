@@ -70,7 +70,7 @@ module.exports = {
             );
 
             const embed = new EmbedBuilder()
-                .setTitle(`Twitch Team Removal Report for "${teamName}"`)
+                .setTitle(`Twitch Team Removal Report for "${teamName}""`)
                 .setDescription(`Successfully processed team removal from ${channel}.`)
                 .setColor('#ED4245')
                 .addFields(

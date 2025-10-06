@@ -1,0 +1,23 @@
+<div class="content-card">
+    <h4><i class="fas fa-file-csv me-2"></i> Mass Management (CSV)</h4>
+    <p class="text-muted">Import and export your streamer list using CSV files.</p>
+
+    <div class="row">
+        <div class="col-md-6">
+            <h5>Import Streamers</h5>
+            <p>Upload a CSV file to add or update streamers in bulk. The required columns are <code>platform</code> and <code>username</code>. Optional columns: <code>discord_user_id</code>, <code>announcement_channel_id</code>.</p>
+            <form action="/manage/<%= guild.id %>/import-csv" method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="csvFile" class="form-label">CSV File</label>
+                    <input class="form-control" type="file" id="csvFile" name="csvFile" accept=".csv" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Import CSV</button>
+            </form>
+        </div>
+        <div class="col-md-6">
+            <h5>Export Streamers</h5>
+            <p>Download a CSV file containing all of your currently tracked streamers and their settings for this server.</p>
+            <a href="/manage/<%= guild.id %>/export-csv" class="btn btn-secondary">Export as CSV</a>
+        </div>
+    </div>
+</div>

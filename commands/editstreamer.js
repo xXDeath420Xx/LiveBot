@@ -18,7 +18,7 @@ module.exports = {
     const guildId = interaction.guild.id;
 
     try {
-      const [subscriptions] = await db.pool.execute(`
+      const [subscriptions] = await db.execute(`
         SELECT sub.subscription_id, sub.announcement_channel_id, s.platform, s.username, s.streamer_id
         FROM subscriptions sub
         JOIN streamers s ON sub.streamer_id = s.streamer_id
@@ -26,7 +26,7 @@ module.exports = {
       `, [guildId, username]);
 
       if (subscriptions.length === 0) {
-        return interaction.editReply({ content: `No editable (non-team) subscriptions found for \"${username}\" in this server.` });
+        return interaction.editReply({ content: `No editable (non-team) subscriptions found for "${username}" in this server.` });
       }
 
       const options = await Promise.all(subscriptions.map(async (sub) => {
@@ -47,7 +47,7 @@ module.exports = {
       const row = new ActionRowBuilder().addComponents(selectMenu);
 
       await interaction.editReply({ 
-        content: `Found ${subscriptions.length} subscription(s) for \"${username}\". Please select one to edit.`,
+        content: `Found ${subscriptions.length} subscription(s) for "${username}". Please select one to edit.`,
         components: [row] 
       });
 
@@ -56,54 +56,28 @@ module.exports = {
 
       collector.on('collect', async i => {
         const subscriptionId = i.values[0];
-        const [[subDetails]] = await db.pool.execute("SELECT * FROM subscriptions WHERE subscription_id = ?", [subscriptionId]);
+        const [[subDetails]] = await db.execute("SELECT * FROM subscriptions WHERE subscription_id = ?", [subscriptionId]);
 
         if (!subDetails) {
             return i.update({ content: "Could not find subscription details. Please try again.", components: [] });
         }
-
-        const [[streamerDetails]] = await db.pool.execute("SELECT discord_user_id FROM streamers WHERE streamer_id = ?", [subDetails.streamer_id]);
-
+        
         const modal = new ModalBuilder()
-            .setCustomId(`editstreamer_modal_${subscriptionId}_${subDetails.streamer_id}`)
+            .setCustomId(`editstreamer_modal_${subscriptionId}`)
             .setTitle("Edit Subscription");
 
-        const messageInput = new TextInputBuilder()
-            .setCustomId('custom_message')
-            .setLabel("Custom Announcement Message")
-            .setStyle(TextInputStyle.Paragraph)
-            .setValue(subDetails.custom_message || '')
-            .setRequired(false);
-
-        const nicknameInput = new TextInputBuilder()
-            .setCustomId('override_nickname')
-            .setLabel("Custom Webhook Name")
-            .setStyle(TextInputStyle.Short)
-            .setValue(subDetails.override_nickname || '')
-            .setRequired(false);
-
-        const avatarInput = new TextInputBuilder()
-            .setCustomId('override_avatar_url')
-            .setLabel("Custom Webhook Avatar URL")
-            .setStyle(TextInputStyle.Short)
-            .setValue(subDetails.override_avatar_url || '')
-            .setRequired(false);
-
-        const discordUserInput = new TextInputBuilder()
-            .setCustomId('discord_user_id')
-            .setLabel("Discord User ID (Manual Link)")
-            .setStyle(TextInputStyle.Short)
-            .setValue(streamerDetails?.discord_user_id || '')
-            .setRequired(false);
+        const messageInput = new TextInputBuilder().setCustomId('custom_message').setLabel("Custom Announcement Message").setStyle(TextInputStyle.Paragraph).setValue(subDetails.custom_message || '').setRequired(false);
+        const nicknameInput = new TextInputBuilder().setCustomId('override_nickname').setLabel("Custom Webhook Name").setStyle(TextInputStyle.Short).setValue(subDetails.override_nickname || '').setRequired(false);
+        const avatarInput = new TextInputBuilder().setCustomId('override_avatar_url').setLabel("Custom Webhook Avatar URL").setStyle(TextInputStyle.Short).setValue(subDetails.override_avatar_url || '').setRequired(false);
 
         modal.addComponents(
             new ActionRowBuilder().addComponents(messageInput),
             new ActionRowBuilder().addComponents(nicknameInput),
-            new ActionRowBuilder().addComponents(avatarInput),
-            new ActionRowBuilder().addComponents(discordUserInput)
+            new ActionRowBuilder().addComponents(avatarInput)
         );
 
         await i.showModal(modal);
+        collector.stop(); // Modal has been shown, stop listening for select menu interaction
       });
 
       collector.on('end', collected => {

@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, escapeMarkdown, PermissionsBitField } = require('discord.js');
 const db = require('../utils/db');
 
-// A reusable pagination helper
 async function sendPaginatedEmbed(interaction, pages) {
     if (!pages || pages.length === 0) return;
     let currentPage = 0;
@@ -14,20 +13,20 @@ async function sendPaginatedEmbed(interaction, pages) {
 
     const message = await interaction.editReply({ embeds: [pages[currentPage]], components: pages.length > 1 ? [createButtons()] : [], ephemeral: true });
 
-    // Ensure message was successfully sent before creating a collector
     if (!message || pages.length <= 1) return;
 
     const collector = message.createMessageComponentCollector({ componentType: ComponentType.Button, time: 300000 });
 
     collector.on('collect', async i => {
-        if (i.user.id !== interaction.user.id) return i.reply({ content: 'You cannot use these buttons.', ephemeral: true });
+        if (i.user.id !== interaction.user.id) {
+            return i.reply({ content: 'You cannot use these buttons.', ephemeral: true });
+        }
         i.customId.startsWith('next') ? currentPage++ : currentPage--;
         await i.update({ embeds: [pages[currentPage]], components: [createButtons()] });
     });
 
-    collector.on('end', (collected, reason) => {
-        // Log the error if updating components fails on end
-        message.edit({ components: [createButtons(true)] }).catch(e => console.error(`Error updating pagination buttons for interaction ${interaction.id} on collector end (reason: ${reason}):`, e));
+    collector.on('end', () => {
+        message.edit({ components: [createButtons(true)] }).catch(()=>{});
     });
 };
 
@@ -43,11 +42,14 @@ module.exports = {
         JOIN streamers s ON sub.streamer_id = s.streamer_id
         LEFT JOIN announcements a ON s.streamer_id = a.streamer_id AND sub.guild_id = a.guild_id
         WHERE sub.guild_id = ?
+        GROUP BY s.streamer_id, s.platform, s.username, s.discord_user_id, s.platform_user_id, isLive
         ORDER BY isLive DESC, s.platform, s.username`,
         [interaction.guild.id]
       );
 
-      if (allStreamers.length === 0) return interaction.editReply({ content: 'No streamers are tracked on this server.' });
+      if (allStreamers.length === 0) {
+        return interaction.editReply({ content: 'No streamers are tracked on this server.' });
+      }
       
       const liveCount = allStreamers.filter(s => s.isLive).length;
       const totalCount = allStreamers.length;
@@ -66,9 +68,8 @@ module.exports = {
               case 'kick': url = `https://kick.com/${s.username}`; break;
               case 'tiktok': url = `https://www.tiktok.com/@${s.username}`; break;
               case 'trovo': url = `https://trovo.live/s/${s.username}`; break;
-              default: url = null; // Changed fallback to null for unknown platforms
+              default: url = null;
           }
-          // Display as plain text if URL is null, otherwise as a link
           const usernameDisplay = url ? `[**${escapeMarkdown(s.username)}**](${url})` : `**${escapeMarkdown(s.username)}**`;
           return `${status} ${usernameDisplay} (${s.platform}) ${user}`;
         }).join('\n');
@@ -84,8 +85,7 @@ module.exports = {
       await sendPaginatedEmbed(interaction, pages);
     } catch (e) { 
         console.error('Error in /liststreamers:', e);
-        // interaction.editReply() is safe to call after deferReply, no need for !interaction.replied check
-        await interaction.editReply({ content: 'An error occurred.' }).catch(error => console.error('Failed to send error reply:', error));
+        await interaction.editReply({ content: 'An error occurred while fetching the list.' }).catch(()=>{});
     }
   },
 };

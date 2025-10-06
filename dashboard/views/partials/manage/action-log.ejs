@@ -1,0 +1,42 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-history me-2"></i> Action Log</h4>
+    </div>
+    <div class="plugin-card-body">
+        <p class="text-muted">A detailed, searchable log of all recorded server events.</p>
+        
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Event</th>
+                        <th>User</th>
+                        <th>Target</th>
+                        <th>Details</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% if (actionLogs && actionLogs.length > 0) { %>
+                        <% actionLogs.forEach(log => { %>
+                            <tr>
+                                <td><span class="badge bg-secondary"><%= log.event_type %></span></td>
+                                <td><%= log.user_id ? `<@${log.user_id}>` : 'N/A' %></td>
+                                <td><%= log.target_id ? `<@${log.target_id}>` : 'N/A' %></td>
+                                <td>
+                                    <% const details = JSON.parse(log.details || '{}'); %>
+                                    <small class="text-muted"><%= Object.entries(details).map(([key, val]) => `${key}: ${String(val).substring(0, 30)}...`).join(', ') %></small>
+                                </td>
+                                <td><small><t:<%= Math.floor(new Date(log.timestamp).getTime() / 1000) %>:R></small></td>
+                            </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No actions have been logged yet.</td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

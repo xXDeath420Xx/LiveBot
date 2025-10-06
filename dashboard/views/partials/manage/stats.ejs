@@ -1,0 +1,65 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-chart-bar me-2"></i> Server Analytics</h4>
+    </div>
+    <div class="plugin-card-body">
+        <p class="text-muted">Visualize your server's growth and activity over the last 30 days.</p>
+        
+        <h5 class="mt-4">Member Count</h5>
+        <canvas id="memberChart"></canvas>
+
+        <h5 class="mt-5">Message Activity</h5>
+        <canvas id="messageChart"></canvas>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+<script>
+    // Pass data from EJS to JavaScript
+    const statsData = <%- JSON.stringify(serverStats) %>;
+
+    const labels = statsData.map(s => new Date(s.date).toLocaleDateString());
+    const totalMembers = statsData.map(s => s.total_members);
+    const onlineMembers = statsData.map(s => s.online_members);
+    const messageCounts = statsData.map(s => s.message_count);
+
+    // Member Chart
+    const memberCtx = document.getElementById('memberChart').getContext('2d');
+    new Chart(memberCtx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Total Members',
+                data: totalMembers,
+                borderColor: 'rgb(88, 101, 242)',
+                tension: 0.1,
+                fill: false
+            }, {
+                label: 'Online Members',
+                data: onlineMembers,
+                borderColor: 'rgb(36, 128, 70)',
+                tension: 0.1,
+                fill: false
+            }]
+        }
+    });
+
+    // Message Chart
+    const messageCtx = document.getElementById('messageChart').getContext('2d');
+    new Chart(messageCtx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Messages per Day',
+                data: messageCounts,
+                backgroundColor: 'rgba(230, 126, 34, 0.6)',
+                borderColor: 'rgb(230, 126, 34)',
+                borderWidth: 1
+            }]
+        }
+    });
+</script>

@@ -1,0 +1,51 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-hand-pointer me-2"></i> Reaction Roles</h4>
+    </div>
+    <div class="plugin-card-body">
+        <p class="text-muted">Create panels where users can react to get roles. This is a powerful tool for self-assigning roles like colors, regions, or notification preferences.</p>
+        
+        <% reactionRolePanels.forEach(panel => { %>
+            <div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);">
+                <h5>Panel: <%= panel.panel_name %></h5>
+                <p class="small text-muted">in <#<%= panel.channel_id %>> | Mode: <strong><%= panel.panel_mode %></strong> | <a href="https://discord.com/channels/<%= guild.id %>/<%= panel.channel_id %>/<%= panel.message_id %>" target="_blank">Jump to Message</a></p>
+                
+                <table class="table table-sm">
+                    <tbody>
+                    <% panel.mappings.forEach(map => { %>
+                        <tr>
+                            <td><%= map.emoji_id.length > 5 ? `<img src="https://cdn.discordapp.com/emojis/${map.emoji_id}.png" width="20">` : map.emoji_id %></td>
+                            <td><@&<%= map.role_id %>></td>
+                            <td class="text-end">
+                                <form action="/manage/<%= guild.id %>/remove-rr-mapping" method="POST" class="d-inline">
+                                    <input type="hidden" name="mappingId" value="<%= map.id %>">
+                                    <button type="submit" class="btn btn-xs btn-danger">X</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                    </tbody>
+                </table>
+
+                <form action="/manage/<%= guild.id %>/add-rr-mapping" method="POST" class="row gx-2 align-items-end">
+                    <input type="hidden" name="panelId" value="<%= panel.id %>">
+                    <div class="col-auto"><label class="form-label small">Emoji</label><input type="text" name="emoji_id" class="form-control form-control-sm" required></div>
+                    <div class="col"><label class="form-label small">Role</label><select name="role_id" class="form-select form-select-sm"><% roles.forEach(role => { %><option value="<%= role.id %>">@<%= role.name %></option><% }); %></select></div>
+                    <div class="col-auto"><button type="submit" class="btn btn-sm btn-info">Add Role</button></div>
+                </form>
+            </div>
+        <% }); %>
+
+        <hr class="my-4">
+        <h5>Create New Panel</h5>
+        <form action="/manage/<%= guild.id %>/create-rr-panel" method="POST">
+            <div class="row">
+                <div class="col-md-4 mb-3"><label class="form-label">Panel Name</label><input type="text" class="form-control" name="panel_name" required></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Post in Channel</label><select name="channel_id" class="form-select"><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }); %></select></div>
+                <div class="col-md-4 mb-3"><label class="form-label">Mode</label><select name="panel_mode" class="form-select"><option value="standard">Standard (Add/Remove)</option><option value="unique">Unique (Only one role from panel)</option></select></div>
+            </div>
+            <div class="mb-3"><label class="form-label">Message Content</label><textarea class="form-control" name="message_content" rows="3" required placeholder="React to the emojis below to get your roles!"></textarea></div>
+            <button type="submit" class="btn btn-success">Create Panel</button>
+        </form>
+    </div>
+</div>

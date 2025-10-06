@@ -1,4 +1,3 @@
-// commands/exportcsv.js (UPDATED - With new customization fields)
 const { SlashCommandBuilder, PermissionsBitField, AttachmentBuilder } = require('discord.js');
 const db = require('../utils/db');
 const Papa = require('papaparse');
@@ -13,7 +12,6 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         try {
-            // The query is updated to join subscriptions and select the new fields.
             const [subscriptions] = await db.execute(
                 `SELECT 
                     s.platform, 
@@ -34,7 +32,6 @@ module.exports = {
                 return interaction.editReply('There are no streamer subscriptions to export from this server.');
             }
             
-            // The data is formatted to match the new CSV structure, including all customization fields.
             const formattedData = subscriptions.map(sub => ({
                 platform: sub.platform,
                 username: sub.username,
@@ -50,7 +47,7 @@ module.exports = {
             const attachment = new AttachmentBuilder(Buffer.from(csv), { name: `streamers_export_${interaction.guild.id}.csv` });
             
             await interaction.editReply({ 
-                content: `Here is the export of ${subscriptions.length} streamer subscriptions.`, 
+                content: `Here is the export of ${subscriptions.length} streamer subscriptions.`,
                 files: [attachment] 
             });
 

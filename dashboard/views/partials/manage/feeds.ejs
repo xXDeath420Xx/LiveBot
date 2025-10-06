@@ -1,0 +1,111 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fab fa-youtube me-2"></i> YouTube Feeds</h4>
+    </div>
+    <div class="plugin-card-body">
+        <p class="text-muted">Get automatic posts in a channel when a new video is uploaded to a YouTube channel.</p>
+        
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>YouTube Channel</th>
+                    <th>Post in Channel</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% youtubeFeeds.forEach(feed => { %>
+                    <tr>
+                        <td><code><%= feed.channel_name || feed.youtube_channel_id %></code></td>
+                        <td><#<%= channels.find(c => c.id === feed.discord_channel_id)?.name || 'Unknown' %></td>
+                        <td>
+                            <form action="/manage/<%= guild.id %>/remove-youtube-feed" method="POST" class="d-inline">
+                                <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                <% }); %>
+            </tbody>
+        </table>
+
+        <hr class="my-4">
+
+        <h5>Add New YouTube Feed</h5>
+        <form action="/manage/<%= guild.id %>/add-youtube-feed" method="POST">
+            <div class="row">
+                <div class="col-md-5 mb-3">
+                    <label class="form-label">YouTube Channel ID</label>
+                    <input type="text" class="form-control" name="youtube_channel_id" placeholder="UC..." required>
+                </div>
+                <div class="col-md-5 mb-3">
+                    <label class="form-label">Post in Channel</label>
+                    <select class="form-select" name="discord_channel_id" required>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>">#<%= channel.name %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end mb-3">
+                    <button type="submit" class="btn btn-success w-100">Add</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="plugin-card mt-4">
+    <div class="plugin-card-header">
+        <h4><i class="fab fa-twitter me-2"></i> Twitter (X) Feeds</h4>
+    </div>
+    <div class="plugin-card-body">
+        <p class="text-muted">Get automatic posts when a Twitter account posts a new tweet.</p>
+        
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Twitter User</th>
+                    <th>Post in Channel</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% twitterFeeds.forEach(feed => { %>
+                    <tr>
+                        <td><code>@<%= feed.twitter_username %></code></td>
+                        <td><#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></td>
+                        <td>
+                            <form action="/manage/<%= guild.id %>/remove-twitter-feed" method="POST" class="d-inline">
+                                <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                <% }); %>
+            </tbody>
+        </table>
+
+        <hr class="my-4">
+
+        <h5>Add New Twitter Feed</h5>
+        <form action="/manage/<%= guild.id %>/add-twitter-feed" method="POST">
+            <div class="row">
+                <div class="col-md-5 mb-3">
+                    <label class="form-label">Twitter Username (no @)</label>
+                    <input type="text" class="form-control" name="twitter_username" required>
+                </div>
+                <div class="col-md-5 mb-3">
+                    <label class="form-label">Post in Channel</label>
+                    <select class="form-select" name="channel_id" required>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>">#<%= channel.name %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end mb-3">
+                    <button type="submit" class="btn btn-success w-100">Add</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

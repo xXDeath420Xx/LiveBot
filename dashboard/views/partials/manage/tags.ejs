@@ -1,0 +1,36 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-tags me-2"></i> Tag Management</h4>
+    </div>
+    <div class="plugin-card-body">
+        <p class="text-muted">View and manage all tags created on your server. Users can create their own tags with <code>/tag create</code>.</p>
+        
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Content</th>
+                        <th>Creator</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% tags.forEach(tag => { %>
+                        <tr>
+                            <td><code><%= tag.tag_name %></code></td>
+                            <td style="white-space: pre-wrap; word-break: break-word;"><%= tag.tag_content %></td>
+                            <td><%= tag.creator_tag || tag.creator_id %></td>
+                            <td>
+                                <form action="/manage/<%= guild.id %>/delete-tag" method="POST" class="d-inline">
+                                    <input type="hidden" name="tagId" value="<%= tag.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger" title="Delete Tag">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

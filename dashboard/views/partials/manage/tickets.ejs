@@ -1,0 +1,47 @@
+<div class="plugin-card">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-ticket-alt me-2"></i> Ticket System Configuration</h4>
+    </div>
+    <div class="plugin-card-body">
+        <form action="/manage/<%= guild.id %>/update-tickets" method="POST">
+            <p class="text-muted">Set up the channels and roles for the support ticket system. After saving, use <code>/ticket setup</code> in the panel channel to create the button.</p>
+
+            <div class="mb-3">
+                <label for="ticket-panel-channel" class="form-label">Panel Channel</label>
+                <p class="small text-muted">The channel where users will click a button to create a ticket.</p>
+                <select class="form-select" id="ticket-panel-channel" name="panel_channel_id">
+                    <option value="">-- Select a Channel --</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= (ticketConfig && ticketConfig.panel_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="ticket-category" class="form-label">Ticket Category</label>
+                <p class="small text-muted">The category where new ticket channels will be created.</p>
+                <select class="form-select" id="ticket-category" name="ticket_category_id">
+                    <option value="">-- Select a Category --</option>
+                    <% categories.forEach(cat => { %>
+                        <option value="<%= cat.id %>" <%= (ticketConfig && ticketConfig.ticket_category_id === cat.id) ? 'selected' : '' %>><%= cat.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="ticket-support-role" class="form-label">Support Team Role</label>
+                <p class="small text-muted">This role will have access to view and respond to all tickets.</p>
+                <select class="form-select" id="ticket-support-role" name="support_role_id">
+                    <option value="">-- Select a Role --</option>
+                    <% roles.forEach(role => { %>
+                        <option value="<%= role.id %>" <%= (ticketConfig && ticketConfig.support_role_id === role.id) ? 'selected' : '' %>>@<%= role.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary">Save Ticket Settings</button>
+            </div>
+        </form>
+    </div>
+</div>

@@ -1,10 +1,31 @@
+# Environment variables
 .env
-node_modules
-dashboard/sessions/*.json
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Logs
+logs/
+*.log
+
+# Dashboard specific
+dashboard/sessions/
 uploads/
-*.sql
-*.save
-sessions/*.json
-.vscode
-.idea
-user-data-dir/*
+
+# Build output
+dist/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# IDE config
+.vscode/
+.idea/
+
+# Playwright user data
+user-data-dir/

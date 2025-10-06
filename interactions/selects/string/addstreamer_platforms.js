@@ -1,5 +1,5 @@
 const {ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder} = require("discord.js");
-const {pendingInteractions} = require("../../../commands/addstreamer");
+const {pendingInteractions} = require("../../pending-interactions");
 
 module.exports = {
   customId: /^addstreamer_platforms_/,

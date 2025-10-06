@@ -35,16 +35,24 @@
                 <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#core-tab">Core Settings</button></li>
                 <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#appearance-tab">Appearance</button></li>
                 <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#teams-tab">Twitch Teams</button></li>
-                <li class="nav-item" role="presentation"><button class="nav-link w-100" data-bs-toggle="tab" data-bs-target="#csv-tab">Mass Management</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#feeds-tab"><i class="fas fa-rss-square fa-fw"></i> Feeds</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#moderation-tab"><i class="fas fa-gavel fa-fw"></i> Moderation</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#logging-tab"><i class="fas fa-file-alt fa-fw"></i> Logging</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link w-100 mb-1" data-bs-toggle="tab" data-bs-target="#csv-tab">Mass Management</button></li>
+                <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#leveling-tab"><i class="fas fa-chart-line fa-fw"></i> Leveling</button></li>
             </ul>
         </div>
     </aside>
     <main class="manage-main-content">
         <div class="tab-content">
+            <div class="tab-pane fade" id="feeds-tab" role="tabpanel"><%- include('partials/manage/feeds') %></div>
+            <div class="tab-pane fade" id="moderation-tab" role="tabpanel"><%- include('partials/manage/moderation') %></div>
+            <div class="tab-pane fade" id="logging-tab" role="tabpanel"><%- include('partials/manage/logging') %></div>
             <div class="tab-pane fade" id="core-tab" role="tabpanel"><%- include('partials/manage/core', {guild, settings, channels, roles}) %></div>
             <div class="tab-pane fade" id="appearance-tab" role="tabpanel"><%- include('partials/manage/appearance', {guild, channels, channelSettings}) %></div>
             <div class="tab-pane fade" id="teams-tab" role="tabpanel"><%- include('partials/manage/teams', {guild, channels, teamSubscriptions, roles}) %></div>
             <div class="tab-pane fade" id="csv-tab" role="tabpanel"><%- include('partials/manage/mass', {guild, channels}) %></div>
+            <div class="tab-pane fade" id="leveling-tab" role="tabpanel"><%- include('partials/manage/leveling') %></div>
             <div class="tab-pane fade show active" id="streamers-tab" role="tabpanel">
                 <div class="content-card">
                     <h2><i class="fas fa-user-plus me-2"></i>Add Streamer</h2>
@@ -67,7 +75,7 @@
                             <% consolidatedStreamers.forEach((streamer, index) => { %>
                                 <div class="accordion-item mb-2">
                                     <h2 class="accordion-header" id="heading-<%= streamer.id %>">
-                                        <button class="accordion-button <%= index > 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= streamer.id %>" aria-expanded="<%= index === 0 ? 'true' : 'false' %>" aria-controls="collapse-<%= streamer.id %>">
+                                        <button class="accordion-button <%= index > 0 ? 'collapsed' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= streamer.id %>" aria-expanded="<%= index === 0 ? 'true' : '' %>" aria-controls="collapse-<%= streamer.id %>">
                                             <img src="<%= streamer.primaryAvatar %>" alt="<%= streamer.primaryUsername %> Avatar" class="rounded-circle me-2" width="24" height="24">
                                             <strong><%= streamer.primaryUsername %></strong>
                                             <span class="badge bg-primary ms-2"><%= streamer.platforms.length %> Platforms</span>
@@ -78,9 +86,15 @@
                                         <div class="accordion-body">
                                             <h6>Platforms:</h6>
                                             <ul class="list-group list-group-flush mb-3">
-                                                <% streamer.platforms.forEach(platform => { %>
+                                                <% streamer.platforms.forEach(platform => {
+                                                    const platformIcon = platform.platform === 'twitch' ? '<i class="fab fa-twitch platform-icon-fa platform-icon-twitch me-2"></i>' :
+                                                                         platform.platform === 'youtube' ? '<i class="fab fa-youtube platform-icon-fa platform-icon-youtube me-2"></i>' :
+                                                                         platform.platform === 'kick' ? '<i class="fas fa-k platform-icon-fa platform-icon-kick me-2"></i>' :
+                                                                         platform.platform === 'tiktok' ? '<i class="fab fa-tiktok platform-icon-fa platform-icon-tiktok me-2"></i>' :
+                                                                         platform.platform === 'trovo' ? '<i class="fas fa-t platform-icon-fa platform-icon-trovo me-2"></i>' : '';
+                                                %>
                                                     <li class="list-group-item d-flex align-items-center px-0 py-1">
-                                                        <% if (platform.platform === 'twitch') { %><i class="fab fa-twitch platform-icon-fa platform-icon-twitch me-2"></i><% } else if (platform.platform === 'youtube') { %><i class="fab fa-youtube platform-icon-fa platform-icon-youtube me-2"></i><% } else if (platform.platform === 'kick') { %><i class="fas fa-k platform-icon-fa platform-icon-kick me-2"></i><% } else if (platform.platform === 'tiktok') { %><i class="fab fa-tiktok platform-icon-fa platform-icon-tiktok me-2"></i><% } else if (platform.platform === 'trovo') { %><i class="fas fa-t platform-icon-fa platform-icon-trovo me-2"></i><% } %>
+                                                        <%- platformIcon %>
                                                         <%= platform.username %> (<%= platform.platform %>)
                                                         <% if (platform.discord_user_id) { %><span class="badge bg-info ms-2">Linked to Discord</span><% } %>
                                                     </li>
@@ -89,14 +103,22 @@
 
                                             <h6>Subscriptions:</h6>
                                             <% if (streamer.subscriptionsByChannel.length > 0) { %>
-                                                <% streamer.subscriptionsByChannel.forEach(channelGroup => { %>
+                                                <% streamer.subscriptionsByChannel.forEach(channelGroup => {
+                                                    const channelName = channelGroup.channelName;
+                                                %>
                                                     <div class="mb-3">
-                                                        <strong>Channel: <%= channelGroup.channelName %></strong>
+                                                        <strong>Channel: <%= channelName %></strong>
                                                         <ul class="list-group list-group-flush">
-                                                            <% channelGroup.subs.forEach(sub => { %>
+                                                            <% channelGroup.subs.forEach(sub => {
+                                                                const subPlatformIcon = sub.platform === 'twitch' ? '<i class="fab fa-twitch platform-icon-fa platform-icon-twitch me-2"></i>' :
+                                                                                      sub.platform === 'youtube' ? '<i class="fab fa-youtube platform-icon-fa platform-icon-youtube me-2"></i>' :
+                                                                                      sub.platform === 'kick' ? '<i class="fas fa-k platform-icon-fa platform-icon-kick me-2"></i>' :
+                                                                                      sub.platform === 'tiktok' ? '<i class="fab fa-tiktok platform-icon-fa platform-icon-tiktok me-2"></i>' :
+                                                                                      sub.platform === 'trovo' ? '<i class="fas fa-t platform-icon-fa platform-icon-trovo me-2"></i>' : '';
+                                                            %>
                                                                 <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-1">
                                                                     <div>
-                                                                        <% if (sub.platform === 'twitch') { %><i class="fab fa-twitch platform-icon-fa platform-icon-twitch me-2"></i><% } else if (sub.platform === 'youtube') { %><i class="fab fa-youtube platform-icon-fa platform-icon-youtube me-2"></i><% } else if (sub.platform === 'kick') { %><i class="fas fa-k platform-icon-fa platform-icon-kick me-2"></i><% } else if (sub.platform === 'tiktok') { %><i class="fab fa-tiktok platform-icon-fa platform-icon-tiktok me-2"></i><% } else if (sub.platform === 'trovo') { %><i class="fas fa-t platform-icon-fa platform-icon-trovo me-2"></i><% } %>
+                                                                        <%- subPlatformIcon %>
                                                                         <%= sub.platform.charAt(0).toUpperCase() + sub.platform.slice(1) %>
                                                                         <% if (sub.override_nickname) { %><span class="badge bg-info ms-2">Nickname: <%= sub.override_nickname %></span><% } %>
                                                                         <% if (sub.custom_message) { %><span class="badge bg-info ms-2">Custom Message</span><% } %>

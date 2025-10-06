@@ -1,43 +1,58 @@
 module.exports = {
-  apps: [{
-    name: "LiveBot",
-    script: "index.js",
-    exec_mode: "fork",
-    instances: 1,
-    autorestart: false,
-    watch: false,
-    max_memory_restart: "1G",
-    out_file: "./logs/LiveBot-out.log",
-    error_file: "./logs/LiveBot-error.log",
-    log_date_format: "YYYY-MM-DD HH:mm:ss Z",
-    env: {
-      NODE_ENV: "development",
-      SHARD_ID: undefined, // Explicitly unset sharding environment variables
-      SHARD_COUNT: undefined,
-      DISCORD_SHARDING_MANAGER: false // Explicitly disable Discord.js sharding
+  apps: [
+    {
+      name: 'LiveBot-Main',
+      script: 'index.js',
+      env_production: { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
     },
-    env_production: {
-      NODE_ENV: "production",
-      SHARD_ID: undefined, // Explicitly unset sharding environment variables
-      SHARD_COUNT: undefined,
-      DISCORD_SHARDING_MANAGER: false // Explicitly disable Discord.js sharding
-    }
-  }, {
-    name: "AnnouncementWorker",
-    script: "jobs/announcement-worker.js",
-    exec_mode: "fork",
-    instances: 1,
-    autorestart: true,
-    watch: false,
-    max_memory_restart: "500M",
-    out_file: "./logs/AnnouncementWorker-out.log",
-    error_file: "./logs/AnnouncementWorker-error.log",
-    log_date_format: "YYYY-MM-DD HH:mm:ss Z",
-    env: {
-      NODE_ENV: "development",
+    {
+      name: 'LiveBot-Announcer',
+      script: 'jobs/announcement-worker.js',
+      env_production: { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
     },
-    env_production: {
-      NODE_ENV: "production",
+    {
+      name: 'LiveBot-System',
+      script: 'jobs/system-worker.js',
+      env_production: { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
+    },
+    {
+      name: 'LiveBot-Reminder-Worker',
+      script: 'jobs/reminder-worker.js',
+      env_production: { NODE_ENV: 'production' },
+      env_development: { NODE_ENV: 'development' },
+    },
+    {
+      name: 'Stream-Check-Scheduler',
+      script: 'jobs/stream-check-scheduler.js',
+      cron_restart: '*/2 * * * *',
+      autorestart: false,
+    },
+    {
+      name: 'Team-Sync-Scheduler',
+      script: 'jobs/team-sync-scheduler.js',
+      cron_restart: '0 */6 * * *',
+      autorestart: false,
+    },
+    {
+      name: 'Reminder-Scheduler',
+      script: 'jobs/reminder-scheduler.js',
+      cron_restart: '*/1 * * * *',
+      autorestart: false,
+    },
+    {
+      name: 'Stats-Scheduler',
+      script: 'jobs/stats-scheduler.js',
+      cron_restart: '0 0 * * *', // Run once a day at midnight
+      autorestart: false,
+    },
+    {
+      name: 'Poll-Scheduler',
+      script: 'jobs/poll-scheduler.js',
+      cron_restart: '*/1 * * * *',
+      autorestart: false,
     }
-  }]
+  ],
 };

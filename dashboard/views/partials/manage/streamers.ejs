@@ -1,0 +1,71 @@
+<div class="content-card">
+    <h4><i class="fas fa-users me-2"></i> Streamer Subscriptions (<%= totalSubscriptions %>)</h4>
+    <p class="text-muted">Manage all streamers and their announcement settings in this server.</p>
+
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Streamer</th>
+                <th>Linked Discord User</th>
+                <th>Platforms</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% consolidatedStreamers.forEach(streamer => { %>
+                <tr>
+                    <td><%= streamer.name %></td>
+                    <td><%= streamer.discord_user_id ? `<@${streamer.discord_user_id}>` : 'Not Linked' %></td>
+                    <td>
+                        <% streamer.platforms.forEach(p => { %>
+                            <span class="badge bg-secondary"><%= p.platform %></span>
+                        <% }); %>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal"
+                            data-streamer-name="<%= streamer.name %>"
+                            data-consolidated-streamer-id="<%= streamer.discord_user_id || streamer.name.toLowerCase() %>"
+                            data-discord-user-id="<%= streamer.discord_user_id %>"
+                            data-platforms='<%= JSON.stringify(streamer.platforms) %>'
+                            data-subscriptions-by-channel='<%= JSON.stringify(streamer.subscriptions) %>'>
+                            Edit
+                        </button>
+                    </td>
+                </tr>
+            <% }); %>
+        </tbody>
+    </table>
+</div>
+
+<!-- Streamer Settings Modal -->
+<div class="modal fade" id="streamerSettingsModal" tabindex="-1" aria-labelledby="streamerSettingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="streamerSettingsModalLabel">Editing: <span id="modal-streamer-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/update-streamer" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="consolidatedStreamerId" id="edit-consolidated-streamer-id">
+                    
+                    <div class="mb-3">
+                        <label for="edit-discord-user-id" class="form-label">Linked Discord User ID</label>
+                        <input type="text" class="form-control" id="edit-discord-user-id" name="discordUserId" placeholder="Enter Discord User ID to link account">
+                    </div>
+
+                    <h5>Platforms</h5>
+                    <div id="modal-platforms-container" class="mb-3"></div>
+
+                    <h5>Channel-Specific Settings</h5>
+                    <div id="modal-subscriptions-container"></div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

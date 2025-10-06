@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, PermissionsBitField } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -15,7 +16,7 @@ module.exports = {
              FROM streamers s 
              JOIN subscriptions sub ON s.streamer_id = sub.streamer_id 
              WHERE sub.guild_id = ? 
-             GROUP BY s.streamer_id`, 
+             GROUP BY s.streamer_id, s.username, s.platform`, 
             [guildId]
         );
 
@@ -32,7 +33,7 @@ module.exports = {
             .setCustomId('remove_streamer_select')
             .setPlaceholder('Select streamers to remove')
             .setMinValues(1)
-            .setMaxValues(options.length)
+            .setMaxValues(Math.min(options.length, 25))
             .addOptions(options);
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
@@ -52,38 +53,24 @@ module.exports = {
             }
 
             try {
-                // Begin transaction
                 await db.query('START TRANSACTION');
 
-                // 1. Delete from announcements
-                const [announcementsResult] = await db.query(
-                    'DELETE FROM announcements WHERE streamer_id IN (?)', 
-                    [streamerIdsToRemove]
-                );
+                const placeholders = streamerIdsToRemove.map(() => '?').join(',');
 
-                // 2. Delete from subscriptions
+                // We don't need to delete from announcements, as the stream checker handles cleanup
                 const [subscriptionsResult] = await db.query(
-                    'DELETE FROM subscriptions WHERE streamer_id IN (?) AND guild_id = ?', 
-                    [streamerIdsToRemove, guildId]
+                    `DELETE FROM subscriptions WHERE streamer_id IN (${placeholders}) AND guild_id = ?`, 
+                    [...streamerIdsToRemove, guildId]
                 );
-
-                // 3. Optionally, delete from streamers if they have no other subscriptions in any other guild
-                for (const streamerId of streamerIdsToRemove) {
-                    const [[subCount]] = await db.query('SELECT COUNT(*) as count FROM subscriptions WHERE streamer_id = ?', [streamerId]);
-                    if (subCount.count === 0) {
-                        await db.query('DELETE FROM streamers WHERE streamer_id = ?', [streamerId]);
-                    }
-                }
-
-                // Commit transaction
+                
                 await db.query('COMMIT');
 
                 const removedCount = subscriptionsResult.affectedRows;
                 await i.editReply({ content: `Successfully removed ${removedCount} subscription(s) for the selected streamer(s) from this server.`, components: [] });
 
             } catch (error) {
-                await db.query('ROLLBACK'); // Rollback on error
-                console.error('[RemoveStreamer Error]', error);
+                await db.query('ROLLBACK');
+                logger.error('[RemoveStreamer Error]', error);
                 await i.editReply({ content: 'An error occurred while removing the streamer(s). The operation has been cancelled.', components: [] });
             } finally {
                 collector.stop();

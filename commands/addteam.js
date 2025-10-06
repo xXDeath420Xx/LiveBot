@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
 const apiChecks = require('../utils/api_checks');
 
@@ -27,39 +27,31 @@ module.exports = {
         const added = [], updated = [], failed = [];
 
         try {
-            // Step 1: Fetch the list of team members from the Twitch API
             const teamMembers = await apiChecks.getTwitchTeamMembers(teamName);
-
             if (!teamMembers) {
-                return interaction.editReply({ content: `❌ Could not find a Twitch Team named \`${teamName}\`. Please check the name and try again.` });
+                return interaction.editReply({ content: `❌ Could not find a Twitch Team named \\\`${teamName}\\\`. Please check the name and try again.` });
             }
-            
             if (teamMembers.length === 0) {
-                return interaction.editReply({ content: `ℹ️ The Twitch Team \`${teamName}\` does not have any members.` });
+                return interaction.editReply({ content: `ℹ️ The Twitch Team \\\`${teamName}\\\` does not have any members.` });
             }
 
-            // Step 2: Loop through each member and add them to the database
             for (const member of teamMembers) {
                 try {
-                    // Add or update the streamer in the main `streamers` table
                     await db.execute(
                         `INSERT INTO streamers (platform, platform_user_id, username) VALUES ('twitch', ?, ?)
                          ON DUPLICATE KEY UPDATE username = VALUES(username)`,
                         [member.user_id, member.user_login]
                     );
 
-                    // Get the internal streamer_id for the subscription
                     const [[streamer]] = await db.execute('SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?', ['twitch', member.user_id]);
 
-                    // Add or update the subscription for this specific guild and channel
                     const [subResult] = await db.execute(
                         `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)
-                         ON DUPLICATE KEY UPDATE streamer_id = VALUES(streamer_id)`, // Benign update to check for existence
+                         ON DUPLICATE KEY UPDATE streamer_id = VALUES(streamer_id)`,
                         [guildId, streamer.streamer_id, channel.id]
                     );
 
-                    // Check if it was a new addition or an update
-                    if (subResult.affectedRows > 1) {
+                    if (subResult.affectedRows > 1) { // This indicates an UPDATE happened on duplicate key
                         updated.push(member.user_login);
                     } else {
                         added.push(member.user_login);
@@ -71,9 +63,8 @@ module.exports = {
                 }
             }
 
-            // Step 3: Send a summary report
             const embed = new EmbedBuilder()
-                .setTitle(`Twitch Team Import Report for "${teamName}"`)
+                .setTitle(`Twitch Team Import Report for \\"${teamName}\\"`)
                 .setDescription(`All members have been added/updated for announcements in ${channel}.`)
                 .setColor('#5865F2')
                 .addFields(

@@ -1,10 +1,5 @@
 const { SlashCommandBuilder, PermissionsBitField, StringSelectMenuBuilder, ActionRowBuilder, MessageFlags } = require('discord.js');
-
-// This map will temporarily store the initial command data
-const pendingInteractions = new Map();
-
-// Define a constant for the timeout duration for better readability
-const INTERACTION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+const { pendingInteractions } = require('../interactions/pending-interactions'); // Share the map
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -42,19 +37,14 @@ module.exports = {
             }
             try {
                 const tempChannel = await interaction.client.channels.fetch(tempUploadChannelId);
-                if (!tempChannel) { // Channel not found or bot doesn't have access
-                    throw new Error("Temporary upload channel not found. Check TEMP_UPLOAD_CHANNEL_ID and bot's permissions.");
-                }
-                if (!tempChannel.isTextBased()) { // Added check for text-based channel
-                    throw new Error("Temporary upload channel is not a text channel. Check TEMP_UPLOAD_CHANNEL_ID in your .env file.");
+                if (!tempChannel || !tempChannel.isTextBased()) {
+                    throw new Error("Temporary upload channel is not a text channel or was not found.");
                 }
                 const tempMessage = await tempChannel.send({ files: [{ attachment: avatar.url, name: avatar.name }] });
                 avatarUrl = tempMessage.attachments.first().url;
-                // IMPORTANT: Do NOT delete this message if you need a permanent CDN URL for the attachment.
-                // Ensure any follow-up process that uses this URL is aware of its dependency on this message's existence.
             } catch (uploadError) {
                 console.error('[Add Streamer Command] Error uploading temporary avatar to Discord:', uploadError);
-                return interaction.editReply({ content: `Failed to upload custom avatar: ${uploadError.message || 'An unknown error occurred'}. Please check bot's permissions or TEMP_UPLOAD_CHANNEL_ID.` });
+                return interaction.editReply({ content: `Failed to upload custom avatar: ${uploadError.message}. Please check bot's permissions or TEMP_UPLOAD_CHANNEL_ID.` });
             }
         }
 
@@ -66,10 +56,7 @@ module.exports = {
             guildId: interaction.guild.id
         });
 
-        // Set a timeout to clear the pending interaction data.
-        // The follow-up interaction handler (for the select menu with customId 'addstreamer_platforms_${interactionId}')
-        // must check if this data has expired and inform the user if it has, as the select menu itself can remain active longer.
-        setTimeout(() => pendingInteractions.delete(interactionId), INTERACTION_TIMEOUT_MS);
+        setTimeout(() => pendingInteractions.delete(interactionId), 15 * 60 * 1000); // 15 minute timeout
 
         const platformSelect = new StringSelectMenuBuilder()
             .setCustomId(`addstreamer_platforms_${interactionId}`)
@@ -91,5 +78,4 @@ module.exports = {
             components: [row]
         });
     },
-    pendingInteractions
 };
