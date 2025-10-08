@@ -1,9 +1,8 @@
 const db = require('../utils/db');
 const logger = require('../utils/logger');
 
-// A simple cache to reduce database lookups
 const commandCache = new Map();
-setInterval(() => commandCache.clear(), 5 * 60 * 1000); // Clear cache every 5 minutes
+setInterval(() => commandCache.clear(), 5 * 60 * 1000);
 
 async function handleCustomCommand(interaction) {
     if (!interaction.isChatInputCommand()) return false;
@@ -16,7 +15,7 @@ async function handleCustomCommand(interaction) {
     if (commandCache.has(cacheKey)) {
         command = commandCache.get(cacheKey);
     } else {
-        const [rows] = await db.execute('SELECT response, action_type, action_content FROM custom_commands WHERE guild_id = ? AND command_name = ?', [guildId, commandName]);
+        const [rows] = await db.execute('SELECT * FROM custom_commands WHERE guild_id = ? AND command_name = ?', [guildId, commandName]);
         if (rows.length > 0) {
             command = rows[0];
             commandCache.set(cacheKey, command);
@@ -25,42 +24,61 @@ async function handleCustomCommand(interaction) {
 
     if (command) {
         try {
+            // Permission Checks
+            const requiredRoles = command.required_roles ? JSON.parse(command.required_roles) : [];
+            if (requiredRoles.length > 0 && !interaction.member.roles.cache.some(r => requiredRoles.includes(r.id))) {
+                return interaction.reply({ content: 'You do not have the required role to use this command.', ephemeral: true });
+            }
+
+            const allowedChannels = command.allowed_channels ? JSON.parse(command.allowed_channels) : [];
+            if (allowedChannels.length > 0 && !allowedChannels.includes(interaction.channelId)) {
+                return interaction.reply({ content: `This command can only be used in the following channels: ${allowedChannels.map(id => `<#${id}>`).join(', ')}.`, ephemeral: true });
+            }
+
             const response = parseVariables(command.response, interaction);
-            
+            const targetMember = interaction.options.getMember('user') || interaction.member;
+
             switch (command.action_type) {
                 case 'reply':
                     await interaction.reply(response);
                     break;
-                case 'send_to_channel':
-                    const channel = await interaction.guild.channels.fetch(command.action_content).catch(() => null);
-                    if (channel && channel.isTextBased()) {
-                        await channel.send(response);
-                        await interaction.reply({ content: 'Custom command executed.', ephemeral: true });
-                    } else {
-                        await interaction.reply({ content: 'Error: The channel configured for this command no longer exists.', ephemeral: true });
+                case 'add_role':
+                    const roleToAdd = await interaction.guild.roles.fetch(command.action_content).catch(() => null);
+                    if (!roleToAdd || !roleToAdd.editable) {
+                        return interaction.reply({ content: 'Error: The role configured for this command is invalid or I cannot manage it.', ephemeral: true });
                     }
+                    await targetMember.roles.add(roleToAdd);
+                    await interaction.reply({ content: `Added the ${roleToAdd.name} role to ${targetMember.displayName}.`, ephemeral: true });
                     break;
-                case 'dm_user':
-                    await interaction.user.send(response);
-                    await interaction.reply({ content: 'Custom command executed. Check your DMs.', ephemeral: true });
+                case 'remove_role':
+                    const roleToRemove = await interaction.guild.roles.fetch(command.action_content).catch(() => null);
+                    if (!roleToRemove || !roleToRemove.editable) {
+                        return interaction.reply({ content: 'Error: The role configured for this command is invalid or I cannot manage it.', ephemeral: true });
+                    }
+                    await targetMember.roles.remove(roleToRemove);
+                    await interaction.reply({ content: `Removed the ${roleToRemove.name} role from ${targetMember.displayName}.`, ephemeral: true });
                     break;
             }
             return true;
         } catch (error) {
-            logger.error(`[CustomCommandHandler] Error executing command '${commandName}':`, error);
-            await interaction.reply({ content: 'There was an error trying to execute that custom command.', ephemeral: true });
-            return true; // Still counts as handled
+            if (error.code !== 'ER_BAD_FIELD_ERROR') {
+                logger.error(`[CustomCommandHandler] Error executing command '${commandName}':`, error);
+            }
+            await interaction.reply({ content: 'There was an error trying to execute that custom command. It may not be configured correctly.', ephemeral: true });
+            return true;
         }
     }
     return false;
 }
 
 function parseVariables(text, interaction) {
+    if (!text) return '';
+    const targetUser = interaction.options.getUser('user') || interaction.user;
     const replacements = {
-        '{user.name}': interaction.user.username,
-        '{user.mention}': interaction.user.toString(),
-        '{user.id}': interaction.user.id,
-        '{user.tag}': interaction.user.tag,
+        '{user.name}': targetUser.username,
+        '{user.mention}': targetUser.toString(),
+        '{user.id}': targetUser.id,
+        '{user.tag}': targetUser.tag,
         '{channel.name}': interaction.channel.name,
         '{channel.mention}': interaction.channel.toString(),
         '{channel.id}': interaction.channel.id,

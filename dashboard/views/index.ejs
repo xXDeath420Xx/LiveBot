@@ -1,61 +1,76 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CertiFried Announcer - The All-in-One Discord Bot</title>
+    <title>CertiFried Announcer - Multi-Platform Discord Announcer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/dashboard-style.css?v=4.0.0">
+    <link rel="stylesheet" href="/css/dashboard-style.css">
+    <style>
+        .hero {
+            padding: 6rem 0;
+            background-color: var(--background-tertiary);
+        }
+        .hero-logo {
+            width: 128px;
+            height: 128px;
+        }
+    </style>
 </head>
 <body>
 
-<%- include('partials/header-landing') %>
+<%- include('partials/header', { user: user }) %>
 
-<main class="container">
-    <div class="hero">
-        <img src="/images/CertiFried.png" alt="Bot Logo" class="hero-logo">
-        <h1>CertiFried Announcer</h1>
-        <p>The ultimate all-in-one bot for stream announcements, server moderation, and community engagement. Powerful, reliable, and fully customizable.</p>
-        <div class="hero-buttons">
-            <a href="https://discord.com/api/oauth2/authorize?client_id=<%= client_id %>&permissions=8&scope=bot%20applications.commands" class="btn btn-lg btn-primary" target="_blank">Add to Discord</a>
-            <a href="/servers" class="btn btn-lg btn-secondary">Go to Dashboard</a>
+<main>
+    <div class="hero text-center">
+        <div class="container">
+            <img src="/images/CertiFried.png" alt="CertiFried Announcer Logo" class="hero-logo rounded-circle mb-4">
+            <h1 class="display-4 fw-bold">CertiFried Announcer</h1>
+            <p class="lead text-muted col-lg-6 mx-auto">The ultimate, multi-platform live stream announcer bot for Discord. Announce streams from Twitch, Kick, YouTube, and more, all from one place.</p>
+            <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mt-4">
+                <% if (user) { %>
+                    <a href="/dashboard" class="btn btn-primary btn-lg px-4 gap-3"><i class="fas fa-tachometer-alt me-2"></i>Go to Dashboard</a>
+                <% } else { %>
+                    <a href="/login" class="btn btn-primary btn-lg px-4 gap-3"><i class="fab fa-discord me-2"></i>Login with Discord</a>
+                <% } %>
+                <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.clientId || '#' %>&permissions=8&scope=bot+applications.commands" class="btn btn-outline-secondary btn-lg px-4" target="_blank"><i class="fas fa-plus me-2"></i>Invite Bot</a>
+            </div>
         </div>
     </div>
 
-    <div class="text-center my-5">
-        <h2 class="section-title">A Bot That Does It All</h2>
-    </div>
-
-    <div class="features-grid">
-        <div class="feature-card">
-            <h3><i class="fas fa-broadcast-tower me-2"></i> Multi-Platform Announcements</h3>
-            <p>Reliable, real-time notifications for Twitch, YouTube, Kick, and more. Never miss a stream again.</p>
+    <div class="page-container">
+        <div class="text-center mb-5">
+            <h2>Why Choose Us?</h2>
         </div>
-        <div class="feature-card">
-            <h3><i class="fas fa-shield-alt me-2"></i> Powerful Moderation</h3>
-            <p>Protect your server with a configurable Automod, Anti-Nuke system, and new member verification.</p>
-        </div>
-        <div class="feature-card">
-            <h3><i class="fas fa-tachometer-alt me-2"></i> Web Dashboard</h3>
-            <p>Manage every aspect of the bot from a clean, intuitive, and modern web dashboard.</p>
-        </div>
-        <div class="feature-card">
-            <h3><i class="fas fa-ticket-alt me-2"></i> Ticket System</h3>
-            <p>Provide dedicated support to your members with a fully integrated ticket management tool.</p>
-        </div>
-        <div class="feature-card">
-            <h3><i class="fas fa-music me-2"></i> Music Player</h3>
-            <p>Play high-quality music directly from YouTube. Manage queues, skip, and stop with simple commands.</p>
-        </div>
-        <div class="feature-card">
-            <h3><i class="fas fa-star me-2"></i> And Much More...</h3>
-            <p>Includes a leveling system, reaction roles, custom commands, server backups, and invite tracking.</p>
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="content-card text-center h-100">
+                    <div class="feature-icon fs-2 mb-3"><i class="fas fa-cogs"></i></div>
+                    <h4>Multi-Platform Support</h4>
+                    <p class="text-muted">Effortlessly announce streams from Twitch, Kick, YouTube, and other major platforms.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="content-card text-center h-100">
+                    <div class="feature-icon fs-2 mb-3"><i class="fas fa-palette"></i></div>
+                    <h4>Fully Customizable</h4>
+                    <p class="text-muted">Customize announcement messages, embed colors, and live roles to match your brand.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="content-card text-center h-100">
+                    <div class="feature-icon fs-2 mb-3"><i class="fas fa-bolt"></i></div>
+                    <h4>Fast & Reliable</h4>
+                    <p class="text-muted">Built for speed and reliability, ensuring your announcements are always on time.</p>
+                </div>
+            </div>
         </div>
     </div>
 </main>
 
-<%- include('partials/footer-landing') %>
+<%- include('partials/footer') %>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

@@ -1,61 +1,122 @@
-<div class="plugin-card mt-4">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-level-up-alt me-2"></i> Infraction Escalation Rules</h4>
+<div class="row">
+    <div class="col-12">
+        <h3>Moderation</h3>
+        <p class="text-muted">Configure moderation settings and view member infractions.</p>
     </div>
-    <div class="plugin-card-body">
-        <p class="text-muted">Automatically take action when a user accumulates a certain number of infractions.</p>
-        
-        <table class="table">
-            <thead>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Configuration</h4>
+        <p class="card-subtitle mb-3 text-muted">Set up logging channels and roles for the moderation system.</p>
+        <form action="/manage/<%= guild.id %>/update-moderation" method="POST">
+            <div class="mb-3">
+                <label for="modLogChannel" class="form-label">Moderation Log Channel</label>
+                <select class="form-select" id="modLogChannel" name="mod_log_channel_id">
+                    <option value="">Select a channel</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= settings && settings.mod_log_channel_id === channel.id ? 'selected' : '' %>><%= channel.name %></option>
+                    <% }) %>
+                </select>
+                <div class="form-text">Channel where moderation actions will be logged.</div>
+            </div>
+            <div class="mb-3">
+                <label for="muteRole" class="form-label">Mute Role</label>
+                <select class="form-select" id="muteRole" name="muted_role_id">
+                    <option value="">Select a role</option>
+                    <% roles.forEach(role => { %>
+                        <option value="<%= role.id %>" <%= settings && settings.muted_role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                    <% }) %>
+                </select>
+                <div class="form-text">The role assigned to muted users.</div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Configuration</button>
+        </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Recent Infractions</h4>
+        <p class="card-subtitle mb-3 text-muted">A log of the most recent moderation actions taken in the server.</p>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
                 <tr>
-                    <th>Condition</th>
-                    <th>Action</th>
-                    <th>Remove</th>
+                    <th>User</th>
+                    <th>Moderator</th>
+                    <th>Type</th>
+                    <th>Reason</th>
+                    <th>Date</th>
                 </tr>
-            </thead>
+                </thead>
+                <tbody>
+                <% if (infractions && infractions.length > 0) { %>
+                    <% infractions.forEach(infraction => { %>
+                        <tr>
+                            <td><%= infraction.user_tag || infraction.user_id %></td>
+                            <td><%= infraction.moderator_tag || infraction.moderator_id %></td>
+                            <td><span class="badge bg-primary text-uppercase"><%= infraction.type %></span></td>
+                            <td><%= infraction.reason %></td>
+                            <td><%= new Date(infraction.created_at).toLocaleString() %></td>
+                        </tr>
+                    <% }) %>
+                <% } else { %>
+                    <tr>
+                        <td colspan="5" class="text-center">No recent infractions found.</td>
+                    </tr>
+                <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Escalation Rules</h4>
+        <p class="card-subtitle mb-3 text-muted">Automatically apply stricter punishments for repeat offenders.</p>
+        <form action="/manage/<%= guild.id %>/add-escalation-rule" method="POST" class="row g-3 mb-4 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Infraction Count</label>
+                <input type="number" name="infraction_count" class="form-control" required min="1">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Time Period (Hours)</label>
+                <input type="number" name="time_period_hours" class="form-control" required min="1">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Action</label>
+                <select name="action" class="form-select" required>
+                    <option value="timeout">Timeout</option>
+                    <option value="kick">Kick</option>
+                    <option value="ban">Ban</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus me-2"></i>Add Rule</button>
+            </div>
+        </form>
+
+        <h5 class="mt-4">Existing Rules</h5>
+        <table class="table table-hover">
             <tbody>
                 <% if (escalationRules && escalationRules.length > 0) { %>
                     <% escalationRules.forEach(rule => { %>
                         <tr>
-                            <td>If a user gets <strong><%= rule.infraction_count %></strong> infractions within <strong><%= rule.time_period_hours %></strong> hours...</td>
-                            <td>...then <strong><%= rule.action %></strong> them <%= rule.action_duration_minutes ? `for ${rule.action_duration_minutes} minutes.` : '.' %></td>
-                            <td>
-                                <form action="/manage/<%= guild.id %>/remove-escalation-rule" method="POST">
+                            <td>After <strong><%= rule.infraction_count %></strong> infractions within <strong><%= rule.time_period_hours %></strong> hours, apply <strong><%= rule.action %></strong>.</td>
+                            <td class="text-end">
+                                <form action="/manage/<%= guild.id %>/remove-escalation-rule" method="POST" class="d-inline">
                                     <input type="hidden" name="ruleId" value="<%= rule.id %>">
-                                    <button type="submit" class="btn btn-sm btn-danger">X</button>
+                                    <button type="submit" class="btn btn-sm btn-danger">Remove</button>
                                 </form>
                             </td>
                         </tr>
                     <% }); %>
                 <% } else { %>
-                    <tr><td colspan="3" class="text-center text-muted">No escalation rules are set up.</td></tr>
+                    <tr><td class="text-center text-muted">No escalation rules configured.</td></tr>
                 <% } %>
             </tbody>
         </table>
-
-        <hr class="my-4">
-        <h5>Add New Rule</h5>
-        <form action="/manage/<%= guild.id %>/add-escalation-rule" method="POST">
-            <div class="row align-items-end">
-                <div class="col-md-3 mb-3"><label class="form-label">Infraction Count</label><input type="number" name="infraction_count" class="form-control" min="2" required></div>
-                <div class="col-md-3 mb-3"><label class="form-label">Time Period (Hours)</label><input type="number" name="time_period_hours" class="form-control" min="1" required></div>
-                <div class="col-md-3 mb-3"><label class="form-label">Action</label><select name="action" class="form-select" id="action-select"><option value="mute">Mute</option><option value="kick">Kick</option><option value="ban">Ban</option></select></div>
-                <div class="col-md-3 mb-3" id="duration-container"><label class="form-label">Duration (Minutes)</label><input type="number" name="action_duration_minutes" class="form-control" min="1"></div>
-                <div class="col-12"><button type="submit" class="btn btn-success">Add Rule</button></div>
-            </div>
-        </form>
     </div>
 </div>
-
-<script>
-    document.getElementById('action-select').addEventListener('change', function() {
-        const durationContainer = document.getElementById('duration-container');
-        if (this.value === 'mute') {
-            durationContainer.style.display = 'block';
-        } else {
-            durationContainer.style.display = 'none';
-        }
-    });
-    // Trigger change on load
-    document.getElementById('action-select').dispatchEvent(new Event('change'));
-</script>

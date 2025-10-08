@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -56,7 +57,7 @@ module.exports = {
             const purgePromises = announcementsToPurge.map(ann => {
                 return interaction.client.channels.fetch(ann.channel_id)
                     .then(channel => channel?.messages.delete(ann.message_id))
-                    .catch(() => {});
+                    .catch(e => logger.warn(`[Mass Remove Streamer] Failed to delete message ${ann.message_id} in channel ${ann.channel_id}: ${e.message}`));
             });
             await Promise.allSettled(purgePromises);
             purgedMessageCount = announcementsToPurge.length;
@@ -81,7 +82,7 @@ module.exports = {
       );
       await interaction.editReply({ embeds: [embed] });
     } catch (error) {
-      console.error('Error during mass streamer removal:', error);
+      logger.error('[Mass Remove Streamer Command Error]', error);
       await interaction.editReply('An error occurred while trying to remove streamers. Please try again later.');
     }
   },

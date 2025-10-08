@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const { logInfraction } = require('../core/moderation-manager');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 // Simple time string parser (e.g., "5m", "1h", "2d")
 function parseDuration(durationStr) {
@@ -89,7 +90,7 @@ module.exports = {
                     .setTimestamp();
                 await targetUser.send({ embeds: [dmEmbed] });
             } catch (dmError) {
-                console.log(`Could not DM user ${targetUser.tag}.`);
+                logger.warn(`[Mute Command] Could not DM user ${targetUser.tag}: ${dmError.message}`);
             }
 
             const replyEmbed = new EmbedBuilder()
@@ -99,7 +100,7 @@ module.exports = {
             await interaction.editReply({ embeds: [replyEmbed] });
 
         } catch (error) {
-            console.error('[Mute Command Error]', error);
+            logger.error('[Mute Command Error]', error);
             await interaction.editReply("An unexpected error occurred while trying to mute this user.");
         }
     },

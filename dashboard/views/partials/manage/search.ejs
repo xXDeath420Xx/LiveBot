@@ -1,0 +1,98 @@
+<div class="plugin-card mt-4">
+    <div class="plugin-card-header">
+        <h4><i class="fas fa-search me-2"></i> Dashboard Search</h4>
+    </div>
+    <div class="plugin-card-body">
+        <p class="text-muted">Search across bot settings, user data (infractions, roles), and log entries for this server.</p>
+
+        <div class="mb-3">
+            <input type="text" class="form-control" id="dashboard-search-input" placeholder="Enter your search query...">
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Filter by Category:</label>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="search-settings" value="settings" checked>
+                <label class="form-check-label" for="search-settings">Settings</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="search-users" value="users" checked>
+                <label class="form-check-label" for="search-users">Users/Roles</label>
+            </div>
+            <div class="form-check form-check-inline">
+                <input class="form-check-input" type="checkbox" id="search-logs" value="logs" checked>
+                <label class="form-check-label" for="search-logs">Logs</label>
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" id="run-dashboard-search"><i class="fas fa-search me-2"></i> Search</button>
+
+        <hr class="my-4">
+
+        <h5>Search Results</h5>
+        <div id="dashboard-search-results">
+            <p class="text-muted">Your search results will appear here.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('dashboard-search-input');
+        const searchButton = document.getElementById('run-dashboard-search');
+        const searchResultsDiv = document.getElementById('dashboard-search-results');
+
+        searchButton.addEventListener('click', async function() {
+            const query = searchInput.value.trim();
+            if (!query) {
+                searchResultsDiv.innerHTML = '<p class="text-danger">Please enter a search query.</p>';
+                return;
+            }
+
+            const categories = [];
+            if (document.getElementById('search-settings').checked) categories.push('settings');
+            if (document.getElementById('search-users').checked) categories.push('users');
+            if (document.getElementById('search-logs').checked) categories.push('logs');
+
+            if (categories.length === 0) {
+                searchResultsDiv.innerHTML = '<p class="text-danger">Please select at least one category to search.</p>';
+                return;
+            }
+
+            searchResultsDiv.innerHTML = '<p class="text-muted">Searching...</p>';
+
+            try {
+                const response = await fetch(`/api/guild/<%= guild.id %>/search?q=${encodeURIComponent(query)}&categories=${categories.join(',')}`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'An error occurred during search.');
+                }
+
+                renderSearchResults(data);
+            } catch (error) {
+                console.error('Dashboard Search Error:', error);
+                searchResultsDiv.innerHTML = `<p class="text-danger">Error: ${error.message}</p>`;
+            }
+        });
+
+        function renderSearchResults(results) {
+            let html = '';
+            if (results.length === 0) {
+                html = '<p class="text-muted">No results found.</p>';
+            } else {
+                html = '<ul class="list-group">';
+                results.forEach(item => {
+                    html += `
+                        <li class="list-group-item">
+                            <strong>${item.type}:</strong> ${item.description}
+                            ${item.link ? `<a href="${item.link}" class="btn btn-sm btn-info ms-2">View</a>` : ''}
+                        </li>
+                    `;
+                });
+                html += '</ul>';
+            }
+            searchResultsDiv.innerHTML = html;
+        }
+    });
+</script>

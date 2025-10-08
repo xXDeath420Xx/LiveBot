@@ -1,9 +1,7 @@
 const { Queue } = require('bullmq');
-const Redis = require('ioredis');
-require('dotenv').config();
+const { redisOptions } = require('../utils/cache');
 
-const redisClient = new Redis(process.env.REDIS_URL);
-const systemQueue = new Queue('system-tasks', { connection: redisClient });
+const systemQueue = new Queue('system-tasks', { connection: redisOptions });
 
 async function scheduleGiveawayChecks() {
     await systemQueue.removeRepeatable('check-giveaways');
@@ -12,6 +10,7 @@ async function scheduleGiveawayChecks() {
         jobId: 'check-giveaways'
     });
     console.log('[GiveawayScheduler] Giveaway check job scheduled to run every 15 seconds.');
+    await systemQueue.close();
 }
 
 scheduleGiveawayChecks().catch(console.error);

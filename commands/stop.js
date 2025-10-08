@@ -1,17 +1,27 @@
-const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
-const musicManager = require('../core/music-manager');
+const { SlashCommandBuilder } = require('discord.js');
+const { checkMusicPermissions } = require('../utils/music_helpers');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('stop')
-    .setDescription('Stops the music, clears the queue, and disconnects the bot.'),
+    .setDescription('Stops the music and clears the queue.'),
 
   async execute(interaction) {
-    if (!interaction.member.voice.channel) {
-      return interaction.reply({ content: 'You must be in a voice channel to use this command!', ephemeral: true });
+    const permissionCheck = await checkMusicPermissions(interaction);
+    if (!permissionCheck.permitted) {
+        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
     }
 
-    musicManager.stop(interaction.guild.id);
-    await interaction.reply('⏹️ Music stopped and queue cleared.');
+    const queue = interaction.client.distube.getQueue(interaction.guildId);
+    if (!queue) {
+      return interaction.reply({ content: 'There is nothing playing right now!', ephemeral: true });
+    }
+
+    try {
+      await queue.stop();
+      await interaction.reply({ content: '⏹️ Music stopped and queue cleared.' });
+    } catch (e) {
+      await interaction.reply({ content: `❌ Error: ${e.message}` });
+    }
   },
 };

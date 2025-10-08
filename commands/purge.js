@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ChannelType } = require('discord.js');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -51,7 +52,7 @@ module.exports = {
             await interaction.editReply({ embeds: [replyEmbed] });
 
         } catch (error) {
-            console.error('[Purge Command Error]', error);
+            logger.error('[Purge Command Error]', error);
             await interaction.editReply("An error occurred. I may not have permission to delete messages, or the messages are older than 14 days.");
         }
     },

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 const logOptions = [
     { name: 'Message Deleted', value: 'messageDelete' },
@@ -53,7 +54,7 @@ module.exports = {
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('[Logging Command Error]', error);
+            logger.error('[Logging Command Error]', error);
             await interaction.editReply({ content: 'An error occurred while saving logging settings.' });
         }
     },

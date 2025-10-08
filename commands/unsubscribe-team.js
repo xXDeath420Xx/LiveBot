@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -39,7 +40,7 @@ module.exports = {
             }
 
         } catch (error) {
-            console.error('UnsubscribeTeam command error:', error);
+            logger.error('[UnsubscribeTeam command error]', error);
             await interaction.editReply({ content: 'A database error occurred while trying to unsubscribe from the team.' });
         }
     },

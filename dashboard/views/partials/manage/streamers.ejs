@@ -1,71 +1,124 @@
-<div class="content-card">
-    <h4><i class="fas fa-users me-2"></i> Streamer Subscriptions (<%= totalSubscriptions %>)</h4>
-    <p class="text-muted">Manage all streamers and their announcement settings in this server.</p>
+<%
+    const channelOptions = channels.map(c => ({ id: c.id, name: c.name }));
+%>
 
-    <table class="table table-hover">
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4><i class="fas fa-users me-2"></i>Manage Streamers</h4>
+        <p class="text-muted mb-0">Add, edit, or remove streamers for this server. Total: <%= streamers.length %></p>
+    </div>
+    <div>
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#add-streamer-modal"><i class="fas fa-plus me-2"></i>Add Streamer</button>
+    </div>
+</div>
+<hr class="my-3">
+
+<div class="table-responsive">
+    <table class="table table-hover align-middle">
         <thead>
-            <tr>
-                <th>Streamer</th>
-                <th>Linked Discord User</th>
-                <th>Platforms</th>
-                <th>Actions</th>
-            </tr>
+        <tr>
+            <th>Streamer</th>
+            <th>Platforms</th>
+            <th>Subscriptions</th>
+            <th class="text-end">Actions</th>
+        </tr>
         </thead>
         <tbody>
-            <% consolidatedStreamers.forEach(streamer => { %>
-                <tr>
-                    <td><%= streamer.name %></td>
-                    <td><%= streamer.discord_user_id ? `<@${streamer.discord_user_id}>` : 'Not Linked' %></td>
+        <% if (streamers && streamers.length > 0) { %>
+            <% streamers.forEach(streamer => { %>
+                <tr id="streamer-row-<%= streamer.id %>">
                     <td>
-                        <% streamer.platforms.forEach(p => { %>
-                            <span class="badge bg-secondary"><%= p.platform %></span>
-                        <% }); %>
+                        <% if (streamer.discord_user_id) { %>
+                            <i class="fab fa-discord text-primary me-1" title="Linked to Discord User"></i>
+                        <% } %>
+                        <strong><%= streamer.name %></strong>
                     </td>
                     <td>
-                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal"
-                            data-streamer-name="<%= streamer.name %>"
-                            data-consolidated-streamer-id="<%= streamer.discord_user_id || streamer.name.toLowerCase() %>"
-                            data-discord-user-id="<%= streamer.discord_user_id %>"
-                            data-platforms='<%= JSON.stringify(streamer.platforms) %>'
-                            data-subscriptions-by-channel='<%= JSON.stringify(streamer.subscriptions) %>'>
-                            Edit
+                        <% streamer.platforms.forEach(p => { %>
+                            <span class="badge bg-secondary me-1"><%= p.platform %></span>
+                        <% }); %>
+                    </td>
+                    <td><%= streamer.subscriptions.length %></td>
+                    <td class="text-end">
+                        <button class="btn btn-sm btn-outline-primary me-1 edit-streamer-btn"
+                                data-bs-toggle="modal"
+                                data-bs-target="#edit-streamer-modal"
+                                data-streamer='<%= JSON.stringify(streamer) %>'>
+                            <i class="fas fa-pencil-alt"></i> Edit
                         </button>
                     </td>
                 </tr>
             <% }); %>
+        <% } else { %>
+            <tr>
+                <td colspan="4" class="text-center text-muted py-4">No streamers have been added yet.</td>
+            </tr>
+        <% } %>
         </tbody>
     </table>
 </div>
 
-<!-- Streamer Settings Modal -->
-<div class="modal fade" id="streamerSettingsModal" tabindex="-1" aria-labelledby="streamerSettingsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="streamerSettingsModalLabel">Editing: <span id="modal-streamer-name"></span></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form action="/manage/<%= guild.id %>/update-streamer" method="POST">
-                <div class="modal-body">
-                    <input type="hidden" name="consolidatedStreamerId" id="edit-consolidated-streamer-id">
-                    
-                    <div class="mb-3">
-                        <label for="edit-discord-user-id" class="form-label">Linked Discord User ID</label>
-                        <input type="text" class="form-control" id="edit-discord-user-id" name="discordUserId" placeholder="Enter Discord User ID to link account">
-                    </div>
+<%- include('./add-streamer.ejs', { guild, roles, channels }) %>
+<%- include('./edit-streamer-modal.ejs', { guild, roles, channels }) %>
 
-                    <h5>Platforms</h5>
-                    <div id="modal-platforms-container" class="mb-3"></div>
+<script>
+    const channelOptions = <%- JSON.stringify(channelOptions) %>;
+    const guildId = '<%= guild.id %>';
 
-                    <h5>Channel-Specific Settings</h5>
-                    <div id="modal-subscriptions-container"></div>
+    document.addEventListener('DOMContentLoaded', () => {
+        const editStreamerModal = document.getElementById('edit-streamer-modal');
+        if (editStreamerModal) {
+            editStreamerModal.addEventListener('show.bs.modal', event => {
+                const button = event.relatedTarget;
+                const streamer = JSON.parse(button.getAttribute('data-streamer'));
 
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+                const editForm = editStreamerModal.querySelector('#edit-streamer-form');
+                editForm.action = `/manage/${guildId}/edit-consolidated-streamer`;
+
+                const deleteForm = editStreamerModal.querySelector('#delete-streamer-form');
+                deleteForm.action = `/manage/${guildId}/delete-streamer`;
+                
+                editForm.querySelector('#consolidated_streamer_id').value = streamer.id;
+                editForm.querySelector('#edit-streamer-name').textContent = streamer.name;
+                editForm.querySelector('#discord_user_id').value = streamer.discord_user_id || '';
+                deleteForm.querySelector('#delete-streamer-id').value = streamer.id;
+
+                const subscriptionsContainer = editForm.querySelector('#subscriptions-container');
+                subscriptionsContainer.innerHTML = '';
+
+                streamer.subscriptions.forEach(sub => {
+                    let optionsHtml = '<option value="">Default</option>';
+                    channelOptions.forEach(c => {
+                        const selected = sub.announcement_channel_id === c.id ? 'selected' : '';
+                        optionsHtml += `<option value="${c.id}" ${selected}>#${c.name}</option>`;
+                    });
+
+                    const subHtml = `
+                        <div class="subscription-card mb-3 p-3 border rounded bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0 text-capitalize">${sub.platform} - ${sub.username}</h6>
+                                <span class="badge bg-info">Sub ID: ${sub.subscription_id}</span>
+                            </div>
+                            <hr>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Announcement Channel</label>
+                                    <select class="form-select" name="subscriptions[${sub.subscription_id}][announcement_channel_id]">${optionsHtml}</select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Override Nickname</label>
+                                    <input type="text" class="form-control" name="subscriptions[${sub.subscription_id}][override_nickname]" value="${sub.override_nickname || ''}">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label">Custom Message</label>
+                                    <textarea class="form-control" name="subscriptions[${sub.subscription_id}][custom_message]" rows="2">${sub.custom_message || ''}</textarea>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    subscriptionsContainer.insertAdjacentHTML('beforeend', subHtml);
+                });
+            });
+        }
+    });
+</script>

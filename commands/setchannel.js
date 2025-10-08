@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, ChannelType, PermissionsBitField, EmbedBuilder, MessageFlags } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,7 +16,6 @@ module.exports = {
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
     try {
-      // REWRITE: Use a single, more efficient and atomic query.
       await db.execute(
         'INSERT INTO guilds (guild_id, announcement_channel_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE announcement_channel_id = VALUES(announcement_channel_id)',
         [guildId, channel.id]
@@ -28,7 +28,7 @@ module.exports = {
       await interaction.editReply({ embeds: [embed] });
 
     } catch (e) {
-      console.error('[SetChannel Error]', e);
+      logger.error('[SetChannel Error]', e);
       await interaction.editReply({ content: 'An error occurred while setting the channel.' });
     }
   },

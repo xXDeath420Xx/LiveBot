@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 // Time string parser (e.g., "1m", "1h", "2d")
 function parseTime(timeStr) {
@@ -37,12 +38,13 @@ module.exports = {
         .addStringOption(option => option.setName('choice10').setDescription('The tenth choice.')),
 
     async execute(interaction) {
+        await interaction.deferReply({ ephemeral: true });
         const question = interaction.options.getString('question');
         const duration = interaction.options.getString('duration');
         const endsAt = parseTime(duration);
 
         if (!endsAt) {
-            return interaction.reply({ content: 'Invalid duration format. Use formats like `30m`, `2h`, `1d`.', ephemeral: true });
+            return interaction.editReply({ content: 'Invalid duration format. Use formats like `30m`, `2h`, `1d`.' });
         }
 
         const choices = [];
@@ -53,26 +55,35 @@ module.exports = {
             }
         }
 
-        const embed = new EmbedBuilder()
-            .setColor('#3498DB')
-            .setAuthor({ name: `${interaction.user.tag} started a poll`, iconURL: interaction.user.displayAvatarURL() })
-            .setTitle(question)
-            .setDescription(choices.map((c, i) => `${numberEmojis[i]} ${c}`).join('\n\n'))
-            .addFields({ name: 'Ends', value: `<t:${Math.floor(endsAt.getTime() / 1000)}:R>` })
-            .setTimestamp();
-
-        const pollMessage = await interaction.channel.send({ embeds: [embed] });
-        await interaction.reply({ content: 'Poll created!', ephemeral: true });
-
-        // Add reactions
-        for (let i = 0; i < choices.length; i++) {
-            await pollMessage.react(numberEmojis[i]);
+        if (choices.length < 2) {
+            return interaction.editReply({ content: 'Please provide at least two choices for the poll.' });
         }
 
-        // Save to database
-        await db.execute(
-            'INSERT INTO polls (guild_id, channel_id, message_id, question, options, ends_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [interaction.guild.id, interaction.channel.id, pollMessage.id, question, JSON.stringify(choices), endsAt]
-        );
+        try {
+            const embed = new EmbedBuilder()
+                .setColor('#3498DB')
+                .setAuthor({ name: `${interaction.user.tag} started a poll`, iconURL: interaction.user.displayAvatarURL() })
+                .setTitle(question)
+                .setDescription(choices.map((c, i) => `${numberEmojis[i]} ${c}`).join('\n\n'))
+                .addFields({ name: 'Ends', value: `<t:${Math.floor(endsAt.getTime() / 1000)}:R>` })
+                .setTimestamp();
+
+            const pollMessage = await interaction.channel.send({ embeds: [embed] });
+            await interaction.editReply({ content: 'Poll created!' });
+
+            // Add reactions
+            for (let i = 0; i < choices.length; i++) {
+                await pollMessage.react(numberEmojis[i]);
+            }
+
+            // Save to database
+            await db.execute(
+                'INSERT INTO polls (guild_id, channel_id, message_id, question, options, ends_at) VALUES (?, ?, ?, ?, ?, ?)',
+                [interaction.guild.id, interaction.channel.id, pollMessage.id, question, JSON.stringify(choices), endsAt]
+            );
+        } catch (error) {
+            logger.error('[Poll Command Error]', error);
+            await interaction.editReply({ content: 'An error occurred while creating the poll.' });
+        }
     },
 };

@@ -46,13 +46,13 @@ module.exports = {
 
       const row = new ActionRowBuilder().addComponents(selectMenu);
 
-      await interaction.editReply({ 
+      const reply = await interaction.editReply({ 
         content: `Found ${subscriptions.length} subscription(s) for "${username}". Please select one to edit.`,
         components: [row] 
       });
 
       const filter = i => i.customId === `editstreamer_select_${interaction.id}` && i.user.id === interaction.user.id;
-      const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000 });
+      const collector = reply.createMessageComponentCollector({ filter, time: 60000 });
 
       collector.on('collect', async i => {
         const subscriptionId = i.values[0];
@@ -80,9 +80,16 @@ module.exports = {
         collector.stop(); // Modal has been shown, stop listening for select menu interaction
       });
 
-      collector.on('end', collected => {
-        if (collected.size === 0) {
-          interaction.editReply({ content: 'You did not make a selection in time.', components: [] });
+      collector.on('end', async (collected, reason) => {
+        if (reason === 'time' && collected.size === 0) {
+          await interaction.editReply({ content: 'You did not make a selection in time.', components: [] });
+        } else if (reason !== 'time') {
+          // If the collector ended for a reason other than timeout (e.g., 'stop' was called),
+          // and a selection was made, the interaction has already been updated by i.update.
+          // No need to editReply again.
+        }
+        if (reason === 'time' && collected.size === 0) {
+            logger.info(`[EditStreamer] Select menu interaction timed out for user ${interaction.user.id}.`);
         }
       });
 

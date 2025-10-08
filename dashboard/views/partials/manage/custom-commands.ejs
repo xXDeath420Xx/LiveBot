@@ -1,94 +1,69 @@
-<div class="plugin-card">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-terminal me-2"></i> Custom Commands</h4>
+<div class="row">
+    <div class="col-12">
+        <h3>Custom Commands</h3>
+        <p class="text-muted">Create your own commands for the bot to respond to.</p>
     </div>
-    <div class="plugin-card-body">
-        <p class="text-muted">Create custom commands with variables and actions.</p>
-        
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Create New Command</h4>
+        <p class="card-subtitle mb-3 text-muted">Create a simple text-based command. The command name should not contain spaces.</p>
+        <form action="/manage/<%= guild.id %>/add-custom-command" method="POST">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Command Name</label>
+                    <div class="input-group">
+                        <span class="input-group-text">!</span>
+                        <input type="text" name="command_name" class="form-control" required pattern="^\S+$">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Response</label>
+                    <textarea name="response" class="form-control" required rows="1"></textarea>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus me-2"></i>Create Command</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Existing Commands</h4>
+        <p class="card-subtitle mb-3 text-muted">Manage your server's custom commands.</p>
         <div class="table-responsive">
-            <table class="table">
+            <table class="table table-hover">
                 <thead>
-                    <tr>
-                        <th>Command Name</th>
-                        <th>Action</th>
-                        <th>Response</th>
-                        <th>Actions</th>
-                    </tr>
+                <tr>
+                    <th>Command Name</th>
+                    <th>Response</th>
+                    <th>Actions</th>
+                </tr>
                 </thead>
                 <tbody>
-                    <% customCommands.forEach(cmd => { %>
+                <% if (commands && commands.length > 0) { %>
+                    <% commands.forEach(command => { %>
                         <tr>
-                            <td><code>!<%= cmd.command_name %></code></td>
-                            <td><span class="badge bg-secondary"><%= cmd.action_type.replace('_', ' ') %></span></td>
-                            <td style="white-space: pre-wrap; word-break: break-word;"><%= cmd.response %></td>
+                            <td>!<%= command.command_name %></td>
+                            <td class="text-truncate" style="max-width: 400px;"><%= command.response %></td>
                             <td>
-                                <form action="/manage/<%= guild.id %>/delete-custom-command" method="POST" class="d-inline">
-                                    <input type="hidden" name="commandId" value="<%= cmd.id %>">
+                                <form action="/manage/<%= guild.id %>/remove-custom-command" method="POST" class="d-inline">
+                                    <input type="hidden" name="command_name" value="<%= command.command_name %>">
                                     <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                                 </form>
                             </td>
                         </tr>
-                    <% }); %>
+                    <% }) %>
+                <% } else { %>
+                    <tr>
+                        <td colspan="3" class="text-center">You haven't created any custom commands yet.</td>
+                    </tr>
+                <% } %>
                 </tbody>
             </table>
         </div>
-
-        <hr class="my-4">
-
-        <h5>Add New Command</h5>
-        <form action="/manage/<%= guild.id %>/add-custom-command" method="POST">
-            <div class="row">
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">Command Name (no prefix)</label>
-                    <input type="text" class="form-control" name="command_name" required>
-                </div>
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">Action</label>
-                    <select class="form-select" name="action_type" id="action-type-select">
-                        <option value="reply">Reply in channel</option>
-                        <option value="send_to_channel">Send to a specific channel</option>
-                        <option value="dm_user">Send as a DM</option>
-                    </select>
-                </div>
-                <div class="col-md-4 mb-3" id="action-content-container" style="display: none;">
-                    <label class="form-label">Target Channel</label>
-                    <select class="form-select" name="action_content">
-                        <% channels.forEach(channel => { %>
-                            <option value="<%= channel.id %>">#<%= channel.name %></option>
-                        <% }); %>
-                    </select>
-                </div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label">Response Text</label>
-                <textarea class="form-control" name="response" rows="3" required></textarea>
-            </div>
-            <button type="submit" class="btn btn-success">Add Command</button>
-        </form>
-
-        <div class="mt-4 p-3 rounded" style="background-color: var(--bg-primary);">
-            <h6>Available Variables</h6>
-            <div class="d-flex flex-wrap gap-2">
-                <code class="p-1">{user.name}</code>
-                <code class="p-1">{user.mention}</code>
-                <code class="p-1">{user.id}</code>
-                <code class="p-1">{user.tag}</code>
-                <code class="p-1">{channel.name}</code>
-                <code class="p-1">{channel.mention}</code>
-                <code class="p-1">{channel.id}</code>
-                <code class="p-1">{server.name}</code>
-            </div>
-        </div>
     </div>
 </div>
-
-<script>
-    document.getElementById('action-type-select').addEventListener('change', function() {
-        const container = document.getElementById('action-content-container');
-        if (this.value === 'send_to_channel') {
-            container.style.display = 'block';
-        } else {
-            container.style.display = 'none';
-        }
-    });
-</script>

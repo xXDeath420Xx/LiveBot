@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -23,8 +24,13 @@ module.exports = {
 
     async autocomplete(interaction) {
         const focusedValue = interaction.options.getFocused();
-        const [feeds] = await db.execute('SELECT DISTINCT twitter_username FROM twitter_feeds WHERE guild_id = ? AND twitter_username LIKE ?', [interaction.guild.id, `${focusedValue}%`]);
-        await interaction.respond(feeds.map(feed => ({ name: `@${feed.twitter_username}`, value: feed.twitter_username })));
+        try {
+            const [feeds] = await db.execute('SELECT DISTINCT twitter_username FROM twitter_feeds WHERE guild_id = ? AND twitter_username LIKE ?', [interaction.guild.id, `${focusedValue}%`]);
+            await interaction.respond(feeds.map(feed => ({ name: `@${feed.twitter_username}`, value: feed.twitter_username })));
+        } catch (error) {
+            logger.error('[Twitter Feed Autocomplete Error]', error);
+            await interaction.respond([]); // Respond with an empty array on error
+        }
     },
 
     async execute(interaction) {
@@ -49,7 +55,7 @@ module.exports = {
             if (error.code === 'ER_DUP_ENTRY') {
                 await interaction.editReply('A feed for that Twitter user in that channel already exists.');
             } else {
-                console.error('[Twitter Feed Command Error]', error);
+                logger.error('[Twitter Feed Command Error]', error);
                 await interaction.editReply('An error occurred while managing Twitter feeds.');
             }
         }

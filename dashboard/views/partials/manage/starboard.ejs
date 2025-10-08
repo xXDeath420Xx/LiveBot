@@ -1,30 +1,37 @@
-<div class="plugin-card">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-star me-2"></i> Starboard</h4>
+<div class="row">
+    <div class="col-12">
+        <h3>Starboard</h3>
+        <p class="text-muted">Highlight the best messages in your server by adding them to a special channel.</p>
     </div>
-    <div class="plugin-card-body">
-        <form action="/manage/<%= guild.id %>/update-starboard" method="POST">
-            <p class="text-muted">Create a "best-of" channel for your server. When a message gets enough ⭐ reactions, it will be posted to the starboard channel.</p>
+</div>
 
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Starboard Settings</h4>
+        <p class="card-subtitle mb-3 text-muted">Configure the channel and threshold for the starboard.</p>
+        <form action="/manage/<%= guild.id %>/starboard/config" method="POST">
             <div class="mb-3">
-                <label for="starboard-channel" class="form-label">Starboard Channel</label>
-                <select class="form-select" id="starboard-channel" name="channel_id">
-                    <option value="">-- Disable Starboard --</option>
+                <label for="starboardEnabled" class="form-label">Enable Starboard</label>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="starboardEnabled" name="enabled" <%= starboardConfig && starboardConfig.enabled ? 'checked' : '' %>>
+                    <label class="form-check-label" for="starboardEnabled">Enable</label>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="starboardChannel" class="form-label">Starboard Channel</label>
+                <select class="form-select" id="starboardChannel" name="channelId">
+                    <option value="">Select a channel</option>
                     <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>" <%= (starboardConfig && starboardConfig.channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
-                    <% }); %>
+                        <option value="<%= channel.id %>" <%= starboardConfig && starboardConfig.channel_id === channel.id ? 'selected' : '' %> >#<%= channel.name %></option>
+                    <% }) %>
                 </select>
             </div>
-
             <div class="mb-3">
-                <label for="star-threshold" class="form-label">Star Threshold</label>
-                <input type="number" class="form-control" name="star_threshold" id="star-threshold" value="<%= (starboardConfig && starboardConfig.star_threshold) ? starboardConfig.star_threshold : 3 %>" min="1">
-                <div class="form-text">The number of ⭐ reactions required to post a message.</div>
+                <label for="starboardThreshold" class="form-label">Star Threshold</label>
+                <input type="number" class="form-control" id="starboardThreshold" name="threshold" value="<%= starboardConfig ? starboardConfig.threshold : '5' %>" min="1">
+                <div class="form-text">The number of star reactions required to post a message to the starboard.</div>
             </div>
-
-            <div class="d-flex justify-content-end">
-                <button type="submit" class="btn btn-primary">Save Settings</button>
-            </div>
+            <button type="submit" class="btn btn-primary">Save Starboard Settings</button>
         </form>
     </div>
 </div>

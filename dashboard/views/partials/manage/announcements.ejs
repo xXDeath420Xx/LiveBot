@@ -1,0 +1,41 @@
+<form id="announcement-settings-form">
+    <h4><i class="fas fa-bullhorn me-2"></i>Announcement Settings</h4>
+    <p class="text-muted">Customize the message that is sent when a streamer goes live.</p>
+    <hr class="my-4">
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="mb-3">
+                <label for="announcement-channel" class="form-label">Announcement Channel</label>
+                <select class="form-select" id="announcement-channel" name="announcement_channel_id">
+                    <option value="">None</option>
+                    <% guild.channels.cache.filter(c => c.type === 0).forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= (settings && settings.announcement_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="announcement-message" class="form-label">Announcement Message</label>
+                <textarea class="form-control" id="announcement-message" name="announcement_message" rows="5"><%= settings.announcement_message || '' %></textarea>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="p-3 rounded" style="background-color: var(--background-tertiary);">
+                <h6 class="mb-3"><i class="fas fa-code me-2"></i>Available Variables</h6>
+                <ul class="list-unstyled small">
+                    <li><code>{streamer}</code> - Streamer's name</li>
+                    <li><code>{platform}</code> - Streaming platform (Twitch, etc.)</li>
+                    <li><code>{game}</code> - Game being played</li>
+                    <li><code>{url}</code> - Link to the stream</li>
+                    <li><code>{everyone}</code> - Pings @everyone</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end mt-4">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Changes</button>
+    </div>
+</form>

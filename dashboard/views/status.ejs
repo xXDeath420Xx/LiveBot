@@ -59,7 +59,7 @@
         </div>
     </div>
 </main>
-<%- include('partials/footer') %>
+
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const isAuthenticated = <%- user ? 'true' : 'false' %>;
@@ -228,5 +228,6 @@
         setInterval(fetchData, 30000);
     });
 </script>
+<%- include('partials/footer') %>
 </body>
 </html>

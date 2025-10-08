@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
 const { endGiveaway } = require('../core/giveaway-manager');
+const logger = require('../utils/logger');
 
 // Time string parser (e.g., "10m", "1h", "2d")
 function parseTime(timeStr) {
@@ -87,7 +88,7 @@ module.exports = {
                 await interaction.editReply('Giveaway has been rerolled.');
             }
         } catch (error) {
-            console.error('[Giveaway Command Error]', error);
+            logger.error('[Giveaway Command Error]', error);
             await interaction.editReply('An error occurred while managing the giveaway.');
         }
     },

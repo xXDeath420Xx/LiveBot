@@ -1,60 +1,77 @@
-<div class="content-card">
-    <h4><i class="fas fa-users-cog me-2"></i> Twitch Team Subscriptions</h4>
-    <p class="text-muted">Automatically announce for all members of a Twitch Team.</p>
-
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Twitch Team Name</th>
-                <th>Announcement Channel</th>
-                <th>Live Role</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            <% teamSubscriptions.forEach(team => { %>
-                <tr>
-                    <td><%= team.team_name %></td>
-                    <td>#<%= team.announcement_channel_name %></td>
-                    <td>@<%= team.live_role_name %></td>
-                    <td>
-                        <form action="/manage/<%= guild.id %>/unsubscribe-team" method="POST" class="d-inline">
-                            <input type="hidden" name="teamId" value="<%= team.id %>">
-                            <button type="submit" class="btn btn-sm btn-danger">Unsubscribe</button>
-                        </form>
-                    </td>
-                </tr>
-            <% }); %>
-        </tbody>
-    </table>
-
-    <hr class="my-4">
-
-    <h5>Subscribe to a New Team</h5>
-    <form action="/manage/<%= guild.id %>/subscribe-team" method="POST">
-        <div class="row">
-            <div class="col-md-4 mb-3">
-                <label class="form-label">Twitch Team Name (URL Slug)</label>
-                <input type="text" class="form-control" name="team_name" placeholder="e.g., 'OTK'" required>
-            </div>
-            <div class="col-md-4 mb-3">
-                <label class="form-label">Announcement Channel</label>
-                <select class="form-select" name="announcement_channel_id" required>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>">#<%= channel.name %></option>
-                    <% }); %>
-                </select>
-            </div>
-            <div class="col-md-4 mb-3">
-                <label class="form-label">Live Role (Optional)</label>
-                <select class="form-select" name="live_role_id">
-                    <option value="">None</option>
-                    <% roles.forEach(role => { %>
-                        <option value="<%= role.id %>">@<%= role.name %></option>
-                    <% }); %>
-                </select>
-            </div>
-        </div>
-        <button type="submit" class="btn btn-success">Subscribe</button>
-    </form>
+<div class="row">
+    <div class="col-12">
+        <h3>Teams</h3>
+        <p class="text-muted">Manage streaming teams and subscriptions for your server.</p>
+    </div>
 </div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h4 class="card-title mb-0">Team Subscriptions</h4>
+                <p class="card-subtitle text-muted mt-1">Manage the streaming teams your server is subscribed to.</p>
+            </div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTeamModal"><i class="fas fa-plus me-2"></i>Add Team</button>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th>Team Name</th>
+                    <th>Announcement Channel</th>
+                    <th>Live Role</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                <% if (teamSubscriptions && teamSubscriptions.length > 0) { %>
+                    <% teamSubscriptions.forEach(team => { %>
+                        <tr>
+                            <td><%= team.team_name %></td>
+                            <td><%= team.announcement_channel_name %></td>
+                            <td><%= team.live_role_name %></td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-secondary edit-team-btn" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#teamSettingsModal"
+                                        data-team='<%= JSON.stringify(team) %>'>Edit</button>
+                                <form action="/manage/<%= guild.id %>/delete-team" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to unsubscribe from this team? This will remove all associated streamers.');">
+                                    <input type="hidden" name="teamId" value="<%= team.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">Unsubscribe</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }) %>
+                <% } else { %>
+                    <tr>
+                        <td colspan="4" class="text-center">This server is not subscribed to any teams.</td>
+                    </tr>
+                <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<%- include('../manage-team-modal.ejs', { guild, channels, roles }) %>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const teamSettingsModal = document.getElementById('teamSettingsModal');
+        if (teamSettingsModal) {
+            teamSettingsModal.addEventListener('show.bs.modal', event => {
+                const button = event.relatedTarget;
+                const team = JSON.parse(button.getAttribute('data-team'));
+                
+                document.getElementById('modal-team-name').textContent = team.team_name;
+                document.getElementById('edit-team-subscription-id').value = team.id;
+                document.getElementById('edit-team-channel-id').value = team.announcement_channel_id || '';
+                document.getElementById('edit-team-live-role-id').value = team.live_role_id || '';
+                document.getElementById('edit-team-webhook-name').value = team.webhook_name || '';
+                document.getElementById('edit-team-webhook-avatar-url').value = team.webhook_avatar_url || '';
+            });
+        }
+    });
+</script>

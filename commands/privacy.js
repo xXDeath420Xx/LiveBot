@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -23,9 +24,10 @@ module.exports = {
                 'INSERT INTO user_preferences (discord_user_id, privacy_level) VALUES (?, ?) ON DUPLICATE KEY UPDATE privacy_level = VALUES(privacy_level)',
                 [userId, privacyLevel]
             );
-            await interaction.reply({ content: `Your privacy preference has been set to **${privacyLevel}**.`, ephemeral: true });
+            await interaction.reply({ content: `Your privacy preference has been set to **${privacyLevel}**.`,
+             ephemeral: true });
         } catch (error) {
-            console.error("Error setting user privacy preference:", error);
+            logger.error("Error setting user privacy preference:", error);
             await interaction.reply({ content: 'There was an error saving your preference.', ephemeral: true });
         }
     },

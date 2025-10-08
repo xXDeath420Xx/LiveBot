@@ -2,6 +2,7 @@ const {SlashCommandBuilder, ChannelType, PermissionsBitField, EmbedBuilder} = re
 const db = require("../utils/db");
 const {getAvatarUploadChannel} = require("../utils/channel-helpers.js");
 const {logAuditEvent} = require("../utils/audit-log.js");
+const logger = require("../utils/logger"); // Assuming logger is available
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -27,16 +28,21 @@ module.exports = {
     const focusedOption = interaction.options.getFocused(true);
     if (interaction.options.getSubcommand() === "streamer" && focusedOption.name === "username") {
       const focusedValue = focusedOption.value;
-      const [streamers] = await db.execute(
-        `SELECT DISTINCT s.username
-         FROM streamers s
-                  JOIN subscriptions sub ON s.streamer_id = sub.streamer_id
-         WHERE sub.guild_id = ?
-           AND s.username LIKE ?
-         LIMIT 25`,
-        [interaction.guild.id, `${focusedValue}%`]
-      );
-      await interaction.respond(streamers.map(s => ({name: s.username, value: s.username})));
+      try {
+        const [streamers] = await db.execute(
+          `SELECT DISTINCT s.username
+           FROM streamers s
+                    JOIN subscriptions sub ON s.streamer_id = sub.streamer_id
+           WHERE sub.guild_id = ?
+             AND s.username LIKE ?
+           LIMIT 25`,
+          [interaction.guild.id, `${focusedValue}%`]
+        );
+        await interaction.respond(streamers.map(s => ({name: s.username, value: s.username})));
+      } catch (error) {
+        logger.error('[Config Command Autocomplete Error]', error);
+        await interaction.respond([]); // Respond with an empty array on error
+      }
     }
   },
 

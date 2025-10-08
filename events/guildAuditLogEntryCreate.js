@@ -1,13 +1,12 @@
 const { Events } = require('discord.js');
-const { processAuditLog } = require('../core/core/anti-nuke');
+const antiNuke = require('../core/anti-nuke'); // Make sure this path is correct
 
 module.exports = {
     name: Events.GuildAuditLogEntryCreate,
-    async execute(auditLog, guild) {
-        try {
-            await processAuditLog(auditLog, guild);
-        } catch (error) {
-            logger.error(`Error processing audit log for guild ${guild.id}:`, error);
+    async execute(auditLogEntry, guild) {
+        // The antiNuke module and its processAuditLog function are now correctly referenced
+        if (antiNuke && typeof antiNuke.processAuditLog === 'function') {
+            await antiNuke.processAuditLog(auditLogEntry, guild);
         }
     },
 };

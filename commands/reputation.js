@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 const REP_COOLDOWN_HOURS = 24;
 
@@ -88,7 +89,7 @@ module.exports = {
                 await interaction.editReply({ embeds: [embed] });
             }
         } catch (error) {
-            console.error('[Reputation Command Error]', error);
+            logger.error('[Reputation Command Error]', error);
             await interaction.editReply({ content: 'An error occurred while handling reputation.', ephemeral: true });
         }
     },

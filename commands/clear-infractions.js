@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
 const { logInfraction } = require('../core/moderation-manager');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -42,7 +43,7 @@ module.exports = {
             }
 
         } catch (error) {
-            console.error('[Clear Infractions Command Error]', error);
+            logger.error('[Clear Infractions Command Error]', error);
             await interaction.editReply("An error occurred while trying to clear this user's history.");
         }
     },

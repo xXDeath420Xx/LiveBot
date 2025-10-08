@@ -31,7 +31,7 @@ body, html {
 .container {
     padding: 2rem 4rem;
     max-width: 1200px;
-    margin: 4rem auto;
+    margin: 0 auto; /* Centered container */
 }
 
 a {
@@ -104,18 +104,16 @@ a:hover {
 
 .hero {
     text-align: center;
-    padding: 4rem 1rem;
+    padding: 6rem 1rem;
     background-color: var(--background-secondary);
-    border-radius: 8px;
-    margin-bottom: 3rem;
-    border: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .hero-logo {
     width: 128px;
     height: 128px;
     border-radius: 50%;
-    margin-bottom: 1rem;
+    margin-bottom: 1.5rem;
 }
 
 .hero h1 {
@@ -129,7 +127,7 @@ a:hover {
     font-size: 1.2rem;
     color: var(--text-muted);
     max-width: 600px;
-    margin: 0 auto 1.5rem;
+    margin: 0 auto 2rem;
 }
 
 .hero-buttons {
@@ -146,18 +144,26 @@ a:hover {
 
 .features {
     text-align: center;
+    padding: 4rem 1rem;
+}
+
+.features h2 {
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: var(--header-primary);
+    margin-bottom: 3rem;
 }
 
 .features-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
     text-align: left;
 }
 
 .feature-card {
     background-color: var(--background-secondary);
-    padding: 2rem;
+    padding: 2.5rem;
     border-radius: 8px;
     border: 1px solid var(--border-color);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -165,21 +171,22 @@ a:hover {
 
 .feature-card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }
 
 .feature-card h3 {
     margin-top: 0;
     color: var(--header-primary);
-    font-size: 1.25rem;
+    font-size: 1.5rem;
     font-weight: 700;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 1rem;
 }
 
 .feature-card p, .feature-card li {
     color: var(--text-muted);
+    font-size: 1rem;
 }
 
 .feature-card code {

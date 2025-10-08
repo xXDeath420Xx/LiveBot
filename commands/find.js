@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require('discord.js');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -77,7 +78,7 @@ module.exports = {
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('[Find Command Error]', error);
+            logger.error('[Find Command Error]', error);
             await interaction.editReply('An error occurred while performing the search.');
         }
     },

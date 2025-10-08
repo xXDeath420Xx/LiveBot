@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 // Basic time string parser (e.g., "10m", "1h", "2d")
 function parseTime(timeStr) {
@@ -85,8 +86,8 @@ module.exports = {
                     .setTitle('Your Active Reminders')
                     .setColor('#5865F2')
                     .setDescription(reminders.map(r => 
-                        `**ID: ${r.id}** - <t:${Math.floor(new Date(r.remind_at).getTime() / 1000)}:R>\\n> ${r.message.substring(0, 100)}${r.is_dm ? ' (in DM)' : ''}`
-                    ).join('\\n\\n'));
+                        `**ID: ${r.id}** - <t:${Math.floor(new Date(r.remind_at).getTime() / 1000)}:R>\n> ${r.message.substring(0, 100)}${r.is_dm ? ' (in DM)' : ''}`
+                    ).join('\n\n'));
                 
                 await interaction.editReply({ embeds: [embed] });
 
@@ -101,7 +102,7 @@ module.exports = {
                 }
             }
         } catch (error) {
-            console.error('[Remind Command Error]', error);
+            logger.error('[Remind Command Error]', error);
             await interaction.editReply('An error occurred while managing your reminders.');
         }
     },

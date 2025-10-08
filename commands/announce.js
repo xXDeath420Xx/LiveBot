@@ -35,8 +35,13 @@ module.exports = {
         const channel = interaction.options.getChannel('channel');
         const message = interaction.options.getString('message');
         const title = interaction.options.getString('title');
-        const color = interaction.options.getString('color');
+        let color = interaction.options.getString('color');
         const mentionRole = interaction.options.getRole('mention');
+
+        // Validate color input
+        if (color && !/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
+            return interaction.editReply({ content: '❌ Invalid color format. Please use a valid hex color code (e.g., #3498DB).', ephemeral: true });
+        }
 
         try {
             const announcementContent = {
@@ -48,7 +53,7 @@ module.exports = {
                 const embed = new EmbedBuilder()
                     .setTitle(title)
                     .setDescription(message)
-                    .setColor(color || '#5865F2')
+                    .setColor(color || '#5865F2') // Default color if none provided or invalid
                     .setTimestamp();
                 
                 announcementContent.embeds = [embed];

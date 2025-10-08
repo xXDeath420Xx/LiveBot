@@ -1,46 +1,130 @@
-<div class="plugin-card">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-file-alt me-2"></i> Audit Logging</h4>
+<% 
+    const currentSettings = settings || {}; 
+    const enabledLogs = JSON.parse(currentSettings.enabled_logs || '[]');
+    const categoryChannels = JSON.parse(currentSettings.log_categories || '{}');
+    const logCategories = [
+        { key: 'messageDelete', label: 'Message Deletions' },
+        { key: 'messageUpdate', label: 'Message Edits' },
+        { key: 'memberUpdate', label: 'Member Updates (Roles, Nicknames)' },
+        { key: 'voiceUpdate', label: 'Voice Channel Updates' },
+        { key: 'channelUpdate', label: 'Channel Create/Delete' },
+        { key: 'roleUpdate', label: 'Role Create/Delete' },
+        { key: 'moderation', label: 'Moderation Actions' },
+        { key: 'join-gate', label: 'Join Gate Actions' },
+        { key: 'system', label: 'Bot System Messages' },
+        { key: 'xp', label: 'Level Up/XP Events' },
+        { key: 'giveaway', label: 'Giveaway Events' },
+        { key: 'poll', label: 'Poll Events' },
+        { key: 'starboard', label: 'Starboard Posts' },
+        { key: 'sticky-roles', label: 'Sticky Role Updates' },
+        { key: 'temp-channels', label: 'Temp Channel Events' },
+        { key: 'twitch-schedule', label: 'Twitch Schedule Sync' },
+        { key: 'auto-publisher', label: 'Auto-Publisher' },
+        { key: 'autorole', label: 'Autorole Assignments' },
+        { key: 'tickets', label: 'Ticket Events' },
+        { key: 'backup', label: 'Backup & Restore' },
+        { key: 'team-sync', label: 'Team Sync Events' },
+        { key: 'http', label: 'Dashboard Actions' }
+    ];
+%>
+<div class="row">
+    <div class="col-12">
+        <h3>Logging</h3>
+        <p class="text-muted">Keep a record of important events and actions within your server.</p>
     </div>
-    <div class="plugin-card-body">
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Log Configuration</h4>
+        <p class="card-subtitle mb-3 text-muted">Select a default channel and then override it for specific categories as needed.</p>
         <form action="/manage/<%= guild.id %>/update-logging" method="POST">
-            <p class="text-muted">Select a channel and choose which server events you want the bot to log.</p>
-
             <div class="mb-4">
-                <label for="log-channel" class="form-label">Log Channel</label>
-                <select class="form-select" id="log-channel" name="log_channel_id">
-                    <option value="">-- Disable Logging --</option>
+                <label for="log-channel-id" class="form-label"><strong>Default Log Channel</strong></label>
+                <select class="form-select" id="log-channel-id" name="log_channel_id">
+                    <option value="">Disabled</option>
                     <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>" <%= (logConfig && logConfig.log_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
-                    <% }); %>
+                        <option value="<%= channel.id %>" <%= currentSettings.log_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                    <% }) %>
                 </select>
+                <div class="form-text">Logs for categories set to "Default" will be sent here.</div>
             </div>
 
-            <% const enabledLogs = logConfig && logConfig.enabled_logs ? JSON.parse(logConfig.enabled_logs) : []; %>
-            <div class="row">
-                <div class="col-md-4">
-                    <h5>Messages</h5>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="messageDelete" id="log-msg-del" <%= enabledLogs.includes('messageDelete') ? 'checked' : '' %>><label class="form-check-label" for="log-msg-del">Message Deleted</label></div>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="messageUpdate" id="log-msg-edit" <%= enabledLogs.includes('messageUpdate') ? 'checked' : '' %>><label class="form-check-label" for="log-msg-edit">Message Edited</label></div>
-                </div>
-                <div class="col-md-4">
-                    <h5>Members</h5>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="memberRoleUpdate" id="log-member-role" <%= enabledLogs.includes('memberRoleUpdate') ? 'checked' : '' %>><label class="form-check-label" for="log-member-role">Roles Updated</label></div>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="memberNicknameUpdate" id="log-member-nick" <%= enabledLogs.includes('memberNicknameUpdate') ? 'checked' : '' %>><label class="form-check-label" for="log-member-nick">Nickname Changed</label></div>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="voiceStateUpdate" id="log-voice" <%= enabledLogs.includes('voiceStateUpdate') ? 'checked' : '' %>><label class="form-check-label" for="log-voice">Voice Channel Updates</label></div>
-                </div>
-                <div class="col-md-4">
-                    <h5>Server</h5>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="channelCreate" id="log-chan-create" <%= enabledLogs.includes('channelCreate') ? 'checked' : '' %>><label class="form-check-label" for="log-chan-create">Channel Created</label></div>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="channelDelete" id="log-chan-del" <%= enabledLogs.includes('channelDelete') ? 'checked' : '' %>><label class="form-check-label" for="log-chan-del">Channel Deleted</label></div>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="roleCreate" id="log-role-create" <%= enabledLogs.includes('roleCreate') ? 'checked' : '' %>><label class="form-check-label" for="log-role-create">Role Created</label></div>
-                    <div class="form-check"><input class="form-check-input" type="checkbox" name="enabled_logs" value="roleDelete" id="log-role-del" <%= enabledLogs.includes('roleDelete') ? 'checked' : '' %>><label class="form-check-label" for="log-role-del">Role Deleted</label></div>
-                </div>
-            </div>
+            <hr>
 
-            <div class="d-flex justify-content-end mt-4">
-                <button type="submit" class="btn btn-primary">Save Logging Settings</button>
+            <h5 class="mt-4">Categorized Logging</h5>
+            <p class="text-muted">Assign specific channels to different log categories. Check the box to enable logging for that category.</p>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Log Category</th>
+                            <th class="text-center">Enable</th>
+                            <th>Channel Override</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% logCategories.forEach(cat => { %>
+                            <tr>
+                                <td><label for="log-<%= cat.key %>" class="form-check-label"><%= cat.label %></label></td>
+                                <td class="text-center">
+                                    <div class="form-check form-switch d-inline-block">
+                                        <input class="form-check-input" type="checkbox" name="enabled_logs" value="<%= cat.key %>" id="log-<%= cat.key %>" <%= enabledLogs.includes(cat.key) ? 'checked' : '' %>>
+                                    </div>
+                                </td>
+                                <td>
+                                    <select class="form-select form-select-sm" name="log_categories[<%= cat.key %>]">
+                                        <option value="">Default</option>
+                                        <% channels.forEach(channel => { %>
+                                            <option value="<%= channel.id %>" <%= categoryChannels[cat.key] === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                                        <% }) %>
+                                    </select>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
             </div>
+            
+            <button type="submit" class="btn btn-primary mt-3">Save Log Configuration</button>
         </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Recent Action Logs</h4>
+        <p class="card-subtitle mb-3 text-muted">A feed of the latest logged actions in the server.</p>
+        <div class="table-responsive" style="max-height: 400px;">
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th>Event</th>
+                        <th>User</th>
+                        <th>Target</th>
+                        <th>Details</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <% if (actionLogs && actionLogs.length > 0) { %>
+                    <% actionLogs.forEach(log => { %>
+                        <tr>
+                            <td><span class="badge bg-secondary"><%= log.event_type %></span></td>
+                            <td><%= log.user_id %></td>
+                            <td><%= log.target_id || 'N/A' %></td>
+                            <td><pre class="mb-0"><%= JSON.stringify(JSON.parse(log.details), null, 2) %></pre></td>
+                            <td><small><%= new Date(log.timestamp).toLocaleString() %></small></td>
+                        </tr>
+                    <% }) %>
+                <% } else { %>
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No recent action logs.</td>
+                    </tr>
+                <% } %>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>

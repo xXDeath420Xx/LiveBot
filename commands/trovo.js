@@ -2,6 +2,7 @@ const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ChannelType } = 
 const db = require("../utils/db");
 const { getTrovoUser } = require("../utils/api_checks.js");
 const { logAuditEvent } = require("../utils/audit-log.js");
+const logger = require("../utils/logger");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -26,15 +27,20 @@ module.exports = {
     async autocomplete(interaction) {
         if (interaction.options.getSubcommand() === "remove") {
             const focusedValue = interaction.options.getFocused();
-            const [subscriptions] = await db.execute(
-                `SELECT s.username
-                 FROM subscriptions sub
-                 JOIN streamers s ON sub.streamer_id = s.streamer_id
-                 WHERE sub.guild_id = ? AND s.platform = 'trovo'`,
-                [interaction.guild.id]
-            );
-            const filtered = subscriptions.filter(sub => sub.username.toLowerCase().includes(focusedValue.toLowerCase()));
-            await interaction.respond(filtered.map(sub => ({ name: sub.username, value: sub.username })));
+            try {
+                const [subscriptions] = await db.execute(
+                    `SELECT s.username
+                     FROM subscriptions sub
+                     JOIN streamers s ON sub.streamer_id = s.streamer_id
+                     WHERE sub.guild_id = ? AND s.platform = 'trovo'`,
+                    [interaction.guild.id]
+                );
+                const filtered = subscriptions.filter(sub => sub.username.toLowerCase().includes(focusedValue.toLowerCase()));
+                await interaction.respond(filtered.map(sub => ({ name: sub.username, value: sub.username })));
+            } catch (error) {
+                logger.error("[Trovo Command Autocomplete Error]", error);
+                await interaction.respond([]); // Respond with an empty array on error
+            }
         }
     },
 
@@ -95,7 +101,7 @@ module.exports = {
                 }
             }
         } catch (error) {
-            console.error("[Trovo Command Error]", error);
+            logger.error("[Trovo Command Error]", error);
             await interaction.editReply({ content: "An error occurred while processing your request." });
         }
     },

@@ -1,35 +1,97 @@
-<div class="plugin-card">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-robot me-2"></i> Automod Rules</h4>
+<div class="row">
+    <div class="col-12">
+        <h3>AutoMod</h3>
+        <p class="text-muted">Set up rules to automatically moderate your server's content.</p>
     </div>
-    <div class="plugin-card-body">
-        <p class="text-muted">Create rules to automatically moderate your server. Rules are checked in order. Add ignored roles/channels to a rule by editing it.</p>
-        
-        <table class="table">
-            <thead>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Add New Rule</h4>
+        <p class="card-subtitle mb-3 text-muted">Create a new rule for the AutoMod system.</p>
+        <form action="/manage/<%= guild.id %>/add-automod-rule" method="POST">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Filter Type</label>
+                    <select name="filter_type" id="filter-type-select" class="form-select" required>
+                        <option value="bannedWords">Banned Words</option>
+                        <option value="massMention">Mass Mention</option>
+                        <option value="allCaps">All Caps</option>
+                        <option value="antiSpam">Anti-Spam</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Action</label>
+                    <select name="action" id="action-select" class="form-select" required>
+                        <option value="delete">Delete Message</option>
+                        <option value="warn">Warn Member</option>
+                        <option value="mute">Mute Member</option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="mute-duration-container" style="display: none;">
+                    <label class="form-label">Mute Duration (minutes)</label>
+                    <input type="number" name="action_duration_minutes" class="form-control" min="1">
+                </div>
+            </div>
+
+            <div id="config-container" class="mt-3">
+                <!-- Banned Words Config -->
+                <div id="bannedWords-config">
+                    <label class="form-label">Banned Words (comma-separated)</label>
+                    <textarea name="config_banned_words" class="form-control" rows="3"></textarea>
+                </div>
+
+                <!-- Mass Mention Config -->
+                <div id="massMention-config" style="display: none;">
+                    <label class="form-label">Mention Limit</label>
+                    <input type="number" name="config_massMention_limit" class="form-control" value="5" min="1">
+                </div>
+
+                <!-- All Caps Config -->
+                <div id="allCaps-config" style="display: none;">
+                    <label class="form-label">Capitalization Percentage Limit (%)</label>
+                    <input type="number" name="config_allCaps_limit" class="form-control" value="70" min="1" max="100">
+                </div>
+
+                <!-- Anti-Spam Config -->
+                <div id="antiSpam-config" style="display: none;" class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Message Limit</label>
+                        <input type="number" name="config_antiSpam_message_limit" class="form-control" value="5" min="2">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Time Period (seconds)</label>
+                        <input type="number" name="config_antiSpam_time_period" class="form-control" value="10" min="1">
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary mt-3">Add Rule</button>
+        </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Existing Rules</h4>
+        <p class="card-subtitle mb-3 text-muted">Manage current automod rules.</p>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
                 <tr>
-                    <th>Rule</th>
+                    <th>Filter Type</th>
+                    <th>Config</th>
                     <th>Action</th>
-                    <th>Configuration</th>
                     <th>Actions</th>
                 </tr>
-            </thead>
-            <tbody>
+                </thead>
+                <tbody>
                 <% if (automodRules && automodRules.length > 0) { %>
                     <% automodRules.forEach(rule => { %>
                         <tr>
-                            <td><strong><%= rule.filter_type.replace(/([A-Z])/g, ' $1').trim() %></strong></td>
-                            <td><span class="badge bg-secondary"><%= rule.action %><%= rule.action_duration_minutes ? ` (${rule.action_duration_minutes}m)` : '' %></span></td>
-                            <td>
-                                <% if (rule.config) { %>
-                                    <% const config = JSON.parse(rule.config); %>
-                                    <% if (config.banned_words) { %>
-                                        <small class="text-muted">Words: <%= config.banned_words.slice(0, 3).join(', ') %><% if (config.banned_words.length > 3) { %>...<% } %></small>
-                                    <% } else if (config.limit) { %>
-                                        <small class="text-muted">Limit: <%= config.limit %></small>
-                                    <% } %>
-                                <% } %>
-                            </td>
+                            <td><span class="badge bg-secondary"><%= rule.filter_type %></span></td>
+                            <td><pre class="mb-0"><code><%= JSON.stringify(JSON.parse(rule.config), null, 2) %></code></pre></td>
+                            <td><span class="badge bg-info"><%= rule.action %></span></td>
                             <td>
                                 <form action="/manage/<%= guild.id %>/delete-automod-rule" method="POST" class="d-inline">
                                     <input type="hidden" name="ruleId" value="<%= rule.id %>">
@@ -37,91 +99,49 @@
                                 </form>
                             </td>
                         </tr>
-                    <% }); %>
+                    <% }) %>
                 <% } else { %>
-                    <tr><td colspan="4" class="text-center text-muted">No automod rules are set up.</td></tr>
+                    <tr>
+                        <td colspan="4" class="text-center">No Automod rules configured.</td>
+                    </tr>
                 <% } %>
-            </tbody>
-        </table>
-
-        <hr class="my-4">
-
-        <h5>Add New Automod Rule</h5>
-        <form action="/manage/<%= guild.id %>/add-automod-rule" method="POST">
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">If a user...</label>
-                    <select class="form-select" name="filter_type" id="filter-type-select">
-                        <option value="bannedWords">Says a Banned Word</option>
-                        <option value="discordInvites">Posts a Discord Invite</option>
-                        <option value="massMention">Mentions too many users</option>
-                        <option value="allCaps">Uses excessive caps</option>
-                        <option value="antiSpam">Sends messages too quickly (Spam)</option>
-                    </select>
-                </div>
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Then take this action...</label>
-                    <select class="form-select" name="action" id="action-select">
-                        <option value="delete">Delete Message</option>
-                        <option value="warn">Warn User</option>
-                        <option value="mute">Mute User</option>
-                    </select>
-                </div>
-            </div>
-
-            <div id="config-bannedWords" class="mb-3 config-container">
-                <label class="form-label">Banned Words (comma-separated)</label>
-                <textarea class="form-control" name="config_banned_words" rows="2"></textarea>
-            </div>
-            <div id="config-massMention" class="mb-3 config-container" style="display: none;">
-                <label class="form-label">Mention Limit</label>
-                <input type="number" class="form-control" name="config_massMention_limit" value="5" min="2">
-            </div>
-            <div id="config-allCaps" class="mb-3 config-container" style="display: none;">
-                <label class="form-label">Caps Percentage Threshold (e.g., 70)</label>
-                <input type="number" class="form-control" name="config_allCaps_limit" value="70" min="50" max="100">
-            </div>
-            <div id="config-antiSpam" class="row mb-3 config-container" style="display: none;">
-                <div class="col-md-6">
-                    <label class="form-label">Message Count</label>
-                    <input type="number" class="form-control" name="config_antiSpam_message_limit" value="5" min="2">
-                    <div class="form-text">Number of messages to trigger the action.</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Time Period (Seconds)</label>
-                    <input type="number" class="form-control" name="config_antiSpam_time_period" value="10" min="2">
-                    <div class="form-text">The window in which the messages must occur.</div>
-                </div>
-            </div>
-
-            <div class="mb-3" id="duration-container" style="display: none;">
-                <label class="form-label">Mute Duration (Minutes)</label>
-                <input type="number" class="form-control" name="action_duration_minutes" value="10" min="1">
-            </div>
-
-            <button type="submit" class="btn btn-success">Add Rule</button>
-        </form>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 <script>
-    const filterSelect = document.getElementById('filter-type-select');
-    const actionSelect = document.getElementById('action-select');
-    const durationContainer = document.getElementById('duration-container');
-    const configContainers = document.querySelectorAll('.config-container');
+    document.addEventListener('DOMContentLoaded', () => {
+        const filterTypeSelect = document.getElementById('filter-type-select');
+        const actionSelect = document.getElementById('action-select');
+        const muteDurationContainer = document.getElementById('mute-duration-container');
+        
+        const configContainers = {
+            bannedWords: document.getElementById('bannedWords-config'),
+            massMention: document.getElementById('massMention-config'),
+            allCaps: document.getElementById('allCaps-config'),
+            antiSpam: document.getElementById('antiSpam-config')
+        };
 
-    function toggleOptions() {
-        // Toggle action duration
-        durationContainer.style.display = actionSelect.value === 'mute' ? 'block' : 'none';
+        function toggleConfig() {
+            const selectedType = filterTypeSelect.value;
+            Object.values(configContainers).forEach(c => c.style.display = 'none');
+            if (configContainers[selectedType]) {
+                configContainers[selectedType].style.display = 'block';
+                 if (selectedType === 'antiSpam') configContainers[selectedType].style.display = 'flex';
+            }
+        }
 
-        // Toggle config containers
-        const selectedFilter = filterSelect.value;
-        configContainers.forEach(container => {
-            container.style.display = container.id.includes(selectedFilter) ? 'block' : 'none';
-        });
-    }
+        function toggleMuteDuration() {
+            muteDurationContainer.style.display = actionSelect.value === 'mute' ? 'block' : 'none';
+        }
 
-    filterSelect.addEventListener('change', toggleOptions);
-    actionSelect.addEventListener('change', toggleOptions);
-    document.addEventListener('DOMContentLoaded', toggleOptions);
+        filterTypeSelect.addEventListener('change', toggleConfig);
+        actionSelect.addEventListener('change', toggleMuteDuration);
+
+        // Initial setup
+        toggleConfig();
+        toggleMuteDuration();
+    });
 </script>

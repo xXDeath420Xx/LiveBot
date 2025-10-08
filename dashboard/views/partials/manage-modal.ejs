@@ -1,35 +1,24 @@
-<div class="modal fade" id="streamerSettingsModal" tabindex="-1" aria-labelledby="streamerSettingsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+<div class="modal fade" id="<%= locals.modalId || 'manageModal' %>" tabindex="-1" aria-labelledby="<%= locals.modalId || 'manageModal' %>Label" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <form action="/manage/<%= guild.id %>/edit-consolidated-streamer" method="POST" enctype="multipart/form-data">
+            <form id="<%= locals.modalId || 'manageModal' %>-form">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="streamerSettingsModalLabel">Edit Settings for <span id="modal-streamer-name"></span></h5>
+                    <h5 class="modal-title" id="<%= locals.modalId || 'manageModal' %>Label"><%= locals.title || 'Manage Item' %></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" name="consolidated_streamer_id" id="edit-consolidated-streamer-id">
-                    
-                    <h6><i class="fas fa-link fa-fw me-2"></i>Account Linking</h6>
-                    <p class="small text-muted">Link accounts to merge announcements when live on multiple platforms.</p>
-                    <div class="mb-3">
-                        <label class="form-label">Linked Discord User ID</label>
-                        <input type="text" class="form-control" id="edit-discord-user-id" name="discord_user_id" placeholder="Optional User ID">
+                    <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="streamer-username" name="username" placeholder="Enter streamer's username" required>
+                        <label for="streamer-username">Streamer Username</label>
                     </div>
-                    <hr class="my-4">
-
-                    <h6><i class="fas fa-globe fa-fw me-2"></i>Platforms</h6>
-                    <div id="modal-platforms-container" class="mb-4">
-                        <!-- Dynamic platform fields will be injected here by JS -->
-                        <p class="text-muted">Loading platforms...</p>
+                    <div class="form-floating">
+                        <select class="form-select" id="streamer-platform" name="platform">
+                            <option value="twitch" selected>Twitch</option>
+                            <option value="youtube">YouTube</option>
+                            <option value="kick">Kick</option>
+                        </select>
+                        <label for="streamer-platform">Platform</label>
                     </div>
-                    <hr class="my-4">
-
-                    <h6><i class="fas fa-bullhorn fa-fw me-2"></i>Subscriptions & Customization</h6>
-                    <div id="modal-subscriptions-container">
-                        <!-- Dynamic subscription fields will be injected here by JS -->
-                        <p class="text-muted">Loading subscriptions...</p>
-                    </div>
-
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -36,7 +37,7 @@ module.exports = {
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('[ServerStats Command Error]', error);
+            logger.error('[ServerStats Command Error]', error);
             await interaction.editReply('An error occurred while fetching server statistics.');
         }
     },

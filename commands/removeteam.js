@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
 const apiChecks = require('../utils/api_checks');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -49,6 +50,8 @@ module.exports = {
             const streamerIdsToRemove = streamers.map(s => s.streamer_id);
             const subPlaceholders = streamerIdsToRemove.map(() => '?').join(',');
 
+            await db.query('START TRANSACTION');
+
             const [announcementsToPurge] = await db.execute(
                 `SELECT message_id, channel_id FROM announcements WHERE guild_id = ? AND channel_id = ? AND streamer_id IN (${subPlaceholders})`,
                 [guildId, channel.id, ...streamerIdsToRemove]
@@ -57,10 +60,10 @@ module.exports = {
             if (announcementsToPurge.length > 0) {
                 const purgePromises = announcementsToPurge.map(announcement => {
                     return interaction.client.channels.fetch(announcement.channel_id)
-                        .then(announcementChannel => announcementChannel.messages.delete(announcement.message_id))
-                        .catch(() => {});
+                        .then(announcementChannel => announcementChannel?.messages.delete(announcement.message_id))
+                        .catch(e => logger.warn(`[RemoveTeam] Failed to delete message ${announcement.message_id} in channel ${announcement.channel_id}: ${e.message}`));
                 });
-                await Promise.all(purgePromises);
+                await Promise.allSettled(purgePromises);
                 purgedMessageCount = announcementsToPurge.length;
             }
 
@@ -69,8 +72,10 @@ module.exports = {
                 [guildId, channel.id, ...streamerIdsToRemove]
             );
 
+            await db.query('COMMIT');
+
             const embed = new EmbedBuilder()
-                .setTitle(`Twitch Team Removal Report for "${teamName}""`)
+                .setTitle(`Twitch Team Removal Report for "${teamName}"`)
                 .setDescription(`Successfully processed team removal from ${channel}.`)
                 .setColor('#ED4245')
                 .addFields(
@@ -82,8 +87,9 @@ module.exports = {
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('RemoveTeam Command Error:', error);
-            await interaction.editReply({ content: 'A critical error occurred while executing the command.' });
+            await db.query('ROLLBACK');
+            logger.error('[RemoveTeam Command Error]', error);
+            await interaction.editReply({ content: 'A critical error occurred while executing the command. The operation has been rolled back.' });
         }
     },
 };

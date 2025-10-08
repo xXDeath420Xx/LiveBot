@@ -4,46 +4,46 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - CertiFried Announcer</title>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/dashboard-style.css?v=2.1.0">
+    <link rel="stylesheet" href="/css/dashboard-style.css">
 </head>
 <body>
 
 <%- include('partials/header', { user: user }) %>
 
-<div class="container mt-5">
-    <div class="row">
-        <div class="col-lg-8 mx-auto">
-            <div class="text-center mb-5">
-                <img src="<%= user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/${user.discriminator % 5}.png` %>" alt="User Avatar" class="rounded-circle mb-3" width="128" height="128">
-                <h1>Welcome, <%= user.username %>!</h1>
-                <p class="lead text-muted">Select a server to manage.</p>
-            </div>
-
-            <div class="list-group">
-                <% manageableGuilds.forEach(guild => { %>
-                    <a href="/manage/<%= guild.id %>" class="list-group-item list-group-item-action d-flex align-items-center">
-                        <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="Guild Icon" width="60" height="60" class="rounded me-3">
-                        <div class="flex-grow-1">
-                            <h5 class="mb-1"><%= guild.name %></h5>
-                            <small class="text-muted">You have permission to manage this server.</small>
-                        </div>
-                        <i class="fas fa-chevron-right"></i>
-                    </a>
-                <% }); %>
-                <% if (manageableGuilds.length === 0) { %>
-                    <div class="alert alert-warning text-center">
-                        No manageable servers found. Make sure you have the "Manage Server" permission on a server where the bot is present.
-                    </div>
-                <% } %>
-            </div>
-             <div class="text-center mt-4">
-                <a href="https://discord.com/api/oauth2/authorize?client_id=<%= process.env.DISCORD_CLIENT_ID %>&permissions=8&scope=bot+applications.commands" class="btn btn-outline-primary" target="_blank"><i class="fas fa-plus me-2"></i>Invite Bot to a New Server</a>
-            </div>
-        </div>
+<main class="page-container">
+    <div class="text-center mb-5">
+        <img src="<%= user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : `https://cdn.discordapp.com/embed/avatars/${user.discriminator % 5}.png` %>" alt="User Avatar" class="rounded-circle mb-3" width="128" height="128">
+        <h1>Welcome, <%= user.username %>!</h1>
+        <p class="lead text-muted">Select a server to manage.</p>
     </div>
-</div>
+
+    <div class="row g-4">
+        <% manageableGuilds.forEach(guild => { %>
+            <div class="col-md-6 col-lg-4">
+                <a href="/manage/<%= guild.id %>" class="text-decoration-none">
+                    <div class="content-card server-card h-100">
+                        <div class="d-flex align-items-center">
+                            <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="Guild Icon" width="60" height="60" class="rounded me-3">
+                            <div class="flex-grow-1">
+                                <h5 class="mb-1"><%= guild.name %></h5>
+                            </div>
+                            <i class="fas fa-chevron-right ms-auto"></i>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        <% }); %>
+    </div>
+
+    <% if (manageableGuilds.length === 0) { %>
+        <div class="alert alert-warning text-center mt-4">
+            No manageable servers found. Make sure you have the "Manage Server" permission.
+        </div>
+    <% } %>
+</main>
 
 <%- include('partials/footer') %>
 

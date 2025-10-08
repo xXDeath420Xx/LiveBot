@@ -1,70 +1,107 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
+require('dotenv').config(); // Ensure dotenv is loaded
+const logger = require('../utils/logger'); // Assuming logger is available
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('help')
-    .setDescription('Displays a guide for all bot commands and their permissions.'),
+    data: new SlashCommandBuilder()
+        .setName('help')
+        .setDescription('Displays a list of available commands and their descriptions.')
+        .addStringOption(option =>
+            option.setName('command')
+                .setDescription('Get detailed information about a specific command.')
+                .setRequired(false)),
 
-  async execute(interaction) {
-    const embed = new EmbedBuilder()
-      .setColor('#5865F2')
-      .setTitle('CertiFried Announcer Command & Feature Guide')
-      .setDescription('Here is a list of all available commands. Most commands require `Manage Server` permissions, unless otherwise noted.')
-      .addFields(
-        {
-          name: '🌟 Core Setup',
-          value: '`/setchannel` - Sets the default channel for live announcements.\n' +
-                 '`/setliverole` - Sets a role to be given to linked Discord users when they go live.\n' +
-                 '`/customize-bot` - Changes the bot\'s default webhook nickname or avatar for this server.\n' +
-                 '`/setup` - Starts an interactive guide for first-time setup.\n' +
-                 '`/setup-requests` - **(Admin)** Creates a panel for members to request their own streams to be announced.'
-        },
-        {
-          name: '👤 Streamer Management',
-          value: '`/addstreamer` - Adds a streamer using an interactive form.\n' +
-                 '`/removestreamer` - Removes a streamer from the notification list.\n' +
-                 '`/liststreamers` - Shows all streamers being tracked on this server and their status.\n' +
-                 '`/check-live` - Instantly lists all currently live streamers for this server.\n' +
-                 '`/editstreamer` - Edits settings for an existing streamer subscription.'
-        },
-        {
-            name: '🎨 Fine-Tuning & Customization',
-            value: '`/customize-streamer` - Sets a unique webhook name, avatar, or message for a streamer in a *specific channel*.\n' +
-                   '`/customize-channel` - Sets a default webhook name/avatar for *all* announcements in a specific channel.'
-        },
-        {
-          name: '🚀 Bulk & Team Actions',
-          value: '`/addteam` - **(One-Time Add)** Adds all members of a Twitch Team.\n' +
-                 '`/removeteam` - **(One-Time Remove)** Removes all members of a Twitch Team.\n' +
-                 '`/subscribe-team` - **(Automated)** Automatically keeps a channel synced with a Twitch Team.\n' +
-                 '`/unsubscribe-team` - Stops the automatic syncing for a team.\n' +
-                 '`/massaddstreamer` - Adds multiple streamers from the same platform at once.\n' +
-                 '`/massremovestreamer` - Removes multiple streamers.\n' +
-                 '`/importcsv` - Adds or updates streamers in bulk by uploading a `.csv` file.\n' +
-                 '`/exportcsv` - Exports all tracked streamers on this server to a `.csv` file.\n' +
-                 '`/clearstreamers` - **(Admin)** Removes **ALL** streamers from the server.'
-        },
-        {
-            name: '✨ Server Engagement',
-            value: '`/rank` - (Any user) Displays your or another member\'s server rank and XP.\n' +
-                   '`/leaderboard` - (Any user) Shows the server\'s top members by XP.\n' +
-                   '`/invites` - (Any user) Shows your or another user\'s invite statistics.\n' +
-                   '`/reaction-roles create` - Creates a new reaction role panel.'
-        },
-        {
-            name: '🛡️ Moderation & Security',
-            value: '`/ticket setup` - **(Admin)** Configures the support ticket system.\n' +
-                   '`/automod` - **(Admin)** Manage automoderation rules (e.g., banned words, spam).\n' +
-                   '`/security` - **(Admin)** Configure anti-nuke and new member join gate settings.\n' +
-                   '`/backup` - **(Admin)** Create, list, or restore backups of your server\'s channels and roles.'
-        },
-        {
-            name: '🌐 Full Web Dashboard',
-            value: 'For easier management, access the **[Web Dashboard](https://bot.certifriedannouncer.online)** to control everything visually.'
+    async execute(interaction) {
+        const commandName = interaction.options.getString('command');
+        const commandsPath = path.join(__dirname); // Assumes commands are in the same directory
+        const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+
+        const commands = commandFiles.map(file => {
+            try {
+                const command = require(`./${file}`);
+                return command.data.toJSON();
+            } catch (e) {
+                logger.error(`[Help Command] Error loading command file ${file}:`, { error: e.stack });
+                return null; // Return null for failed commands
+            }
+        }).filter(Boolean); // Filter out nulls
+
+        const dashboardUrl = process.env.DASHBOARD_URL || 'https://certifriedmultitool.com/';
+        const supportServerInvite = process.env.SUPPORT_SERVER_INVITE || 'https://discord.gg/mJfbDgWA7z';
+
+        // If a specific command is requested
+        if (commandName) {
+            const command = commands.find(cmd => cmd.name === commandName.toLowerCase());
+            if (!command) {
+                return interaction.reply({ content: 'That command does not exist.', ephemeral: true });
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor('#7289da')
+                .setTitle(`Command: /${command.name}`)
+                .setDescription(command.description)
+                .setTimestamp();
+
+            if (command.options && command.options.length > 0) {
+                const optionsField = command.options.map(opt => {
+                    return `\`${opt.name}\`: ${opt.description} ${opt.required ? '(Required)' : ''}`;
+                }).join('\n');
+                embed.addFields({ name: 'Options', value: optionsField });
+            }
+
+            return interaction.reply({ embeds: [embed], ephemeral: true });
         }
-      )
-      .setFooter({ text: 'The bot checks for live streams approximately every 1.5 minutes and team updates every hour.' });
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
-  },
+        // If no specific command is requested, show the full list
+        const categories = {
+            'Core': ['help', 'stats', 'status', 'ping', 'global-reinit', 'reinit', 'reset-database'],
+            'Configuration': ['setup', 'config', 'setchannel', 'setliverole', 'customize-bot', 'customize-channel', 'customize-streamer', 'permissions'],
+            'Streamer Management': ['addstreamer', 'removestreamer', 'editstreamer', 'liststreamers', 'massaddstreamer', 'massremovestreamer', 'importcsv', 'exportcsv', 'clearstreamers'],
+            'Team Management': ['addteam', 'removeteam', 'subscribe-team', 'unsubscribe-team', 'importteamcsv'],
+            'Moderation': ['ban', 'kick', 'mute', 'unmute', 'warn', 'clear-infractions', 'purge', 'quarantine', 'slowmode', 'lock', 'unlock'],
+            'Fun': ['8ball', 'cat', 'coinflip', 'meme', 'roll', 'reddit', 'tiktok'],
+            'Utilities': ['define', 'find', 'invites', 'serverinfo', 'userinfo', 'weather', 'schedule', 'record', 'scan', 'tag', 'temp-channel', 'ticket', 'welcome'],
+            'Music': ['play', 'pause', 'resume', 'stop', 'queue', 'nowplaying', 'loop', 'lyrics', 'music-search'],
+            'Feeds': ['youtube-feed', 'twitter-feed', 'trovo'],
+            'Events': ['giveaway', 'poll', 'remind', 'reaction-roles', 'starboard'],
+        };
+
+        const embed = new EmbedBuilder()
+            .setColor('#7289da')
+            .setTitle('CertiFried Announcer Help')
+            .setDescription('Here is a list of my primary commands. For a full list and easier management, please visit the web dashboard.')
+            .setTimestamp();
+
+        for (const category in categories) {
+            const commandList = categories[category]
+                .map(cmdName => {
+                    const cmd = commands.find(c => c.name === cmdName);
+                    return cmd ? `\`/${cmd.name}\` - ${cmd.description}` : '';
+                })
+                .filter(Boolean) // Remove any commands not found
+                .join('\n');
+
+            if (commandList) {
+                embed.addFields({ name: `🔹 ${category}`, value: commandList });
+            }
+        }
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setLabel('Dashboard')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(dashboardUrl)
+                    .setEmoji('🌐'),
+                new ButtonBuilder()
+                    .setLabel('Support Server')
+                    .setStyle(ButtonStyle.Link)
+                    .setURL(supportServerInvite)
+                    .setEmoji('🤝')
+            );
+
+        await interaction.reply({ embeds: [embed], components: [row] });
+    },
 };

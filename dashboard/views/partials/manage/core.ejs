@@ -1,51 +1,31 @@
-<form action="/manage/<%= guild.id %>/update-core" method="POST">
-    <div class="plugin-card">
-        <div class="plugin-card-header">
-            <h4>Default Announcement Channel</h4>
-        </div>
-        <div class="plugin-card-body">
-            <p class="text-muted">Select the default channel where all stream announcements will be sent.</p>
-            <select class="form-select" id="default-channel" name="default_announcement_channel_id">
-                <option value="">None (Disables default announcements)</option>
-                <% channels.forEach(channel => { %>
-                    <option value="<%= channel.id %>" <%= settings.default_announcement_channel_id === channel.id ? 'selected' : '' %> >#<%= channel.name %></option>
-                <% }); %>
-            </select>
-        </div>
+<form id="core-settings-form">
+    <h4><i class="fas fa-cogs me-2"></i>Core Settings</h4>
+    <p class="text-muted">Configure the basic settings for the bot in this server.</p>
+    <hr class="my-4">
+
+    <div class="mb-3">
+        <label for="timezone" class="form-label">Timezone</label>
+        <select class="form-select" id="timezone" name="timezone">
+            <% const timezones = ["UTC-12", "UTC-11", "UTC-10", "UTC-9", "UTC-8", "UTC-7", "UTC-6", "UTC-5", "UTC-4", "UTC-3", "UTC-2", "UTC-1", "UTC+0", "UTC+1", "UTC+2", "UTC+3", "UTC+4", "UTC+5", "UTC+6", "UTC+7", "UTC+8", "UTC+9", "UTC+10", "UTC+11", "UTC+12"]; %>
+            <% timezones.forEach(tz => { %>
+                <option value="<%= tz %>" <%= (settings && settings.timezone === tz) ? 'selected' : '' %>><%= tz %></option>
+            <% }); %>
+        </select>
+        <div class="form-text">Select the timezone for your server to ensure scheduled announcements are accurate.</div>
     </div>
 
-    <div class="plugin-card">
-        <div class="plugin-card-header">
-            <h4>Live Role</h4>
-        </div>
-        <div class="plugin-card-body">
-            <p class="text-muted">This role is given to Discord users linked to a streamer when they go live. Make sure the bot's role is higher than this role.</p>
-            <select class="form-select" id="live-role" name="live_role_id">
-                <option value="">None (Disables live role)</option>
-                <% roles.forEach(role => { %>
-                    <option value="<%= role.id %>" <%= settings.live_role_id === role.id ? 'selected' : '' %> >@<%= role.name %></option>
-                <% }); %>
-            </select>
-        </div>
-    </div>
-    
-    <div class="plugin-card">
-        <div class="plugin-card-header">
-            <h4>Ping Role</h4>
-        </div>
-        <div class="plugin-card-body">
-            <p class="text-muted">This role will be mentioned in every announcement message.</p>
-             <select class="form-select" id="ping-role" name="ping_role_id">
-                <option value="">None (No @mention in announcements)</option>
-                <option value="@everyone" <%= settings.ping_role_id === '@everyone' ? 'selected' : '' %>>@everyone</option>
-                <% roles.forEach(role => { %>
-                    <option value="<%= role.id %>" <%= settings.ping_role_id === role.id ? 'selected' : '' %> >@<%= role.name %></option>
-                <% }); %>
-            </select>
-        </div>
+    <div class="mb-3">
+        <label for="live-role" class="form-label">Live Role</label>
+        <select class="form-select" id="live-role" name="live_role_id">
+            <option value="">None</option>
+            <% guild.roles.cache.sort((a, b) => b.position - a.position).forEach(role => { %>
+                <option value="<%= role.id %>" <%= (settings && settings.live_role_id === role.id) ? 'selected' : '' %>>@<%= role.name %></option>
+            <% }); %>
+        </select>
+        <div class="form-text">This role will be given to members when they go live.</div>
     </div>
 
-    <div class="d-flex justify-content-end mt-3">
-        <button type="submit" class="btn btn-primary">Save Changes</button>
+    <div class="d-flex justify-content-end mt-4">
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Changes</button>
     </div>
 </form>

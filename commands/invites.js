@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -38,7 +39,7 @@ module.exports = {
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('[Invites Command Error]', error);
+            logger.error('[Invites Command Error]', error);
             await interaction.editReply({ content: 'An error occurred while fetching invite stats.' });
         }
     },

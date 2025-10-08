@@ -1,63 +1,219 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Command Guide - CertiFried Announcer</title>
+    <title>The Complete Manual for CertiFried Announcer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/dashboard-style.css?v=14.0.0">
+    <link rel="stylesheet" href="/css/dashboard-style.css">
+    <style>
+        .docs-layout { display: flex; gap: 2.5rem; }
+        .docs-sidebar { width: 300px; flex-shrink: 0; position: sticky; top: 1.5rem; height: calc(100vh - 3rem); overflow-y: auto; padding-right: 1rem; }
+        .docs-sidebar h6 { font-size: .8rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); padding: 0 .75rem; margin-top: 1.5rem; margin-bottom: .5rem; }
+        .docs-sidebar .nav-link { color: var(--text-muted); padding: .4rem .75rem .4rem 1.25rem; border-left: 3px solid transparent; font-size: .95rem; }
+        .docs-sidebar .nav-link:hover { color: var(--header-primary); }
+        .docs-sidebar .nav-link.active { color: var(--brand-color); font-weight: 600; border-left-color: var(--brand-color); }
+        .docs-content .docs-section { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .docs-content .docs-section.active { display: block; }
+        .command-entry { background-color: var(--background-secondary); border: 1px solid var(--border-color); border-radius: var(--border-radius); margin-bottom: 2rem; }
+        .command-header { padding: 1.25rem 1.5rem; background-color: var(--background-tertiary); border-bottom: 1px solid var(--border-color); }
+        .command-name { font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; color: var(--brand-color); font-weight: 700; }
+        .command-body { padding: 1.5rem; }
+        .permissions-badge { font-size: .8rem; font-weight: 700; color: var(--warning-color); text-transform: uppercase; }
+        .how-to-use { background-color: var(--background-primary); border-radius: 5px; padding: 1.25rem; margin-top: 1.5rem; }
+        .how-to-use code { background-color: var(--background-tertiary); padding: .2rem .4rem; border-radius: 3px; font-size: .9em; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
 <body>
-<%- include('partials/header') %>
+
+<%- include('partials/header', { user: user }) %>
+
 <main class="page-container">
-    <div class="page-header">
-        <h1><i class="fas fa-book me-2"></i>Command Guide</h1>
-        <p>A complete guide to all available slash commands. Permissions are required to use these commands.</p>
+    <div class="page-header text-center">
+        <h1><i class="fas fa-book-open me-2"></i>CertiFried Announcer: The Complete Manual</h1>
+        <p class="lead text-muted">The definitive guide to the bot's architecture, features, and every single command.</p>
     </div>
-    <div class="row g-4">
-        <div class="col-lg-6">
-            <div class="content-card h-100">
-                <h4><i class="fas fa-star me-2 text-warning"></i> Core & Management</h4>
-                <hr>
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item"><strong>/setchannel</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Sets the default channel for announcements.</p></li>
-                    <li class="list-group-item"><strong>/setliverole</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Sets a role for linked users when they go live.</p></li>
-                    <li class="list-group-item"><strong>/addstreamer</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Adds a streamer to the notification list.</p></li>
-                    <li class="list-group-item"><strong>/removestreamer</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Removes a streamer from the list.</p></li>
-                    <li class="list-group-item"><strong>/liststreamers</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Shows all tracked streamers.</p></li>
-                    <li class="list-group-item"><strong>/check-live</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Instantly lists all currently live streamers.</p></li>
-                </ul>
-            </div>
-        </div>
-        <div class="col-lg-6">
-            <div class="content-card h-100">
-                <h4><i class="fas fa-paint-brush me-2"></i> Customization</h4>
-                <hr>
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item"><strong>/customize-bot</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Changes the bot's default webhook name/avatar.</p></li>
-                    <li class="list-group-item"><strong>/customize-streamer</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Sets a unique name, avatar, or message for a streamer.</p></li>
-                    <li class="list-group-item"><strong>/customize-channel</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Sets a default name/avatar for a specific channel.</p></li>
-                </ul>
-            </div>
-        </div>
-        <div class="col-12">
-            <div class="content-card">
-                <h4><i class="fas fa-rocket me-2 text-info"></i> Bulk & Team Actions</h4>
-                <hr>
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item"><strong>/addteam</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">(One-Time) Adds all members of a Twitch Team.</p></li>
-                    <li class="list-group-item"><strong>/removeteam</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">(One-Time) Removes all members of a Twitch Team.</p></li>
-                    <li class="list-group-item"><strong>/subscribe-team</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">(Automated) Keeps a channel synced with a Twitch Team.</p></li>
-                    <li class="list-group-item"><strong>/unsubscribe-team</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Stops the automatic team sync.</p></li>
-                    <li class="list-group-item"><strong>/importcsv</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Adds/updates streamers in bulk from a CSV file.</p></li>
-                    <li class="list-group-item"><strong>/exportcsv</strong><span class="perm-badge perm-mod">Moderator</span><p class="command-description">Exports all tracked streamers to a CSV file.</p></li>
-                    <li class="list-group-item"><strong>/clearstreamers</strong><span class="perm-badge perm-admin">Admin</span><p class="command-description">Removes **ALL** streamers from the entire server.</p></li>
-                </ul>
-            </div>
+
+    <div class="docs-layout">
+        <aside class="docs-sidebar">
+            <nav id="docs-nav" class="nav flex-column">
+                <h6><i class="fas fa-star me-2"></i>Introduction</h6>
+                <a class="nav-link" href="#section-welcome">Welcome</a>
+                <a class="nav-link" href="#section-slash-commands">Using Commands</a>
+
+                <h6><i class="fas fa-cogs me-2"></i>Core Features</h6>
+                <a class="nav-link" href="#section-announcer">Stream Announcements</a>
+                <a class="nav-link" href="#section-moderation">Moderation & Security</a>
+                <a class="nav-link" href="#section-engagement">Community Engagement</a>
+                <a class="nav-link" href="#section-music">Music System</a>
+                <a class="nav-link" href="#section-utility">Server Utilities</a>
+
+                <%
+                const commandsByCategory = {};
+                const categoryOrder = ['Core', 'Configuration', 'Streamer Management', 'Team Management', 'Moderation', 'Community', 'Music', 'Utility', 'Fun', 'Super Admin'];
+                const categoryIcons = {
+                    'Core': 'fa-star', 'Configuration': 'fa-sliders-h', 'Streamer Management': 'fa-users', 'Team Management': 'fa-user-friends',
+                    'Moderation': 'fa-shield-alt', 'Community': 'fa-comments', 'Music': 'fa-music', 'Utility': 'fa-tools', 'Fun': 'fa-puzzle-piece', 'Super Admin': 'fa-user-shield'
+                };
+                if (commands) {
+                    commands.forEach(cmd => {
+                        const category = cmd.category || 'Utility';
+                        if (!commandsByCategory[category]) commandsByCategory[category] = [];
+                        commandsByCategory[category].push(cmd);
+                    });
+                }
+                %>
+                <% for (const category of categoryOrder) { %>
+                    <% if (commandsByCategory[category]) { %>
+                        <h6><i class="fas <%= categoryIcons[category] || 'fa-folder' %> fa-fw me-2"></i><%= category %></h6>
+                        <% commandsByCategory[category].sort((a,b) => a.name.localeCompare(b.name)).forEach(cmd => { %>
+                            <a class="nav-link ms-2" href="#cmd-<%= cmd.name %>"><%= cmd.name %></a>
+                        <% }); %>
+                    <% } %>
+                <% } %>
+            </nav>
+        </aside>
+
+        <div class="docs-content">
+            <section id="section-welcome" class="docs-section">
+                <h2>Welcome to the Definitive Guide</h2>
+                <p>This is your central hub for all information about the CertiFried Announcer bot. Here you will find detailed explanations for every feature and a complete reference for every slash command. This page is dynamically generated from the bot's source code, so it is always 100% accurate and up-to-date.</p>
+                <p>Use the sidebar to quickly navigate to a specific system or command category. The page is modular, so only the content you select will be displayed, keeping things clean and fast.</p>
+            </section>
+
+            <section id="section-slash-commands" class="docs-section">
+                <h2>How to Use Slash Commands in Discord</h2>
+                <p>All of the bot's functions are initiated through Discord's built-in Slash Command interface. This provides a secure and user-friendly way to interact with the bot without needing to remember prefixes or complex syntax.</p>
+            </section>
+
+            <section id="section-announcer" class="docs-section">
+                <h2><i class="fas fa-satellite-dish me-2"></i>Core Feature: Stream Announcements</h2>
+                <p>The flagship feature of the bot. This is a highly optimized, resilient system for detecting when streamers go live and posting announcements. The entire system is managed by a series of specialized modules to ensure maximum reliability.</p>
+            </section>
+
+            <section id="section-moderation" class="docs-section">
+                <h2><i class="fas fa-shield-alt me-2"></i>Core Feature: Moderation & Security</h2>
+                <p>A complete suite of tools to protect your server, managed by `moderation-manager.js`. Every action is logged for accountability.</p>
+            </section>
+
+            <section id="section-engagement" class="docs-section">
+                <h2><i class="fas fa-comments me-2"></i>Core Feature: Community Engagement</h2>
+                <p>A collection of modules designed to increase server activity and interaction.</p>
+            </section>
+
+            <section id="section-music" class="docs-section">
+                <h2><i class="fas fa-music me-2"></i>Core Feature: Music System</h2>
+                <p>The `music-manager.js` module powers a feature-rich music player that can stream audio from YouTube in any voice channel, complete with queueing, searching, and playback controls.</p>
+            </section>
+
+            <section id="section-utility" class="docs-section">
+                <h2><i class="fas fa-tools me-2"></i>Core Feature: Server Utilities</h2>
+                <p>A wide array of utility features, including server backups, custom commands, welcome messages, and a complete ticket system.</p>
+            </section>
+
+            <% for (const category of categoryOrder) { %>
+                <% if (commandsByCategory[category]) { %>
+                    <section id="category-<%= category.replace(/\s+/g, '-').toLowerCase() %>" class="docs-section">
+                        <h2><%= category %> Commands</h2>
+                        <p class="text-muted">All commands related to <%= category.toLowerCase() %> and server management.</p>
+                        <hr class="mb-4">
+                        <% commandsByCategory[category].sort((a, b) => a.name.localeCompare(b.name)).forEach(cmd => { %>
+                            <div class="command-entry" id="cmd-<%= cmd.name %>">
+                                <div class="command-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <p class="command-name mb-0">/<%= cmd.name %></p>
+                                    <% if (cmd.permissions) { %><p class="permissions-badge mb-0"><i class="fas fa-gavel me-1"></i><%= cmd.permissions.replace(/_/g, ' ') %></p><% } %>
+                                </div>
+                                <div class="command-body">
+                                    <p class="lead text-muted"><%= cmd.description %></p>
+
+                                    <div class="how-to-use">
+                                        <h6><i class="fas fa-question-circle me-2"></i>Function & Usage</h6>
+                                        <p class="small mb-0">
+                                            <% if (cmd.name === 'help') { %>
+                                                To get a quick overview of commands within Discord, type <strong>/help</strong>. The bot will respond with an embed listing its main features, similar to what you see here. For more targeted help, use the `command` option to look up a specific command's details directly in chat.
+                                            <% } else if (cmd.name === 'addstreamer') { %>
+                                                This is the primary command for adding a single streamer to the announcement list. When you run <strong>/addstreamer</strong>, you must provide the <strong><code>username</code></strong>. The bot will then ask you to select the streaming platforms and channels for announcements. You can also optionally link a Discord <strong><code>user</code></strong> to automatically give them the Live Role.
+                                            <% } else if (cmd.name === 'ban') { %>
+                                                To permanently remove a member from your server, use <strong>/ban</strong>. You must specify the <strong><code>user</code></strong> you want to ban. You must also provide a <strong><code>reason</code></strong>, which will be recorded in the bot's moderation logs and the server's official audit log.
+                                            <% } else if (cmd.name === 'giveaway') { %>
+                                                This is a full-featured command to manage giveaways. Use <strong>/giveaway <code>start</code></strong> to create a new giveaway, specifying the duration, prize, and number of winners. Use <strong>/giveaway <code>end</code></strong> or <strong>/giveaway <code>reroll</code></strong> to manage an existing giveaway by providing its message ID.
+                                            <% } else if (cmd.name === 'config') { %>
+                                                This command is a master utility for viewing and editing many of the bot's settings directly in Discord, without needing the web dashboard. You can configure automod, announcement settings, leveling, and much more through its various sub-commands.
+                                            <% } else { %>
+                                                To use this command, type <strong>/<%= cmd.name %></strong> in your chat box. Discord will prompt you to fill in any required options. Once you press Enter, the bot will execute the action and provide a confirmation or result.
+                                            <% } %>
+                                        </p>
+                                    </div>
+
+                                    <% if (cmd.options && cmd.options.length > 0) { %>
+                                        <h6 class="mt-4">OPTIONS & SUB-COMMANDS</h6>
+                                        <ul class="list-group list-group-flush">
+                                            <% cmd.options.forEach(opt => { %>
+                                                <li class="list-group-item bg-transparent px-0">
+                                                    <code><%= opt.name %></code> <%= opt.required ? '<span class="badge bg-danger">Required</span>' : '' %>
+                                                    <p class="small text-muted mb-0"><%= opt.description %></p>
+                                                </li>
+                                            <% }); %>
+                                        </ul>
+                                    <% } %>
+                                </div>
+                            </div>
+                        <% }); %>
+                    </section>
+                <% } %>
+            <% } %>
         </div>
     </div>
 </main>
+
 <%- include('partials/footer') %>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const navLinks = document.querySelectorAll('.docs-sidebar .nav-link');
+        const sections = document.querySelectorAll('.docs-content .docs-section');
+
+        function showSection(hash) {
+            if (!hash || !document.querySelector(hash)) {
+                hash = '#section-welcome';
+            }
+
+            let targetElement = document.querySelector(hash);
+            let targetSection = targetElement.matches('.docs-section') ? targetElement : targetElement.closest('.docs-section');
+
+            if(targetSection) {
+                sections.forEach(s => s.classList.remove('active'));
+                targetSection.classList.add('active');
+
+                navLinks.forEach(l => l.classList.remove('active'));
+                const activeLink = document.querySelector(`.nav-link[href="${hash}"]`) || document.querySelector(`.nav-link[href="#${targetSection.id}"]`);
+                if (activeLink) activeLink.classList.add('active');
+            }
+        }
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const hash = e.currentTarget.getAttribute('href');
+                history.pushState(null, null, hash);
+                showSection(hash);
+
+                const targetElement = document.querySelector(hash);
+                if (targetElement && !targetElement.matches('.docs-section')) {
+                    targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                } else {
+                    window.scrollTo(0, 0);
+                }
+            });
+        });
+
+        window.addEventListener('popstate', () => showSection(window.location.hash));
+        showSection(window.location.hash);
+    });
+</script>
+
 </body>
 </html>

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const { logInfraction } = require('../core/moderation-manager');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -39,7 +40,7 @@ module.exports = {
                 .setTitle(`You have been kicked from ${interaction.guild.name}`)
                 .addFields({ name: 'Reason', value: reason }, { name: 'Moderator', value: interaction.user.tag })
                 .setTimestamp();
-            await targetUser.send({ embeds: [dmEmbed] }).catch(() => console.log(`Could not DM user ${targetUser.tag}.`));
+            await targetUser.send({ embeds: [dmEmbed] }).catch((e) => logger.warn(`Could not DM user ${targetUser.tag}: ${e.message}`));
 
             // Kick the user
             await member.kick(reason);
@@ -54,7 +55,7 @@ module.exports = {
             await interaction.editReply({ embeds: [replyEmbed] });
 
         } catch (error) {
-            console.error('[Kick Command Error]', error);
+            logger.error('[Kick Command Error]', error);
             await interaction.editReply("An unexpected error occurred while trying to kick this user.");
         }
     },

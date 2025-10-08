@@ -1,24 +1,27 @@
 const { Worker } = require('bullmq');
-const Redis = require('ioredis');
+const path = require("path");
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const { Client, GatewayIntentBits, Partials, Events } = require("discord.js");
+const { redis } = require('../utils/cache');
 const db = require('../utils/db');
 const logger = require('../utils/logger');
-require('dotenv').config();
 
-const redisClient = new Redis(process.env.REDIS_URL);
+const workerClient = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.DirectMessages
+    ],
+    partials: [Partials.User, Partials.Channel]
+});
 
-// A separate client instance for the worker to avoid conflicts
-let workerClient;
+// Initialize the logger for this worker process
+logger.init(workerClient, db);
 
 const reminderWorker = new Worker('reminders', async job => {
-    if (!workerClient) {
-        // This lazy initialization is a simple way to get a Discord client instance.
-        // In a sharded environment, you'd need a more complex way to communicate with the correct shard.
-        workerClient = global.client; 
-    }
-    
-    if (!workerClient) {
-        logger.warn('[ReminderWorker] Worker running but Discord client is not yet available.');
-        return;
+    if (!workerClient.isReady()) {
+        logger.warn(`[ReminderWorker] Discord client not ready. Retrying job ${job.id}...`);
+        throw new Error("Discord client not ready");
     }
 
     if (job.name === 'check-reminders') {
@@ -31,6 +34,7 @@ const reminderWorker = new Worker('reminders', async job => {
             for (const reminder of reminders) {
                 const user = await workerClient.users.fetch(reminder.user_id).catch(() => null);
                 if (!user) {
+                    logger.warn(`[ReminderWorker] Could not find user ${reminder.user_id} for reminder ${reminder.id}. Deleting.`);
                     await db.execute('DELETE FROM reminders WHERE id = ?', [reminder.id]);
                     continue;
                 }
@@ -49,19 +53,42 @@ const reminderWorker = new Worker('reminders', async job => {
                         const channel = await workerClient.channels.fetch(reminder.channel_id).catch(() => null);
                         if (channel) {
                             await channel.send({ content: `${user}`, embeds: [embed] });
+                        } else {
+                            logger.warn(`[ReminderWorker] Channel ${reminder.channel_id} not found for reminder ${reminder.id}. Deleting.`);
+                            await db.execute('DELETE FROM reminders WHERE id = ?', [reminder.id]);
                         }
                     }
                     await db.execute('DELETE FROM reminders WHERE id = ?', [reminder.id]);
                 } catch (sendError) {
                     logger.error(`[ReminderWorker] Failed to send reminder ${reminder.id}:`, sendError);
-                    // Decide if you want to delete failed reminders or retry
                     await db.execute('DELETE FROM reminders WHERE id = ?', [reminder.id]);
                 }
             }
         } catch (dbError) {
             logger.error('[ReminderWorker] Database error while checking reminders:', dbError);
+            throw dbError;
         }
     }
-}, { connection: redisClient });
+}, { connection: redis });
 
-logger.info('[ReminderWorker] Reminder worker started.');
+logger.info('[Reminder Worker] BullMQ Worker instantiated and listening for jobs.');
+
+workerClient.login(process.env.DISCORD_TOKEN)
+    .then(() => logger.info("[Reminder Worker] Logged in and ready."))
+    .catch(err => {
+        logger.error("[Reminder Worker] Failed to log in.", { error: err });
+        process.exit(1);
+    });
+
+async function shutdown(signal) {
+    logger.warn(`[Reminder Worker] Received ${signal}. Shutting down...`);
+    if (reminderWorker) await reminderWorker.close();
+    await workerClient.destroy();
+    await db.end();
+    await redis.quit();
+    logger.info("[Reminder Worker] Shutdown complete.");
+    process.exit(0);
+}
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));

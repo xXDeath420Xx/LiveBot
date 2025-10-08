@@ -1,85 +1,40 @@
-<div class="modal fade" id="streamerSettingsModal" tabindex="-1" aria-labelledby="streamerSettingsModalLabel" aria-hidden="true">
+<div class="modal fade" id="edit-streamer-modal" tabindex="-1" aria-labelledby="editStreamerModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="streamerSettingsModalLabel">Edit Settings for <strong id="modal-streamer-name"></strong></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="edit-streamer-status"></div>
-
-                <h6><i class="fas fa-link fa-fw me-2"></i>Account Linking</h6>
-                <div class="mb-3">
-                    <label for="edit-discord-user-id" class="form-label">Linked Discord User ID</label>
-                    <input type="text" class="form-control" id="edit-discord-user-id" placeholder="Enter user's Discord ID to link accounts">
+            <form id="edit-streamer-form" method="POST"> 
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editStreamerModalLabel">Edit Settings for <strong id="edit-streamer-name"></strong></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
+                <div class="modal-body">
+                    <input type="hidden" name="consolidated_streamer_id" id="consolidated_streamer_id">
 
-                <hr>
-
-                <h6><i class="fas fa-user-edit fa-fw me-2"></i>Platform Usernames & Settings</h6>
-                <div id="platform-specific-settings">
-                    <!-- Platform-specific settings will be injected here by JavaScript -->
-                </div>
-
-                <div class="mt-3 card p-3 bg-light">
-                    <h6 class="mb-3"><i class="fas fa-plus-circle fa-fw me-2"></i>Add New Channel Subscription</h6>
-                    <div class="row g-2 align-items-end">
-                        <div class="col-md-5">
-                            <label for="add-subscription-platform-select" class="form-label">Platform</label>
-                            <select class="form-select" id="add-subscription-platform-select">
-                                <option selected>Select Platform...</option>
-                                <!-- Populated by JS with streamer's existing platforms -->
-                            </select>
-                        </div>
-                        <div class="col-md-5">
-                            <label for="add-subscription-channel-select" class="form-label">Channel</label>
-                            <select class="form-select" id="add-subscription-channel-select">
-                                <option selected>Select Channel...</option>
-                                <!-- Populated by JS with guild channels -->
-                            </select>
-                        </div>
-                        <div class="col-md-2">
-                            <button class="btn btn-primary w-100" type="button" id="add-subscription-btn">Add</button>
-                        </div>
+                    <div class="mb-3">
+                        <label for="discord_user_id" class="form-label"><i class="fab fa-discord me-2"></i>Linked Discord User ID</label>
+                        <input type="text" class="form-control" id="discord_user_id" name="discord_user_id" placeholder="Enter user's Discord ID to link accounts">
+                        <div class="form-text">This allows the bot to assign the live role to the user when they go live.</div>
                     </div>
-                    <div id="add-subscription-status" class="mt-2"></div>
-                </div>
 
-                <hr class="my-4">
+                    <hr class="my-4">
 
-                <h6><i class="fas fa-link fa-fw me-2"></i>Link New Platform Account</h6>
-                <div class="input-group">
-                    <select class="form-select" id="add-platform-select">
-                        <option value="">-- Select Platform --</option>
-                        <option value="twitch">Twitch</option>
-                        <option value="youtube">YouTube</option>
-                        <option value="kick">Kick</option>
-                        <option value="tiktok">TikTok</option>
-                        <option value="trovo">Trovo</option>
-                    </select>
-                    <input type="text" class="form-control" id="add-platform-username" placeholder="Username or Channel ID">
-                    <button class="btn btn-outline-primary" type="button" id="link-new-platform-btn">Link</button>
-                </div>
-                <div id="add-platform-status" class="mt-2"></div>
+                    <h5><i class="fas fa-satellite-dish me-2"></i>Channel Subscriptions</h5>
+                    <p class="text-muted">Manage announcement settings for each subscribed channel.</p>
+                    <div id="subscriptions-container">
+                        <!-- Subscription settings will be injected here by JavaScript -->
+                    </div>
 
-                <hr>
-
-                <div class="mb-3">
-                    <label for="edit-custom-message" class="form-label">Custom Message</label>
-                    <textarea class="form-control" id="edit-custom-message" rows="2" placeholder="e.g. {username} is now live with {game}!"></textarea>
                 </div>
-                <div class="mb-3">
-                    <label for="edit-avatar-url" class="form-label">Custom Webhook Avatar URL</label>
-                    <input type="text" class="form-control" id="edit-override-avatar-url" name="override_avatar_url" placeholder="Leave blank to use streamer's avatar">
+                <div class="modal-footer justify-content-between">
+                    <form id="delete-streamer-form" method="POST" class="d-inline">
+                        <input type="hidden" name="streamerId" id="delete-streamer-id">
+                        <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to remove ALL subscriptions for this streamer from this server?');"><i class="fas fa-trash-alt me-2"></i>Remove All Subscriptions</button>
+                    </form>
+                    <div>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Changes</button>
+                    </div>
                 </div>
-            </div>
-            <div class="modal-footer justify-content-between">
-                <button type="button" class="btn btn-danger" id="remove-streamer-btn"><i class="fas fa-trash-alt me-2"></i>Remove All Subscriptions</button>
-                <div>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-primary" id="save-streamer-settings"><i class="fas fa-save me-2"></i>Save Changes</button>
-                </div>
-            </div>
+            </form>
         </div>
     </div>
 </div>

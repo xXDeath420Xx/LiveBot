@@ -37,7 +37,13 @@ module.exports = {
                 await interaction.deferReply({ ephemeral: true });
                 const name = interaction.options.getString('name');
 
-                const snapshot = await createSnapshot(guild);
+                let snapshot;
+                try {
+                    snapshot = await createSnapshot(guild);
+                } catch (snapshotError) {
+                    logger.error(`[Backup Command] Error creating snapshot for guild ${guild.id}:`, { error: snapshotError });
+                    return interaction.editReply({ content: '❌ Failed to create backup snapshot. Please check bot permissions and try again.' });
+                }
                 
                 await db.execute(
                     'INSERT INTO server_backups (guild_id, snapshot_name, snapshot_json, created_by_id) VALUES (?, ?, ?, ?)',
@@ -93,11 +99,8 @@ module.exports = {
             }
         } catch (error) {
             logger.error(`[Backup Command Error] Subcommand: ${subcommand}`, {error});
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: 'An error occurred while executing this command.', ephemeral: true });
-            } else {
-                await interaction.editReply({ content: 'An error occurred while executing this command.' });
-            }
+            // Since deferReply is always called, we can always use editReply
+            await interaction.editReply({ content: 'An error occurred while executing this command.' });
         }
     },
 };

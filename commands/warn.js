@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const { logInfraction } = require('../core/moderation-manager');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -44,7 +45,7 @@ module.exports = {
             await targetUser.send({ embeds: [dmEmbed] });
         } catch (error) {
             // This is not critical, so we just note it
-            console.log(`Could not DM user ${targetUser.tag}. They may have DMs disabled.`);
+            logger.warn(`[Warn Command] Could not DM user ${targetUser.tag}. They may have DMs disabled. Error: ${error.message}`);
         }
 
         const replyEmbed = new EmbedBuilder()

@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -24,11 +25,10 @@ module.exports = {
                 .setDescription('This channel has been unlocked. You may now send messages.')
                 .setTimestamp();
 
-            await channel.send({ embeds: [embed] });
-            await interaction.reply({ content: 'Channel unlocked successfully.', ephemeral: true });
+            await interaction.reply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('[Unlock Command Error]', error);
+            logger.error('[Unlock Command Error]', error);
             await interaction.reply({ content: 'Failed to unlock the channel. Do I have the Manage Channels permission?', ephemeral: true });
         }
     },

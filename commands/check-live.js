@@ -45,6 +45,8 @@ module.exports = {
         } else if (streamer.platform === 'tiktok' && browser) {
           liveData = await apiChecks.checkTikTok(streamer.username);
         } else if (streamer.platform === 'trovo' && browser) {
+          liveData = await apiChecks.checkTikTok(streamer.username);
+        } else if (streamer.platform === 'trovo' && browser) {
           liveData = await apiChecks.checkTrovo(streamer.username);
         }
 
@@ -87,6 +89,10 @@ module.exports = {
     } catch (e) {
       console.error('--- Critical Error in /check-live ---', e);
       await interaction.editReply({ content: 'A critical error occurred while fetching live statuses.' });
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
     }
   },
 };

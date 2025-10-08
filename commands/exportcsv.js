@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionsBitField, AttachmentBuilder } = require('discord.js');
 const db = require('../utils/db');
 const Papa = require('papaparse');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -52,7 +53,7 @@ module.exports = {
             });
 
         } catch (error) {
-            console.error('Export CSV Error:', error);
+            logger.error('[Export CSV Error]', error);
             await interaction.editReply('An error occurred while exporting the streamer list.');
         }
     },

@@ -4,6 +4,8 @@ const Papa = require('papaparse');
 const db = require('../utils/db');
 const apiChecks = require('../utils/api_checks');
 const { getBrowser } = require('../utils/browserManager');
+const logger = require('../utils/logger');
+const initCycleTLS = require('cycletls');
 
 module.exports = {
   data: new SlashCommandBuilder().setName('importcsv').setDescription('Bulk adds/updates streamer subscriptions from a CSV file.')
@@ -19,7 +21,8 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const added = [], updated = [], failed = [];
-    let browser;
+    let browser = null;
+    let cycleTLS = null;
     
     try {
         const fileContent = await axios.get(file.url, { responseType: 'text' }).then(res => res.data);
@@ -27,8 +30,21 @@ module.exports = {
         if (!rows || rows.length === 0) {
             return interaction.editReply({ content: 'CSV is empty or missing required headers.' });
         }
+
+        const platformsInCsv = new Set(rows.map(r => r.platform).filter(Boolean));
       
-        if (rows.some(r => ['tiktok', 'trovo'].includes(r.platform))) browser = await getBrowser();
+        if (platformsInCsv.has('tiktok') || platformsInCsv.has('trovo') || platformsInCsv.has('youtube')) {
+            browser = await getBrowser();
+        }
+
+        if (platformsInCsv.has('kick')) {
+            try {
+                cycleTLS = await initCycleTLS({ timeout: 60000 });
+            } catch (cycleTLSError) {
+                logger.error('[Import CSV] Error initializing cycleTLS. Kick platform lookups may fail:', cycleTLSError);
+                // Continue without cycleTLS, Kick platform IDs will likely fail.
+            }
+        }
 
         for (const row of rows) {
             const { platform, username, discord_user_id, custom_message, override_nickname, override_avatar_url, announcement_channel_id } = row;
@@ -47,7 +63,16 @@ module.exports = {
                 if (!streamerId) {
                     let streamerInfo = null;
                     if (platform === 'twitch') { const u = await apiChecks.getTwitchUser(username); if (u) streamerInfo = { puid: u.id, dbUsername: u.login }; }
-                    else if (platform === 'kick') { const u = await apiChecks.getKickUser(username); if (u) streamerInfo = { puid: u.id.toString(), dbUsername: u.user.username }; }
+                    else if (platform === 'kick') {
+                        if (cycleTLS) {
+                            const u = await apiChecks.getKickUser(cycleTLS, username); 
+                            if (u) streamerInfo = { puid: u.id.toString(), dbUsername: u.user.username };
+                        } else {
+                            logger.warn(`[Import CSV] Skipping Kick API lookup for ${username} due to cycleTLS initialization failure.`);
+                            failed.push(`${username} (Kick API Unavailable)`);
+                            continue;
+                        }
+                    }
                     else if (platform === 'youtube') { const c = await apiChecks.getYouTubeChannelId(username); if (c?.channelId) streamerInfo = { puid: c.channelId, dbUsername: c.channelName || username }; }
                     else if (['tiktok', 'trovo'].includes(platform)) streamerInfo = { puid: username, dbUsername: username };
                     
@@ -73,11 +98,18 @@ module.exports = {
                     if (subResult.affectedRows > 1) updated.push(`${username} (Channel: ${channelId || 'Default'})`);
                     else added.push(`${username} (Channel: ${channelId || 'Default'})`);
                 }
-            } catch (err) { console.error(`CSV Row Error for ${username}:`, err); failed.push(`${username}(DB Error)`); }
+            } catch (err) { logger.error(`[Import CSV] Row Error for ${username}:`, err); failed.push(`${username}(DB Error)`); }
         }
     } catch(e) {
-      console.error('CSV Main Error:', e); 
+      logger.error('[Import CSV] Main Error:', e); 
       return await interaction.editReply({content:'A critical error occurred processing the file.'}); 
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+      if (cycleTLS) {
+        try { cycleTLS.exit(); } catch(e){ logger.error('[Import CSV] Error exiting cycleTLS:', e); }
+      }
     }
     
     const embed = new EmbedBuilder().setTitle('CSV Import Complete').setColor('#5865F2');

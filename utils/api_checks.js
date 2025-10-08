@@ -1,7 +1,6 @@
-// B:/Code/LiveBot/utils/api_checks.js - Updated on 2025-10-01 - Unique Identifier: APICHECKS-FINAL-005
 const axios = require('axios');
 const initCycleTLS = require('cycletls');
-const { getBrowser } = require('./browserManager');
+const { getBrowser, closeBrowser } = require('./browserManager');
 const logger = require('./logger');
 
 let twitchToken = null;
@@ -19,7 +18,11 @@ async function getCycleTLSInstance() {
     }
 
     logger.info('[CycleTLS] Initializing global CycleTLS instance...');
-    cycleTLSInitializationPromise = initCycleTLS({ timeout: 60000 }).then(instance => {
+    cycleTLSInitializationPromise = initCycleTLS({
+        ja3: '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53',
+        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.60 Safari/537.36',
+        timeout: 60000
+    }).then(instance => {
         globalCycleTLSInstance = instance;
         cycleTLSInitializationPromise = null;
         logger.info('[CycleTLS] Global CycleTLS instance initialized.');
@@ -63,12 +66,12 @@ async function getYouTubeChannelId(identifier) {
 
     try {
         const searchResponse = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-            params: { 
-                part: 'snippet', 
-                q: searchIdentifier, 
-                type: 'channel', 
-                maxResults: 1, 
-                key: process.env.YOUTUBE_API_KEY 
+            params: {
+                part: 'snippet',
+                q: searchIdentifier,
+                type: 'channel',
+                maxResults: 1,
+                key: process.env.YOUTUBE_API_KEY
             }
         });
 
@@ -80,10 +83,10 @@ async function getYouTubeChannelId(identifier) {
         }
 
         const channelResponse = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-            params: { 
-                part: 'snippet', 
-                forUsername: searchIdentifier, 
-                key: process.env.YOUTUBE_API_KEY 
+            params: {
+                part: 'snippet',
+                forUsername: searchIdentifier,
+                key: process.env.YOUTUBE_API_KEY
             }
         });
 
@@ -107,7 +110,7 @@ async function getKickUser(username) {
     if (typeof username !== 'string' || !username) return null;
     logger.info(`[Kick API] getKickUser started for: ${username}`);
     const MAX_RETRIES = 3;
-    const RETRY_DELAY = 5000; // 5 seconds
+    const RETRY_DELAY = 5000;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
@@ -130,7 +133,7 @@ async function getKickUser(username) {
                 const data = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
                 if (!data || !data.user) {
                     logger.info(`[Kick API] No 'user' object in response for '${username}', assuming non-existent.`);
-                    return null; // Treat as non-existent, no retry
+                    return null;
                 }
                 logger.info(`[Kick API] Successfully retrieved Kick user data for ${username}.`);
                 return data;
@@ -138,10 +141,9 @@ async function getKickUser(username) {
 
             if (response.status === 404) {
                 logger.warn(`[Kick API] Received 404 for ${username}, user likely does not exist. Not retrying.`);
-                return null; // User not found, don't retry.
+                return null;
             }
 
-            // For other errors, retry.
             logger.warn(`[Kick API] Received status ${response.status} for ${username}. Retrying in ${RETRY_DELAY / 1000}s...`);
 
         } catch (error) {
@@ -217,7 +219,7 @@ async function getTikTokUser(username) {
         }
         logger.info(`[TikTok API] Could not validate TikTok user ${username}. They may not exist.`);
         return null;
-    } catch (error) {        
+    } catch (error) {
         logger.error(`[TikTok API Check Error] for "${username}":`, error.message);
         return null;
     }
@@ -311,14 +313,14 @@ async function checkTwitch(streamer) {
 async function checkYouTube(channelId) {
     logger.info(`[YouTube Check] Starting for channel ID: ${channelId}`);
     const defaultResponse = { isLive: false, profileImageUrl: null };
-    let page = null;
+    let browser = null;
     try {
-        const browser = await getBrowser();
+        browser = await getBrowser();
         if (!browser) {
             logger.error('[YouTube Check] Browser not available.');
             return defaultResponse;
         }
-        page = await browser.newPage();
+        const page = await browser.newPage();
         page.on('crash', () => logger.error(`[YouTube Check] Page crashed for ${channelId}`));
 
         const url = `https://www.youtube.com/channel/${channelId}/live`;
@@ -347,7 +349,7 @@ async function checkYouTube(channelId) {
         logger.error(`[Check YouTube Error] for channel ID "${channelId}":`, e.message);
         return { isLive: 'unknown', profileImageUrl: null };
     } finally {
-        if (page) await page.close().catch(e => logger.error(`[YouTube Check] Error closing page for ${channelId}:`, e));
+        if (browser) await closeBrowser(browser);
         logger.info(`[YouTube Check] Finished for channel ID: ${channelId}`);
     }
 }
@@ -355,14 +357,14 @@ async function checkYouTube(channelId) {
 async function checkTikTok(username) {
     logger.info(`[TikTok Check] Starting for username: ${username}`);
     const defaultResponse = { isLive: false, profileImageUrl: null };
-    let page = null;
+    let browser = null;
     try {
-        const browser = await getBrowser();
+        browser = await getBrowser();
         if (!browser) {
             logger.error('[TikTok Check] Browser not available.');
             return defaultResponse;
         }
-        page = await browser.newPage();
+        const page = await browser.newPage();
         page.on('crash', () => logger.error(`[TikTok Check] Page crashed for ${username}`));
 
         const url = `https://www.tiktok.com/@${username}/live`;
@@ -390,7 +392,7 @@ async function checkTikTok(username) {
         logger.error(`[Check TikTok Error] for "${username}":`, e.message);
         return { ...defaultResponse, profileImageUrl: null };
     } finally {
-        if (page) await page.close().catch(e => logger.error(`[TikTok Check] Error closing page for ${username}:`, e));
+        if (browser) await closeBrowser(browser);
         logger.info(`[TikTok Check] Finished for username: ${username}`);
     }
 }
@@ -398,14 +400,14 @@ async function checkTikTok(username) {
 async function checkTrovo(username) {
     logger.info(`[Trovo Check] Starting for username: ${username}`);
     const defaultResponse = { isLive: false, profileImageUrl: null };
-    let page = null;
+    let browser = null;
     try {
-        const browser = await getBrowser();
+        browser = await getBrowser();
         if (!browser) {
             logger.error('[Trovo Check] Browser not available.');
             return defaultResponse;
         }
-        page = await browser.newPage();
+        const page = await browser.newPage();
         page.on('crash', () => logger.error(`[Trovo Check] Page crashed for ${username}`));
 
         const url = `https://trovo.live/s/${username}`;
@@ -434,7 +436,7 @@ async function checkTrovo(username) {
         logger.error(`[Check Trovo Error] for "${username}":`, e.message);
         return { ...defaultResponse, profileImageUrl: null };
     } finally {
-        if (page) await page.close().catch(e => logger.error(`[Trovo Check] Error closing page for ${username}:`, e));
+        if (browser) await closeBrowser(browser);
         logger.info(`[Trovo Check] Finished for username: ${username}`);
     }
 }

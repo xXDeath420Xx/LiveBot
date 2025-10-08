@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
+const logger = require('../utils/logger');
 
 // Helper to parse time strings like "10s", "5m", "1h" into seconds
 function parseTimeToSeconds(timeStr) {
@@ -33,22 +34,23 @@ module.exports = {
         ),
 
     async execute(interaction) {
+        await interaction.deferReply({ ephemeral: true });
         const durationStr = interaction.options.getString('duration').toLowerCase();
         const reason = interaction.options.getString('reason') || 'No reason provided.';
         const channel = interaction.channel;
 
         if (channel.type !== ChannelType.GuildText) {
-            return interaction.reply({ content: 'This command can only be used in text channels.', ephemeral: true });
+            return interaction.editReply({ content: 'This command can only be used in text channels.' });
         }
 
         const seconds = parseTimeToSeconds(durationStr);
 
         if (seconds === null) {
-            return interaction.reply({ content: 'Invalid duration format. Use formats like `10s`, `5m`, `1h`, or `off`.', ephemeral: true });
+            return interaction.editReply({ content: 'Invalid duration format. Use formats like `10s`, `5m`, `1h`, or `off`.' });
         }
 
         if (seconds > 21600) { // Discord's max is 6 hours (21600 seconds)
-            return interaction.reply({ content: 'The maximum slowmode duration is 6 hours (6h).', ephemeral: true });
+            return interaction.editReply({ content: 'The maximum slowmode duration is 6 hours (6h).' });
         }
 
         try {
@@ -65,11 +67,11 @@ module.exports = {
                      .setDescription('The slowmode cooldown has been removed.');
             }
             
-            await interaction.reply({ embeds: [embed] });
+            await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('[Slowmode Command Error]', error);
-            await interaction.reply({ content: 'Failed to set the slowmode. Do I have the Manage Channels permission?', ephemeral: true });
+            logger.error('[Slowmode Command Error]', error);
+            await interaction.editReply({ content: 'Failed to set the slowmode. Do I have the Manage Channels permission?' });
         }
     },
 };

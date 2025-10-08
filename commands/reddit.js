@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
 const axios = require('axios');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -30,8 +31,13 @@ module.exports = {
     async autocomplete(interaction) {
         if (interaction.options.getSubcommand() === 'remove') {
             const focusedValue = interaction.options.getFocused();
-            const [feeds] = await db.execute('SELECT DISTINCT subreddit FROM reddit_feeds WHERE guild_id = ? AND subreddit LIKE ?', [interaction.guild.id, `${focusedValue}%`]);
-            await interaction.respond(feeds.map(feed => ({ name: feed.subreddit, value: feed.subreddit })));
+            try {
+                const [feeds] = await db.execute('SELECT DISTINCT subreddit FROM reddit_feeds WHERE guild_id = ? AND subreddit LIKE ?', [interaction.guild.id, `${focusedValue}%`]);
+                await interaction.respond(feeds.map(feed => ({ name: feed.subreddit, value: feed.subreddit })));
+            } catch (error) {
+                logger.error('[Reddit Command Autocomplete Error]', error);
+                await interaction.respond([]); // Respond with an empty array on error
+            }
         }
     },
 
@@ -49,6 +55,7 @@ module.exports = {
                 try {
                     await axios.get(`https://www.reddit.com/r/${subreddit}/new.json?limit=1`);
                 } catch (e) {
+                    logger.warn(`[Reddit Command] Subreddit r/${subreddit} not found or inaccessible: ${e.message}`);
                     return interaction.editReply(`❌ The subreddit \`r/${subreddit}\` does not seem to exist or is private.`);
                 }
 
@@ -77,7 +84,7 @@ module.exports = {
                 await interaction.editReply({ embeds: [embed] });
             }
         } catch (error) {
-            console.error('[Reddit Command Error]', error);
+            logger.error('[Reddit Command Error]', error);
             if (error.code === 'ER_DUP_ENTRY') {
                 await interaction.editReply('A feed for that subreddit in that channel already exists.');
             } else {

@@ -1,14 +1,11 @@
-
 const { Queue } = require('bullmq');
-const Redis = require('ioredis');
-require('dotenv').config();
+const { redisOptions } = require('../utils/cache');
 
-const redisClient = new Redis(process.env.REDIS_URL);
-const systemQueue = new Queue('system-tasks', { connection: redisClient });
+const systemQueue = new Queue('system-tasks', { connection: redisOptions });
 
 async function scheduleStatsCollection() {
     // Remove any old scheduled job to avoid duplicates
-    await systemQueue.removeRepeatable('collect-server-stats');
+    await systemQueue.removeRepeatable('collect-server-stats', { cron: '0 0 * * *' }, 'collect-server-stats');
 
     // Add the new job, scheduled to run once a day at midnight UTC
     await systemQueue.add('collect-server-stats', {}, {
@@ -20,6 +17,7 @@ async function scheduleStatsCollection() {
         removeOnFail: true,
     });
     console.log('[StatsScheduler] Daily server stats collection job scheduled.');
+    await systemQueue.close();
 }
 
 scheduleStatsCollection().catch(console.error);

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, escapeMarkdown, PermissionsBitField } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 async function sendPaginatedEmbed(interaction, pages) {
     if (!pages || pages.length === 0) return;
@@ -25,8 +26,10 @@ async function sendPaginatedEmbed(interaction, pages) {
         await i.update({ embeds: [pages[currentPage]], components: [createButtons()] });
     });
 
-    collector.on('end', () => {
-        message.edit({ components: [createButtons(true)] }).catch(()=>{});
+    collector.on('end', (collected, reason) => {
+        if (reason === 'time') {
+            message.edit({ components: [createButtons(true)] }).catch(e => logger.warn(`[List Streamers] Failed to disable pagination buttons: ${e.message}`));
+        }
     });
 };
 
@@ -84,7 +87,7 @@ module.exports = {
       
       await sendPaginatedEmbed(interaction, pages);
     } catch (e) { 
-        console.error('Error in /liststreamers:', e);
+        logger.error('[List Streamers Command Error]', e);
         await interaction.editReply({ content: 'An error occurred while fetching the list.' }).catch(()=>{});
     }
   },

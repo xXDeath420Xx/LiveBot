@@ -1,16 +1,16 @@
 const playwright = require('playwright-core');
+const logger = require('./logger');
 
-let browserContext = null;
-
+/**
+ * Launches a new, isolated browser instance.
+ * This is more stable in a multi-process environment than a single persistent context.
+ * @returns {Promise<import('playwright-core').Browser|null>}
+ */
 async function getBrowser() {
-    if (browserContext && browserContext.browser() && browserContext.browser().isConnected()) {
-        return browserContext;
-    }
     try {
-        console.log('[BrowserManager] Initializing new persistent browser instance...');
-        browserContext = await playwright.chromium.launchPersistentContext('./user-data-dir', {
+        const browser = await playwright.chromium.launch({
             headless: true,
-            executablePath: process.env.CHROME_EXECUTABLE_PATH, // Make sure to set this in your .env
+            executablePath: process.env.CHROME_EXECUTABLE_PATH,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -18,36 +18,24 @@ async function getBrowser() {
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--single-process', // Might help on low-resource systems
                 '--disable-gpu'
             ],
         });
-        browserContext.on('close', () => {
-            console.log('[BrowserManager] Persistent browser context closed.');
-            browserContext = null; // Reset browser instance on close
-        });
-        console.log('[BrowserManager] New browser instance launched successfully.');
-        return browserContext;
+        return browser;
     } catch (e) {
-        console.error('[BrowserManager] FATAL: Could not launch browser:', e);
-        browserContext = null;
+        logger.error('[BrowserManager] FATAL: Could not launch browser:', e);
         return null;
     }
 }
 
-async function closeBrowser() {
-    // This function is now a no-op because we want to keep the browser persistent.
-}
-
-async function gracefulShutdown() {
-    if (browserContext) {
-        console.log('[BrowserManager] Gracefully shutting down persistent browser...');
-        await browserContext.close();
-        browserContext = null;
+/**
+ * Gracefully closes a browser instance.
+ * @param {import('playwright-core').Browser} browser The browser instance to close.
+ */
+async function closeBrowser(browser) {
+    if (browser && browser.isConnected()) {
+        await browser.close();
     }
 }
-
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
 
 module.exports = { getBrowser, closeBrowser };

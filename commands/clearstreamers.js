@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -45,7 +46,7 @@ module.exports = {
             const purgePromises = announcementsToPurge.map(ann => {
                 return interaction.client.channels.fetch(ann.channel_id)
                     .then(channel => channel?.messages.delete(ann.message_id))
-                    .catch(() => {});
+                    .catch(e => logger.warn(`Failed to delete message ${ann.message_id} in channel ${ann.channel_id}: ${e.message}`));
             });
             await Promise.allSettled(purgePromises);
             purgedMessageCount = announcementsToPurge.length;
@@ -58,7 +59,7 @@ module.exports = {
           });
 
         } catch (dbError) {
-          console.error('Database error when clearing streamers:', dbError);
+          logger.error('[Clear Streamers Command Error] Database error:', dbError);
           await interaction.editReply({
             content: '❌ An error occurred while trying to clear the server. Please try again later.',
           });
@@ -71,6 +72,7 @@ module.exports = {
         });
       }
     } catch (e) {
+      logger.error('[Clear Streamers Command Error] Confirmation timeout or error:', e);
       await interaction.editReply({
         content: 'Confirmation not received within 1 minute, cancelling.',
         embeds: [],

@@ -12,6 +12,7 @@ module.exports = {
         ),
 
     async execute(interaction) {
+        await interaction.deferReply();
         const sides = interaction.options.getInteger('sides') || 6;
         const result = Math.floor(Math.random() * sides) + 1;
 
@@ -20,6 +21,6 @@ module.exports = {
             .setTitle(`🎲 Dice Roll (1-${sides})`)
             .setDescription(`You rolled a **${result}**!`);
         
-        await interaction.reply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     },
 };

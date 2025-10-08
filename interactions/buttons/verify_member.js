@@ -27,7 +27,12 @@ module.exports = {
             await interaction.member.roles.add(role);
             
             // NEW: After giving the verification role, trigger the autoroles
-            await assignRolesAfterVerification(interaction.member);
+            try {
+                await assignRolesAfterVerification(interaction.member);
+            } catch (autoroleError) {
+                logger.error(`[Verification] Error assigning autoroles after verification for ${interaction.user.tag}:`, autoroleError);
+                // This error is not critical enough to stop the verification success message
+            }
 
             await interaction.editReply('You have been successfully verified!');
         } catch (error) {

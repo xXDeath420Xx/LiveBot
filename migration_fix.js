@@ -21,19 +21,30 @@ async function fixMissingPlatformIds() {
         let fixedCount = 0;
         let failedCount = 0;
 
-        if (streamersToFix.some(s => s.platform === 'kick')) {
-            cycleTLS = await initCycleTLS({ timeout: 60000 });
+        const needsCycleTLS = streamersToFix.some(s => s.platform === 'kick');
+        if (needsCycleTLS) {
+            try {
+                cycleTLS = await initCycleTLS({ timeout: 60000 });
+                console.log('[MIGRATE] cycleTLS initialized for Kick platform.');
+            } catch (cycleTLSError) {
+                console.error('[MIGRATE] Error initializing cycleTLS. Kick platform IDs may not be fixable:', cycleTLSError.message);
+                // Continue without cycleTLS, Kick platform IDs will likely fail.
+            }
         }
 
         for (const streamer of streamersToFix) {
             console.log(`[MIGRATE] > Processing ${streamer.username} on ${streamer.platform}...`);
             let puid = null;
 
-            try { // Added try-catch for individual API calls for robustness
-                if (streamer.platform === 'kick' && cycleTLS) {
-                    const kickUser = await apiChecks.getKickUser(cycleTLS, streamer.username);
-                    if (kickUser && kickUser.id) {
-                        puid = kickUser.id.toString();
+            try {
+                if (streamer.platform === 'kick') {
+                    if (cycleTLS) {
+                        const kickUser = await apiChecks.getKickUser(cycleTLS, streamer.username);
+                        if (kickUser && kickUser.id) {
+                            puid = kickUser.id.toString();
+                        }
+                    } else {
+                        console.log(`[MIGRATE]   ❌ SKIPPED: Kick platform ID for ${streamer.username} because cycleTLS failed to initialize.`);
                     }
                 } else if (streamer.platform === 'twitch') {
                     const twitchUser = await apiChecks.getTwitchUser(streamer.username);
@@ -47,13 +58,10 @@ async function fixMissingPlatformIds() {
                     }
                 }
             } catch (apiError) {
-                // Log the specific API error but allow the loop to continue
                 console.log(`[MIGRATE]   ❌ FAILED API Call for ${streamer.username} on ${streamer.platform}: ${apiError.message}`);
-                // puid remains null, so it will be caught by the outer `if (puid)` check and logged as failed.
             }
 
-            // Add a small delay to prevent hitting API rate limits during bulk operations
-            await new Promise(resolve => setTimeout(resolve, 250)); // 250ms delay
+            await new Promise(resolve => setTimeout(resolve, 250));
 
             if (puid) {
                 await db.execute(
@@ -63,7 +71,6 @@ async function fixMissingPlatformIds() {
                 console.log(`[MIGRATE]   ✔️ SUCCESS: Updated ${streamer.username} with ID: ${puid}`);
                 fixedCount++;
             } else {
-                // This branch also catches streamers where puid remained null due to an API error
                 console.log(`[MIGRATE]   ❌ FAILED: Could not find platform ID for ${streamer.username} on ${streamer.platform}. Please check the username.`);
                 failedCount++;
             }
@@ -74,10 +81,14 @@ async function fixMissingPlatformIds() {
         console.log(`[MIGRATE] ${failedCount} records failed. Manual review may be needed.`);
 
     } catch (error) {
-        console.error('[MIGRATE] A critical error occurred:', error);
+        console.error('[MIGRATE] A critical error occurred during migration:', error);
     } finally {
-        if (cycleTLS) try { cycleTLS.exit(); } catch(e){ console.error('[MIGRATE] Error exiting cycleTLS:', e); }
-        await db.end();
+        if (cycleTLS) {
+            try { cycleTLS.exit(); } catch(e){ console.error('[MIGRATE] Error exiting cycleTLS:', e); }
+        }
+        if (db) {
+            try { await db.end(); } catch(e){ console.error('[MIGRATE] Error closing database connection:', e); }
+        }
     }
 }
 

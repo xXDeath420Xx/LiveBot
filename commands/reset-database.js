@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require("discord.js");
+require('dotenv').config(); // Ensure dotenv is loaded
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -7,7 +8,11 @@ module.exports = {
         .setDefaultMemberPermissions(0), // Only accessible by owner
 
     async execute(interaction) {
-        const BOT_OWNER_ID = "365905620060340224"; // Hardcoded as per server.js
+        const BOT_OWNER_ID = process.env.BOT_OWNER_ID; // Load from environment variable
+
+        if (!BOT_OWNER_ID) {
+            return interaction.reply({ content: "Bot owner ID is not configured. Please set BOT_OWNER_ID in your .env file.", ephemeral: true });
+        }
 
         if (interaction.user.id !== BOT_OWNER_ID) {
             return interaction.reply({ content: "You do not have permission to use this command.", ephemeral: true });

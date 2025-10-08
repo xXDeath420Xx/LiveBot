@@ -1,5 +1,6 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
-const { PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
+const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -21,27 +22,42 @@ module.exports = {
     const user = interaction.options.getUser('user');
     const member = interaction.guild.members.cache.get(user.id);
     const enable = interaction.options.getBoolean('enable');
+    const guildId = interaction.guild.id;
 
     if (!member) {
       return interaction.reply({ content: 'That user is not in this server.', ephemeral: true });
     }
 
     try {
-      const quarantineRole = interaction.guild.roles.cache.find(role => role.name === 'Quarantined');
+      const [[quarantineConfig]] = await db.execute('SELECT is_enabled, quarantine_role_id FROM quarantine_config WHERE guild_id = ?', [guildId]);
+
+      if (!quarantineConfig || !quarantineConfig.is_enabled) {
+        return interaction.reply({ content: 'The quarantine system is not enabled for this server.', ephemeral: true });
+      }
+
+      const quarantineRoleId = quarantineConfig.quarantine_role_id;
+      if (!quarantineRoleId) {
+        return interaction.reply({ content: 'No quarantine role is configured for this server. Please configure it in the dashboard.', ephemeral: true });
+      }
+
+      const quarantineRole = interaction.guild.roles.cache.get(quarantineRoleId);
       if (!quarantineRole) {
-        return interaction.reply({ content: 'Quarantine role not found. Please create a role named "Quarantined" with restricted permissions.', ephemeral: true });
+        return interaction.reply({ content: 'The configured quarantine role was not found in this server. Please check your dashboard settings.', ephemeral: true });
       }
 
       if (enable) {
-        await member.roles.set(member.roles.cache.filter(role => !role.managed && role.id !== interaction.guild.id).set(quarantineRole.id, quarantineRole));
+        // Remove all other roles and add the quarantine role
+        const rolesToRemove = member.roles.cache.filter(role => !role.managed && role.id !== interaction.guild.id);
+        await member.roles.remove(rolesToRemove);
+        await member.roles.add(quarantineRole);
         await interaction.reply({ content: `${user.tag} has been quarantined.`, ephemeral: true });
       } else {
         await member.roles.remove(quarantineRole);
         await interaction.reply({ content: `${user.tag} has been released from quarantine.`, ephemeral: true });
       }
     } catch (error) {
-      console.error(error);
-      await interaction.reply({ content: 'An error occurred while trying to quarantine the user.', ephemeral: true });
+      logger.error('[Quarantine Command Error]', error);
+      await interaction.reply({ content: 'An error occurred while trying to toggle quarantine for the user.', ephemeral: true });
     }
   },
 };

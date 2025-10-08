@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -43,6 +44,7 @@ module.exports = {
                 await db.execute('UPDATE guilds SET bot_nickname = NULL WHERE guild_id = ?', [guildId]);
                 nicknameUpdated = true;
             } catch (e) {
+                logger.error('[Customize Bot Command] Failed to reset nickname:', e);
                 return interaction.editReply({ content: "Failed to reset nickname. My role is likely not high enough in the role list or I lack permissions." });
             }
         } else if (newNickname) {
@@ -51,6 +53,7 @@ module.exports = {
                 await db.execute('UPDATE guilds SET bot_nickname = ? WHERE guild_id = ?', [newNickname, guildId]);
                 nicknameUpdated = true;
             } catch (e) {
+                logger.error('[Customize Bot Command] Failed to set nickname:', e);
                 return interaction.editReply({ content: "Failed to set nickname. My role is likely not high enough in the role list." });
             }
         }
@@ -65,7 +68,7 @@ module.exports = {
             }
             const tempUploadChannelId = process.env.TEMP_UPLOAD_CHANNEL_ID;
             if (!tempUploadChannelId) {
-                throw new Error("Temporary upload channel ID is not configured. Set TEMP_UPLOAD_CHANNEL_ID in your .env file.");
+                return interaction.editReply({ content: "Temporary upload channel ID is not configured. Please set TEMP_UPLOAD_CHANNEL_ID in your .env file." });
             }
             try {
                 const tempChannel = await interaction.client.channels.fetch(tempUploadChannelId);
@@ -75,7 +78,7 @@ module.exports = {
                 permanentAvatarUrl = tempMessage.attachments.first().url;
                 avatarUpdated = true;
             } catch (uploadError) {
-                console.error('[Customize Bot Command] Error uploading temporary avatar to Discord:', uploadError);
+                logger.error('[Customize Bot Command] Error uploading temporary avatar to Discord:', uploadError);
                 return interaction.editReply({ content: "Failed to upload custom avatar. Check bot's permissions or TEMP_UPLOAD_CHANNEL_ID." });
             }
         }
@@ -105,7 +108,7 @@ module.exports = {
         await interaction.editReply({ embeds: [embed] });
 
     } catch (error) {
-        console.error('Customize Bot Error:', error);
+        logger.error('Customize Bot Error:', error);
         await interaction.editReply({ content: `An error occurred: ${error.message}` });
     }
   }

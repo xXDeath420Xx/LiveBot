@@ -1,25 +1,31 @@
 const passport = require('passport');
-const { Strategy } = require('passport-discord');
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+const DiscordStrategy = require('passport-discord').Strategy;
+const logger = require('../utils/logger');
 
+// Store the entire user object in the session
 passport.serializeUser((user, done) => {
     done(null, user);
 });
 
+// Retrieve the entire user object from the session
 passport.deserializeUser((obj, done) => {
     done(null, obj);
 });
 
-const discordStrategy = new Strategy({
+passport.use(new DiscordStrategy({
     clientID: process.env.DASHBOARD_CLIENT_ID,
     clientSecret: process.env.DASHBOARD_CLIENT_SECRET,
     callbackURL: process.env.DASHBOARD_CALLBACK_URL,
     scope: ['identify', 'guilds']
-}, (accessToken, refreshToken, profile, done) => {
-    profile.isSuperAdmin = (profile.id === process.env.BOT_OWNER_ID);
-    process.nextTick(() => {
+}, async (accessToken, refreshToken, profile, done) => {
+    try {
+        // Correctly check against BOT_OWNER_ID from the .env file
+        profile.isSuperAdmin = (profile.id === process.env.BOT_OWNER_ID);
+        logger.info(`User ${profile.username}#${profile.discriminator} (ID: ${profile.id}) logged in. Super Admin status: ${profile.isSuperAdmin}`);
+        
         return done(null, profile);
-    });
-});
-
-passport.use(discordStrategy);
+    } catch (err) {
+        logger.error('Error in Discord strategy:', { category: 'auth', error: err.stack });
+        return done(err, null);
+    }
+}));

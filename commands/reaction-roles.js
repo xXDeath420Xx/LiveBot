@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -55,7 +56,7 @@ module.exports = {
                 });
 
             } catch (error) {
-                console.error("Failed to create reaction role panel:", error);
+                logger.error("Failed to create reaction role panel:", error);
                 await interaction.editReply({ content: 'Could not create the panel. Please ensure I have permissions to send messages and embeds in that channel.' });
             }
         }

@@ -1,0 +1,99 @@
+<div class="row">
+    <div class="col-12">
+        <h3>Giveaways</h3>
+        <p class="text-muted">Create and manage giveaways in your server.</p>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Create a New Giveaway</h4>
+        <p class="card-subtitle mb-3 text-muted">Set up a new giveaway for your members.</p>
+        <form action="/manage/<%= guild.id %>/create-giveaway" method="POST">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="prize" class="form-label">Prize</label>
+                    <input type="text" class="form-control" id="prize" name="prize" required>
+                </div>
+                <div class="col-md-3">
+                    <label for="winner_count" class="form-label">Number of Winners</label>
+                    <input type="number" class="form-control" id="winner_count" name="winner_count" value="1" min="1" required>
+                </div>
+                <div class="col-md-3">
+                    <label for="duration_minutes" class="form-label">Duration (minutes)</label>
+                    <input type="number" class="form-control" id="duration_minutes" name="duration_minutes" value="60" min="1" required>
+                </div>
+                <div class="col-md-9">
+                    <label for="channel_id" class="form-label">Announcement Channel</label>
+                    <select class="form-select" id="channel_id" name="channel_id" required>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>">#<%= channel.name %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-play me-2"></i>Start Giveaway</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Active & Recent Giveaways</h4>
+        <p class="card-subtitle mb-3 text-muted">View and manage ongoing and past giveaways.</p>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th>Prize</th>
+                    <th>Channel</th>
+                    <th>Ends At</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                <% if (giveaways && giveaways.length > 0) { %>
+                    <% giveaways.forEach(giveaway => { %>
+                        <tr>
+                            <td><%= giveaway.prize %></td>
+                            <td>#<%= channels.find(c => c.id === giveaway.channel_id) ? channels.find(c => c.id === giveaway.channel_id).name : 'Unknown' %></td>
+                            <td><%= new Date(giveaway.ends_at).toLocaleString() %></td>
+                            <td>
+                                <% if (giveaway.is_active) { %>
+                                    <span class="badge bg-success">Active</span>
+                                <% } else { %>
+                                    <span class="badge bg-secondary">Ended</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <% if (giveaway.is_active) { %>
+                                    <form action="/manage/<%= guild.id %>/end-giveaway" method="POST" class="d-inline">
+                                        <input type="hidden" name="giveawayId" value="<%= giveaway.id %>">
+                                        <button type="submit" class="btn btn-sm btn-warning">End Now</button>
+                                    </form>
+                                <% } else { %>
+                                     <form action="/manage/<%= guild.id %>/reroll-giveaway" method="POST" class="d-inline">
+                                        <input type="hidden" name="giveawayId" value="<%= giveaway.id %>">
+                                        <button type="submit" class="btn btn-sm btn-info">Reroll</button>
+                                    </form>
+                                <% } %>
+                                <form action="/manage/<%= guild.id %>/delete-giveaway" method="POST" class="d-inline">
+                                    <input type="hidden" name="giveawayId" value="<%= giveaway.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }) %>
+                <% } else { %>
+                    <tr>
+                        <td colspan="5" class="text-center">No giveaways found.</td>
+                    </tr>
+                <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

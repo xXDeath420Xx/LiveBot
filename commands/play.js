@@ -1,16 +1,21 @@
-const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
-const musicManager = require('../core/music-manager');
+const { SlashCommandBuilder } = require('discord.js');
+const { checkMusicPermissions } = require('../utils/music_helpers');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Plays a song from YouTube in your voice channel.')
+    .setDescription('Plays a song from any supported source (YouTube, Spotify, SoundCloud, etc.).')
     .addStringOption(option =>
       option.setName('query')
-        .setDescription('The YouTube URL or search query for the song.')
+        .setDescription('The song URL or search query.')
         .setRequired(true)),
 
   async execute(interaction) {
+    const permissionCheck = await checkMusicPermissions(interaction);
+    if (!permissionCheck.permitted) {
+        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
+    }
+
     const query = interaction.options.getString('query');
     const member = interaction.member;
 
@@ -22,24 +27,17 @@ module.exports = {
       return interaction.reply({ content: 'I cannot join your voice channel!', ephemeral: true });
     }
 
-    await interaction.deferReply();
+    await interaction.reply({ content: `🎶 Searching for \`${query}\`...` });
 
     try {
-      const result = await musicManager.play(member.voice.channel, query, interaction.user);
-      
-      const embed = new EmbedBuilder()
-        .setColor('#57F287')
-        .setAuthor({ name: result.addedToQueue ? 'Added to Queue' : 'Now Playing' })
-        .setTitle(result.song.title)
-        .setURL(result.song.url)
-        .setThumbnail(result.song.thumbnail)
-        .addFields(
-          { name: 'Channel', value: result.song.channel, inline: true },
-          { name: 'Duration', value: result.song.duration, inline: true }
-        )
-        .setFooter({ text: `Requested by ${interaction.user.tag}` });
+      await interaction.client.distube.play(member.voice.channel, query, {
+        member: member,
+        textChannel: interaction.channel,
+      });
+      // DisTube will handle the "Now Playing" message via its event listeners.
+      // We edit the reply here to remove the "Searching..." message.
+      await interaction.deleteReply();
 
-      await interaction.editReply({ embeds: [embed] });
     } catch (error) {
       console.error('[Play Command Error]', error);
       await interaction.editReply({ content: `❌ Error: ${error.message}` });

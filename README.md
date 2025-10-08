@@ -86,6 +86,8 @@ DB_NAME=livebot
 TWITCH_CLIENT_ID=your_twitch_client_id
 TWITCH_CLIENT_SECRET=your_twitch_client_secret
 YOUTUBE_API_KEY=your_youtube_api_key
+SPOTIFY_CLIENT_ID=your_spotify_client_id_here
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
 
 # Redis
 REDIS_HOST=127.0.0.1

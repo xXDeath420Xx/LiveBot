@@ -1,4 +1,4 @@
-
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const { EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
 const logger = require('../utils/logger');

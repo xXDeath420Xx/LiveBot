@@ -1,0 +1,43 @@
+<div class="row">
+    <div class="col-12">
+        <h3>Record</h3>
+        <p class="text-muted">Record voice channel conversations and save them as audio files.</p>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Recording Configuration</h4>
+        <p class="card-subtitle mb-3 text-muted">Set up permissions and a channel for saved recordings.</p>
+        <form action="/manage/<%= guild.id %>/record/config" method="POST">
+            <div class="mb-3">
+                <label for="recordEnabled" class="form-label">Enable Recording</label>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="recordEnabled" name="enabled" <%= recordConfig && recordConfig.enabled ? 'checked' : '' %>>
+                    <label class="form-check-label" for="recordEnabled">Enable</label>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="recordChannel" class="form-label">Recording Output Channel</label>
+                <select class="form-select" id="recordChannel" name="channelId">
+                    <option value="">Select a channel</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= recordConfig && recordConfig.channel_id === channel.id ? 'selected' : '' %> >#<%= channel.name %></option>
+                    <% }) %>
+                </select>
+                <div class="form-text">The channel where saved recording files will be sent.</div>
+            </div>
+            <div class="mb-3">
+                <label for="recordRole" class="form-label">Recording Permission Role</label>
+                <select class="form-select" id="recordRole" name="roleId">
+                    <option value="">Select a role</option>
+                    <% roles.forEach(role => { %>
+                        <option value="<%= role.id %>" <%= recordConfig && recordConfig.role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                    <% }) %>
+                </select>
+                <div class="form-text">Only users with this role can start recordings.</div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </form>
+    </div>
+</div>

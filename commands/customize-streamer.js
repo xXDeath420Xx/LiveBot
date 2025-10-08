@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ChannelType } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -64,6 +65,7 @@ module.exports = {
             }
             const tempUploadChannelId = process.env.TEMP_UPLOAD_CHANNEL_ID;
             if (!tempUploadChannelId) {
+                logger.error('[Customize Streamer Command] TEMP_UPLOAD_CHANNEL_ID is not configured.');
                 return interaction.editReply({ content: "Temporary upload channel ID is not configured. Please set TEMP_UPLOAD_CHANNEL_ID in your .env file." });
             }
             try {
@@ -74,7 +76,7 @@ module.exports = {
                 const tempMessage = await tempChannel.send({ files: [{ attachment: newAvatarAttachment.url, name: newAvatarAttachment.name }] });
                 finalAvatarUrl = tempMessage.attachments.first().url;
             } catch (uploadError) {
-                console.error('[Customize Streamer Command] Error uploading temporary avatar to Discord:', uploadError);
+                logger.error('[Customize Streamer Command] Error uploading temporary avatar to Discord:', uploadError);
                 return interaction.editReply({ content: "Failed to upload custom avatar. Please check bot\'s permissions or TEMP_UPLOAD_CHANNEL_ID." });
             }
         }
@@ -124,7 +126,7 @@ module.exports = {
         await interaction.editReply({ embeds: [embed] });
 
     } catch (error) {
-        console.error('Customize Streamer Error:', error);
+        logger.error('[Customize Streamer Error]', error);
         await interaction.editReply(`An error occurred while updating the streamer customization: ${error.message}`);
     }
   }

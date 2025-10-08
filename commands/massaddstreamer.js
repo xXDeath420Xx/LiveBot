@@ -2,6 +2,8 @@ const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ChannelType } = 
 const db = require('../utils/db');
 const apiChecks = require('../utils/api_checks');
 const { getBrowser } = require('../utils/browserManager');
+const logger = require('../utils/logger');
+const initCycleTLS = require('cycletls');
 
 module.exports = {
   data: new SlashCommandBuilder().setName('massaddstreamer').setDescription('Adds multiple streamers from a platform.')
@@ -26,6 +28,7 @@ module.exports = {
 
     const added = [], failed = [], updated = [];
     let browser = null;
+    let cycleTLS = null;
     let finalAvatarUrl = null;
 
     try {
@@ -35,29 +38,53 @@ module.exports = {
             }
             const tempUploadChannelId = process.env.TEMP_UPLOAD_CHANNEL_ID;
             if (!tempUploadChannelId) {
-                throw new Error("Temporary upload channel ID is not configured. Please set TEMP_UPLOAD_CHANNEL_ID in your .env file for avatar uploads.");
+                logger.error('[Mass Add Streamer] TEMP_UPLOAD_CHANNEL_ID is not configured.');
+                return interaction.editReply({ content: "Temporary upload channel ID is not configured. Please set TEMP_UPLOAD_CHANNEL_ID in your .env file for avatar uploads." });
             }
             try {
                 const tempChannel = await interaction.client.channels.fetch(tempUploadChannelId);
                 if (!tempChannel) {
-                    throw new Error("Temporary upload channel not found. Check TEMP_UPLOAD_CHANNEL_ID in .env.");
+                    logger.error('[Mass Add Streamer] Temporary upload channel not found.');
+                    return interaction.editReply({ content: "Temporary upload channel not found. Check TEMP_UPLOAD_CHANNEL_ID in .env." });
                 }
                 const tempMessage = await tempChannel.send({ files: [{ attachment: avatarAttachment.url, name: avatarAttachment.name }] });
                 finalAvatarUrl = tempMessage.attachments.first().url;
             } catch (uploadError) {
-                console.error('[Mass Add Streamer] Error uploading temporary avatar to Discord:', uploadError);
-                throw new Error("Failed to upload custom avatar. Check bot's permissions or TEMP_UPLOAD_CHANNEL_ID.");
+                logger.error('[Mass Add Streamer] Error uploading temporary avatar to Discord:', uploadError);
+                return interaction.editReply({ content: "Failed to upload custom avatar. Check bot's permissions or TEMP_UPLOAD_CHANNEL_ID." });
             }
         }
 
-        if (['tiktok', 'trovo', 'youtube'].includes(platform)) browser = await getBrowser();
+        const platformsToCheck = new Set(usernames.map(() => platform)); // Assuming all usernames are for the same platform
+
+        if (platformsToCheck.has('tiktok') || platformsToCheck.has('trovo') || platformsToCheck.has('youtube')) {
+            browser = await getBrowser();
+        }
+
+        if (platformsToCheck.has('kick')) {
+            try {
+                cycleTLS = await initCycleTLS({ timeout: 60000 });
+            } catch (cycleTLSError) {
+                logger.error('[Mass Add Streamer] Error initializing cycleTLS. Kick platform lookups may fail:', cycleTLSError);
+                // Continue without cycleTLS, Kick platform IDs will likely fail.
+            }
+        }
 
         for (const username of usernames) {
             try {
                 let streamerInfo = null;
                 if (platform === 'twitch') { const u = await apiChecks.getTwitchUser(username); if (u) streamerInfo = { puid: u.id, dbUsername: u.login }; }
-                else if (platform === 'kick') { const u = await apiChecks.getKickUser(username); if (u) streamerInfo = { puid: u.id.toString(), dbUsername: u.user.username }; } 
-                else if (platform === 'youtube') { const c = await apiChecks.getYouTubeChannelId(username); if (c?.channelId) streamerInfo = { puid: c.channelId, dbUsername: c.channelName || username }; } 
+                else if (platform === 'kick') {
+                    if (cycleTLS) {
+                        const u = await apiChecks.getKickUser(cycleTLS, username); 
+                        if (u) streamerInfo = { puid: u.id.toString(), dbUsername: u.user.username };
+                    } else {
+                        logger.warn(`[Mass Add Streamer] Skipping Kick API lookup for ${username} due to cycleTLS initialization failure.`);
+                        failed.push(`${username} (Kick API Unavailable)`);
+                        continue;
+                    }
+                }
+                else if (platform === 'youtube') { const c = await apiChecks.getYouTubeChannelId(username, browser); if (c?.channelId) streamerInfo = { puid: c.channelId, dbUsername: c.channelName || username }; } 
                 else if (['tiktok', 'trovo'].includes(platform)) { streamerInfo = { puid: username, dbUsername: username }; }
 
                 if (!streamerInfo || !streamerInfo.puid) { failed.push(`${username} (Not Found)`); continue; }
@@ -95,12 +122,20 @@ module.exports = {
                     added.push(username);
                 }
 
-            } catch (e) { console.error(`Mass add error for ${username}:`, e); failed.push(`${username} (API/DB Error)`); }
+            } catch (e) { logger.error(`[Mass Add Streamer] Error for ${username}:`, e); failed.push(`${username} (API/DB Error)`); }
         }
-    } finally { 
-        // No need to close browser, it's persistent now
+    } catch(e) {
+      logger.error('[Mass Add Streamer] Main Error:', e); 
+      return await interaction.editReply({content:`A critical error occurred processing the command: ${e.message}`}); 
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+      if (cycleTLS) {
+        try { cycleTLS.exit(); } catch(e){ logger.error('[Mass Add Streamer] Error exiting cycleTLS:', e); }
+      }
     }
-
+    
     const embed = new EmbedBuilder().setTitle('Mass Add Report').setColor('#5865F2');
     const field = (l) => l.length > 0 ? l.join(', ').substring(0, 1020) : 'None';
     embed.addFields(

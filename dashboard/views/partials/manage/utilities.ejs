@@ -1,104 +1,84 @@
-<div class="plugin-card">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-bullhorn me-2"></i> Auto-Publisher</h4>
+<div class="row">
+    <div class="col-12">
+        <h3>Utilities</h3>
+        <p class="text-muted">Configure various server utilities to enhance your community.</p>
     </div>
-    <div class="plugin-card-body">
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Auto Publisher</h4>
+        <p class="card-subtitle mb-3 text-muted">Automatically publish messages in your announcement channels.</p>
         <form action="/manage/<%= guild.id %>/update-autopublisher" method="POST">
-            <p class="text-muted">When enabled, the bot will automatically publish any new messages sent in your server's Announcement Channels.</p>
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="autopublisher-enabled" name="is_enabled" <%= (autoPublisherConfig && autoPublisherConfig.is_enabled) ? 'checked' : '' %>>
-                <label class="form-check-label" for="autopublisher-enabled">Enable Auto-Publisher</label>
+            <div class="mb-3">
+                <label for="autoPublisherEnabled" class="form-label">Enable Auto Publisher</label>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="autoPublisherEnabled" name="is_enabled" <%= autoPublisher && autoPublisher.is_enabled ? 'checked' : '' %>>
+                    <label class="form-check-label" for="autoPublisherEnabled">Enable</label>
+                </div>
             </div>
-            <div class="d-flex justify-content-end mt-3">
-                <button type="submit" class="btn btn-primary">Save Changes</button>
-            </div>
+            <button type="submit" class="btn btn-primary">Save Settings</button>
         </form>
     </div>
 </div>
 
-<div class="plugin-card">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-user-plus me-2"></i> Autoroles</h4>
-    </div>
-    <div class="plugin-card-body">
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Autoroles</h4>
+        <p class="card-subtitle mb-3 text-muted">Assign roles to members as soon as they join the server.</p>
         <form action="/manage/<%= guild.id %>/update-autoroles" method="POST">
-             <p class="text-muted">Automatically assign roles to new members when they join the server. The bot's role must be higher than the roles you want to assign.</p>
             <div class="mb-3">
-                 <label for="autoroles-roles" class="form-label">Roles to Assign on Join</label>
-                <select class="form-select" id="autoroles-roles" name="roles_to_assign" multiple size="5">
-                    <% const assignedRoles = autorolesConfig && autorolesConfig.roles_to_assign ? JSON.parse(autorolesConfig.roles_to_assign) : []; %>
+                <label for="autorolesEnabled" class="form-label">Enable Autoroles</label>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="autorolesEnabled" name="is_enabled" <%= autoroles && autoroles.is_enabled ? 'checked' : '' %>>
+                    <label class="form-check-label" for="autorolesEnabled">Enable</label>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="autoroleRole" class="form-label">Role to Assign</label>
+                <select class="form-select" id="autoroleRole" name="roles_to_assign">
+                    <option value="">Select a role</option>
                     <% roles.forEach(role => { %>
-                        <option value="<%= role.id %>" <%= assignedRoles.includes(role.id) ? 'selected' : '' %> >@<%= role.name %></option>
-                    <% }); %>
+                        <option value="<%= role.id %>" <%= autoroles && autoroles.roles_to_assign && JSON.parse(autoroles.roles_to_assign).includes(role.id) ? 'selected' : '' %>><%= role.name %></option>
+                    <% }) %>
                 </select>
-                <div class="form-text">Hold Ctrl/Cmd to select multiple roles.</div>
             </div>
-             <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="autoroles-enabled" name="is_enabled" <%= (autorolesConfig && autorolesConfig.is_enabled) ? 'checked' : '' %>>
-                <label class="form-check-label" for="autoroles-enabled">Enable Autoroles</label>
-            </div>
-            <div class="d-flex justify-content-end mt-3">
-                <button type="submit" class="btn btn-primary">Save Changes</button>
-            </div>
+            <button type="submit" class="btn btn-primary">Save Settings</button>
         </form>
     </div>
 </div>
 
-<div class="plugin-card mt-4">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-magnet me-2"></i> Sticky Roles</h4>
-    </div>
-    <div class="plugin-card-body">
-        <form action="/manage/<%= guild.id %>/update-stickyroles" method="POST">
-            <p class="text-muted">When enabled, the bot will remember a user's roles when they leave and automatically re-assign them if they rejoin.</p>
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" role="switch" id="stickyroles-enabled" name="sticky_roles_enabled" <%= (settings && settings.sticky_roles_enabled) ? 'checked' : '' %>>
-                <label class="form-check-label" for="stickyroles-enabled">Enable Sticky Roles</label>
-            </div>
-            <div class="d-flex justify-content-end mt-3">
-                <button type="submit" class="btn btn-primary">Save Changes</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<div class="plugin-card mt-4">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-plus-circle me-2"></i> Auto Voice Channels</h4>
-    </div>
-    <div class="plugin-card-body">
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Temporary Channels</h4>
+        <p class="card-subtitle mb-3 text-muted">Create temporary voice channels that are deleted when empty.</p>
         <form action="/manage/<%= guild.id %>/update-tempchannels" method="POST">
-            <p class="text-muted">Set up a "Join to Create" channel. When a user joins it, the bot will create a temporary voice channel for them.</p>
-
             <div class="mb-3">
-                <label for="creator-channel" class="form-label">Creator Channel</label>
-                <select class="form-select" name="creator_channel_id" id="creator-channel">
-                    <option value="">-- Disable System --</option>
-                    <% voiceChannels.forEach(vc => { %>
-                        <option value="<%= vc.id %>" <%= (tempChannelConfig && tempChannelConfig.creator_channel_id === vc.id) ? 'selected' : '' %> >#<%= vc.name %></option>
-                    <% }); %>
+                <label for="tempChannelCreator" class="form-label">Creator Channel</label>
+                <select class="form-select" id="tempChannelCreator" name="creator_channel_id">
+                    <option value="">Select a voice channel</option>
+                    <% voiceChannels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= tempChannels && tempChannels.creator_channel_id === channel.id ? 'selected' : '' %>><%= channel.name %></option>
+                    <% }) %>
                 </select>
+                 <div class="form-text">Users join this channel to create a new temporary channel.</div>
             </div>
-
             <div class="mb-3">
-                <label for="temp-category" class="form-label">Temporary Channel Category</label>
-                <select class="form-select" name="category_id" id="temp-category">
-                    <option value="">-- Select a Category --</option>
-                    <% categories.forEach(cat => { %>
-                        <option value="<%= cat.id %>" <%= (tempChannelConfig && tempChannelConfig.category_id === cat.id) ? 'selected' : '' %>><%= cat.name %></option>
-                    <% }); %>
+                <label for="tempChannelCategory" class="form-label">Channel Category</label>
+                <select class="form-select" id="tempChannelCategory" name="category_id">
+                    <option value="">Select a category</option>
+                    <% categories.forEach(category => { %>
+                        <option value="<%= category.id %>" <%= tempChannels && tempChannels.category_id === category.id ? 'selected' : '' %>><%= category.name %></option>
+                    <% }) %>
                 </select>
+                <div class="form-text">New temporary channels will be created in this category.</div>
             </div>
-            
             <div class="mb-3">
-                <label for="naming-template" class="form-label">Channel Naming Template</label>
-                <input type="text" class="form-control" name="naming_template" id="naming-template" value="<%= (tempChannelConfig && tempChannelConfig.naming_template) ? tempChannelConfig.naming_template : '{user}''s Channel' %>">
-                <div class="form-text">Use <code>{user}</code> as a placeholder for the user's display name.</div>
+                <label for="tempChannelName" class="form-label">Channel Name Format</label>
+                <input type="text" class="form-control" id="tempChannelName" name="naming_template" value="<%= tempChannels ? tempChannels.naming_template : '{username}\'s Channel' %>">
+                <div class="form-text">Use {username} as a placeholder for the user's name.</div>
             </div>
-
-            <div class="d-flex justify-content-end">
-                <button type="submit" class="btn btn-primary">Save Settings</button>
-            </div>
+            <button type="submit" class="btn btn-primary">Save Settings</button>
         </form>
     </div>
 </div>

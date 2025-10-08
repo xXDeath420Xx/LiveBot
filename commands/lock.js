@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,11 +12,12 @@ module.exports = {
         ),
 
     async execute(interaction) {
+        await interaction.deferReply({ ephemeral: true });
         const channel = interaction.channel;
         const reason = interaction.options.getString('reason') || 'No reason provided.';
 
         if (channel.type !== ChannelType.GuildText) {
-            return interaction.reply({ content: 'This command can only be used in text channels.', ephemeral: true });
+            return interaction.editReply({ content: 'This command can only be used in text channels.' });
         }
 
         try {
@@ -31,11 +33,11 @@ module.exports = {
                 .setTimestamp();
 
             await channel.send({ embeds: [embed] });
-            await interaction.reply({ content: 'Channel locked successfully.', ephemeral: true });
+            await interaction.editReply({ content: 'Channel locked successfully.' });
 
         } catch (error) {
-            console.error('[Lock Command Error]', error);
-            await interaction.reply({ content: 'Failed to lock the channel. Do I have the Manage Channels permission?', ephemeral: true });
+            logger.error('[Lock Command Error]', error);
+            await interaction.editReply({ content: 'Failed to lock the channel. Do I have the Manage Channels permission?' });
         }
     },
 };

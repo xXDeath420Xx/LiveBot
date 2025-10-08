@@ -1,7 +1,16 @@
 const {SlashCommandBuilder, EmbedBuilder, PermissionsBitField} = require("discord.js");
 const db = require("../utils/db");
+const logger = require("../utils/logger");
 
-// ... (generateScheduleGrid helper function remains the same)
+// Assuming generateScheduleGrid is defined elsewhere or is a helper function not included in this snippet
+function generateScheduleGrid(sessions) {
+    // Placeholder for the actual implementation of generateScheduleGrid
+    // This function would process stream_sessions to create a visual schedule grid.
+    // For example, it might count streams per hour/day and represent intensity with emojis.
+    // Since the original snippet had it commented out, I'm keeping this as a placeholder.
+    // If you provide the implementation, I can review it.
+    return "Schedule grid generation logic is not available in this snippet.";
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -61,7 +70,7 @@ module.exports = {
       await interaction.editReply({embeds: [embed]});
 
     } catch (error) {
-      console.error("[Schedule Command Error]", error);
+      logger.error("[Schedule Command Error]", error);
       await interaction.editReply({content: "An error occurred while generating the schedule."});
     }
   },

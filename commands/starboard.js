@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -32,19 +33,24 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
         const subcommand = interaction.options.getSubcommand();
 
-        if (subcommand === 'setup') {
-            const channel = interaction.options.getChannel('channel');
-            const threshold = interaction.options.getInteger('threshold') || 3;
+        try {
+            if (subcommand === 'setup') {
+                const channel = interaction.options.getChannel('channel');
+                const threshold = interaction.options.getInteger('threshold') || 3;
 
-            await db.execute(
-                'INSERT INTO starboard_config (guild_id, channel_id, star_threshold) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id), star_threshold = VALUES(star_threshold)',
-                [interaction.guild.id, channel.id, threshold]
-            );
+                await db.execute(
+                    'INSERT INTO starboard_config (guild_id, channel_id, star_threshold) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id), star_threshold = VALUES(star_threshold)',
+                    [interaction.guild.id, channel.id, threshold]
+                );
 
-            await interaction.editReply(`✅ Starboard enabled! Messages with ${threshold} or more ⭐ reactions will be posted in ${channel}.`);
-        } else if (subcommand === 'disable') {
-            await db.execute('DELETE FROM starboard_config WHERE guild_id = ?', [interaction.guild.id]);
-            await interaction.editReply('🗑️ The starboard has been disabled.');
+                await interaction.editReply(`✅ Starboard enabled! Messages with ${threshold} or more ⭐ reactions will be posted in ${channel}.`);
+            } else if (subcommand === 'disable') {
+                await db.execute('DELETE FROM starboard_config WHERE guild_id = ?', [interaction.guild.id]);
+                await interaction.editReply('🗑️ The starboard has been disabled.');
+            }
+        } catch (error) {
+            logger.error('[Starboard Command Error]', error);
+            await interaction.editReply({ content: 'An error occurred while managing the starboard.' });
         }
     },
 };

@@ -1,51 +1,108 @@
-<div class="plugin-card">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-hand-pointer me-2"></i> Reaction Roles</h4>
+<div class="row">
+    <div class="col-12">
+        <h3>Reaction Roles</h3>
+        <p class="text-muted">Allow users to assign themselves roles by reacting to a message.</p>
     </div>
-    <div class="plugin-card-body">
-        <p class="text-muted">Create panels where users can react to get roles. This is a powerful tool for self-assigning roles like colors, regions, or notification preferences.</p>
-        
-        <% reactionRolePanels.forEach(panel => { %>
-            <div class="p-3 rounded mb-3" style="background-color: var(--bg-primary);">
-                <h5>Panel: <%= panel.panel_name %></h5>
-                <p class="small text-muted">in <#<%= panel.channel_id %>> | Mode: <strong><%= panel.panel_mode %></strong> | <a href="https://discord.com/channels/<%= guild.id %>/<%= panel.channel_id %>/<%= panel.message_id %>" target="_blank">Jump to Message</a></p>
-                
-                <table class="table table-sm">
-                    <tbody>
-                    <% panel.mappings.forEach(map => { %>
-                        <tr>
-                            <td><%= map.emoji_id.length > 5 ? `<img src="https://cdn.discordapp.com/emojis/${map.emoji_id}.png" width="20">` : map.emoji_id %></td>
-                            <td><@&<%= map.role_id %>></td>
-                            <td class="text-end">
-                                <form action="/manage/<%= guild.id %>/remove-rr-mapping" method="POST" class="d-inline">
-                                    <input type="hidden" name="mappingId" value="<%= map.id %>">
-                                    <button type="submit" class="btn btn-xs btn-danger">X</button>
-                                </form>
-                            </td>
-                        </tr>
-                    <% }); %>
-                    </tbody>
-                </table>
+</div>
 
-                <form action="/manage/<%= guild.id %>/add-rr-mapping" method="POST" class="row gx-2 align-items-end">
-                    <input type="hidden" name="panelId" value="<%= panel.id %>">
-                    <div class="col-auto"><label class="form-label small">Emoji</label><input type="text" name="emoji_id" class="form-control form-control-sm" required></div>
-                    <div class="col"><label class="form-label small">Role</label><select name="role_id" class="form-select form-select-sm"><% roles.forEach(role => { %><option value="<%= role.id %>">@<%= role.name %></option><% }); %></select></div>
-                    <div class="col-auto"><button type="submit" class="btn btn-sm btn-info">Add Role</button></div>
-                </form>
-            </div>
-        <% }); %>
-
-        <hr class="my-4">
-        <h5>Create New Panel</h5>
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Create New Panel</h4>
+        <p class="card-subtitle text-muted mb-3">Create a message where users can react to get roles.</p>
         <form action="/manage/<%= guild.id %>/create-rr-panel" method="POST">
-            <div class="row">
-                <div class="col-md-4 mb-3"><label class="form-label">Panel Name</label><input type="text" class="form-control" name="panel_name" required></div>
-                <div class="col-md-4 mb-3"><label class="form-label">Post in Channel</label><select name="channel_id" class="form-select"><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }); %></select></div>
-                <div class="col-md-4 mb-3"><label class="form-label">Mode</label><select name="panel_mode" class="form-select"><option value="standard">Standard (Add/Remove)</option><option value="unique">Unique (Only one role from panel)</option></select></div>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Panel Name</label>
+                    <input type="text" name="panel_name" class="form-control" required placeholder="e.g., 'Color Roles'">
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Channel</label>
+                    <select name="channel_id" class="form-select" required>
+                        <% channels.forEach(c => { %>
+                            <option value="<%= c.id %>">#<%= c.name %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                 <div class="col-12">
+                    <label class="form-label">Message Content</label>
+                    <textarea name="message_content" class="form-control" rows="3" required placeholder="React to this message to get your roles!"></textarea>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus me-2"></i>Create Panel</button>
+                </div>
             </div>
-            <div class="mb-3"><label class="form-label">Message Content</label><textarea class="form-control" name="message_content" rows="3" required placeholder="React to the emojis below to get your roles!"></textarea></div>
-            <button type="submit" class="btn btn-success">Create Panel</button>
         </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title mb-0">Manage Panels</h4>
+        <p class="card-subtitle text-muted mt-1">Manage existing reaction role panels.</p>
+        
+        <% if (reactionRolePanels && reactionRolePanels.length > 0) { %>
+            <div class="accordion mt-3" id="reactionRolesAccordion">
+                <% reactionRolePanels.forEach((panel, index) => { %>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="heading<%= panel.id %>">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse<%= panel.id %>">
+                                <%= panel.panel_name %> (in #<%= channels.find(c => c.id === panel.channel_id) ? channels.find(c => c.id === panel.channel_id).name : 'Unknown' %>)
+                            </button>
+                        </h2>
+                        <div id="collapse<%= panel.id %>" class="accordion-collapse collapse" data-bs-parent="#reactionRolesAccordion">
+                            <div class="accordion-body">
+                                <p><strong>Mappings:</strong></p>
+                                <% if (panel.mappings && panel.mappings.length > 0) { %>
+                                    <ul class="list-group mb-3">
+                                        <% panel.mappings.forEach(mapping => { %>
+                                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                <span><%= mapping.emoji_id %> - @<%= roles.find(r => r.id === mapping.role_id) ? roles.find(r => r.id === mapping.role_id).name : 'Unknown Role' %></span>
+                                                <form action="/manage/<%= guild.id %>/remove-rr-mapping" method="POST" class="d-inline">
+                                                    <input type="hidden" name="mappingId" value="<%= mapping.id %>">
+                                                    <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                                                </form>
+                                            </li>
+                                        <% }) %>
+                                    </ul>
+                                <% } else { %>
+                                    <p class="text-muted">No roles have been added to this panel yet.</p>
+                                <% } %>
+
+                                <hr>
+
+                                <form action="/manage/<%= guild.id %>/add-rr-mapping" method="POST" class="row g-3 align-items-end">
+                                    <h5>Add New Role</h5>
+                                    <input type="hidden" name="panelId" value="<%= panel.id %>">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Emoji</label>
+                                        <input type="text" name="emoji_id" class="form-control" required placeholder=":emoji: or custom emoji ID">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label">Role</label>
+                                        <select name="role_id" class="form-select" required>
+                                            <% roles.forEach(role => { %>
+                                                <option value="<%= role.id %>">@<%= role.name %></option>
+                                            <% }); %>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button type="submit" class="btn btn-secondary w-100">Add Role</button>
+                                    </div>
+                                </form>
+
+                                <hr>
+
+                                <form action="/manage/<%= guild.id %>/delete-rr-panel" method="POST" onsubmit="return confirm('Are you sure you want to delete this entire panel?');">
+                                    <input type="hidden" name="panelId" value="<%= panel.id %>">
+                                    <button type="submit" class="btn btn-danger btn-sm mt-3">Delete Panel</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                <% }) %>
+            </div>
+        <% } else { %>
+            <p class="text-center text-muted mt-3">No reaction role panels have been created yet.</p>
+        <% } %>
     </div>
 </div>

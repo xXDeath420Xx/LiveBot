@@ -1,6 +1,6 @@
-
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -41,7 +41,7 @@ module.exports = {
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('[Weather Command Error]', error);
+            logger.error('[Weather Command Error]', error);
             await interaction.editReply('Could not fetch weather information for that location. Please check the spelling and try again.');
         }
     },

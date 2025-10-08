@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -33,14 +34,14 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setColor('#57F287')
-                .setTitle('✅ Team Subscription Activated (Channel option temporarily removed)')
-                .setDescription(`I will now automatically keep the member list for the Twitch Team **${teamName}** in sync. (Channel option temporarily removed for debugging)`)
+                .setTitle('✅ Team Subscription Activated')
+                .setDescription(`I will now automatically keep the member list for the Twitch Team **${teamName}** in sync.`)
                 .setFooter({ text: 'The team will be checked for updates approximately every 15 minutes.' });
                 
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('SubscribeTeam command error:', error);
+            logger.error('[SubscribeTeam command error]', error);
             await interaction.editReply({ content: 'A database error occurred while trying to subscribe to the team.' });
         }
     },

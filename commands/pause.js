@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const musicManager = require('../core/music-manager');
+const { checkMusicPermissions } = require('../utils/music_helpers');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -7,14 +7,25 @@ module.exports = {
     .setDescription('Pauses the current song.'),
 
   async execute(interaction) {
-    if (!interaction.member.voice.channel) {
-      return interaction.reply({ content: 'You must be in a voice channel to use this command!', ephemeral: true });
+    const permissionCheck = await checkMusicPermissions(interaction);
+    if (!permissionCheck.permitted) {
+        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
     }
-    
-    if (musicManager.pause(interaction.guild.id)) {
-        await interaction.reply('⏸️ Music paused.');
-    } else {
-        await interaction.reply({ content: 'Nothing is currently playing or the music is already paused.', ephemeral: true });
+
+    const queue = interaction.client.distube.getQueue(interaction.guildId);
+    if (!queue) {
+      return interaction.reply({ content: 'There is nothing playing right now!', ephemeral: true });
+    }
+
+    if (queue.paused) {
+        return interaction.reply({ content: 'The music is already paused!', ephemeral: true });
+    }
+
+    try {
+      queue.pause();
+      await interaction.reply({ content: '⏸️ Paused the music.' });
+    } catch (e) {
+      await interaction.reply({ content: `❌ Error: ${e.message}` });
     }
   },
 };

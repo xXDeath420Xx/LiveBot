@@ -11,18 +11,20 @@ async function handleNewMessage(message) {
         return; // Don't try to publish messages from other bots
     }
 
+    const guildId = message.guild.id;
+
     try {
-        const [[config]] = await db.execute('SELECT is_enabled FROM auto_publisher_config WHERE guild_id = ?', [message.guild.id]);
+        const [[config]] = await db.execute('SELECT is_enabled FROM auto_publisher_config WHERE guild_id = ?', [guildId]);
 
         if (config && config.is_enabled) {
             await message.crosspost();
-            logger.info(`[AutoPublisher] Automatically published message ${message.id} in channel ${message.channel.id} for guild ${message.guild.id}.`);
+            logger.info(`Automatically published message ${message.id} in channel ${message.channel.id}.`, { guildId, category: 'auto-publisher' });
         }
     } catch (error) {
         if (error.code === 50024) { // Cannot crosspost message
-            logger.warn(`[AutoPublisher] Failed to publish message ${message.id}. It may have already been published.`);
+            logger.warn(`Failed to publish message ${message.id}. It may have already been published.`, { guildId, category: 'auto-publisher' });
         } else {
-            logger.error(`[AutoPublisher] Error processing message ${message.id}:`, error);
+            logger.error(`Error processing message ${message.id}.`, { guildId, category: 'auto-publisher', error: error.stack });
         }
     }
 }

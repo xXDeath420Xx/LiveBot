@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -24,7 +25,8 @@ module.exports = {
                 try {
                     const user = await interaction.client.users.fetch(row.user_id);
                     return `**${index + 1}.** ${user.username} - **Level ${row.level}** (${row.xp} XP)`;
-                } catch {
+                } catch (userFetchError) {
+                    logger.warn(`[Leaderboard Command] Could not fetch user ${row.user_id}: ${userFetchError.message}`);
                     return `**${index + 1}.** *Unknown User* - **Level ${row.level}** (${row.xp} XP)`;
                 }
             }));
@@ -37,7 +39,7 @@ module.exports = {
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('[Leaderboard Command Error]', error);
+            logger.error('[Leaderboard Command Error]', error);
             await interaction.editReply({ content: 'An error occurred while fetching the leaderboard.' });
         }
     },

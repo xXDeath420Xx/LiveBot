@@ -1,5 +1,6 @@
 const { EmbedBuilder, WebhookClient } = require('discord.js');
 const db = require('./db');
+const logger = require('./logger');
 
 const platformColors = {
     twitch: '#9146FF', youtube: '#FF0000', kick: '#52E252',
@@ -19,14 +20,14 @@ async function getOrCreateWebhook(client, channelId, defaultAvatarUrl) {
         }
         return new WebhookClient({ id: webhook.id, token: webhook.token });
     } catch (e) {
-        console.error(`[Webhook Manager] Failed for channel ${channelId}:`, e.message);
+        logger.error(`[Webhook Manager] Failed for channel ${channelId}:`, e);
         return null;
     }
 }
 
-async function updateAnnouncement(client, subContext, liveData, existingAnnouncement, guildSettings, channelSettings, teamSettings) {
+async function updateAnnouncement(client, subContext, liveData, existingAnnouncement, guildSettings, channelSettings, teamSettings, targetChannelId) {
     if (!liveData || typeof liveData.platform !== 'string') {
-        console.error(`[Announcer] Invalid liveData for ${subContext.username}. Aborting.`, liveData);
+        logger.error(`[Announcer] Invalid liveData for ${subContext.username}. Aborting.`, liveData);
         return null;
     }
 
@@ -34,12 +35,11 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
         try {
             await db.execute('UPDATE streamers SET profile_image_url = ? WHERE streamer_id = ?', [liveData.profileImageUrl, subContext.streamer_id]);
         } catch (dbError) {
-            console.error(`[Announcer] Failed to update profile image for ${subContext.username}:`, dbError);
+            logger.error(`[Announcer] Failed to update profile image for ${subContext.username}:`, dbError);
         }
     }
 
-    const channelId = subContext.announcement_channel_id || teamSettings?.announcement_channel_id || guildSettings?.announcement_channel_id;
-    if (!channelId) return null;
+    if (!targetChannelId) return null;
 
     const platformName = liveData.platform.charAt(0).toUpperCase() + liveData.platform.slice(1);
 
@@ -75,27 +75,40 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
         if (subContext.override_avatar_url) finalAvatarURL = subContext.override_avatar_url;
 
         const webhookClient = await getOrCreateWebhook(client, channelId, finalAvatarURL);
-        if (!webhookClient) return null;
+        if (!webhookClient) {
+            logger.error(`[Announcer] Failed to get or create webhook for channel ${channelId}. Cannot send/edit message.`);
+            return null;
+        }
 
         const messageOptions = { username: finalNickname, avatarURL: finalAvatarURL, content, embeds: [embed] };
 
         if (existingAnnouncement?.message_id) {
+            logger.debug(`[Announcer] Attempting to edit existing message ${existingAnnouncement.message_id} for ${liveData.username}.`);
             try {
                 const editedMessage = await webhookClient.editMessage(existingAnnouncement.message_id, messageOptions);
+                logger.info(`[Announcer] Successfully edited message ${existingAnnouncement.message_id} for ${liveData.username}.`);
                 return editedMessage;
             } catch (e) {
-                const newMessage = await webhookClient.send(messageOptions);
-                await db.execute('UPDATE announcements SET message_id = ?, stream_url = ? WHERE announcement_id = ?', [newMessage.id, liveData.url || null, existingAnnouncement.announcement_id]);
-                return newMessage;
+                if (e.code === 10008) { // Unknown Message - means it was deleted
+                    logger.warn(`[Announcer] Existing announcement message ${existingAnnouncement.message_id} was deleted from Discord. Signaling worker to re-create.`, { guildId: subContext.guild_id, category: 'announcer' });
+                    return { deleted: true }; // Signal to worker that message was deleted
+                } else {
+                    logger.error(`[Announcer] Failed to edit existing announcement ${existingAnnouncement.message_id} for ${liveData.username} (Error Code: ${e.code || 'N/A'}):`, e);
+                    return null; // Edit failed for other reasons, do not send new message here
+                }
             }
         } else {
-            return await webhookClient.send(messageOptions);
+            logger.info(`[Announcer] No existing announcement found for ${liveData.username}. Sending new message.`);
+            const sentMessage = await webhookClient.send(messageOptions);
+            // Only increment global_stats for newly sent announcements, not updates
+            await db.execute('INSERT INTO global_stats (id, total_announcements) VALUES (1, 1) ON DUPLICATE KEY UPDATE total_announcements = total_announcements + 1');
+            logger.info(`[Announcer] Successfully sent new message ${sentMessage.id} for ${liveData.username}.`);
+            return sentMessage;
         }
     } catch (error) {
-        console.error(`[Announcer] CRITICAL Failure for ${liveData.username} in #${channelId}:`, error.message);
+        logger.error(`[Announcer] CRITICAL Failure for ${liveData.username} in #${channelId}:`, error);
         return null;
     }
 }
 
-module.exports = { updateAnnouncement };
-    
+module.exports = { updateAnnouncement, getOrCreateWebhook };

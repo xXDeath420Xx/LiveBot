@@ -9,6 +9,12 @@ async function checkAfkStatus(message) {
     const guildId = message.guild.id;
     const authorId = message.author.id;
 
+    // Check if AFK system is enabled for this guild
+    const [[guildSettings]] = await db.execute('SELECT afk_enabled FROM guilds WHERE guild_id = ?', [guildId]);
+    if (guildSettings && !guildSettings.afk_enabled) {
+        return; // AFK system is disabled for this guild
+    }
+
     // First, check if the message author is returning from AFK
     let authorAfk = afkCache.get(`${guildId}:${authorId}`);
     if (!authorAfk) {

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const { logInfraction } = require('../core/moderation-manager');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -12,7 +13,7 @@ module.exports = {
                 .setRequired(true))
         .addStringOption(option =>
             option.setName('reason')
-                .setDescription('The reason for unmuting.')
+                .setDescription('The reason for the unban.')
                 .setRequired(true)),
 
     async execute(interaction) {
@@ -45,7 +46,7 @@ module.exports = {
                     .setTimestamp();
                 await targetUser.send({ embeds: [dmEmbed] });
             } catch (dmError) {
-                console.log(`Could not DM user ${targetUser.tag}.`);
+                logger.warn(`[Unmute Command] Could not DM user ${targetUser.tag}: ${dmError.message}`);
             }
 
             const replyEmbed = new EmbedBuilder()
@@ -55,7 +56,7 @@ module.exports = {
             await interaction.editReply({ embeds: [replyEmbed] });
 
         } catch (error) {
-            console.error('[Unmute Command Error]', error);
+            logger.error('[Unmute Command Error]', error);
             await interaction.editReply("An unexpected error occurred. I may be missing permissions to remove timeouts.");
         }
     },

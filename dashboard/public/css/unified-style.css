@@ -1,0 +1,28 @@
+body {
+    background-color: #f8f9fa;
+    color: #212529;
+}
+
+.navbar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e7e7e7;
+}
+
+.card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary {
+    background-color: #5865f2;
+    border: none;
+}
+
+.btn-primary:hover {
+    background-color: #4752c4;
+}
+
+.container {
+    padding-top: 50px;
+}

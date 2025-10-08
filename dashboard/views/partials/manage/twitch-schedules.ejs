@@ -1,0 +1,34 @@
+<div class="row">
+    <div class="col-12">
+        <h3>Twitch Schedules</h3>
+        <p class="text-muted">Sync and display Twitch stream schedules in your server.</p>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Twitch Schedule Sync</h4>
+        <p class="card-subtitle mb-3 text-muted">Automatically sync a streamer's Twitch schedule to a channel.</p>
+        <form action="/manage/<%= guild.id %>/twitch-schedules/sync" method="POST">
+            <div class="mb-3">
+                <label for="scheduleStreamer" class="form-label">Streamer</label>
+                <select class="form-select" id="scheduleStreamer" name="streamerId">
+                    <option value="">Select a streamer</option>
+                    <% consolidatedStreamers.forEach(streamer => { %>
+                        <option value="<%= streamer.user_id %>"><%= streamer.display_name %></option>
+                    <% }) %>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="scheduleChannel" class="form-label">Post Schedule In</label>
+                <select class="form-select" id="scheduleChannel" name="channelId">
+                    <option value="">Select a channel</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" >#<%= channel.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Schedule Sync</button>
+        </form>
+    </div>
+</div>

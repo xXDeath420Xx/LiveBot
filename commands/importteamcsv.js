@@ -3,6 +3,9 @@ const axios = require('axios');
 const Papa = require('papaparse');
 const db = require('../utils/db');
 const apiChecks = require('../utils/api_checks');
+const { getBrowser } = require('../utils/browserManager');
+const logger = require('../utils/logger');
+const initCycleTLS = require('cycletls');
 
 module.exports = {
   data: new SlashCommandBuilder().setName('importteamcsv').setDescription('Syncs a specific channel with a CSV, adding/updating and removing streamers.')
@@ -27,6 +30,8 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const added = [], updated = [], failed = [], removed = [];
+    let browser = null;
+    let cycleTLS = null;
     
     try {
         const fileContent = await axios.get(file.url, { responseType: 'text' }).then(res => res.data);
@@ -34,7 +39,22 @@ module.exports = {
         if (!rows || rows.length === 0) {
             return interaction.editReply({ content: 'CSV is empty or does not contain valid data rows.' });
         }
+
+        const platformsInCsv = new Set(rows.map(r => r.platform).filter(Boolean));
       
+        if (platformsInCsv.has('tiktok') || platformsInCsv.has('trovo') || platformsInCsv.has('youtube')) {
+            browser = await getBrowser();
+        }
+
+        if (platformsInCsv.has('kick')) {
+            try {
+                cycleTLS = await initCycleTLS({ timeout: 60000 });
+            } catch (cycleTLSError) {
+                logger.error('[Import Team CSV] Error initializing cycleTLS. Kick platform lookups may fail:', cycleTLSError);
+                // Continue without cycleTLS, Kick platform IDs will likely fail.
+            }
+        }
+
         const [existingSubsInChannel] = await db.execute(
             'SELECT s.streamer_id, s.username FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id WHERE sub.guild_id = ? AND sub.announcement_channel_id = ?',
             [interaction.guild.id, targetChannelId]
@@ -57,15 +77,24 @@ module.exports = {
 
             try {
                 let streamerInfo = null;
-                const [[existingStreamer]] = await db.execute('SELECT streamer_id, platform_user_id, username FROM streamers WHERE platform = ? AND username = ?', [platform, username]);
+                let [[existingStreamer]] = await db.execute('SELECT streamer_id, platform_user_id, username FROM streamers WHERE platform = ? AND username = ?', [platform, username]);
                 
                 if (existingStreamer) {
                     streamerInfo = { id: existingStreamer.streamer_id, puid: existingStreamer.platform_user_id, dbUsername: existingStreamer.username };
                 } else {
                     let apiResult;
                     if (platform === 'twitch') { apiResult = await apiChecks.getTwitchUser(username); if(apiResult) streamerInfo = { puid: apiResult.id, dbUsername: apiResult.login }; } 
-                    else if (platform === 'kick') { apiResult = await apiChecks.getKickUser(username); if(apiResult) streamerInfo = { puid: apiResult.id.toString(), dbUsername: apiResult.user.username }; }
-                    else if (platform === 'youtube') { apiResult = await apiChecks.getYouTubeChannelId(username); if(apiResult?.channelId) streamerInfo = { puid: apiResult.channelId, dbUsername: apiResult.channelName || username }; }
+                    else if (platform === 'kick') {
+                        if (cycleTLS) {
+                            apiResult = await apiChecks.getKickUser(cycleTLS, username); 
+                            if(apiResult) streamerInfo = { puid: apiResult.id.toString(), dbUsername: apiResult.user.username };
+                        } else {
+                            logger.warn(`[Import Team CSV] Skipping Kick API lookup for ${username} due to cycleTLS initialization failure.`);
+                            failed.push(`${username} (Kick API Unavailable)`);
+                            continue;
+                        }
+                    }
+                    else if (platform === 'youtube') { apiResult = await apiChecks.getYouTubeChannelId(username, browser); if(apiResult?.channelId) streamerInfo = { puid: apiResult.channelId, dbUsername: apiResult.channelName || username }; }
                     else if (['tiktok', 'trovo'].includes(platform)) { streamerInfo = { puid: username, dbUsername: username }; }
 
                     if (!streamerInfo || !streamerInfo.puid) {
@@ -91,7 +120,7 @@ module.exports = {
                 
                 if (subResult.affectedRows > 1) { updated.push(username); } else { added.push(username); }
 
-            } catch (err) { console.error(`CSV Row Error for ${username}:`, err); failed.push(`${username} (DB Error)`); }
+            } catch (err) { logger.error(`[Import Team CSV] Row Error for ${username}:`, err); failed.push(`${username} (DB Error)`); }
         }
 
         const idsToRemove = [];
@@ -111,8 +140,15 @@ module.exports = {
         }
 
     } catch(e) {
-      console.error('Team CSV Import Error:', e); 
+      logger.error('[Import Team CSV] Main Error:', e); 
       return await interaction.editReply({content:`A critical error occurred processing the file: ${e.message}`}); 
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+      if (cycleTLS) {
+        try { cycleTLS.exit(); } catch(e){ logger.error('[Import Team CSV] Error exiting cycleTLS:', e); }
+      }
     }
     
     const embed = new EmbedBuilder().setTitle(`Team Sync Complete for #${targetChannel.name}`).setColor('#5865F2');

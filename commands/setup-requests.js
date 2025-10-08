@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -48,7 +49,7 @@ module.exports = {
         ephemeral: true
       });
     } catch (error) {
-      console.error("Failed to post request panel:", error);
+      logger.error("Failed to post request panel:", error);
       await interaction.reply({
         content: `❌ Could not post the panel in ${panelChannel}. Please ensure I have permissions to send messages and embeds there.`,
         ephemeral: true

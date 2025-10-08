@@ -1,97 +1,81 @@
-<div class="plugin-card">
-    <div class="plugin-card-header">
-        <h4><i class="fas fa-hand-sparkles me-2"></i> Welcome & Goodbye</h4>
-    </div>
-    <div class="plugin-card-body">
-        <form action="/manage/<%= guild.id %>/update-welcome" method="POST">
-            <p class="text-muted">Configure a custom message and generate a unique image card to welcome new members.</p>
-
-            <div class="mb-3">
-                <label for="welcome-channel" class="form-label">Welcome Channel</label>
-                <select class="form-select" id="welcome-channel" name="channel_id">
-                    <option value="">-- Disable Welcome Messages --</option>
-                    <% channels.forEach(channel => {
-                        const isSelected = (welcomeSettings && welcomeSettings.channel_id === channel.id) ? 'selected' : '';
-                    %>
-                        <option value="<%= channel.id %>" <%= isSelected %>>#<%= channel.name %></option>
-                    <% }); %>
-                </select>
-            </div>
-
-            <div class="mb-3">
-                <label for="welcome-message" class="form-label">Welcome Message</label>
-                <textarea class="form-control" id="welcome-message" name="message" rows="2" placeholder="Welcome {user} to {server}!"><%= (welcomeSettings && welcomeSettings.message) ? welcomeSettings.message : '' %></textarea>
-                <div class="form-text">Use <code>{user}</code> to mention the user and <code>{server}</code> for the server name.</div>
-            </div>
-            
-            <hr class="my-4">
-            
-            <h5>Welcome Card</h5>
-            <div class="form-check form-switch mb-3">
-                <input class="form-check-input" type="checkbox" role="switch" id="card-enabled" name="card_enabled" <%= (welcomeSettings && welcomeSettings.card_enabled) ? 'checked' : '' %>>
-                <label class="form-check-label" for="card-enabled">Enable Welcome Card Image</label>
-            </div>
-            
-            <div class="mb-3">
-                <label for="card-background" class="form-label">Background Image URL</label>
-                <input type="text" class="form-control" name="card_background_url" id="card-background" value="<%= (welcomeSettings && welcomeSettings.card_background_url) ? welcomeSettings.card_background_url : '' %>" placeholder="https://i.imgur.com/gGkExuB.png">
-            </div>
-
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label for="card-title" class="form-label">Title Text</label>
-                    <input type="text" class="form-control" name="card_title_text" id="card-title" value="<%= (welcomeSettings && welcomeSettings.card_title_text) ? welcomeSettings.card_title_text : 'WELCOME' %>">
-                </div>
-                 <div class="col-md-6 mb-3">
-                    <label for="card-title-color" class="form-label">Title Color</label>
-                    <input type="color" class="form-control form-control-color" name="card_title_color" id="card-title-color" value="<%= (welcomeSettings && welcomeSettings.card_title_color) ? welcomeSettings.card_title_color : '#FFFFFF' %>">
-                </div>
-            </div>
-            
-            <div class="row">
-                <div class="col-md-6 mb-3">
-                    <label for="card-username-color" class="form-label">Username Color</label>
-                    <input type="color" class="form-control form-control-color" name="card_username_color" id="card-username-color" value="<%= (welcomeSettings && welcomeSettings.card_username_color) ? welcomeSettings.card_username_color : '#FFFFFF' %>">
-                </div>
-                 <div class="col-md-6 mb-3">
-                    <label for="card-subtitle-color" class="form-label">Subtitle Color</label>
-                    <input type="color" class="form-control form-control-color" name="card_subtitle_color" id="card-subtitle-color" value="<%= (welcomeSettings && welcomeSettings.card_subtitle_color) ? welcomeSettings.card_subtitle_color : '#FFFFFF' %>">
-                </div>
-            </div>
-
-            <div class="mb-3">
-                <label for="card-subtitle" class="form-label">Subtitle Text</label>
-                <input type="text" class="form-control" name="card_subtitle_text" id="card-subtitle" value="<%= (welcomeSettings && welcomeSettings.card_subtitle_text) ? welcomeSettings.card_subtitle_text : 'You are member #{server.count}!' %>">
-                <div class="form-text">Use <code>{server.count}</code> to show the new member count.</div>
-            </div>
-
-            <hr class="my-4">
-
-            <h5>Goodbye Message</h5>
-            <div class="form-check form-switch mb-3">
-                <input class="form-check-input" type="checkbox" role="switch" id="goodbye-enabled" name="goodbye_enabled" <%= (welcomeSettings && welcomeSettings.goodbye_enabled) ? 'checked' : '' %>>
-                <label class="form-check-label" for="goodbye-enabled">Enable Goodbye Message</label>
-            </div>
-
-            <div class="mb-3">
-                <label for="goodbye-channel" class="form-label">Goodbye Channel</label>
-                <select class="form-select" id="goodbye-channel" name="goodbye_channel_id">
-                    <option value="">-- Select a Channel --</option>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>" <%= (welcomeSettings && welcomeSettings.goodbye_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
-                    <% }); %>
-                </select>
-            </div>
-
-            <div class="mb-3">
-                <label for="goodbye-message" class="form-label">Goodbye Message</label>
-                <textarea class="form-control" id="goodbye-message" name="goodbye_message" rows="2"><%= (welcomeSettings && welcomeSettings.goodbye_message) ? welcomeSettings.goodbye_message : '{user.tag} has left the server.' %></textarea>
-                <div class="form-text">Use <code>{user.tag}</code>, <code>{user.name}</code>, <code>{server.name}</code>, <code>{server.count}</code>.</div>
-            </div>
-
-            <div class="d-flex justify-content-end">
-                <button type="submit" class="btn btn-primary">Save Welcome Settings</button>
-            </div>
-        </form>
+<div class="row">
+    <div class="col-12">
+        <h3>Welcome & Farewell</h3>
+        <p class="text-muted">Set up messages to greet new members and say goodbye to those who leave.</p>
     </div>
 </div>
+
+<form action="/manage/<%= guild.id %>/update-welcome" method="POST">
+    <div class="content-card mt-4">
+        <div class="card-body">
+            <h4 class="card-title">Welcome Settings</h4>
+            <p class="card-subtitle mb-3 text-muted">Greet new members when they join your server.</p>
+
+            <div class="mb-3">
+                <label for="welcomeChannel" class="form-label">Welcome Channel</label>
+                <select class="form-select" id="welcomeChannel" name="channel_id">
+                    <option value="">Disabled</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= (settings && settings.channel_id === channel.id) ? 'selected' : '' %> >#<%= channel.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="welcomeMessage" class="form-label">Welcome Message</label>
+                <textarea class="form-control" id="welcomeMessage" name="message" rows="3"><%= (settings && settings.message) ? settings.message : '' %></textarea>
+                <div class="form-text">Available placeholders: {user}, {server}, {memberCount}</div>
+            </div>
+
+            <hr class="my-4">
+
+            <h5 class="card-title">Welcome Card</h5>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="card_enabled" name="card_enabled" <%= (settings && settings.card_enabled) ? 'checked' : '' %>>
+                <label class="form-check-label" for="card_enabled">Enable Welcome Card Image</label>
+            </div>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Title Text</label>
+                    <input type="text" class="form-control" name="card_title_text" value="<%= (settings && settings.card_title_text) ? settings.card_title_text : 'Welcome, {user}!' %>">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Subtitle Text</label>
+                    <input type="text" class="form-control" name="card_subtitle_text" value="<%= (settings && settings.card_subtitle_text) ? settings.card_subtitle_text : 'Welcome to {server}!' %>">
+                </div>
+                <div class="col-md-12 mb-3">
+                    <label class="form-label">Background URL</label>
+                    <input type="text" class="form-control" name="card_background_url" value="<%= (settings && settings.card_background_url) ? settings.card_background_url : '' %>">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="content-card mt-4">
+        <div class="card-body">
+            <h4 class="card-title">Farewell Settings</h4>
+            <p class="card-subtitle mb-3 text-muted">Announce when a member leaves the server.</p>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="goodbye_enabled" name="goodbye_enabled" <%= (settings && settings.goodbye_enabled) ? 'checked' : '' %>>
+                <label class="form-check-label" for="goodbye_enabled">Enable Farewell Messages</label>
+            </div>
+            <div class="mb-3">
+                <label for="goodbye_channel_id" class="form-label">Farewell Channel</label>
+                <select class="form-select" id="goodbye_channel_id" name="goodbye_channel_id">
+                    <option value="">Disabled</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= (settings && settings.goodbye_channel_id === channel.id) ? 'selected' : '' %> >#<%= channel.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="goodbye_message" class="form-label">Farewell Message</label>
+                <textarea class="form-control" id="goodbye_message" name="goodbye_message" rows="3"><%= (settings && settings.goodbye_message) ? settings.goodbye_message : '' %></textarea>
+                <div class="form-text">Available placeholders: {user}, {server}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <button type="submit" class="btn btn-primary btn-lg">Save All Welcome & Farewell Settings</button>
+    </div>
+</form>

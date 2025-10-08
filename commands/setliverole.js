@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder, MessageFlags } = require('discord.js');
 const db = require('../utils/db');
+const logger = require('../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -33,7 +34,7 @@ module.exports = {
       await interaction.editReply({ embeds: [embed] });
 
     } catch (e) {
-      console.error('[SetLiveRole Error]', e);
+      logger.error('[SetLiveRole Error]', e);
       await interaction.editReply({ content: 'A critical database error occurred.' });
     }
   },

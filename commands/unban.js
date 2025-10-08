@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const { logInfraction } = require('../core/moderation-manager');
+const logger = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -38,7 +39,7 @@ module.exports = {
             await interaction.editReply({ embeds: [replyEmbed] });
 
         } catch (error) {
-            console.error('[Unban Command Error]', error);
+            logger.error('[Unban Command Error]', error);
             if (error.code === 10026) { // Unknown Ban
                 await interaction.editReply("Could not find a ban for that user ID.");
             } else {

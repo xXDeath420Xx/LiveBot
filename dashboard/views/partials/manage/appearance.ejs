@@ -1,40 +1,46 @@
-<div class="content-card">
-    <h2><i class="fas fa-paint-brush me-2"></i>Channel Appearance</h2>
-    <p class="text-muted">Set a default webhook nickname and avatar for all announcements in a specific channel. This will override the bot's default appearance but can be overridden by individual streamer settings.</p>
-    <hr class="my-4">
-    <form action="/manage/<%= guild.id %>/channel-appearance/save" method="POST" enctype="multipart/form-data">
-        <div class="mb-3">
-            <label class="form-label">Channel to Customize</label>
-            <select name="channelId" class="form-select" required>
-                <option value="">-- Select a channel --</option>
-                <% channels.forEach(channel => { %>
-                    <option value="<%= channel.id %>">#<%= channel.name %></option>
-                <% }) %>
-            </select>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Custom Nickname</label>
-            <input type="text" class="form-control" name="nickname" placeholder='Optional Nickname (type "reset" to clear)' maxlength="80">
-        </div>
-        <div class="row g-3">
-            <div class="col-md-6">
-                <label class="form-label">Upload New Avatar</label>
-                <input class="form-control" type="file" name="avatar" accept="image/*">
+<div class="row">
+    <div class="col-12">
+        <h3>Appearance</h3>
+        <p class="text-muted">Customize the look and feel of the bot's messages.</p>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Bot Customization</h4>
+        <p class="card-subtitle mb-3 text-muted">Change the bot's nickname and the color of its embeds.</p>
+        <form action="/manage/<%= guild.id %>/update-bot-appearance" method="POST" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="bot_nickname" class="form-label">Bot Nickname</label>
+                <input type="text" class="form-control" id="bot_nickname" name="bot_nickname" value="<%= settings.bot_nickname || '' %>">
+                <div class="form-text">Leave blank to use the default bot name. Type 'reset' to clear an existing nickname.</div>
             </div>
-            <div class="col-md-6">
-                <label class="form-label">Or Use Avatar URL</label>
-                <input type="text" class="form-control" name="avatar_url_text" placeholder='Optional URL (type "reset" to clear)'>
+
+            <div class="mb-3">
+                <label for="bot_avatar_url_text" class="form-label">Bot Avatar URL</label>
+                <input type="text" class="form-control" id="bot_avatar_url_text" name="bot_avatar_url_text" placeholder="https://i.imgur.com/....png" value="<%= settings.webhook_avatar_url || '' %>">
+                <div class="form-text">Or upload a file below.</div>
             </div>
-        </div>
-        <div class="mb-3 mt-3">
-            <label class="form-label">Privacy Level</label>
-            <select name="privacyLevel" class="form-select">
-                <option value="">-- Use Server Default --</option>
-                <option value="public">Public</option>
-                <option value="members">Members Only</option>
-                <option value="subscribers">Subscribers Only</option>
-            </select>
-        </div>
-        <button type="submit" class="btn btn-primary w-100 mt-4"><i class="fas fa-save me-2"></i>Save Channel Appearance</button>
-    </form>
+
+            <div class="mb-3">
+                <label for="bot_avatar_file" class="form-label">Upload Avatar</label>
+                <input class="form-control" type="file" id="bot_avatar_file" name="bot_avatar_file">
+            </div>
+
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="reset_bot_avatar" name="reset_bot_avatar">
+                <label class="form-check-label" for="reset_bot_avatar">
+                    Reset to default avatar
+                </label>
+            </div>
+
+            <div class="mb-3">
+                <label for="embedColor" class="form-label">Embed Color</label>
+                <input type="color" class="form-control form-control-color" id="embedColor" name="embed_color" value="<%= settings.embed_color || '#5865F2' %>">
+                <div class="form-text">The color of the sidebar on announcement embeds.</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Save Bot Appearance</button>
+        </form>
+    </div>
 </div>

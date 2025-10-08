@@ -4,7 +4,7 @@ require("dotenv-flow").config({ path: path.resolve(__dirname, "..") });
 const { Client, GatewayIntentBits, Partials, Events } = require("discord.js");
 const logger = require("../utils/logger");
 const db = require("../utils/db");
-const cache = require("../utils/cache");
+const { redisOptions } = require("../utils/cache"); // Import redisOptions
 const { checkStreams, checkTeams } = require("../core/stream-checker");
 const { syncDiscordUserIds } = require("../core/user-sync");
 const { collectServerStats } = require("../core/stats-manager");
@@ -14,6 +14,9 @@ const workerClient = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages],
   partials: [Partials.Channel],
 });
+
+// Initialize the logger for this worker process
+logger.init(workerClient, db);
 
 let worker;
 
@@ -44,10 +47,7 @@ workerClient.once(Events.ClientReady, async (c) => {
       throw error; // Re-throw to let BullMQ handle the failure
     }
   }, {
-    connection: {
-      host: process.env.REDIS_HOST || "127.0.0.1",
-      port: process.env.REDIS_PORT || 6379,
-    },
+    connection: redisOptions, // Use the centralized redisOptions
     // High concurrency to allow different system tasks to run in parallel if needed
     concurrency: 5, 
   });
@@ -70,8 +70,8 @@ async function shutdown(signal) {
     await worker.close();
   }
   await workerClient.destroy();
+  await redisOptions.quit(); // Use redisOptions for quit
   await db.end();
-  await cache.redis.quit();
   logger.info("[System Worker] Shutdown complete.");
   process.exit(0);
 }

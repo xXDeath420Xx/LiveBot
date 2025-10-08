@@ -1,5 +1,6 @@
 const {SlashCommandBuilder, PermissionsBitField, EmbedBuilder} = require("discord.js");
 const db = require("../utils/db");
+const logger = require("../utils/logger");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -21,9 +22,14 @@ module.exports = {
 
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
-    const commandNames = Array.from(interaction.client.commands.keys());
-    const filtered = commandNames.filter(name => name.startsWith(focusedValue) && name !== "permissions");
-    await interaction.respond(filtered.map(name => ({name, value: name})));
+    try {
+        const commandNames = Array.from(interaction.client.commands.keys());
+        const filtered = commandNames.filter(name => name.startsWith(focusedValue) && name !== "permissions");
+        await interaction.respond(filtered.map(name => ({name, value: name})));
+    } catch (error) {
+        logger.error("[Permissions Command Autocomplete Error]", error);
+        await interaction.respond([]); // Respond with an empty array on error
+    }
   },
 
   async execute(interaction) {
@@ -51,7 +57,7 @@ module.exports = {
         await interaction.editReply({embeds: [new EmbedBuilder().setColor("#ED4245").setTitle("✅ Permission Revoked").setDescription(`The role ${role} can no longer use the \`/${commandName}\` command.`)]});
       }
     } catch (error) {
-      console.error("[Permissions Command Error]", error);
+      logger.error("[Permissions Command Error]", error);
       await interaction.editReply({content: "An error occurred while updating permissions."});
     }
   },

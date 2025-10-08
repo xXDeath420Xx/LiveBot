@@ -38,10 +38,10 @@ module.exports = {
 
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
-        await interaction.reply({ content: 'Please select the streamer(s) you want to remove:', components: [row], ephemeral: true });
+        const replyMessage = await interaction.reply({ content: 'Please select the streamer(s) you want to remove:', components: [row], ephemeral: true });
 
         const filter = i => i.customId === 'remove_streamer_select' && i.user.id === interaction.user.id;
-        const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000 });
+        const collector = replyMessage.createMessageComponentCollector({ filter, time: 60000 });
 
         collector.on('collect', async i => {
             await i.deferUpdate();
@@ -57,7 +57,6 @@ module.exports = {
 
                 const placeholders = streamerIdsToRemove.map(() => '?').join(',');
 
-                // We don't need to delete from announcements, as the stream checker handles cleanup
                 const [subscriptionsResult] = await db.query(
                     `DELETE FROM subscriptions WHERE streamer_id IN (${placeholders}) AND guild_id = ?`, 
                     [...streamerIdsToRemove, guildId]
@@ -77,9 +76,13 @@ module.exports = {
             }
         });
 
-        collector.on('end', collected => {
-            if (collected.size === 0) {
-                interaction.editReply({ content: 'Time has run out, no streamers were removed.', components: [] });
+        collector.on('end', async (collected, reason) => {
+            if (reason === 'time' && collected.size === 0) {
+                // Only edit if no interaction was collected (i.e., timeout without selection)
+                await interaction.editReply({ content: 'Time has run out, no streamers were removed.', components: [] }).catch(e => logger.warn(`[RemoveStreamer] Failed to edit reply after timeout: ${e.message}`));
+            } else if (reason !== 'time') {
+                // If collector stopped for other reasons (e.g., 'collect' event called collector.stop()),
+                // the interaction has already been updated by i.editReply.
             }
         });
     },
