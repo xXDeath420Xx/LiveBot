@@ -74,9 +74,9 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
         if (subContext.override_nickname) finalNickname = subContext.override_nickname;
         if (subContext.override_avatar_url) finalAvatarURL = subContext.override_avatar_url;
 
-        const webhookClient = await getOrCreateWebhook(client, channelId, finalAvatarURL);
+        const webhookClient = await getOrCreateWebhook(client, targetChannelId, finalAvatarURL);
         if (!webhookClient) {
-            logger.error(`[Announcer] Failed to get or create webhook for channel ${channelId}. Cannot send/edit message.`);
+            logger.error(`[Announcer] Failed to get or create webhook for channel ${targetChannelId}. Cannot send/edit message.`);
             return null;
         }
 
@@ -106,7 +106,7 @@ async function updateAnnouncement(client, subContext, liveData, existingAnnounce
             return sentMessage;
         }
     } catch (error) {
-        logger.error(`[Announcer] CRITICAL Failure for ${liveData.username} in #${channelId}:`, error);
+        logger.error(`[Announcer] CRITICAL Failure for ${liveData.username} in #${targetChannelId}:`, error);
         return null;
     }
 }

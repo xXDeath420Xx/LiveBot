@@ -45,7 +45,6 @@
 
                 <h6 class="sidebar-heading">Analytics</h6>
                 <a class="nav-link" href="/manage/<%= guild.id %>/statroles"><i class="fas fa-chart-line fa-fw"></i> Stat Roles</a>
-                <a class="nav-link" href="/manage/<%= guild.id %>/statdocks"><i class="fas fa-tachometer-alt fa-fw"></i> Stat Docks</a>
 
                 <h6 class="sidebar-heading">Logging & Feeds</h6>
                 <a class="nav-link" href="/manage/<%= guild.id %>/logging"><i class="fas fa-file-alt fa-fw"></i> Logging</a>
@@ -65,6 +64,7 @@
         <div class="main-content flex-grow-1">
             <div class="content-card">
                 <% 
+                    const currentSavedEmbeds = typeof savedEmbeds !== 'undefined' ? savedEmbeds : [];
                     const pageMap = {
                         'streamers': { partial: 'streamers', data: { guild, streamers: consolidatedStreamers, roles, channels } },
                         'teams': { partial: 'teams', data: { guild, teamSubscriptions, roles, channels } },
@@ -80,13 +80,12 @@
                         'automod': { partial: 'automod', data: { guild, rules: automodRules, heatConfig } },
                         'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles } },
                         'statroles': { partial: 'statroles', data: { guild, statroles: statroleConfigs, roles } },
-                        'statdocks': { partial: 'statdocks', data: { guild, statdocks: statdockConfigs, channels } },
                         'logging': { partial: 'logging', data: { guild, settings: logConfig, actionLogs, channels } },
                         'feeds': { partial: 'feeds', data: { guild, redditFeeds, youtubeFeeds, twitterFeeds, channels } },
                         'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
                         'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
                         'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
-                        'embeds': { partial: 'embeds', data: { guild, embeds: savedEmbeds } },
+                        'embeds': { partial: 'embeds', data: { guild, embeds: currentSavedEmbeds } },
                         'tickets': { partial: 'tickets', data: { guild, settings: ticketConfig, forms: ticketForms, categories, roles } },
                         'record': { partial: 'record', data: { guild, settings: recordConfig, roles, channels } },
                         'backups': { partial: 'backups', data: { guild, backups } }

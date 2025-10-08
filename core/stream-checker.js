@@ -6,6 +6,7 @@ const logger = require('../utils/logger');
 const { Queue } = require('bullmq');
 const { syncTwitchTeam } = require('./team-sync');
 const { processRole } = require('./role-manager'); // Corrected import
+const { EmbedBuilder } = require('discord.js'); // Import EmbedBuilder
 
 async function checkStreams(client) {
     logger.info('[Check] ---> Starting stream check @ ' + new Date().toLocaleTimeString(), { category: 'stream-check' });
@@ -32,7 +33,7 @@ async function checkStreams(client) {
                 logger.debug(`[Check] Cache miss for ${streamer.username} on ${streamer.platform}. Calling API.`, { category: 'stream-check' });
                 switch (streamer.platform) {
                     case 'twitch': status = await apiChecks.checkTwitch(streamer); break;
-                    case 'kick': status = await apiChecks.checkKick(streamer.username); break;
+                    case 'kick': status = await apiChecks.checkKick(streamer.kick_username); break;
                     case 'youtube': status = await apiChecks.checkYouTube(streamer.platform_user_id); break;
                     case 'tiktok': status = await apiChecks.checkTikTok(streamer.username); break;
                     case 'trovo': status = await apiChecks.checkTrovo(streamer.username); break;
@@ -168,26 +169,31 @@ async function checkStreams(client) {
                 try {
                     const channel = await client.channels.fetch(ann.channel_id).catch(() => null);
                     if (channel) {
-                        // Stream Cleanup Logic
-                        if (sub.delete_on_end) {
-                            await channel.messages.delete(ann.message_id).catch(err => {
-                                if (err.code !== 10008) logger.error(`[Check] Failed to delete message ${ann.message_id} in channel ${ann.channel_id}:`, { category: 'stream-check', error: err.stack });
-                            });
-                            logger.info(`[Check] Deleting message for ended announcement ${ann.announcement_id} in channel ${ann.channel_id}.`, { category: 'stream-check' });
-                        } else {
-                            // Optionally edit the message to indicate the stream has ended
-                            const messageToEdit = await channel.messages.fetch(ann.message_id).catch(() => null);
-                            if (messageToEdit && messageToEdit.editable) {
-                                const embed = messageToEdit.embeds[0];
+                        const messageToProcess = await channel.messages.fetch(ann.message_id).catch(() => null);
+
+                        if (messageToProcess) {
+                            // If delete_on_end is false (meaning keep_summary was true), edit the message first
+                            // to indicate the stream has ended, before deleting it.
+                            if (sub && !sub.delete_on_end && messageToProcess.editable) {
+                                const embed = messageToProcess.embeds[0];
                                 if (embed) {
                                     const updatedEmbed = EmbedBuilder.from(embed)
                                         .setColor('#95A5A6') // Grey color for ended stream
                                         .setDescription(`${embed.description}\n\n**Stream Ended.**`)
                                         .setFields([]); // Clear dynamic fields if any
-                                    await messageToEdit.edit({ embeds: [updatedEmbed], components: [] });
-                                    logger.info(`[Check] Edited message for ended announcement ${ann.announcement_id} in channel ${ann.channel_id}.`, { category: 'stream-check' });
+                                    await messageToProcess.edit({ embeds: [updatedEmbed], components: [] }).catch(e => {
+                                        logger.error(`[Check] Failed to edit message ${ann.message_id} before deletion:`, { category: 'stream-check', error: e.stack });
+                                    });
+                                    logger.info(`[Check] Edited message for ended announcement ${ann.announcement_id} in channel ${ann.channel_id} before deletion.`, { category: 'stream-check' });
                                 }
                             }
+                            // Now, delete the message regardless of the delete_on_end setting
+                            await messageToProcess.delete().catch(err => {
+                                if (err.code !== 10008) logger.error(`[Check] Failed to delete message ${ann.message_id} in channel ${ann.channel_id}:`, { category: 'stream-check', error: err.stack });
+                            });
+                            logger.info(`[Check] Deleting message for ended announcement ${ann.announcement_id} in channel ${ann.channel_id}.`, { category: 'stream-check' });
+                        } else {
+                            logger.warn(`[Check] Message ${ann.message_id} not found for deletion in channel ${ann.channel_id}.`, { category: 'stream-check' });
                         }
                     }
                     announcementIdsToDelete.push(ann.announcement_id);

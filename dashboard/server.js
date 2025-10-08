@@ -13,7 +13,7 @@ const { syncTwitchTeam } = require('../core/team-sync');
 const logger = require('../utils/logger');
 const { invalidateCommandCache } = require('../core/custom-command-handler');
 const { createBackup, restoreBackup, deleteBackup } = require('../core/backup-manager');
-const { endGiveaway } = require('../core/giveaway-manager');
+const { endGiveaway, rerollGiveaway } = require('../core/giveaway-manager');
 const { endPoll } = require('../core/poll-manager');
 const RedisStore = require('connect-redis')(session);
 const Redis = require('ioredis');
@@ -177,12 +177,10 @@ async function getManagePageData(guildId, botGuild) {
         allSubscriptions.forEach(sub => {
             const key = sub.streamer_id;
             if (!consolidatedStreamers[key]) {
-                consolidatedStreamers[key] = { id: sub.streamer_id, name: sub.username, discord_user_id: sub.discord_user_id, platforms: [], subscriptions: [] };
+                consolidatedStreamers[key] = { id: sub.streamer_id, name: sub.username, discord_user_id: sub.discord_user_id, platforms: new Set(), subscriptions: [] };
             }
             consolidatedStreamers[key].subscriptions.push(sub);
-            if (!consolidatedStreamers[key].platforms.some(p => p.platform === sub.platform)) {
-                consolidatedStreamers[key].platforms.push({ platform: sub.platform, username: sub.username, profile_image_url: sub.profile_image_url });
-            }
+            consolidatedStreamers[key].platforms.add({ platform: sub.platform, username: sub.username, profile_image_url: sub.profile_image_url });
         });
 
         const teamSubscriptions = rawTeamSubscriptions.map(t => {
@@ -199,7 +197,10 @@ async function getManagePageData(guildId, botGuild) {
 
         const dataToReturn = {
             totalSubscriptions: allSubscriptions.length,
-            consolidatedStreamers: Object.values(consolidatedStreamers),
+            consolidatedStreamers: Object.values(consolidatedStreamers).map(streamer => ({
+                ...streamer,
+                platforms: Array.from(streamer.platforms)
+            })),
             settings: guildSettingsResult[0] || {},
             channelSettings: channelSettingsResult,
             roles: Array.from(allRolesCollection.values()).filter(r => !r.managed && r.name !== '@everyone').map(r => ({ id: r.id, name: r.name })).sort((a, b) => a.name.localeCompare(b.name)),
@@ -265,6 +266,7 @@ const TABLES_TO_RESET = [
     'welcome_settings',
     'custom_commands',
     'ticket_config',
+    'ticket_forms',
     'auto_publisher_config',
     'autoroles_config',
     'log_config',
@@ -294,8 +296,8 @@ const TABLES_TO_RESET = [
     'stream_sessions',
     'global_stats',
     'user_preferences',
-    'statrole_configs', // Added statrole_configs
-    'embeds' // Added embeds table
+    'statrole_configs',
+    'embeds'
 ];
 
 async function resetDatabase() {
@@ -429,7 +431,7 @@ function start(botClient) {
                 'streamers', 'teams', 'appearance', 'welcome', 'utilities', 'moderation',
                 'automod', 'security', 'logging', 'feeds', 'custom-commands', 'leveling',
                 'backups', 'giveaways', 'polls', 'music', 'twitch-schedules', 'record',
-                'tickets', 'starboard', 'reaction-roles', 'statroles', 'statdocks', 'embeds' // Added statroles, statdocks, and embeds
+                'tickets', 'starboard', 'reaction-roles', 'statroles', 'statdocks', 'embeds'
             ];
 
             if (!validPages.includes(page)) {
@@ -442,7 +444,7 @@ function start(botClient) {
                 ...data,
                 page: page,
                 userPreferences: {},
-                savedEmbeds: data.savedEmbeds, // Explicitly pass savedEmbeds
+                savedEmbeds: data.savedEmbeds,
                 ticketForms: data.ticketForms // Explicitly pass ticketForms
             });
         } catch (error) {
@@ -781,7 +783,7 @@ function start(botClient) {
         const { twitter_username, channel_id } = req.body;
         const { guildId } = req.params;
         try {
-            await db.execute('INSERT INTO twitter_feeds (guild_id, twitter_username, channel_id) VALUES (?, ?, ?)', [guildId, twitter_username.toLowerCase(), channel_id]);
+            await db.execute(`INSERT INTO twitter_feeds (guild_id, twitter_username, channel_id) VALUES (?, ?, ?)`, [guildId, twitter_username.toLowerCase(), channel_id]);
         } catch (e) {
             if (e.code !== 'ER_DUP_ENTRY') {
                 logger.error('Error adding twitter feed.', { guildId, category: 'http', error: e.stack });
@@ -940,7 +942,7 @@ function start(botClient) {
         const { guildId } = req.params;
         try {
             const [[giveaway]] = await db.execute('SELECT * FROM giveaways WHERE id = ? AND guild_id = ?', [giveawayId, guildId]);
-            if (giveaway) await endGiveaway(giveaway, true);
+            if (giveaway) await rerollGiveaway(giveaway, true);
             res.redirect(`/manage/${guildId}/giveaways`);
         } catch (error) {
             logger.error(`Error rerolling giveaway ${giveawayId}.`, { guildId, category: 'http', error: error.stack });
@@ -1571,7 +1573,7 @@ function start(botClient) {
                     guildSettings.forEach(setting => {
                         if (setting.bot_nickname && setting.bot_nickname.toLowerCase().includes(query.toLowerCase())) searchResults.push({ type: 'Bot Nickname', description: `Bot Nickname: ${setting.bot_nickname}`, link: `/manage/${guildId}/appearance` });
                         if (setting.welcome_message && setting.welcome_message.toLowerCase().includes(query.toLowerCase())) searchResults.push({ type: 'Welcome Message', description: `Welcome Message: ${setting.welcome_message}`, link: `/manage/${guildId}/welcome` });
-                        if (setting.goodbye_message && setting.goodbye_message.toLowerCase().includes(query.toLowerCase())) searchResults.push({ type: 'Goodbye Message', description: `Goodbye Message: ${setting.goodbye_message}`, link: `/manage/${guildId}/welcome` });
+                        if (setting.goodbye_message && setting.goodbye.message.toLowerCase().includes(query.toLowerCase())) searchResults.push({ type: 'Goodbye Message', description: `Goodbye Message: ${setting.goodbye_message}`, link: `/manage/${guildId}/welcome` });
                     });
                 }
 

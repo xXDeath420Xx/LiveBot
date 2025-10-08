@@ -22,33 +22,33 @@ const workerClient = new Client({
 // Initialize the logger for this worker process
 logger.init(workerClient, db);
 
-// New helper function to clean up old announcements for a specific streamer/platform/channel
-async function cleanupOldAnnouncements(client, streamerId, platform, channelId, messageIdToKeep = null) {
-    logger.info(`[Worker] Initiating cleanup for streamer ${streamerId} on platform ${platform} in channel ${channelId}. Message to keep: ${messageIdToKeep || 'none'}`);
+// New helper function to clean up old announcements for a specific subscription
+async function cleanupOldAnnouncements(client, subscriptionId, messageIdToKeep = null) {
+    logger.info(`[Worker] Initiating cleanup for subscription ${subscriptionId}. Message to keep: ${messageIdToKeep || 'none'}`);
     try {
         const [oldAnnouncements] = await db.execute(
-            `SELECT announcement_id, message_id FROM announcements WHERE streamer_id = ? AND platform = ? AND channel_id = ?`,
-            [streamerId, platform, channelId]
+            `SELECT announcement_id, message_id, channel_id FROM announcements WHERE subscription_id = ?`,
+            [subscriptionId]
         );
 
         if (oldAnnouncements.length > 0) {
-            const webhookClient = await getOrCreateWebhook(client, channelId, null);
-            if (!webhookClient) {
-                logger.error(`[Worker] Failed to get webhook for channel ${channelId} during cleanup. Cannot delete old messages.`);
-                // Continue with DB cleanup even if webhook fails
-            }
-
             for (const oldAnn of oldAnnouncements) {
                 if (oldAnn.message_id && oldAnn.message_id !== messageIdToKeep) {
+                    const webhookClient = await getOrCreateWebhook(client, oldAnn.channel_id, null); // Need channel_id from oldAnn
+                    if (!webhookClient) {
+                        logger.error(`[Worker] Failed to get webhook for channel ${oldAnn.channel_id} during cleanup. Cannot delete old messages.`);
+                        // Continue with DB cleanup even if webhook fails
+                    }
+
                     if (webhookClient) {
                         try {
                             await webhookClient.deleteMessage(oldAnn.message_id);
-                            logger.info(`[Worker] Successfully deleted old Discord message ${oldAnn.message_id} during cleanup.`);
+                            logger.info(`[Worker] Successfully deleted old Discord message ${oldAnn.message_id} for subscription ${subscriptionId}.`);
                         } catch (e) {
                             if (e.code === 10008) { // Unknown Message
                                 logger.warn(`[Worker] Old Discord message ${oldAnn.message_id} was already deleted. Skipping Discord delete.`);
                             } else {
-                                logger.error(`[Worker] Failed to delete old Discord message ${oldAnn.message_id} during cleanup:`, e);
+                                logger.error(`[Worker] Failed to delete old Discord message ${oldAnn.message_id} for subscription ${subscriptionId}:`, e);
                             }
                         }
                     } else {
@@ -58,12 +58,12 @@ async function cleanupOldAnnouncements(client, streamerId, platform, channelId, 
                 // Always delete the DB record if it's not the one we intend to keep (if any)
                 if (oldAnn.message_id !== messageIdToKeep) {
                     await db.execute('DELETE FROM announcements WHERE announcement_id = ?', [oldAnn.announcement_id]);
-                    logger.info(`[Worker] Deleted old announcement DB record ${oldAnn.announcement_id} during cleanup.`);
+                    logger.info(`[Worker] Deleted old announcement DB record ${oldAnn.announcement_id} for subscription ${subscriptionId}.`);
                 }
             }
         }
     } catch (error) {
-        logger.error(`[Worker] Error during cleanupOldAnnouncements for streamer ${streamerId}:`, error);
+        logger.error(`[Worker] Error during cleanupOldAnnouncements for subscription ${subscriptionId}:`, error);
     }
 }
 
@@ -73,21 +73,21 @@ async function globalAnnouncementCleanupAtStartup(client) {
     try {
         // Find all unique streamer/platform/channel combinations that have multiple announcements
         const [duplicateCombinations] = await db.execute(`
-            SELECT streamer_id, platform, channel_id
+            SELECT subscription_id
             FROM announcements
-            GROUP BY streamer_id, platform, channel_id
+            GROUP BY subscription_id
             HAVING COUNT(*) > 1
         `);
 
         for (const combo of duplicateCombinations) {
-            const { streamer_id, platform, channel_id } = combo;
+            const { subscription_id } = combo;
             // Get all announcements for this combination, ordered by newest first
             const [announcementsForCombo] = await db.execute(`
-                SELECT announcement_id, message_id
+                SELECT announcement_id, message_id, channel_id
                 FROM announcements
-                WHERE streamer_id = ? AND platform = ? AND channel_id = ?
+                WHERE subscription_id = ?
                 ORDER BY announcement_id DESC
-            `, [streamer_id, platform, channel_id]);
+            `, [subscription_id]);
 
             // Keep the newest one (first in the sorted list)
             const messageIdToKeep = announcementsForCombo[0].message_id;
@@ -95,8 +95,8 @@ async function globalAnnouncementCleanupAtStartup(client) {
             // Delete all older ones
             for (let i = 1; i < announcementsForCombo.length; i++) {
                 const oldAnn = announcementsForCombo[i];
-                logger.info(`[Worker] Cleaning up old duplicate announcement ${oldAnn.announcement_id} for streamer ${streamer_id} on platform ${platform} in channel ${channel_id}.`);
-                const webhookClient = await getOrCreateWebhook(client, channel_id, null);
+                logger.info(`[Worker] Cleaning up old duplicate announcement ${oldAnn.announcement_id} for subscription ${subscription_id}.`);
+                const webhookClient = await getOrCreateWebhook(client, oldAnn.channel_id, null);
                 if (webhookClient && oldAnn.message_id) {
                     try {
                         await webhookClient.deleteMessage(oldAnn.message_id);
@@ -230,10 +230,10 @@ const worker = new Worker("announcement-queue", async job => {
             return;
         }
 
-        // Fetch the most recent announcement for this specific streamer, platform, and target channel
+        // Fetch the most recent announcement for this specific subscription
         const [existingAnnouncements] = await db.execute(
-            `SELECT a.*, ss.start_time FROM announcements a LEFT JOIN stream_sessions ss ON a.announcement_id = ss.announcement_id WHERE a.streamer_id = ? AND a.platform = ? AND a.channel_id = ? ORDER BY a.announcement_id DESC LIMIT 1`,
-            [sub.streamer_id, liveData.platform, targetChannelId]
+            `SELECT a.*, ss.start_time FROM announcements a LEFT JOIN stream_sessions ss ON a.announcement_id = ss.announcement_id WHERE a.subscription_id = ? ORDER BY a.announcement_id DESC LIMIT 1`,
+            [sub.subscription_id]
         );
         let existingAnnouncementFromDb = existingAnnouncements[0] || null;
 
@@ -250,15 +250,15 @@ const worker = new Worker("announcement-queue", async job => {
         }
 
         // --- Cleanup Phase ---
-        // Before attempting to send/update, ensure only one relevant announcement exists.
+        // Before attempting to send/update, ensure only one relevant announcement exists for this subscription.
         // We pass the message_id of the announcement we *might* want to update, so it's not deleted.
-        await cleanupOldAnnouncements(workerClient, sub.streamer_id, liveData.platform, targetChannelId, existingAnnouncementFromDb?.message_id);
+        await cleanupOldAnnouncements(workerClient, sub.subscription_id, existingAnnouncementFromDb?.message_id);
 
         // After cleanup, re-fetch existingAnnouncementFromDb in case it was deleted by cleanup (e.g., if messageIdToKeep was null)
         // or if the original existingAnnouncementFromDb was not the one we wanted to keep (e.g. if it was a duplicate)
         const [recheckedAnnouncements] = await db.execute(
-            `SELECT a.*, ss.start_time FROM announcements a LEFT JOIN stream_sessions ss ON a.announcement_id = ss.announcement_id WHERE a.streamer_id = ? AND a.platform = ? AND a.channel_id = ? ORDER BY a.announcement_id DESC LIMIT 1`,
-            [sub.streamer_id, liveData.platform, targetChannelId]
+            `SELECT a.*, ss.start_time FROM announcements a LEFT JOIN stream_sessions ss ON a.announcement_id = ss.announcement_id WHERE a.subscription_id = ? ORDER BY a.announcement_id DESC LIMIT 1`,
+            [sub.subscription_id]
         );
         existingAnnouncementFromDb = recheckedAnnouncements[0] || null;
 
