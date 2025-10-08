@@ -21,6 +21,93 @@ const Redis = require('ioredis');
 // Setup multer for file uploads
 const upload = multer({ dest: 'uploads/' });
 
+async function performServerCleanup(guildId, client) {
+    logger.warn(`[ADMIN] Initiating server cleanup for guild ${guildId}.`, { guildId, category: 'system' });
+    try {
+        const guild = client.guilds.cache.get(guildId);
+        if (!guild) {
+            logger.error(`[ADMIN] Guild ${guildId} not found for cleanup.`, { guildId, category: 'system' });
+            return { success: false, error: 'Guild not found.' };
+        }
+
+        // 1. Delete all webhooks
+        logger.info(`[ADMIN] Deleting webhooks for guild ${guildId}.`, { guildId, category: 'system' });
+        const webhooks = await guild.fetchWebhooks().catch(e => {
+            logger.error(`Failed to fetch webhooks for guild ${guildId}`, { guildId, category: 'discord', error: e.stack });
+            return new Map();
+        });
+        for (const webhook of webhooks.values()) {
+            await webhook.delete().catch(e => logger.error(`Failed to delete webhook ${webhook.id}`, { guildId, category: 'discord', error: e.stack }));
+        }
+        logger.info(`[ADMIN] Webhooks deleted for guild ${guildId}.`, { guildId, category: 'system' });
+
+        // 2. Remove all live roles
+        logger.info(`[ADMIN] Deleting live roles for guild ${guildId}.`, { guildId, category: 'system' });
+        const [subscriptions] = await db.execute('SELECT live_role_id FROM subscriptions WHERE guild_id = ? AND live_role_id IS NOT NULL', [guildId]).catch(e => {
+            logger.error(`Failed to get live_role_id from subscriptions for guild ${guildId}`, { guildId, category: 'database', error: e.stack });
+            return [[]];
+        });
+        const [teamSubscriptions] = await db.execute('SELECT live_role_id FROM twitch_teams WHERE guild_id = ? AND live_role_id IS NOT NULL', [guildId]).catch(e => {
+            logger.error(`Failed to get live_role_id from twitch_teams for guild ${guildId}`, { guildId, category: 'database', error: e.stack });
+            return [[]];
+        });
+
+        const liveRoleIds = new Set();
+        subscriptions.forEach(sub => liveRoleIds.add(sub.live_role_id));
+        teamSubscriptions.forEach(team => liveRoleIds.add(team.live_role_id));
+
+        for (const roleId of liveRoleIds) {
+            const role = guild.roles.cache.get(roleId);
+            if (role && role.editable) { // Check if bot has permissions to delete the role
+                await role.delete().catch(e => logger.error(`Failed to delete live role ${roleId}`, { guildId, category: 'discord', error: e.stack }));
+            } else if (role) {
+                logger.warn(`[ADMIN] Bot does not have permissions to delete live role ${role.name} (${roleId}).`, { guildId, category: 'discord' });
+            }
+        }
+        logger.info(`[ADMIN] Live roles processed for guild ${guildId}.`, { guildId, category: 'system' });
+
+        // 3. Purge all messages (and thus announcements) from text channels
+        logger.info(`[ADMIN] Purging messages from text channels for guild ${guildId}. This may take a while and is subject to Discord rate limits.`, { guildId, category: 'system' });
+        const textChannels = guild.channels.cache.filter(c => c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement);
+        for (const channel of textChannels.values()) {
+            logger.info(`[ADMIN] Purging channel: ${channel.name} (${channel.id})`, { guildId, category: 'system' });
+            let fetched;
+            do {
+                fetched = await channel.messages.fetch({ limit: 100, cache: false }).catch(e => {
+                    logger.error(`Failed to fetch messages in channel ${channel.name}`, { guildId, category: 'discord', error: e.stack });
+                    return null;
+                });
+                if (!fetched || fetched.size === 0) break;
+
+                const deletableMessages = fetched.filter(msg => msg.deletable);
+                if (deletableMessages.size > 0) {
+                    // Discord's bulkDelete can only delete messages less than 14 days old
+                    const recentMessages = deletableMessages.filter(msg => (Date.now() - msg.createdTimestamp) < 1209600000); // 14 days in ms
+                    const oldMessages = deletableMessages.filter(msg => (Date.now() - msg.createdTimestamp) >= 1209600000);
+
+                    if (recentMessages.size > 0) {
+                        await channel.bulkDelete(recentMessages, true).catch(e => logger.error(`Failed to bulk delete recent messages in ${channel.name}`, { guildId, category: 'discord', error: e.stack }));
+                    }
+                    for (const msg of oldMessages.values()) {
+                        await msg.delete().catch(e => logger.error(`Failed to delete old message ${msg.id} in ${channel.name}`, { guildId, category: 'discord', error: e.stack }));
+                        await new Promise(r => setTimeout(r, 1000)); // Rate limit precaution for individual deletes
+                    }
+                }
+                // Add a small delay to avoid hitting Discord API rate limits too hard
+                await new Promise(r => setTimeout(r, 1000));
+            } while (fetched.size > 1); // Continue if there might be more messages
+        }
+        logger.info(`[ADMIN] Message purge complete for guild ${guildId}.`, { guildId, category: 'system' });
+
+        logger.info(`[ADMIN] Server cleanup complete for guild ${guildId}.`, { guildId, category: 'system' });
+        return { success: true, message: 'Server cleanup completed successfully.' };
+
+    } catch (error) {
+        logger.error(`[CRITICAL] Error during server cleanup for guild ${guildId}:`, { guildId, category: 'system', error: error.stack });
+        return { success: false, error: 'Failed to perform server cleanup.' };
+    }
+}
+
 async function getManagePageData(guildId, botGuild) {
     try {
         const results = await Promise.all([
@@ -38,6 +125,7 @@ async function getManagePageData(guildId, botGuild) {
             db.execute('SELECT * FROM welcome_settings WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get welcome_settings', { guildId, category: 'system', error: e.stack }); return [[]]; }),
             db.execute('SELECT * FROM custom_commands WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get custom_commands', { guildId, category: 'system', error: e.stack }); return [[]]; }),
             db.execute('SELECT * FROM ticket_config WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get ticket_config', { guildId, category: 'system', error: e.stack }); return [[]]; }),
+            db.execute('SELECT * FROM ticket_forms WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get ticket_forms', { guildId, category: 'system', error: e.stack }); return [[]]; }), // Fetch ticketForms
             db.execute('SELECT * FROM auto_publisher_config WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get auto_publisher_config', { guildId, category: 'system', error: e.stack }); return [[]]; }),
             db.execute('SELECT * FROM autoroles_config WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get autoroles_config', { guildId, category: 'system', error: e.stack }); return [[]]; }),
             db.execute('SELECT * FROM log_config WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get log_config', { guildId, category: 'system', error: e.stack }); return [[]]; }),
@@ -61,7 +149,9 @@ async function getManagePageData(guildId, botGuild) {
             db.execute('SELECT * FROM twitch_schedule_sync_config WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get twitch_schedule_sync_config', { guildId, category: 'system', error: e.stack }); return [[]]; }),
             db.execute('SELECT * FROM quarantine_config WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get quarantine_config', { guildId, category: 'system', error: e.stack }); return [[]]; }),
             db.execute('SELECT * FROM record_config WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get record_config', { guildId, category: 'system', error: e.stack }); return [[]]; }),
-            db.execute('SELECT * FROM reminders WHERE guild_id = ? ORDER BY remind_at ASC', [guildId]).catch(e => { logger.error('Failed to get reminders', { guildId, category: 'system', error: e.stack }); return [[]]; })
+            db.execute('SELECT * FROM reminders WHERE guild_id = ? ORDER BY remind_at ASC', [guildId]).catch(e => { logger.error('Failed to get reminders', { guildId, category: 'system', error: e.stack }); return [[]]; }),
+            db.execute('SELECT * FROM statrole_configs WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get statrole_configs', { guildId, category: 'system', error: e.stack }); return [[]]; }), // Added statrole_configs
+            db.execute('SELECT * FROM embeds WHERE guild_id = ?', [guildId]).catch(e => { logger.error('Failed to get embeds', { guildId, category: 'system', error: e.stack }); return [[]]; }) // Fetch savedEmbeds
         ]);
 
         const [
@@ -69,12 +159,13 @@ async function getManagePageData(guildId, botGuild) {
             allRolesCollection, allChannelsCollection, [rawTeamSubscriptions],
             [automodRules], [heatConfigResult], [antiNukeConfigResult],
             [backups], [joinGateConfigResult], [welcomeSettingsResult], [customCommands],
-            [ticketConfigResult], [autoPublisherConfigResult], [autorolesConfigResult],
+            [ticketConfigResult], [ticketFormsResult], [autoPublisherConfigResult], [autorolesConfigResult],
             [logConfigResult], [redditFeeds], [youtubeFeeds], [twitterFeeds],
             [moderationConfigResult], [recentInfractions], [escalationRules],
             [roleRewards], [tempChannelConfigResult], [serverStats],
             [antiRaidConfigResult], [tags], [starboardConfigResult],
-            [reactionRolePanels], [actionLogs], [giveaways], [polls], [musicConfigResult], [twitchScheduleSyncs], [quarantineConfigResult], [recordConfigResult], [reminders]
+            [reactionRolePanels], [actionLogs], [giveaways], [polls], [musicConfigResult], [twitchScheduleSyncs], [quarantineConfigResult], [recordConfigResult], [reminders], [statroleConfigs],
+            [savedEmbedsResult] // Destructure savedEmbeds as savedEmbedsResult
         ] = results;
 
         for (const panel of reactionRolePanels) {
@@ -124,6 +215,7 @@ async function getManagePageData(guildId, botGuild) {
             welcomeSettings: welcomeSettingsResult[0] || null,
             customCommands,
             ticketConfig: ticketConfigResult[0] || null,
+            ticketForms: ticketFormsResult || [], // Include ticketForms
             autoPublisherConfig: autoPublisherConfigResult[0] || null,
             autorolesConfig: autorolesConfigResult[0] || null,
             logConfig: logConfigResult[0] || null,
@@ -147,7 +239,9 @@ async function getManagePageData(guildId, botGuild) {
             twitchScheduleSyncs: twitchScheduleSyncs || [],
             quarantineConfig: quarantineConfig || null,
             recordConfig: recordConfig ? { ...recordConfig, allowed_role_ids: JSON.parse(recordConfig.allowed_role_ids || '[]') } : null,
-            reminders: reminders || []
+            reminders: reminders || [],
+            statroleConfigs: statroleConfigs || [], // Added statrole_configs
+            savedEmbeds: savedEmbedsResult || [] // Include savedEmbeds
         };
         return dataToReturn;
     } catch (error) {
@@ -199,7 +293,9 @@ const TABLES_TO_RESET = [
     'announcements',
     'stream_sessions',
     'global_stats',
-    'user_preferences'
+    'user_preferences',
+    'statrole_configs', // Added statrole_configs
+    'embeds' // Added embeds table
 ];
 
 async function resetDatabase() {
@@ -333,7 +429,7 @@ function start(botClient) {
                 'streamers', 'teams', 'appearance', 'welcome', 'utilities', 'moderation',
                 'automod', 'security', 'logging', 'feeds', 'custom-commands', 'leveling',
                 'backups', 'giveaways', 'polls', 'music', 'twitch-schedules', 'record',
-                'tickets', 'starboard', 'reaction-roles'
+                'tickets', 'starboard', 'reaction-roles', 'statroles', 'statdocks', 'embeds' // Added statroles, statdocks, and embeds
             ];
 
             if (!validPages.includes(page)) {
@@ -345,7 +441,9 @@ function start(botClient) {
                 guild: req.guildObject,
                 ...data,
                 page: page,
-                userPreferences: {}
+                userPreferences: {},
+                savedEmbeds: data.savedEmbeds, // Explicitly pass savedEmbeds
+                ticketForms: data.ticketForms // Explicitly pass ticketForms
             });
         } catch (error) {
             logger.error(`[CRITICAL] Error in /manage/:guildId/:page route:`, { guildId: req.params.guildId, category: 'http', error: error.stack });
@@ -502,7 +600,7 @@ function start(botClient) {
             const [[config]] = await db.execute('SELECT panel_channel_id FROM ticket_config WHERE guild_id = ?', [guildId]);
             if (!config || !config.panel_channel_id) return res.status(400).render('error', { user: req.user, error: 'Ticket panel channel is not configured.' });
             const channel = await client.channels.fetch(config.panel_channel_id).catch(() => null);
-            if (!channel) return res.status(400).render('error', { user: req.user, error: 'Ticket panel channel not found.' });
+            if (!channel) return res.status(400).render('error', { user: req.user, error: 'Invalid channel selected.' });
 
             const embed = new EmbedBuilder().setTitle('Create a Support Ticket').setDescription('Click the button below to create a private ticket and get support from the staff team.').setColor('#5865F2');
             const button = new ButtonBuilder().setCustomId('create_ticket').setLabel('Create Ticket').setStyle(ButtonStyle.Primary);
@@ -1088,7 +1186,7 @@ function start(botClient) {
             if (!creator_channel_id || !category_id) {
                 await db.execute('DELETE FROM temp_channel_config WHERE guild_id = ?', [guildId]);
             } else {
-                await db.execute(`INSERT INTO temp_channel_config (guild_id, creator_channel_id, category_id, naming_template) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE creator_channel_id = VALUES(creator_channel_id), category_id = VALUES(category_id), naming_template = VALUES(naming_template)`, [guildId, creator_channel_id, category_id, naming_template || '{username}\'s Channel']);
+                await db.execute(`INSERT INTO temp_channel_config (guild_id, creator_channel_id, category_id, naming_template) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE creator_channel_id = VALUES(creator_channel_id), category_id = VALUES(category_id), naming_template = VALUES(naming_template)`, [guildId, creator_channel_id, category_id, naming_template || "{username}'s Channel"]);
             }
             res.redirect(`/manage/${guildId}/utilities`);
         } catch (error) {
@@ -1127,7 +1225,7 @@ function start(botClient) {
                     commands.push(commandData);
                 }
             } catch (error) {
-                logger.error(`Error loading command file ${file}:`, { category: 'system', error: error.stack });
+                logger.error(`Error loading command file ${file}:`, { category: 'system', error: e.stack });
             }
         }
     
@@ -1143,20 +1241,32 @@ function start(botClient) {
 
             const liveStreamersMap = new Map();
             for (const row of liveStreamersRows) {
-                if (!liveStreamersMap.has(row.username)) liveStreamersMap.set(row.username, { username: row.username, avatar_url: row.avatar_url, live_platforms: [] });
-                liveStreamersMap.get(row.username).live_platforms.push({ platform: row.platform, url: row.url });
+                if (!liveStreamersMap.has(row.username)) liveStreamersMap.set(row.username, { username: row.username, avatar_url: row.avatar_url, live_platforms: new Set() });
+                liveStreamersMap.get(row.username).live_platforms.add({ platform: row.platform, url: row.url });
             }
-            const liveStreamers = Array.from(liveStreamersMap.values());
+            const liveStreamers = Array.from(liveStreamersMap.values()).map(streamer => ({
+                ...streamer,
+                live_platforms: Array.from(streamer.live_platforms)
+            }));
 
-            let announcementCount = 0;
+            let twitchApiStatus = 'error';
             try {
-                const [[announcementCountResult]] = await db.execute('SELECT total_announcements FROM global_stats WHERE id = 1');
-                if (announcementCountResult) announcementCount = announcementCountResult.total_announcements;
+                const twitchToken = await apiChecks.getTwitchAccessToken();
+                if (twitchToken) {
+                    twitchApiStatus = 'ok';
+                }
             } catch (e) {
-                logger.warn('Could not retrieve total_announcements from global_stats. Defaulting to 0.', { category: 'database' });
+                logger.error('[Twitch API Health Check Error]:', { category: 'system', error: e.stack });
             }
 
-            const data = { liveCount: liveCountResult.count, totalStreamers: totalStreamersResult['COUNT(DISTINCT streamer_id)'], totalGuilds: client.guilds.cache.size, totalAnnouncements: announcementCount, liveStreamers, platformDistribution: platformDistributionResult };
+            const data = {
+                liveCount: liveCountResult.count,
+                totalStreamers: totalStreamersResult['COUNT(DISTINCT streamer_id)'],
+                totalGuilds: client.guilds.cache.size,
+                totalAnnouncements: liveCountResult.count, // Use liveCount for announcements
+                liveStreamers,
+                platformDistribution: platformDistributionResult
+            };
 
             if (req.isAuthenticated() && req.user.isSuperAdmin) {
                 data.app = { status: 'online', uptime: `${Math.floor(process.uptime() / 86400)}d ${Math.floor(process.uptime() % 86400 / 3600)}h ${Math.floor(process.uptime() % 3600 / 60)}m` };
@@ -1166,6 +1276,7 @@ function start(botClient) {
                 } catch (e) {
                     data.db = { status: 'error' };
                 }
+                data.api = { twitch: twitchApiStatus }; // Add Twitch API status
             }
 
             res.json(data);
@@ -1201,13 +1312,20 @@ function start(botClient) {
         });
     });
 
-    app.post('/api/admin/reinit-bot', checkAuth, (req, res) => {
-        if (!req.user.isSuperAdmin) return res.status(403).json({ error: 'Forbidden' });
-
-        logger.warn(`[ADMIN] Bot re-initialization requested by ${req.user.username}`, { category: 'system' });
-        res.json({ success: true, message: 'Re-initialization command sent. The bot will restart shortly.' });
-
-        setTimeout(() => process.exit(0), 1000);
+    app.post('/api/admin/reinit-bot', checkAuth, checkSuperAdmin, async (req, res) => {
+        const { guildId } = req.body; // Expect guildId in the request body
+        if (!guildId) {
+            return res.status(400).json({ success: false, error: 'guildId is required for server reinitialization.' });
+        }
+    
+        logger.warn(`[ADMIN] Server re-initialization requested by ${req.user.username} for guild ${guildId}`, { category: 'system', guildId });
+        const result = await performServerCleanup(guildId, client);
+    
+        if (result.success) {
+            res.json({ success: true, message: `Server re-initialization for guild ${guildId} completed.` });
+        } else {
+            res.status(500).json({ success: false, error: result.error });
+        }
     });
 
     app.post('/api/admin/reset-database', checkAuth, checkSuperAdmin, async (req, res) => {
@@ -1482,7 +1600,7 @@ function start(botClient) {
                         const moderator = await client.users.fetch(infraction.moderator_id).catch(() => null);
                         if (user) description = description.replace(infraction.user_id, user.tag);
                         if (moderator) description = description.replace(infraction.moderator_id, moderator.tag);
-                    } catch (e) { logger.warn('Failed to fetch user for infraction search', { guildId, category: 'discord', error: e.message }); }
+                    } catch (e) { logger.warn('Failed to fetch user for infraction search', { guildId, category: 'discord', error: e.stack }); }
                     searchResults.push({ type: 'Infraction', description: description, link: `/manage/${req.params.guildId}/moderation` });
                 }
 
@@ -1492,7 +1610,7 @@ function start(botClient) {
                     try {
                         const user = await client.users.fetch(log.user_id).catch(() => null);
                         if (user) description = description.replace(log.user_id, user.tag);
-                    } catch (e) { logger.warn('Failed to fetch user for action log search', { guildId, category: 'discord', error: e.message }); }
+                    } catch (e) { logger.warn('Failed to fetch user for action log search', { guildId, category: 'discord', error: e.stack }); }
                     searchResults.push({ type: 'Action Log', description: description, link: `/manage/${req.params.guildId}/logging` });
                 }
             }
