@@ -1,4 +1,4 @@
-const {SlashCommandBuilder} = require("discord.js");
+const {SlashCommandBuilder, VoiceChannel} = require("discord.js");
 const {useMainPlayer} = require("discord-player");
 const {checkMusicPermissions} = require("../utils/music_helpers");
 
@@ -47,6 +47,9 @@ module.exports = {
         searchResult.playlist.author = {
           name: searchResult.playlist.author.name || "N/A"
         };
+      }
+      if (!(interaction.member.voice.channel instanceof VoiceChannel)) {
+        return interaction.editReply({content: "You must be in a voice channel to do that"});
       }
 
       await player.play(interaction.channel.id, searchResult, {
