@@ -24,7 +24,7 @@
                 <h4><i class="fas fa-cogs me-2"></i>System Actions</h4>
                 <p class="text-muted">Perform global actions on the bot.</p>
                 <div class="d-grid gap-2">
-                    <button class="btn btn-warning" id="reinitialize-bot-btn"><i class="fas fa-sync-alt me-2"></i>Re-initialize Bot</button>
+                    <button class="btn btn-warning" id="reinitialize-bot-btn"><i class="fas fa-sync-alt me-2"></i>Re-initialize Bot (Global)</button>
                     <button class="btn btn-danger" id="reset-database-btn"><i class="fas fa-trash me-2"></i>Reset Database</button>
                 </div>
             </div>
@@ -32,6 +32,17 @@
 
         <div class="col-lg-6">
             <div class="content-card h-100">
+                <h4><i class="fas fa-server me-2"></i>Guild-Specific Actions</h4>
+                <p class="text-muted">Perform actions on a specific guild.</p>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="guild-id-input" placeholder="Enter Guild ID...">
+                    <button class="btn btn-primary" id="reinitialize-guild-btn">Re-initialize Guild</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="content-card">
                 <h4><i class="fas fa-chart-bar me-2"></i>Global Stats</h4>
                 <p class="text-muted">A top-level overview of the system.</p>
                 <ul class="list-group">
@@ -50,16 +61,6 @@
                 </ul>
             </div>
         </div>
-
-        <div class="col-12">
-            <div class="content-card">
-                <h4><i class="fas fa-search me-2"></i>User & Guild Management</h4>
-                <div class="input-group mb-3">
-                    <input type="text" class="form-control" placeholder="Search by User ID or Guild ID...">
-                    <button class="btn btn-outline-secondary" type="button">Search</button>
-                </div>
-            </div>
-        </div>
     </div>
 </main>
 
@@ -68,12 +69,14 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const reinitializeBtn = document.getElementById('reinitialize-bot-btn');
+        const reinitializeBotBtn = document.getElementById('reinitialize-bot-btn');
         const resetDatabaseBtn = document.getElementById('reset-database-btn');
+        const reinitializeGuildBtn = document.getElementById('reinitialize-guild-btn');
+        const guildIdInput = document.getElementById('guild-id-input');
 
-        if (reinitializeBtn) {
-            reinitializeBtn.addEventListener('click', async () => {
-                if (confirm('Are you sure you want to re-initialize the bot? This will restart the bot process.')) {
+        if (reinitializeBotBtn) {
+            reinitializeBotBtn.addEventListener('click', async () => {
+                if (confirm('Are you sure you want to re-initialize the entire bot? This will restart the bot process.')) {
                     try {
                         const response = await fetch('/api/admin/reinit-bot', {
                             method: 'POST',
@@ -82,14 +85,36 @@
                             }
                         });
                         const data = await response.json();
-                        if (data.success) {
-                            alert(data.message);
-                        } else {
-                            alert(`Error: ${data.error || 'Failed to re-initialize bot.'}`);
-                        }
+                        alert(data.message || `Error: ${data.error}`);
                     } catch (error) {
                         console.error('Error re-initializing bot:', error);
                         alert('An error occurred while trying to re-initialize the bot.');
+                    }
+                }
+            });
+        }
+
+        if (reinitializeGuildBtn) {
+            reinitializeGuildBtn.addEventListener('click', async () => {
+                const guildId = guildIdInput.value.trim();
+                if (!guildId) {
+                    alert('Please enter a Guild ID.');
+                    return;
+                }
+                if (confirm(`Are you sure you want to re-initialize guild ${guildId}?`)) {
+                    try {
+                        const response = await fetch('/api/admin/reinit-guild', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ guildId })
+                        });
+                        const data = await response.json();
+                        alert(data.message || `Error: ${data.error}`);
+                    } catch (error) {
+                        console.error(`Error re-initializing guild ${guildId}:`, error);
+                        alert(`An error occurred while trying to re-initialize guild ${guildId}.`);
                     }
                 }
             });
@@ -106,12 +131,7 @@
                             }
                         });
                         const data = await response.json();
-                        if (data.success) {
-                            alert(data.message);
-                            // Optionally redirect or update UI after successful reset
-                        } else {
-                            alert(`Error: ${data.error || 'Failed to reset database.'}`);
-                        }
+                        alert(data.message || `Error: ${data.error}`);
                     } catch (error) {
                         console.error('Error resetting database:', error);
                         alert('An error occurred while trying to reset the database.');

@@ -3,8 +3,8 @@ const { checkMusicPermissions } = require('../utils/music_helpers');
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('resume')
-    .setDescription('Resumes the current song.'),
+    .setName('clear')
+    .setDescription('Clears all songs from the queue.'),
 
   async execute(interaction) {
     const permissionCheck = await checkMusicPermissions(interaction);
@@ -14,16 +14,16 @@ module.exports = {
 
     const queue = interaction.client.player.nodes.get(interaction.guildId);
     if (!queue || !queue.isPlaying()) {
-      return interaction.reply({ content: 'There is nothing playing right now!', ephemeral: true });
+      return interaction.reply({ content: 'There is nothing in the queue to clear!', ephemeral: true });
     }
 
-    if (!queue.node.isPaused()) {
-        return interaction.reply({ content: 'The music is not paused!', ephemeral: true });
+    if (queue.tracks.size < 1) {
+        return interaction.reply({ content: 'The queue is already empty.', ephemeral: true });
     }
 
     try {
-      queue.node.setPaused(false);
-      await interaction.reply({ content: '▶️ Resumed the music.' });
+      queue.tracks.clear();
+      await interaction.reply({ content: '🗑️ The queue has been cleared.' });
     } catch (e) {
       await interaction.reply({ content: `❌ Error: ${e.message}` });
     }

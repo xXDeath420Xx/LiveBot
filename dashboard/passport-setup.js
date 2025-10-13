@@ -29,3 +29,5 @@ passport.use(new DiscordStrategy({
         return done(err, null);
     }
 }));
+
+module.exports = passport;

@@ -23,16 +23,17 @@ async function handleMessageXP(message) {
             return;
         }
     }
-    
+
     if (!config.leveling_enabled) return;
-    
+
     // Check ignored channels and roles
     try {
         const ignoredChannels = config.leveling_ignored_channels ? JSON.parse(config.leveling_ignored_channels) : [];
         if (ignoredChannels.includes(message.channel.id)) return;
 
         const ignoredRoles = config.leveling_ignored_roles ? JSON.parse(config.leveling_ignored_roles) : [];
-        if (message.member.roles.cache.some(role => ignoredRoles.includes(role.id))) return;
+        // FIX: Add null check for message.member before accessing roles
+        if (message.member && message.member.roles.cache.some(role => ignoredRoles.includes(role.id))) return;
     } catch (error) {
         logger.error('Failed to parse ignored channels/roles for XP manager.', { guildId, category: 'xp', error: error.stack });
         // Continue execution, as this is not a critical failure
@@ -52,14 +53,14 @@ async function handleMessageXP(message) {
     try {
         // Grant XP
         const xpToGrant = Math.floor(Math.random() * 5) + (config.leveling_xp_rate || 20); // Random XP between rate and rate+5
-        
+
         const [[user]] = await db.execute('SELECT * FROM user_levels WHERE guild_id = ? AND user_id = ?', [guildId, userId]);
-        
+
         let currentXP = (user ? user.xp : 0) + xpToGrant;
         let currentLevel = user ? user.level : 0;
-        
+
         let xpForNextLevel = 5 * (currentLevel ** 2) + 50 * currentLevel + 100;
-        
+
         // Check for level up
         let leveledUp = false;
         while (currentXP >= xpForNextLevel) {
@@ -90,7 +91,7 @@ async function checkRoleRewards(member, newLevel) {
     const guildId = member.guild.id;
     try {
         const [rewards] = await db.execute('SELECT level, role_id FROM role_rewards WHERE guild_id = ? AND level <= ? ORDER BY level DESC', [guildId, newLevel]);
-        
+
         if (rewards.length === 0) return;
 
         // Find the highest reward the user qualifies for
@@ -107,7 +108,7 @@ async function checkRoleRewards(member, newLevel) {
 
             // Add the new role
             await member.roles.add(role);
-            logger.info(`Granted role "${role.name}" to ${member.user.tag} for reaching level ${newLevel}.`, { guildId, category: 'role-rewards' });
+            logger.info(`Granted role \"${role.name}\" to ${member.user.tag} for reaching level ${newLevel}.`, { guildId, category: 'role-rewards' });
         }
     } catch (error) {
         logger.error(`Failed to check/grant role rewards to ${member.user.tag}`, { guildId, category: 'role-rewards', error: error.stack });

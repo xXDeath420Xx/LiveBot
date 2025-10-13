@@ -10,6 +10,12 @@
         <h4 class="card-title">Music Bot Configuration</h4>
         <p class="card-subtitle mb-3 text-muted">Set up the default behavior for the music bot.</p>
         <form action="/manage/<%= guild.id %>/music/config" method="POST">
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" id="musicEnabled" name="enabled" <%= musicConfig && musicConfig.enabled ? 'checked' : '' %>>
+                <label class="form-check-label" for="musicEnabled">Enable Music System</label>
+                <div class="form-text">Turn on or off all music bot functionality for this server.</div>
+            </div>
+
             <div class="mb-3">
                 <label for="musicDjRole" class="form-label">DJ Role</label>
                 <select class="form-select" id="musicDjRole" name="djRoleId">

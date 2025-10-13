@@ -36,7 +36,7 @@ async function syncDiscordUserIds(client) {
         logger.info(`[UserSync-P1] Member map built with ${memberMap.size} unique users.`);
 
         // 1b. Fetch ALL streamers and group them by their normalized username.
-        const [allStreamers] = await db.pool.execute('SELECT streamer_id, username, platform, discord_user_id, normalized_username FROM streamers');
+        const [allStreamers] = await db.execute('SELECT streamer_id, username, platform, discord_user_id, normalized_username FROM streamers');
         const normalizedGroups = new Map();
         for (const streamer of allStreamers) {
             const normalized = streamer.normalized_username; // Use the already normalized column
@@ -60,7 +60,7 @@ async function syncDiscordUserIds(client) {
                 const idsToUpdate = group.map(s => s.streamer_id);
                 const placeholders = idsToUpdate.map(() => '?').join(',');
                 try {
-                    const [result] = await db.pool.execute(`UPDATE streamers SET discord_user_id = ? WHERE streamer_id IN (${placeholders})`, [masterId, ...idsToUpdate]);
+                    const [result] = await db.execute(`UPDATE streamers SET discord_user_id = ? WHERE streamer_id IN (${placeholders})`, [masterId, ...idsToUpdate]);
                     if (result.affectedRows > 0) {
                         logger.info(`[UserSync-P1] Consolidated ${result.affectedRows} account(s) for name '${normalized}' to Discord ID ${masterId}.`);
                         totalUpdated += result.affectedRows;
@@ -74,7 +74,7 @@ async function syncDiscordUserIds(client) {
 
         // --- PHASE 2: Proactively Find and Add Missing Kick Accounts ---
         logger.info('[UserSync-P2] Searching for existing users missing a Kick account link...');
-        const [usersMissingKick] = await db.pool.execute(`
+        const [usersMissingKick] = await db.execute(`
             SELECT s.discord_user_id, s.username, s.normalized_username
             FROM streamers s
             WHERE s.discord_user_id IS NOT NULL
@@ -96,11 +96,11 @@ async function syncDiscordUserIds(client) {
                 if (!discord_user_id || !username || normalized_username === normalizeUsername('xxdeath420xx')) continue;
 
                 // Check if a Kick account with the same normalized username already exists in the DB
-                const [existingKickByNormalizedName] = await db.pool.execute("SELECT streamer_id FROM streamers WHERE platform = 'kick' AND normalized_username = ?", [normalized_username]);
+                const [existingKickByNormalizedName] = await db.execute("SELECT streamer_id FROM streamers WHERE platform = 'kick' AND normalized_username = ?", [normalized_username]);
                 if (existingKickByNormalizedName.length > 0) {
                     logger.debug(`[UserSync-P2] Kick account for normalized username '${normalized_username}' already exists in DB. Ensuring Discord ID is linked.`);
                     // Ensure the existing Kick account has the correct Discord ID
-                    await db.pool.execute(
+                    await db.execute(
                         `UPDATE streamers SET discord_user_id = ? WHERE streamer_id = ? AND (discord_user_id IS NULL OR discord_user_id != ?)`,
                         [discord_user_id, existingKickByNormalizedName[0].streamer_id, discord_user_id]
                     );
@@ -111,7 +111,7 @@ async function syncDiscordUserIds(client) {
                     const kickUser = await apiChecks.getKickUser(username);
                     if (kickUser && kickUser.user) {
                         logger.info(`[UserSync-P2] Found and linking missing Kick account for ${username}: ${kickUser.user.username}`);
-                        await db.pool.execute(
+                        await db.execute(
                             `INSERT INTO streamers (platform, platform_user_id, username, normalized_username, profile_image_url, discord_user_id) VALUES (?, ?, ?, ?, ?, ?) 
                              ON DUPLICATE KEY UPDATE 
                                 username=VALUES(username), 

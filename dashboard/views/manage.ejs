@@ -28,7 +28,7 @@
                 <a class="nav-link" href="/manage/<%= guild.id %>/streamers"><i class="fas fa-users fa-fw"></i> Streamers</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/teams"><i class="fas fa-user-friends fa-fw"></i> Teams</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/appearance"><i class="fas fa-paint-brush fa-fw"></i> Appearance</a>
-                
+
                 <h6 class="sidebar-heading">Community</h6>
                 <a class="nav-link" href="/manage/<%= guild.id %>/welcome"><i class="fas fa-hand-sparkles fa-fw"></i> Welcome</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/reaction-roles"><i class="fas fa-smile-beam fa-fw"></i> Reaction Roles</a>
@@ -44,7 +44,7 @@
                 <a class="nav-link" href="/manage/<%= guild.id %>/security"><i class="fas fa-lock fa-fw"></i> Security</a>
 
                 <h6 class="sidebar-heading">Analytics</h6>
-                <a class="nav-link" href="/manage/<%= guild.id %>/statroles"><i class="fas fa-chart-line fa-fw"></i> Stat Roles</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/stat-roles"><i class="fas fa-chart-line fa-fw"></i> Stat Roles</a>
 
                 <h6 class="sidebar-heading">Logging & Feeds</h6>
                 <a class="nav-link" href="/manage/<%= guild.id %>/logging"><i class="fas fa-file-alt fa-fw"></i> Logging</a>
@@ -54,7 +54,7 @@
                 <h6 class="sidebar-heading">Utility</h6>
                 <a class="nav-link" href="/manage/<%= guild.id %>/utilities"><i class="fas fa-wrench fa-fw"></i> General Utilities</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/custom-commands"><i class="fas fa-terminal fa-fw"></i> Custom Commands</a>
-                <a class="nav-link" href="/manage/<%= guild.id %>/embeds"><i class="fas fa-file-image fa-fw"></i> Embed Builder</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/embed-builder"><i class="fas fa-file-image fa-fw"></i> Embed Builder</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/tickets"><i class="fas fa-ticket-alt fa-fw"></i> Tickets & Forms</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/record"><i class="fas fa-record-vinyl fa-fw"></i> Record</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/backups"><i class="fas fa-save fa-fw"></i> Backups</a>
@@ -63,34 +63,34 @@
 
         <div class="main-content flex-grow-1">
             <div class="content-card">
-                <% 
-                    const currentSavedEmbeds = typeof savedEmbeds !== 'undefined' ? savedEmbeds : [];
-                    const pageMap = {
-                        'streamers': { partial: 'streamers', data: { guild, streamers: consolidatedStreamers, roles, channels } },
-                        'teams': { partial: 'teams', data: { guild, teamSubscriptions, roles, channels } },
-                        'appearance': { partial: 'appearance', data: { guild, settings } },
-                        'welcome': { partial: 'welcome', data: { guild, settings: welcomeSettings, channels } },
-                        'reaction-roles': { partial: 'reaction-roles', data: { guild, panels: reactionRolePanels, roles, channels } },
-                        'starboard': { partial: 'starboard', data: { guild, settings: starboardConfig, channels } },
-                        'leveling': { partial: 'leveling', data: { guild, settings, rewards: roleRewards, roles, channels } },
-                        'giveaways': { partial: 'giveaways', data: { guild, giveaways, channels } },
-                        'polls': { partial: 'polls', data: { guild, polls, channels } },
-                        'music': { partial: 'music', data: { guild, settings: musicConfig, roles, channels, voiceChannels } },
-                        'moderation': { partial: 'moderation', data: { guild, settings: moderationConfig, infractions: recentInfractions, escalationRules: escalationRules, roles } },
-                        'automod': { partial: 'automod', data: { guild, rules: automodRules, heatConfig } },
-                        'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles } },
-                        'statroles': { partial: 'statroles', data: { guild, statroles: statroleConfigs, roles } },
-                        'logging': { partial: 'logging', data: { guild, settings: logConfig, actionLogs, channels } },
-                        'feeds': { partial: 'feeds', data: { guild, redditFeeds, youtubeFeeds, twitterFeeds, channels } },
-                        'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
-                        'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
-                        'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
-                        'embeds': { partial: 'embeds', data: { guild, embeds: currentSavedEmbeds } },
-                        'tickets': { partial: 'tickets', data: { guild, settings: ticketConfig, forms: ticketForms, categories, roles } },
-                        'record': { partial: 'record', data: { guild, settings: recordConfig, roles, channels } },
-                        'backups': { partial: 'backups', data: { guild, backups } }
-                    };
-                    const activePage = pageMap[page] || pageMap['streamers'];
+                <%
+                const currentSavedEmbeds = typeof savedEmbeds !== 'undefined' ? savedEmbeds : [];
+                const pageMap = {
+                    'streamers': { partial: 'streamers', data: { guild, streamers: consolidatedStreamers, roles, channels } },
+                    'teams': { partial: 'teams', data: { guild, teamSubscriptions, roles, channels } },
+                    'appearance': { partial: 'appearance', data: { guild, settings } },
+                    'welcome': { partial: 'welcome', data: { guild, settings: welcomeSettings, channels } },
+                    'reaction-roles': { partial: 'reaction-roles', data: { guild, panels: reactionRolePanels, roles, channels } },
+                    'starboard': { partial: 'starboard', data: { guild, settings: starboardConfig, channels } },
+                    'leveling': { partial: 'leveling', data: { guild, settings, rewards: roleRewards, roles, channels } },
+                    'giveaways': { partial: 'giveaways', data: { guild, giveaways, channels } },
+                    'polls': { partial: 'polls', data: { guild, polls, channels } },
+                    'music': { partial: 'music', data: { guild, settings: musicConfig, roles, channels, voiceChannels } },
+                    'moderation': { partial: 'moderation', data: { guild, settings: moderationConfig, infractions: recentInfractions, escalationRules: escalationRules, roles } },
+                    'automod': { partial: 'automod', data: { guild, rules: automodRules, heatConfig } },
+                    'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles } },
+                    'stat-roles': { partial: 'stat-roles', data: { guild, statroles: statroleConfigs, roles } },
+                    'logging': { partial: 'logging', data: { guild, settings: logConfig, actionLogs, channels } },
+                    'feeds': { partial: 'feeds', data: { guild, redditFeeds, youtubeFeeds, twitterFeeds, channels } },
+                    'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
+                    'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
+                    'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
+                    'embed-builder': { partial: 'embed-builder', data: { guild, embeds: currentSavedEmbeds } },
+                    'tickets': { partial: 'tickets', data: { guild, settings: ticketConfig, forms: forms, categories, roles } },
+                    'record': { partial: 'record', data: { guild, settings: recordConfig, roles, channels } },
+                    'backups': { partial: 'backups', data: { guild, backups } }
+                };
+                const activePage = pageMap[page] || pageMap['streamers'];
                 %>
                 <%- include(`partials/manage/${activePage.partial}`, activePage.data) %>
             </div>
@@ -105,10 +105,10 @@
 <script>
     // Update active link in sidebar
     document.addEventListener('DOMContentLoaded', () => {
-        const currentPage = '<%= page %>' || 'streamers';
+        const currentPage = '<%= page %>';
         const navLinks = document.querySelectorAll('.sidebar .nav-link');
         navLinks.forEach(link => {
-            if (link.getAttribute('href').includes(currentPage)) {
+            if (link.getAttribute('href').endsWith(currentPage)) {
                 link.classList.add('active');
             }
         });

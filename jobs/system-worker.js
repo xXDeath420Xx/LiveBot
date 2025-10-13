@@ -1,43 +1,34 @@
 const { Worker } = require("bullmq");
 const path = require("path");
-require("dotenv-flow").config({ path: path.resolve(__dirname, "..") });
-const { Client, GatewayIntentBits, Partials, Events } = require("discord.js");
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const logger = require("../utils/logger");
 const db = require("../utils/db");
-const { redisOptions } = require("../utils/cache"); // Import redisOptions
+const { redisOptions } = require("../utils/cache");
 const { checkStreams, checkTeams } = require("../core/stream-checker");
 const { syncDiscordUserIds } = require("../core/user-sync");
 const { collectServerStats } = require("../core/stats-manager");
 
-// This worker has its own client to perform its tasks independently.
-const workerClient = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages],
-  partials: [Partials.Channel],
-});
+// Export a function that takes the main client instance
+module.exports = function startSystemWorker(client) {
+  // The logger is initialized in the main index.js file. DO NOT re-initialize it here.
 
-// Initialize the logger for this worker process
-logger.init(workerClient, db);
+  logger.info(`[System Worker] Initializing BullMQ worker.`);
 
-let worker;
-
-workerClient.once(Events.ClientReady, async (c) => {
-  logger.info(`[System Worker] Discord client is ready as ${c.user.tag}. Worker is active.`);
-
-  worker = new Worker("system-tasks", async (job) => {
+  const worker = new Worker("system-tasks", async (job) => {
     logger.info(`[System Worker] Processing job '${job.name}' (ID: ${job.id}).`);
     try {
       switch (job.name) {
         case "check-streams":
-          await checkStreams(workerClient);
+          await checkStreams(client);
           break;
         case "sync-teams":
-          await checkTeams(workerClient);
+          await checkTeams(client);
           break;
         case "sync-users":
-          await syncDiscordUserIds(workerClient);
+          await syncDiscordUserIds(client);
           break;
         case "collect-server-stats":
-          await collectServerStats();
+          await collectServerStats(client);
           break;
         default:
           logger.warn(`[System Worker] Unknown job name: ${job.name}`);
@@ -47,9 +38,8 @@ workerClient.once(Events.ClientReady, async (c) => {
       throw error; // Re-throw to let BullMQ handle the failure
     }
   }, {
-    connection: redisOptions, // Use the centralized redisOptions
-    // High concurrency to allow different system tasks to run in parallel if needed
-    concurrency: 5, 
+    connection: redisOptions,
+    concurrency: 1, // System tasks should probably run one at a time
   });
 
   worker.on("completed", (job) => {
@@ -57,24 +47,10 @@ workerClient.once(Events.ClientReady, async (c) => {
   });
 
   worker.on("failed", (job, err) => {
-    logger.error(`[System Worker] Job '${job.name}' (ID: ${job.id}) has failed with error: ${err.message}`);
+    logger.error(`[System Worker] Job '${job.name}' (ID: ${job.id}) has failed.`, { error: err });
   });
-});
 
-workerClient.login(process.env.DISCORD_TOKEN)
-  .then(() => logger.info("[System Worker] Logging in..."));
+  // Graceful shutdown is handled by the main process.
 
-async function shutdown(signal) {
-  logger.warn(`[System Worker] Received ${signal}. Shutting down...`);
-  if (worker) {
-    await worker.close();
-  }
-  await workerClient.destroy();
-  await redisOptions.quit(); // Use redisOptions for quit
-  await db.end();
-  logger.info("[System Worker] Shutdown complete.");
-  process.exit(0);
-}
-
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+  return worker;
+};

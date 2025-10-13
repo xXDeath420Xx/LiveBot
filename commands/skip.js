@@ -12,14 +12,14 @@ module.exports = {
         return interaction.reply({ content: permissionCheck.message, ephemeral: true });
     }
 
-    const queue = interaction.client.distube.getQueue(interaction.guildId);
-    if (!queue) {
-      return interaction.reply({ content: 'There is nothing in the queue right now!', ephemeral: true });
+    const queue = interaction.client.player.nodes.get(interaction.guildId);
+    if (!queue || !queue.isPlaying()) {
+      return interaction.reply({ content: 'There is nothing playing to skip!', ephemeral: true });
     }
 
     try {
-      await queue.skip();
-      await interaction.reply({ content: '⏭️ Skipped! Now playing the next song.' });
+      const success = queue.node.skip();
+      await interaction.reply({ content: success ? '⏭️ Skipped! Now playing the next song.' : '❌ Something went wrong while skipping.' });
     } catch (e) {
       await interaction.reply({ content: `❌ Error: ${e.message}` });
     }

@@ -17,11 +17,12 @@ async function syncTwitchTeam(teamId, db) {
         logger.info(`[TeamSync] Starting sync for team ID: ${teamId}`, { guildId, category: 'team-sync' });
 
         const twitchMembers = await apiChecks.getTwitchTeamMembers(team.team_name);
+
         if (!twitchMembers) {
             logger.error(`[TeamSync] Failed to fetch members for Twitch team: ${team.team_name}. API returned no data.`, { guildId, category: 'team-sync' });
             return { success: false, message: `Failed to fetch Twitch team members.` };
         }
-        
+
         const twitchUsernames = new Set(twitchMembers.map(m => m.user_login.toLowerCase()));
 
         const [dbTeamStreamers] = await db.execute(`
@@ -52,13 +53,12 @@ async function syncTwitchTeam(teamId, db) {
             const [insertResult] = await db.execute(
                 `INSERT INTO streamers (platform, platform_user_id, username, profile_image_url) VALUES (?, ?, ?, ?)
                  ON DUPLICATE KEY UPDATE username=VALUES(username), profile_image_url=VALUES(profile_image_url)`,
-                ['twitch', member.user_id, member.user_login, member.profile_image_url]
+                ['twitch', member.user_id, member.user_login, member.profile_image_url || null]
             );
             
             if (insertResult.insertId) {
                 streamerId = insertResult.insertId;
             } else {
-                // If it was a duplicate key update, fetch the existing streamer_id
                 const [[existingStreamer]] = await db.execute("SELECT streamer_id FROM streamers WHERE platform = 'twitch' AND platform_user_id = ?", [member.user_id]);
                 streamerId = existingStreamer?.streamer_id;
             }
@@ -71,7 +71,7 @@ async function syncTwitchTeam(teamId, db) {
                 } else {
                     await db.execute(
                         `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, team_subscription_id) VALUES (?, ?, ?, ?)`, 
-                        [team.guild_id, streamerId, team.announcement_channel_id, teamId]
+                        [team.guild_id, streamerId, team.announcement_channel_id || null, teamId]
                     );
                 }
             }
@@ -80,8 +80,7 @@ async function syncTwitchTeam(teamId, db) {
         return { success: true, message: `Team sync complete.` };
 
     } catch (error) {
-        const errorStack = error instanceof Error ? error.stack : String(error);
-        logger.error(`[TeamSync] Error during team sync for ID ${teamId}:`, { guildId, category: 'team-sync', error: errorStack });
+        logger.error(`[TeamSync] Error during team sync for ID ${teamId}: ${error.message || error}`, { guildId, category: 'team-sync' });
         return { success: false, message: "An unexpected error occurred." };
     }
 }

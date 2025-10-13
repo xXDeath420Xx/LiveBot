@@ -1,20 +1,28 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
-const { EmbedBuilder } = require('discord.js');
+const path = require("path");
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const { EmbedBuilder } = require("discord.js");
 const db = require('../utils/db');
 const logger = require('../utils/logger');
-const discordClient = require('../index'); // We need the client to fetch channels and messages
 
-async function checkEndedPolls() {
+async function checkEndedPolls(discordClient) {
     try {
-        const endedPolls = await db.query('SELECT * FROM polls WHERE ends_at <= NOW() AND is_active = 1');
+        const [endedPolls] = await db.query('SELECT * FROM polls WHERE ends_at <= NOW() AND is_active = 1');
 
         for (const poll of endedPolls) {
             try {
-                const channel = await discordClient.channels.fetch(poll.channel_id);
-                if (!channel) continue;
+                const channel = await discordClient.channels.fetch(poll.channel_id).catch(() => null);
+                if (!channel) {
+                    logger.warn(`[PollScheduler] Channel for Poll #${poll.id} not found. Deactivating.`);
+                    await db.query('UPDATE polls SET is_active = 0 WHERE id = ?', [poll.id]);
+                    continue;
+                }
 
-                const message = await channel.messages.fetch(poll.message_id);
-                if (!message) continue;
+                const message = await channel.messages.fetch(poll.message_id).catch(() => null);
+                if (!message) {
+                    logger.warn(`[PollScheduler] Message for Poll #${poll.id} not found. Deactivating.`);
+                    await db.query('UPDATE polls SET is_active = 0 WHERE id = ?', [poll.id]);
+                    continue;
+                }
 
                 const options = JSON.parse(poll.options);
                 let results = [];
@@ -22,7 +30,7 @@ async function checkEndedPolls() {
 
                 for (let i = 0; i < options.length; i++) {
                     const reaction = message.reactions.cache.get(`${i + 1}️⃣`);
-                    const count = reaction ? reaction.count - 1 : 0; // Subtract the bot's own reaction
+                    const count = reaction ? reaction.count - 1 : 0; // Subtract bot's reaction
                     results.push({ option: options[i], votes: count });
                     totalVotes += count;
                 }
@@ -41,25 +49,29 @@ async function checkEndedPolls() {
                     .setFooter({ text: `Total Votes: ${totalVotes}` })
                     .setTimestamp();
 
-                await message.edit({ embeds: [pollEmbed], components: [] }); // Remove buttons/reactions from ended poll
-
+                await message.edit({ embeds: [pollEmbed], components: [] });
                 await db.query('UPDATE polls SET is_active = 0 WHERE id = ?', [poll.id]);
-                logger.info(`Poll #${poll.id} has ended and results have been announced.`);
+                logger.info(`[PollScheduler] Poll #${poll.id} has ended.`);
 
             } catch (err) {
-                if (err.code === 10008 || err.code === 10003) { // Unknown Message or Unknown Channel
-                    logger.warn(`Message or Channel for Poll #${poll.id} not found. Deactivating poll.`);
-                    await db.query('UPDATE polls SET is_active = 0 WHERE id = ?', [poll.id]);
-                } else {
-                    logger.error(`Error processing ended poll #${poll.id}: ${err.message}`);
-                }
+                logger.error(`[PollScheduler] Error processing ended poll #${poll.id}:`, { error: err });
+                // Deactivate poll to prevent reprocessing
+                await db.query('UPDATE polls SET is_active = 0 WHERE id = ?', [poll.id]);
             }
         }
     } catch (error) {
-        logger.error(`Error fetching ended polls: ${error.message}`);
+        logger.error(`[PollScheduler] Error fetching ended polls:`, { error });
     }
 }
 
-// Run the check every minute
-checkEndedPolls();
-setInterval(checkEndedPolls, 60000);
+module.exports = function startPollScheduler(client) {
+    // The logger is initialized in the main index.js file. DO NOT re-initialize it here.
+    logger.info('[PollScheduler] Initializing scheduler.');
+
+    checkEndedPolls(client);
+    const intervalId = setInterval(() => checkEndedPolls(client), 60000);
+
+    // Graceful shutdown is handled by the main process.
+
+    return intervalId;
+};

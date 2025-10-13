@@ -1,31 +1,36 @@
 const Redis = require('ioredis');
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+const logger = require('./logger');
+require('dotenv').config(); // Ensure dotenv is loaded in this process
 
-console.log('[DEBUG] REDIS_PASSWORD from process.env in cache.js:', process.env.REDIS_PASSWORD);
+// Debugging: Log Redis environment variables
+console.log('[DEBUG] REDIS_HOST from process.env in cache.js:', process.env.REDIS_HOST || 'NOT SET');
+console.log('[DEBUG] REDIS_PORT from process.env in cache.js:', process.env.REDIS_PORT || 'NOT SET');
+console.log('[DEBUG] REDIS_PASSWORD from process.env in cache.js:', process.env.REDIS_PASSWORD ? '********' + process.env.REDIS_PASSWORD.slice(-5) : 'NOT SET');
 
 const redisOptions = {
-    host: process.env.REDIS_HOST || '127.0.0.1',
-    port: process.env.REDIS_PORT || 6379,
-    db: process.env.REDIS_DB || 0,
-    maxRetriesPerRequest: null, // Required for BullMQ
+    host: process.env.REDIS_HOST,
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
 };
 
-// Conditionally add password if it exists in environment variables and is not an empty string
-if (process.env.REDIS_PASSWORD && process.env.REDIS_PASSWORD !== '') {
-    redisOptions.password = process.env.REDIS_PASSWORD;
-}
+const connection = new Redis(redisOptions);
 
-const redis = new Redis(redisOptions);
-
-redis.on('error', (err) => {
-    // Do not exit the process, just log the error.
-    // BullMQ and other components have their own retry logic.
-    console.error('[Cache] Redis connection error:', err.message);
+connection.on('error', (err) => {
+    logger.error('[Cache] Redis connection error:', { category: 'system', error: err.message });
 });
 
-redis.on('connect', () => {
-    console.log('[Cache] Successfully connected to Redis.');
+connection.on('connect', () => {
+    logger.info('[Cache] Connected to Redis.', { category: 'system' });
 });
 
-module.exports = { redis, redisOptions };
+const queueOptions = {
+    connection: connection,
+};
+
+module.exports = {
+    redisOptions,
+    connection,
+    queueOptions,
+};

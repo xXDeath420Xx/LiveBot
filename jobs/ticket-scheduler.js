@@ -21,12 +21,6 @@ async function scheduleTicketChecks() {
         removeOnFail: true,
     });
     logger.info('[TicketScheduler] Inactive ticket check job scheduled to run every 5 minutes.');
-    await ticketQueue.close();
 }
 
-// We only want this to run from the main process, not workers.
-if (process.env.IS_MAIN_PROCESS === 'true') {
-    scheduleTicketChecks().catch(err => {
-        logger.error('[TicketScheduler] Failed to schedule ticket jobs:', err);
-    });
-}
+module.exports = { scheduleTicketChecks };

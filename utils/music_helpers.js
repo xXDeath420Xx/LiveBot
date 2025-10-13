@@ -14,7 +14,8 @@ async function checkMusicPermissions(interaction) {
         configCache.set(guildId, config);
     }
 
-    if (!config || !config.is_enabled) {
+    // FIX: Check config.enabled instead of config.is_enabled
+    if (!config || !config.enabled) {
         return { permitted: false, message: 'The music system is disabled on this server.' };
     }
 

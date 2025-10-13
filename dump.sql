@@ -1,0 +1,9 @@
+TRUNCATE TABLE announcements;
+TRUNCATE TABLE channel_settings;
+TRUNCATE TABLE guilds;
+TRUNCATE TABLE manual_schedules;
+TRUNCATE TABLE streamers;
+TRUNCATE TABLE stream_sessions;
+TRUNCATE TABLE subscriptions;
+TRUNCATE TABLE twitch_teams;
+TRUNCATE TABLE youtube_subscriptions;

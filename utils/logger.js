@@ -15,6 +15,21 @@ const logPath = path.join(logDir, 'app.log');
 let botClient = null;
 let db = null;
 
+// This helper function will handle circular references and BigInts
+const safeStringify = (obj, indent = 2) => {
+    let cache = new Set();
+    const retVal = JSON.stringify(obj, (key, value) => {
+        if (typeof value === 'object' && value !== null) {
+            if (cache.has(value)) return '[Circular]';
+            cache.add(value);
+        }
+        if (typeof value === 'bigint') return value.toString();
+        return value;
+    }, indent);
+    cache.clear();
+    return retVal;
+};
+
 class DiscordTransport extends Transport {
     constructor(opts) {
         super(opts);
@@ -35,52 +50,35 @@ class DiscordTransport extends Transport {
 
             const enabledLogs = JSON.parse(logConfig.enabled_logs || '[]');
             const logCategories = JSON.parse(logConfig.log_categories || '{}');
-
             const targetChannelId = logCategories[category] || logConfig.log_channel_id;
-
             const isCategoryEnabled = enabledLogs.includes(category) || enabledLogs.includes('all');
 
-            if (!targetChannelId || !isCategoryEnabled) {
-                return callback();
-            }
+            if (!targetChannelId || !isCategoryEnabled) return callback();
 
             const channel = await botClient.channels.fetch(targetChannelId).catch(() => null);
-            if (!channel) {
-                // Don't log this warning to avoid loops
-                console.warn(`[Logger] Log channel ${targetChannelId} not found for guild ${guildId}`);
-                return callback();
-            }
-
-            const levelColors = {
-                error: '#FF0000',
-                warn: '#FFA500',
-                info: '#00FF00',
-                verbose: '#808080',
-                debug: '#808080',
-                silly: '#808080'
-            };
+            if (!channel) return callback();
 
             const embed = new EmbedBuilder()
                 .setTitle(`Log: ${category}`)
-                .setColor(levelColors[level] || '#FFFFFF')
+                .setColor(level === 'error' ? '#FF0000' : level === 'warn' ? '#FFA500' : '#00FF00')
                 .setDescription(message)
                 .setTimestamp();
 
-            if (Object.keys(meta).length > 0) {
-                let metaString = '';
-                for(const [key, value] of Object.entries(meta)) {
-                    const valStr = typeof value === 'object' ? JSON.stringify(value) : value;
-                    const field = `**${key}**: ${valStr}\n`;
-                    if (metaString.length + field.length > 1024) break;
-                    metaString += field;
+            if (meta && Object.keys(meta).length > 0) {
+                const errorStack = meta.error?.stack || (meta.error ? safeStringify(meta.error) : null);
+                if (errorStack) {
+                    embed.addFields({ name: 'Error Stack', value: `\`\`\`sh\n${errorStack.substring(0, 1020)}\n\`\`\`` });
+                    delete meta.error;
                 }
-                if(metaString) embed.addFields({ name: 'Details', value: metaString });
+                const details = safeStringify(meta);
+                if (details !== '{}') {
+                    embed.addFields({ name: 'Details', value: `\`\`\`json\n${details.substring(0, 1000)}\n\`\`\`` });
+                }
             }
 
             await channel.send({ embeds: [embed] });
-
         } catch (error) {
-            console.error('[Logger] Failed to send log to Discord:', error);
+            console.error('[Logger] CRITICAL: Failed to send log to Discord:', error);
         }
 
         callback();
@@ -89,27 +87,36 @@ class DiscordTransport extends Transport {
 
 const baseLogger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
-    format: winston.format.json(),
+    // DO NOT add format.json() here as it disrupts the console transport
+    format: winston.format.combine(
+        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        winston.format.errors({ stack: true }) // This will add the stack trace to the meta object
+    ),
     transports: [
         new winston.transports.Console({
             format: winston.format.combine(
-                winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
                 winston.format.colorize(),
-                winston.format.printf(info => `${info.timestamp} ${info.level}: ${info.message}` + (info.splat !== undefined ? `${info.splat}`: " "))
+                winston.format.printf(info => {
+                    const { timestamp, level, message, stack, ...meta } = info;
+                    let metaString = '';
+                    if (meta && Object.keys(meta).length) {
+                        metaString = safeStringify(meta, null);
+                    }
+                    // The stack will be automatically included by `winston.format.errors`
+                    return `${timestamp} ${level}: ${message}${stack ? `\n${stack}` : ''}${metaString ? ` - ${metaString}` : ''}`;
+                })
             )
         }),
         new winston.transports.File({
             filename: logPath,
-            format: winston.format.combine(
-                winston.format.timestamp(),
-                winston.format.json()
-            )
+            format: winston.format.json() // JSON format is fine for file logging
         })
     ]
 });
 
 const logger = {
     init: (client, database) => {
+        if (botClient && db) return; // Prevent re-initialization
         botClient = client;
         db = database;
         baseLogger.add(new DiscordTransport({}));

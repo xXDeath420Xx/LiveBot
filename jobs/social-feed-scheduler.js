@@ -1,3 +1,5 @@
+const path = require("path");
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const { Queue } = require('bullmq');
 const { redisOptions } = require('../utils/cache');
 const logger = require('../utils/logger');
@@ -18,11 +20,6 @@ async function scheduleSocialFeedChecks() {
         removeOnFail: true,
     });
     logger.info('[SocialFeedScheduler] Social feed check job scheduled to run every 5 minutes.');
-    await socialQueue.close();
 }
 
-if (process.env.IS_MAIN_PROCESS === 'true') {
-    scheduleSocialFeedChecks().catch(err => {
-        logger.error('[SocialFeedScheduler] Failed to schedule social feed jobs:', err);
-    });
-}
+module.exports = { scheduleSocialFeedChecks };

@@ -12,17 +12,17 @@ module.exports = {
         return interaction.reply({ content: permissionCheck.message, ephemeral: true });
     }
 
-    const queue = interaction.client.distube.getQueue(interaction.guildId);
-    if (!queue) {
+    const queue = interaction.client.player.nodes.get(interaction.guildId);
+    if (!queue || !queue.isPlaying()) {
       return interaction.reply({ content: 'There is nothing playing right now!', ephemeral: true });
     }
 
-    if (queue.paused) {
+    if (queue.node.isPaused()) {
         return interaction.reply({ content: 'The music is already paused!', ephemeral: true });
     }
 
     try {
-      queue.pause();
+      queue.node.setPaused(true);
       await interaction.reply({ content: '⏸️ Paused the music.' });
     } catch (e) {
       await interaction.reply({ content: `❌ Error: ${e.message}` });

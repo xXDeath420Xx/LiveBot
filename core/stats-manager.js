@@ -1,15 +1,12 @@
-
 const db = require('../utils/db');
 const logger = require('../utils/logger');
 
 // This function will be called by a scheduled job
-async function collectServerStats() {
-    if (!global.client) return;
-    
+async function collectServerStats(client) {
     logger.info('[StatsManager] Starting daily server stats collection...');
 
     try {
-        const guilds = global.client.guilds.cache;
+        const guilds = client.guilds.cache;
         for (const [guildId, guild] of guilds) {
             try {
                 // Fetch members to get accurate presence data

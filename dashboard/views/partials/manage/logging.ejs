@@ -1,31 +1,31 @@
-<% 
-    const currentSettings = settings || {}; 
-    const enabledLogs = JSON.parse(currentSettings.enabled_logs || '[]');
-    const categoryChannels = JSON.parse(currentSettings.log_categories || '{}');
-    const logCategories = [
-        { key: 'messageDelete', label: 'Message Deletions' },
-        { key: 'messageUpdate', label: 'Message Edits' },
-        { key: 'memberUpdate', label: 'Member Updates (Roles, Nicknames)' },
-        { key: 'voiceUpdate', label: 'Voice Channel Updates' },
-        { key: 'channelUpdate', label: 'Channel Create/Delete' },
-        { key: 'roleUpdate', label: 'Role Create/Delete' },
-        { key: 'moderation', label: 'Moderation Actions' },
-        { key: 'join-gate', label: 'Join Gate Actions' },
-        { key: 'system', label: 'Bot System Messages' },
-        { key: 'xp', label: 'Level Up/XP Events' },
-        { key: 'giveaway', label: 'Giveaway Events' },
-        { key: 'poll', label: 'Poll Events' },
-        { key: 'starboard', label: 'Starboard Posts' },
-        { key: 'sticky-roles', label: 'Sticky Role Updates' },
-        { key: 'temp-channels', label: 'Temp Channel Events' },
-        { key: 'twitch-schedule', label: 'Twitch Schedule Sync' },
-        { key: 'auto-publisher', label: 'Auto-Publisher' },
-        { key: 'autorole', label: 'Autorole Assignments' },
-        { key: 'tickets', label: 'Ticket Events' },
-        { key: 'backup', label: 'Backup & Restore' },
-        { key: 'team-sync', label: 'Team Sync Events' },
-        { key: 'http', label: 'Dashboard Actions' }
-    ];
+<%
+const currentSettings = settings || {};
+const enabledLogs = JSON.parse(currentSettings.enabled_logs || '[]');
+const categoryChannels = JSON.parse(currentSettings.log_categories || '{}');
+const logCategories = [
+    { key: 'messageDelete', label: 'Message Deletions' },
+    { key: 'messageUpdate', label: 'Message Edits' },
+    { key: 'memberUpdate', label: 'Member Updates (Roles, Nicknames)' },
+    { key: 'voiceUpdate', label: 'Voice Channel Updates' },
+    { key: 'channelUpdate', label: 'Channel Create/Delete' },
+    { key: 'roleUpdate', label: 'Role Create/Delete' },
+    { key: 'moderation', label: 'Moderation Actions' },
+    { key: 'join-gate', label: 'Join Gate Actions' },
+    { key: 'system', label: 'Bot System Messages' },
+    { key: 'xp', label: 'Level Up/XP Events' },
+    { key: 'giveaway', label: 'Giveaway Events' },
+    { key: 'poll', label: 'Poll Events' },
+    { key: 'starboard', label: 'Starboard Posts' },
+    { key: 'sticky-roles', label: 'Sticky Role Updates' },
+    { key: 'temp-channels', label: 'Temp Channel Events' },
+    { key: 'twitch-schedule', label: 'Twitch Schedule Sync' },
+    { key: 'auto-publisher', label: 'Auto-Publisher' },
+    { key: 'autorole', label: 'Autorole Assignments' },
+    { key: 'tickets', label: 'Ticket Events' },
+    { key: 'backup', label: 'Backup & Restore' },
+    { key: 'team-sync', label: 'Team Sync Events' },
+    { key: 'http', label: 'Dashboard Actions' }
+];
 %>
 <div class="row">
     <div class="col-12">
@@ -58,36 +58,68 @@
             <div class="table-responsive">
                 <table class="table table-hover align-middle">
                     <thead>
-                        <tr>
-                            <th>Log Category</th>
-                            <th class="text-center">Enable</th>
-                            <th>Channel Override</th>
-                        </tr>
+                    <tr>
+                        <th>Log Category</th>
+                        <th class="text-center">Enable</th>
+                        <th>Channel Override</th>
+                    </tr>
                     </thead>
                     <tbody>
-                        <% logCategories.forEach(cat => { %>
-                            <tr>
-                                <td><label for="log-<%= cat.key %>" class="form-check-label"><%= cat.label %></label></td>
-                                <td class="text-center">
-                                    <div class="form-check form-switch d-inline-block">
-                                        <input class="form-check-input" type="checkbox" name="enabled_logs" value="<%= cat.key %>" id="log-<%= cat.key %>" <%= enabledLogs.includes(cat.key) ? 'checked' : '' %>>
-                                    </div>
-                                </td>
-                                <td>
-                                    <select class="form-select form-select-sm" name="log_categories[<%= cat.key %>]">
-                                        <option value="">Default</option>
-                                        <% channels.forEach(channel => { %>
-                                            <option value="<%= channel.id %>" <%= categoryChannels[cat.key] === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
-                                        <% }) %>
-                                    </select>
-                                </td>
-                            </tr>
-                        <% }); %>
+                    <% logCategories.forEach(cat => { %>
+                        <tr>
+                            <td><label for="log-<%= cat.key %>" class="form-check-label"><%= cat.label %></label></td>
+                            <td class="text-center">
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input" type="checkbox" name="enabled_logs" value="<%= cat.key %>" id="log-<%= cat.key %>" <%= enabledLogs.includes(cat.key) ? 'checked' : '' %>>
+                                </div>
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm" name="log_categories[<%= cat.key %>]">
+                                    <option value="">Default</option>
+                                    <% channels.forEach(channel => { %>
+                                        <option value="<%= channel.id %>" <%= categoryChannels[cat.key] === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                                    <% }) %>
+                                </select>
+                            </td>
+                        </tr>
+                    <% }); %>
                     </tbody>
                 </table>
             </div>
-            
+
             <button type="submit" class="btn btn-primary mt-3">Save Log Configuration</button>
+        </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Channel Webhook Overrides</h4>
+        <p class="card-subtitle mb-3 text-muted">Provide a custom webhook URL for specific channels. This will override the bot's default webhook creation for announcements in that channel.</p>
+        <form action="/manage/<%= guild.id %>/update-channel-webhooks" method="POST">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                    <tr>
+                        <th>Channel</th>
+                        <th>Custom Webhook URL</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <% channels.forEach(channel => { %>
+                        <% const cs = channelSettingsMap.get(channel.id) || {}; %>
+                        <tr>
+                            <td>#<%= channel.name %></td>
+                            <td>
+                                <input type="url" class="form-control form-control-sm" name="channel_webhooks[<%= channel.id %>]" value="<%= cs.webhook_url || '' %>" placeholder="https://discord.com/api/webhooks/...">
+                                <div class="form-text">Leave blank to use the bot's default webhook.</div>
+                            </td>
+                        </tr>
+                    <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <button type="submit" class="btn btn-primary mt-3">Save Webhook Overrides</button>
         </form>
     </div>
 </div>
@@ -99,13 +131,13 @@
         <div class="table-responsive" style="max-height: 400px;">
             <table class="table table-sm table-striped">
                 <thead>
-                    <tr>
-                        <th>Event</th>
-                        <th>User</th>
-                        <th>Target</th>
-                        <th>Details</th>
-                        <th>Timestamp</th>
-                    </tr>
+                <tr>
+                    <th>Event</th>
+                    <th>User</th>
+                    <th>Target</th>
+                    <th>Details</th>
+                    <th>Timestamp</th>
+                </tr>
                 </thead>
                 <tbody>
                 <% if (actionLogs && actionLogs.length > 0) { %>
