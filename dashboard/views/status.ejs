@@ -135,7 +135,7 @@
                 if (!data.app && !data.db && !data.api) {
                     healthContainer.innerHTML = '<div class="text-muted small">System health data is currently unavailable.</div>';
                 } else {
-                    const statusHtml = (status) => status === 'ok' || status === 'online' ? `<span class="status-badge status-ok">${status.charAt(0).toUpperCase() + status.slice(1)}</span>` : `<span class="status-badge status-error">${(status || 'Error').charAt(0).toUpperCase() + (status || 'Error').slice(1)}</span>`;
+                    const statusHtml = (status) => (status?.toLowerCase() === 'ok' || status?.toLowerCase() === 'online') ? `<span class="status-badge status-ok">${status.charAt(0).toUpperCase() + status.slice(1)}</span>` : `<span class="status-badge status-error">${(status || 'Error').charAt(0).toUpperCase() + (status || 'Error').slice(1)}</span>`;
                     healthContainer.innerHTML = `
                         <div class="health-item"><span>App Status</span>${statusHtml(data.app?.status)}</div>
                         <div class="health-item"><span>App Uptime</span><span class="text-muted">${data.app?.uptime || 'N/A'}</span></div>

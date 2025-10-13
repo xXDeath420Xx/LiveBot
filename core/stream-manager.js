@@ -268,4 +268,11 @@ async function init(client) {
     await checkStreamers(client);
 }
 
-module.exports = { init };
+function getLiveAnnouncements() {
+    return liveAnnouncements;
+}
+
+module.exports = { 
+    init,
+    getLiveAnnouncements
+};

@@ -101,4 +101,13 @@ async function getTwitchTeamMembers(teamName) {
     }
 }
 
-module.exports = { isStreamerLive, getStreamDetails, getAccessToken, getStreamSchedule, getTwitchUser, getTwitchTeamMembers };
+async function getApiStatus() {
+    try {
+        await getAccessToken();
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+module.exports = { isStreamerLive, getStreamDetails, getAccessToken, getStreamSchedule, getTwitchUser, getTwitchTeamMembers, getApiStatus };

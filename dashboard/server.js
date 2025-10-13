@@ -9,6 +9,9 @@ const logger = require("../utils/logger");
 const RedisStore = require("connect-redis")(session);
 const Redis = require("ioredis");
 const fs = require("fs");
+const { getLiveAnnouncements } = require("../core/stream-manager.js");
+const { getStatus } = require("../core/status-manager.js");
+const twitchApi = require("../utils/twitch-api.js");
 
 function getSanitizedUser(req) {
   if (!req.isAuthenticated() || !req.user) {
@@ -206,7 +209,7 @@ function start(botClient) {
 
   app.get("/dashboard", checkAuth, (req, res) => {
     const manageableGuilds = req.user.guilds.filter(g => new PermissionsBitField(BigInt(g.permissions)).has(PermissionsBitField.Flags.ManageGuild) && botClient.guilds.cache.has(g.id));
-    res.render("dashboard", {user: getSanitizedUser(req), manageableGuilds});
+    res.render("dashboard", {user: getSanitizedUser(req), manageable});
   });
 
   app.get("/servers", checkAuth, (req, res) => {
@@ -289,7 +292,97 @@ function start(botClient) {
 
   app.get("/super-admin", checkAuth, checkSuperAdmin, (req, res) => res.render("super-admin", {user: getSanitizedUser(req)}));
 
-  // All other API routes are assumed to be here...
+    app.get("/api/status-data", async (req, res) => {
+        try {
+            const liveAnnouncements = getLiveAnnouncements();
+            const uniqueMemberIds = new Set([...liveAnnouncements.keys()].map(k => k.split('-')[1]));
+
+            const liveStreamers = [];
+
+            for (const memberId of uniqueMemberIds) {
+                try {
+                    const user = await botClient.users.fetch(memberId);
+                    const memberLivePlatforms = [...liveAnnouncements.keys()]
+                        .filter(k => k.split('-')[1] === memberId)
+                        .map(k => k.split('-')[2]);
+                    
+                    const [streamerDetails] = await db.execute('SELECT username FROM streamers WHERE discord_user_id = ? LIMIT 1', [memberId]);
+
+                    liveStreamers.push({
+                        username: user.username,
+                        avatar_url: user.displayAvatarURL(),
+                        live_platforms: memberLivePlatforms.map(p => ({ platform: p, url: getPlatformUrl(streamerDetails[0]?.username, p) }))
+                    });
+                } catch (e) {
+                    logger.warn(`[Status Page] Could not fetch user ${memberId}`, { error: e.message });
+                }
+            }
+
+            const [[{ count: totalStreamers }]] = await db.execute("SELECT COUNT(*) as count FROM streamers");
+            const [dbPlatformDist] = await db.execute("SELECT platform, COUNT(*) as count FROM streamers GROUP BY platform");
+
+            const data = {
+                liveCount: uniqueMemberIds.size,
+                totalGuilds: botClient.guilds.cache.size,
+                totalStreamers: totalStreamers,
+                totalAnnouncements: liveAnnouncements.size,
+                liveStreamers,
+                platformDistribution: dbPlatformDist,
+            };
+
+            if (req.isAuthenticated() && req.user && req.user.isSuperAdmin) {
+                const appStatus = getStatus();
+                let dbStatus = 'ok';
+                try {
+                    await db.execute('SELECT 1');
+                } catch (e) {
+                    dbStatus = 'error';
+                }
+
+                const twitchStatus = await twitchApi.getApiStatus();
+
+                data.app = {
+                    status: appStatus.state,
+                    uptime: formatUptime(process.uptime()),
+                };
+                data.db = { status: dbStatus };
+                data.api = { twitch: twitchStatus ? 'ok' : 'error' };
+            }
+
+            res.json(data);
+        } catch (error) {
+            logger.error("[API Status] Failed to fetch status data:", { error: error.message, stack: error.stack });
+            res.status(500).json({ error: "Failed to retrieve status data." });
+        }
+    });
+
+    app.get("/api/authenticated-logs", checkAuth, checkSuperAdmin, async (req, res) => {
+        try {
+            const logDir = path.join(__dirname, '..', 'logs');
+            const files = await fs.promises.readdir(logDir);
+    
+            const logFiles = files.filter(f => f.startsWith('LiveBot-Main-out-') && f.endsWith('.log'));
+    
+            if (logFiles.length === 0) {
+                return res.json({ logs: 'No main log files found.' });
+            }
+    
+            const latestLogFile = logFiles.reduce((latest, current) => {
+                const latestNum = parseInt(latest.split('-').pop().split('.')[0], 10);
+                const currentNum = parseInt(current.split('-').pop().split('.')[0], 10);
+                return currentNum > latestNum ? current : latest;
+            });
+    
+            const logPath = path.join(logDir, latestLogFile);
+            const logContent = await fs.promises.readFile(logPath, 'utf8');
+            
+            res.json({ logs: logContent });
+    
+        } catch (error) {
+            logger.error('[API Logs] Failed to fetch logs:', { error: error.message, stack: error.stack });
+            res.status(500).json({ error: 'Failed to retrieve logs.' });
+        }
+    });
 
   // Fallback error handlers
   app.use((req, res) => res.status(404).render("error", {user: getSanitizedUser(req), error: "Page Not Found"}));
@@ -304,6 +397,22 @@ function start(botClient) {
       process.exit(1);
     }
   });
+}
+
+function getPlatformUrl(username, platform) {
+    switch (platform) {
+        case 'twitch': return `https://twitch.tv/${username}`;
+        case 'kick': return `https://kick.com/${username}`;
+        default: return '#';
+    }
+}
+
+function formatUptime(seconds) {
+    const d = Math.floor(seconds / (3600*24));
+    const h = Math.floor(seconds % (3600*24) / 3600);
+    const m = Math.floor(seconds % 3600 / 60);
+    const s = Math.floor(seconds % 60);
+    return `${d}d ${h}h ${m}m ${s}s`;
 }
 
 module.exports = {start};
