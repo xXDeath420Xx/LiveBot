@@ -209,7 +209,7 @@ function start(botClient) {
 
   app.get("/dashboard", checkAuth, (req, res) => {
     const manageableGuilds = req.user.guilds.filter(g => new PermissionsBitField(BigInt(g.permissions)).has(PermissionsBitField.Flags.ManageGuild) && botClient.guilds.cache.has(g.id));
-    res.render("dashboard", {user: getSanitizedUser(req), manageable});
+    res.render("dashboard", {user: getSanitizedUser(req), manageableGuilds});
   });
 
   app.get("/servers", checkAuth, (req, res) => {
