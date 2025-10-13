@@ -49,7 +49,7 @@ module.exports = {
         };
       }
 
-      await player.play(interaction.member.voice.channel, searchResult, {
+      await player.play(interaction.channel.id, searchResult, {
         nodeOptions: {
           metadata: {
             channelId: interaction.channel.id,
