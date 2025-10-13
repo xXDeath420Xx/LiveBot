@@ -80,4 +80,5 @@ module.exports = {
       await interaction.editReply("An error occurred while performing the search.");
     }
   },
+  category: "Utility",
 };

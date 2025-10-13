@@ -33,4 +33,5 @@ module.exports = {
       await interaction.reply({content: "There was an error saving your preference.", ephemeral: true});
     }
   },
+  category: "Utility",
 };

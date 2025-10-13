@@ -53,4 +53,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while managing the starboard."});
     }
   },
+  category: "Utility",
 };

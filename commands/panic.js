@@ -43,4 +43,5 @@ module.exports = {
       await interaction.reply({content: "An error occurred while trying to toggle panic mode.", ephemeral: true});
     }
   },
+  category: "Utility",
 };

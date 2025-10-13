@@ -122,5 +122,6 @@ module.exports = {
       logger.error('Customize Bot Error:', error);
       await interaction.editReply({content: `An error occurred: ${error.message}`});
     }
-  }
+  },
+  category: "Utility",
 };

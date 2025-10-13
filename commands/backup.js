@@ -103,4 +103,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while executing this command."});
     }
   },
+  category: "Super Admin",
 };

@@ -59,4 +59,5 @@ module.exports = {
       await interaction.editReply("An unexpected error occurred while trying to kick this user.");
     }
   },
+  category: "Utility",
 };

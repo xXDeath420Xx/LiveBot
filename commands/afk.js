@@ -36,4 +36,5 @@ module.exports = {
       await interaction.editReply("An error occurred while setting your AFK status.");
     }
   },
+  category: "Utility",
 };

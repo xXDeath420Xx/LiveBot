@@ -117,4 +117,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while trying to start the recording."});
     }
   },
+  category: "Utility",
 };

@@ -36,4 +36,5 @@ module.exports = {
       await interaction.reply({content: `❌ Error: ${e.message}`});
     }
   },
+  category: "Utility",
 };

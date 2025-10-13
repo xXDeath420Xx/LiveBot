@@ -39,4 +39,5 @@ module.exports = {
       ephemeral: true
     });
   },
+  category: "Utility",
 };

@@ -50,4 +50,5 @@ module.exports = {
 
     await interaction.reply({embeds: [embed]});
   },
+  category: "Fun"
 };

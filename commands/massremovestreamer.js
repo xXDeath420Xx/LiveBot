@@ -86,4 +86,5 @@ module.exports = {
       await interaction.editReply("An error occurred while trying to remove streamers. Please try again later.");
     }
   },
+  category: "Utility",
 };

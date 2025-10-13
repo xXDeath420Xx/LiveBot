@@ -45,4 +45,5 @@ module.exports = {
       await interaction.editReply("Could not fetch weather information for that location. Please check the spelling and try again.");
     }
   },
+  category: "Utility",
 };

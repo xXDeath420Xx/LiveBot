@@ -108,4 +108,5 @@ module.exports = {
       }
     }
   },
+  category: "Utility",
 };

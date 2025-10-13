@@ -61,7 +61,7 @@
                     commands.forEach(cmd => {
                         const category = cmd.category || 'Utility';
                         if (!commandsByCategory[category]) commandsByCategory[category] = [];
-                        commandsByCategory[category].push(cmd);
+                        commandsByCategory[category].push(cmd.data);
                     });
                 }
                 %>

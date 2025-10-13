@@ -183,4 +183,5 @@ module.exports = {
 
     await interaction.editReply({embeds: [embed]});
   },
+  category: "Utility",
 };

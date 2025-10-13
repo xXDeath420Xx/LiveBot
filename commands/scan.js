@@ -77,4 +77,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while scanning for bots."});
     }
   },
+  category: "Utility",
 };

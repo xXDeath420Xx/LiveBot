@@ -32,4 +32,5 @@ module.exports = {
       await interaction.reply({content: "Failed to unlock the channel. Do I have the Manage Channels permission?", ephemeral: true});
     }
   },
+  category: "Utility",
 };

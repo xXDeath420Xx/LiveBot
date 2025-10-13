@@ -61,4 +61,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while updating permissions."});
     }
   },
+  category: "Utility",
 };

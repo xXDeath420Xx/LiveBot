@@ -78,4 +78,5 @@ module.exports = {
       components: [row]
     });
   },
+  category: "Streamer Management",
 };

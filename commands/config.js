@@ -75,4 +75,5 @@ module.exports = {
     }
     // ... other execute logic
   },
+  category: "Utility",
 };

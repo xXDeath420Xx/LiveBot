@@ -48,4 +48,5 @@ module.exports = {
       await interaction.editReply("Sorry, I couldn't connect to the dictionary service right now.");
     }
   },
+  category: "Utility",
 };

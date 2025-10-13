@@ -117,5 +117,6 @@ module.exports = {
       logger.error("[Customize Channel Error]", error);
       await interaction.editReply(`An error occurred while updating the channel customization: ${error.message}.`);
     }
-  }
+  },
+  category: "Utility",
 };

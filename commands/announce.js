@@ -71,4 +71,5 @@ module.exports = {
       await interaction.editReply("Failed to send the announcement. Please check my permissions for that channel.");
     }
   },
+  category: "Utility",
 };

@@ -76,4 +76,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred, or this feature has not been fully configured by the bot owner yet."});
     }
   },
+  category: "Utility",
 };

@@ -70,4 +70,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while saving the welcome settings."});
     }
   },
+  category: "Utility",
 };

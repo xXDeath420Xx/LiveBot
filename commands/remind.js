@@ -116,4 +116,5 @@ module.exports = {
       await interaction.editReply("An error occurred while managing your reminders.");
     }
   },
+  category: "Utility",
 };

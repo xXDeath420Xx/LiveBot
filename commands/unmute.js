@@ -60,4 +60,5 @@ module.exports = {
       await interaction.editReply("An unexpected error occurred. I may be missing permissions to remove timeouts.");
     }
   },
+  category: "Utility",
 };

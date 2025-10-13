@@ -74,4 +74,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while generating the schedule."});
     }
   },
+  category: "Utility",
 };

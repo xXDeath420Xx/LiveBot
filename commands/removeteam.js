@@ -92,4 +92,5 @@ module.exports = {
       await interaction.editReply({content: "A critical error occurred while executing the command. The operation has been rolled back."});
     }
   },
+  category: "Utility",
 };

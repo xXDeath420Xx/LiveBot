@@ -26,4 +26,5 @@ module.exports = {
       await interaction.editReply("Sorry, I couldn't fetch a cat picture right now.");
     }
   },
+  category: "Fun",
 };

@@ -43,4 +43,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while fetching invite stats."});
     }
   },
+  category: "Utility",
 };

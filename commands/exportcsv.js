@@ -57,4 +57,5 @@ module.exports = {
       await interaction.editReply("An error occurred while exporting the streamer list.");
     }
   },
+  category: "Utility",
 };

@@ -41,4 +41,5 @@ module.exports = {
       await interaction.editReply("An error occurred while fetching server statistics.");
     }
   },
+  category: "Utility",
 };
