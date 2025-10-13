@@ -48,9 +48,6 @@ module.exports = {
           name: searchResult.playlist.author.name || "N/A"
         };
       }
-      if (!(interaction.member.voice.channel instanceof VoiceChannel)) {
-        return interaction.editReply({content: "You must be in a voice channel to do that"});
-      }
 
       await player.play(interaction.channel.id, searchResult, {
         nodeOptions: {
