@@ -244,7 +244,7 @@ async function start() {
       .setURL(track.url)
       .setThumbnail(track.thumbnail)
       .addFields(
-        {name: "Position in queue", value: `${queue.tracks.size}`.toString(), inline: true},
+        {name: "Position in queue", value: `${queue.tracks.size}`, inline: true},
         {name: "Duration", value: track.duration || "0:00", inline: true}
       )
       .setFooter({text: `Requested by ${track.requestedBy.tag}`});
