@@ -4,12 +4,12 @@ const logger = require("../utils/logger");
 
 // Assuming generateScheduleGrid is defined elsewhere or is a helper function not included in this snippet
 function generateScheduleGrid(sessions) {
-    // Placeholder for the actual implementation of generateScheduleGrid
-    // This function would process stream_sessions to create a visual schedule grid.
-    // For example, it might count streams per hour/day and represent intensity with emojis.
-    // Since the original snippet had it commented out, I'm keeping this as a placeholder.
-    // If you provide the implementation, I can review it.
-    return "Schedule grid generation logic is not available in this snippet.";
+  // Placeholder for the actual implementation of generateScheduleGrid
+  // This function would process stream_sessions to create a visual schedule grid.
+  // For example, it might count streams per hour/day and represent intensity with emojis.
+  // Since the original snippet had it commented out, I'm keeping this as a placeholder.
+  // If you provide the implementation, I can review it.
+  return "Schedule grid generation logic is not available in this snippet.";
 }
 
 module.exports = {

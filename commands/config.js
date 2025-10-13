@@ -1,7 +1,7 @@
-const { SlashCommandBuilder, ChannelType, PermissionsBitField, EmbedBuilder } = require("discord.js");
+const {SlashCommandBuilder, ChannelType, PermissionsBitField, EmbedBuilder} = require("discord.js");
 const db = require("../utils/db");
-const { getAvatarUploadChannel } = require("../utils/channel-helpers.js");
-const { logAuditEvent } = require("../utils/audit-log.js");
+const {getAvatarUploadChannel} = require("../utils/channel-helpers.js");
+const {logAuditEvent} = require("../utils/audit-log.js");
 const logger = require("../utils/logger");
 
 module.exports = {
@@ -25,11 +25,11 @@ module.exports = {
         .setName("customize")
         .setDescription("Customize the appearance of the bot and its messages.")
         .addSubcommand(subcommand =>
-            subcommand
-              .setName("streamer")
-              .setDescription("Sets a custom name, avatar, or message for a specific streamer's announcements.")
-              .addStringOption(option => option.setName("platform").setDescription("The platform of the streamer.").setRequired(true).addChoices({name: "Twitch", value: "twitch"}, {name: "Kick", value: "kick"}, {name: "YouTube", value: "youtube"}))
-              .addStringOption(option => option.setName("username").setDescription("The username of the streamer.").setRequired(true).setAutocomplete(true))
+          subcommand
+            .setName("streamer")
+            .setDescription("Sets a custom name, avatar, or message for a specific streamer's announcements.")
+            .addStringOption(option => option.setName("platform").setDescription("The platform of the streamer.").setRequired(true).addChoices({name: "Twitch", value: "twitch"}, {name: "Kick", value: "kick"}, {name: "YouTube", value: "youtube"}))
+            .addStringOption(option => option.setName("username").setDescription("The username of the streamer.").setRequired(true).setAutocomplete(true))
         )
     ),
 
@@ -49,7 +49,7 @@ module.exports = {
         );
         await interaction.respond(streamers.map(s => ({name: s.username, value: s.username})));
       } catch (error) {
-        logger.error('[Config Command Autocomplete Error]', error);
+        logger.error("[Config Command Autocomplete Error]", error);
         await interaction.respond([]);
       }
     }
@@ -60,18 +60,18 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommandGroup === "music") {
-        if (subcommand === "dj-role") {
-            const role = interaction.options.getRole("role");
-            const guildId = interaction.guild.id;
+      if (subcommand === "dj-role") {
+        const role = interaction.options.getRole("role");
+        const guildId = interaction.guild.id;
 
-            try {
-                await db.execute('INSERT INTO music_config (guild_id, dj_role_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE dj_role_id = ?', [guildId, role.id, role.id]);
-                await interaction.reply({ content: `✅ The DJ role has been set to <@&${role.id}>.`, ephemeral: true });
-            } catch (error) {
-                logger.error('[Config DJ Role Error]', error);
-                await interaction.reply({ content: "❌ An error occurred while setting the DJ role.", ephemeral: true });
-            }
+        try {
+          await db.execute("INSERT INTO music_config (guild_id, dj_role_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE dj_role_id = ?", [guildId, role.id, role.id]);
+          await interaction.reply({content: `✅ The DJ role has been set to <@&${role.id}>.`, ephemeral: true});
+        } catch (error) {
+          logger.error("[Config DJ Role Error]", error);
+          await interaction.reply({content: "❌ An error occurred while setting the DJ role.", ephemeral: true});
         }
+      }
     }
     // ... other execute logic
   },

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField, ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder } = require("discord.js");
+const {SlashCommandBuilder, PermissionsBitField, ButtonBuilder, ButtonStyle, ActionRowBuilder, EmbedBuilder} = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -19,24 +19,24 @@ module.exports = {
         + "This action cannot be undone. The bot will automatically post new announcements for any currently live streamers on its next cycle."
       )
       .setColor(0xFFCC00) // Yellow for warning
-      .setFooter({ text: "Please confirm you want to proceed." });
+      .setFooter({text: "Please confirm you want to proceed."});
 
     const confirmButton = new ButtonBuilder()
-      .setCustomId('confirm_reinit')
+      .setCustomId("confirm_reinit")
       .setLabel("I understand, reinitialize this server")
       .setStyle(ButtonStyle.Danger);
-      
+
     const cancelButton = new ButtonBuilder()
-        .setCustomId('cancel_reinit')
-        .setLabel("Cancel")
-        .setStyle(ButtonStyle.Secondary);
+      .setCustomId("cancel_reinit")
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Secondary);
 
     const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
 
-    await interaction.reply({ 
+    await interaction.reply({
       embeds: [embed],
       components: [row],
-      ephemeral: true 
+      ephemeral: true
     });
   },
 };

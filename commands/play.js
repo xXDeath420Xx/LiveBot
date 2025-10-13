@@ -1,26 +1,26 @@
-const { SlashCommandBuilder } = require('discord.js');
-const { useMainPlayer } = require('discord-player');
-const { checkMusicPermissions } = require('../utils/music_helpers');
+const {SlashCommandBuilder} = require("discord.js");
+const {useMainPlayer} = require("discord-player");
+const {checkMusicPermissions} = require("../utils/music_helpers");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('play')
-    .setDescription('Plays a song or playlist.')
+    .setName("play")
+    .setDescription("Plays a song or playlist.")
     .addStringOption(option =>
-      option.setName('query')
-        .setDescription('A search term or URL.')
+      option.setName("query")
+        .setDescription("A search term or URL.")
         .setRequired(true)),
 
   async execute(interaction) {
     const permissionCheck = await checkMusicPermissions(interaction);
     if (!permissionCheck.permitted) {
-      return interaction.reply({ content: permissionCheck.message, ephemeral: true });
+      return interaction.reply({content: permissionCheck.message, ephemeral: true});
     }
 
     await interaction.deferReply();
 
     const player = useMainPlayer();
-    const query = interaction.options.getString('query');
+    const query = interaction.options.getString("query");
 
     try {
       const searchResult = await player.search(query, {
@@ -28,7 +28,7 @@ module.exports = {
       });
 
       if (!searchResult.hasTracks()) {
-        return interaction.editReply({ content: 'No results found for your query.' });
+        return interaction.editReply({content: "No results found for your query."});
       }
 
       // ** THE DEFINITIVE FIX - PART 1 **
@@ -43,9 +43,9 @@ module.exports = {
 
       // ** THE DEFINITIVE FIX - PART 2 **
       // Sanitize the `playlist.author` property, which can also be a complex object.
-      if (searchResult.playlist && searchResult.playlist.author && typeof searchResult.playlist.author === 'object') {
+      if (searchResult.playlist && searchResult.playlist.author && typeof searchResult.playlist.author === "object") {
         searchResult.playlist.author = {
-          name: searchResult.playlist.author.name || 'N/A'
+          name: searchResult.playlist.author.name || "N/A"
         };
       }
 
@@ -59,11 +59,11 @@ module.exports = {
       });
 
       const message = searchResult.playlist ? `Loading your playlist...` : `Loading your track...`;
-      return interaction.editReply({ content: `⏱️ | ${message}` });
+      return interaction.editReply({content: `⏱️ | ${message}`});
 
     } catch (e) {
-      console.error('[Play Command Error]', e);
-      return interaction.editReply({ content: `An error occurred: ${e.message}` });
+      console.error("[Play Command Error]", e);
+      return interaction.editReply({content: `An error occurred: ${e.message}`});
     }
   },
 };

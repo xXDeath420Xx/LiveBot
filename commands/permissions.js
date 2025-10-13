@@ -23,12 +23,12 @@ module.exports = {
   async autocomplete(interaction) {
     const focusedValue = interaction.options.getFocused();
     try {
-        const commandNames = Array.from(interaction.client.commands.keys());
-        const filtered = commandNames.filter(name => name.startsWith(focusedValue) && name !== "permissions");
-        await interaction.respond(filtered.map(name => ({name, value: name})));
+      const commandNames = Array.from(interaction.client.commands.keys());
+      const filtered = commandNames.filter(name => name.startsWith(focusedValue) && name !== "permissions");
+      await interaction.respond(filtered.map(name => ({name, value: name})));
     } catch (error) {
-        logger.error("[Permissions Command Autocomplete Error]", error);
-        await interaction.respond([]); // Respond with an empty array on error
+      logger.error("[Permissions Command Autocomplete Error]", error);
+      await interaction.respond([]); // Respond with an empty array on error
     }
   },
 
