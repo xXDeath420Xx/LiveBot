@@ -4,7 +4,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const logger = require("../utils/logger");
 const db = require("../utils/db");
 const { redisOptions } = require("../utils/cache");
-const { checkStreams, checkTeams } = require("../core/stream-checker");
+const { checkTeams } = require("../core/stream-checker");
 const { syncDiscordUserIds } = require("../core/user-sync");
 const { collectServerStats } = require("../core/stats-manager");
 
@@ -18,9 +18,6 @@ module.exports = function startSystemWorker(client) {
     logger.info(`[System Worker] Processing job '${job.name}' (ID: ${job.id}).`);
     try {
       switch (job.name) {
-        case "check-streams":
-          await checkStreams(client);
-          break;
         case "sync-teams":
           await checkTeams(client);
           break;

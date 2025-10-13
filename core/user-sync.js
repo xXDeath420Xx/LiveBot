@@ -1,6 +1,6 @@
 const db = require('../utils/db');
 const logger = require('../utils/logger');
-const apiChecks = require('../utils/api_checks');
+const kickApi = require('../utils/kick-api'); // Corrected import
 const { normalizeUsername } = require('../utils/db');
 
 /**
@@ -95,11 +95,9 @@ async function syncDiscordUserIds(client) {
                 const { discord_user_id, username, normalized_username } = user;
                 if (!discord_user_id || !username || normalized_username === normalizeUsername('xxdeath420xx')) continue;
 
-                // Check if a Kick account with the same normalized username already exists in the DB
                 const [existingKickByNormalizedName] = await db.execute("SELECT streamer_id FROM streamers WHERE platform = 'kick' AND normalized_username = ?", [normalized_username]);
                 if (existingKickByNormalizedName.length > 0) {
                     logger.debug(`[UserSync-P2] Kick account for normalized username '${normalized_username}' already exists in DB. Ensuring Discord ID is linked.`);
-                    // Ensure the existing Kick account has the correct Discord ID
                     await db.execute(
                         `UPDATE streamers SET discord_user_id = ? WHERE streamer_id = ? AND (discord_user_id IS NULL OR discord_user_id != ?)`,
                         [discord_user_id, existingKickByNormalizedName[0].streamer_id, discord_user_id]
@@ -108,7 +106,8 @@ async function syncDiscordUserIds(client) {
                 }
 
                 try {
-                    const kickUser = await apiChecks.getKickUser(username);
+                    // Corrected to use the new kickApi module
+                    const kickUser = await kickApi.getKickUser(username);
                     if (kickUser && kickUser.user) {
                         logger.info(`[UserSync-P2] Found and linking missing Kick account for ${username}: ${kickUser.user.username}`);
                         await db.execute(

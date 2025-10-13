@@ -1,9 +1,11 @@
 const {SlashCommandBuilder, PermissionsBitField, EmbedBuilder, ChannelType} = require("discord.js");
 const db = require("../utils/db");
-const apiChecks = require("../utils/api_checks");
+const twitchApi = require("../utils/twitch-api");
+const kickApi = require("../utils/kick-api");
+const { getYouTubeChannelId } = require("../utils/api_checks");
+const { exitCycleTLSInstance } = require("../utils/tls-manager"); // Corrected import
 const {getBrowser} = require("../utils/browserManager");
 const logger = require("../utils/logger");
-const initCycleTLS = require("cycletls");
 
 module.exports = {
   data: new SlashCommandBuilder().setName("massaddstreamer").setDescription("Adds multiple streamers from a platform.")
@@ -30,7 +32,6 @@ module.exports = {
 
     const added = [], failed = [], updated = [];
     let browser = null;
-    let cycleTLS = null;
     let finalAvatarUrl = null;
 
     try {
@@ -57,45 +58,22 @@ module.exports = {
         }
       }
 
-      const platformsToCheck = new Set(usernames.map(() => platform)); // Assuming all usernames are for the same platform
-
-      if (platformsToCheck.has("tiktok") || platformsToCheck.has("trovo") || platformsToCheck.has("youtube")) {
+      if (platform === "youtube") {
         browser = await getBrowser();
-      }
-
-      if (platformsToCheck.has("kick")) {
-        try {
-          cycleTLS = await initCycleTLS({timeout: 60000});
-        } catch (cycleTLSError) {
-          logger.error("[Mass Add Streamer] Error initializing cycleTLS. Kick platform lookups may fail:", cycleTLSError);
-          // Continue without cycleTLS, Kick platform IDs will likely fail.
-        }
       }
 
       for (const username of usernames) {
         try {
           let streamerInfo = null;
           if (platform === "twitch") {
-            const u = await apiChecks.getTwitchUser(username);
-            if (u) {
-              streamerInfo = {puid: u.id, dbUsername: u.login};
-            }
+            const u = await twitchApi.getTwitchUser(username);
+            if (u) streamerInfo = {puid: u.id, dbUsername: u.login};
           } else if (platform === "kick") {
-            if (cycleTLS) {
-              const u = await apiChecks.getKickUser(cycleTLS, username);
-              if (u) {
-                streamerInfo = {puid: u.id.toString(), dbUsername: u.user.username};
-              }
-            } else {
-              logger.warn(`[Mass Add Streamer] Skipping Kick API lookup for ${username} due to cycleTLS initialization failure.`);
-              failed.push(`${username} (Kick API Unavailable)`);
-              continue;
-            }
+            const u = await kickApi.getKickUser(username);
+            if (u) streamerInfo = {puid: u.id.toString(), dbUsername: u.user.username};
           } else if (platform === "youtube") {
-            const c = await apiChecks.getYouTubeChannelId(username, browser);
-            if (c?.channelId) {
-              streamerInfo = {puid: c.channelId, dbUsername: c.channelName || username};
-            }
+            const c = await getYouTubeChannelId(username, browser);
+            if (c?.channelId) streamerInfo = {puid: c.channelId, dbUsername: c.channelName || username};
           } else if (["tiktok", "trovo"].includes(platform)) {
             streamerInfo = {puid: username, dbUsername: username};
           }
@@ -122,17 +100,13 @@ module.exports = {
 
           if (existingSubscription) {
             await db.execute(
-              `UPDATE subscriptions SET 
-                           override_nickname = ?,
-                           override_avatar_url = IF(? IS NOT NULL, ?, override_avatar_url)
-                         WHERE subscription_id = ?`,
+              `UPDATE subscriptions SET override_nickname = ?, override_avatar_url = IF(? IS NOT NULL, ?, override_avatar_url) WHERE subscription_id = ?`,
               [nickname || null, finalAvatarUrl, finalAvatarUrl, existingSubscription.subscription_id]
             );
             updated.push(username);
           } else {
             await db.execute(
-              `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, override_nickname, override_avatar_url) 
-                         VALUES (?, ?, ?, ?, ?)`,
+              `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, override_nickname, override_avatar_url) VALUES (?, ?, ?, ?, ?)`,
               [interaction.guild.id, streamerId, announcementChannel, nickname || null, finalAvatarUrl]
             );
             added.push(username);
@@ -147,16 +121,8 @@ module.exports = {
       logger.error("[Mass Add Streamer] Main Error:", e);
       return await interaction.editReply({content: `A critical error occurred processing the command: ${e.message}`});
     } finally {
-      if (browser) {
-        await browser.close();
-      }
-      if (cycleTLS) {
-        try {
-          cycleTLS.exit();
-        } catch (e) {
-          logger.error("[Mass Add Streamer] Error exiting cycleTLS:", e);
-        }
-      }
+      if (browser) await browser.close();
+      await exitCycleTLSInstance();
     }
 
     const embed = new EmbedBuilder().setTitle("Mass Add Report").setColor("#5865F2");
@@ -168,18 +134,10 @@ module.exports = {
     );
 
     let footerText = [];
-    if (channelOverride) {
-      footerText.push(`Channel: #${channelOverride.name}`);
-    }
-    if (nickname) {
-      footerText.push(`Nickname: ${nickname}`);
-    }
-    if (finalAvatarUrl) {
-      footerText.push(`Avatar URL provided`);
-    }
-    if (footerText.length > 0) {
-      embed.setFooter({text: `Applied to all successful entries: ${footerText.join(' | ')}`});
-    }
+    if (channelOverride) footerText.push(`Channel: #${channelOverride.name}`);
+    if (nickname) footerText.push(`Nickname: ${nickname}`);
+    if (finalAvatarUrl) footerText.push(`Avatar URL provided`);
+    if (footerText.length > 0) embed.setFooter({text: `Applied to all successful entries: ${footerText.join(' | ')}`});
 
     await interaction.editReply({embeds: [embed]});
   },

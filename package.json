@@ -10,7 +10,6 @@
     "delete": "pm2 delete all",
     "logs": "pm2 logs",
     "deploy": "node deploy-commands.js",
-    "schedule:streams": "node jobs/stream-check-scheduler.js",
     "schedule:teams": "node jobs/team-sync-scheduler.js"
   },
   "dependencies": {

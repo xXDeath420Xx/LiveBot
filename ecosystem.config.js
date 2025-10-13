@@ -41,14 +41,6 @@ module.exports = {
         exec_mode: 'fork',
     },
     {
-      name: 'Stream-Check-Scheduler',
-      script: 'jobs/stream-check-scheduler.js',
-      instances: 1,
-      exec_mode: 'fork',
-      cron_restart: '*/2 * * * *',
-      autorestart: false,
-    },
-    {
         name: 'Team-Sync-Scheduler',
         script: 'jobs/team-sync-scheduler.js',
         instances: 1,

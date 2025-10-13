@@ -1,11 +1,11 @@
 const db = require('./utils/db');
-const apiChecks = require('./utils/api_checks');
-const initCycleTLS = require('cycletls');
+const twitchApi = require('./utils/twitch-api');
+const kickApi = require('./utils/kick-api');
+const { getYouTubeChannelId } = require('./utils/api_checks');
+const { exitCycleTLSInstance } = require('./utils/tls-manager'); // Corrected import
 
 async function fixMissingPlatformIds() {
     console.log('[MIGRATE] Starting data migration script...');
-
-    let cycleTLS = null;
 
     try {
         const [streamersToFix] = await db.execute(
@@ -21,40 +21,25 @@ async function fixMissingPlatformIds() {
         let fixedCount = 0;
         let failedCount = 0;
 
-        const needsCycleTLS = streamersToFix.some(s => s.platform === 'kick');
-        if (needsCycleTLS) {
-            try {
-                cycleTLS = await initCycleTLS({ timeout: 60000 });
-                console.log('[MIGRATE] cycleTLS initialized for Kick platform.');
-            } catch (cycleTLSError) {
-                console.error('[MIGRATE] Error initializing cycleTLS. Kick platform IDs may not be fixable:', cycleTLSError.message);
-                // Continue without cycleTLS, Kick platform IDs will likely fail.
-            }
-        }
-
         for (const streamer of streamersToFix) {
             console.log(`[MIGRATE] > Processing ${streamer.username} on ${streamer.platform}...`);
             let puid = null;
 
             try {
                 if (streamer.platform === 'kick') {
-                    if (cycleTLS) {
-                        const kickUser = await apiChecks.getKickUser(cycleTLS, streamer.username);
-                        if (kickUser && kickUser.id) {
-                            puid = kickUser.id.toString();
-                        }
-                    } else {
-                        console.log(`[MIGRATE]   ❌ SKIPPED: Kick platform ID for ${streamer.username} because cycleTLS failed to initialize.`);
+                    const kickUser = await kickApi.getKickUser(streamer.username);
+                    if (kickUser && kickUser.id) {
+                        puid = kickUser.id.toString();
                     }
                 } else if (streamer.platform === 'twitch') {
-                    const twitchUser = await apiChecks.getTwitchUser(streamer.username);
+                    const twitchUser = await twitchApi.getTwitchUser(streamer.username);
                     if (twitchUser && twitchUser.id) {
                         puid = twitchUser.id;
                     }
                 } else if (streamer.platform === 'youtube') {
-                    const youtubeChannelId = await apiChecks.getYouTubeChannelId(streamer.username);
-                    if (youtubeChannelId) {
-                        puid = youtubeChannelId;
+                    const youtubeChannel = await getYouTubeChannelId(streamer.username);
+                    if (youtubeChannel?.channelId) {
+                        puid = youtubeChannel.channelId;
                     }
                 }
             } catch (apiError) {
@@ -83,9 +68,7 @@ async function fixMissingPlatformIds() {
     } catch (error) {
         console.error('[MIGRATE] A critical error occurred during migration:', error);
     } finally {
-        if (cycleTLS) {
-            try { cycleTLS.exit(); } catch(e){ console.error('[MIGRATE] Error exiting cycleTLS:', e); }
-        }
+        await exitCycleTLSInstance();
         if (db) {
             try { await db.end(); } catch(e){ console.error('[MIGRATE] Error closing database connection:', e); }
         }

@@ -62,7 +62,7 @@ async function handleGuildMemberRemove(member) {
             );
             logger.info(`[Invites] User ${member.user.tag} left ${member.guild.name}. Logged as a leave against inviter ${joinRecord.inviter_id}.`);
         } else {
-            logger.warn(`[Invites] Could not determine invite for ${member.user.tag} leaving ${guild.name}.`);
+            logger.warn(`[Invites] Could not determine invite for ${member.user.tag} leaving ${member.guild.name}.`);
         }
      } catch(error) {
         logger.error(`[Invites] Error handling member remove in ${member.guild.name}:`, error);

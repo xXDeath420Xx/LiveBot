@@ -2,10 +2,12 @@ const {SlashCommandBuilder, PermissionsBitField, EmbedBuilder, MessageFlags} = r
 const axios = require("axios");
 const Papa = require("papaparse");
 const db = require("../utils/db");
-const apiChecks = require("../utils/api_checks");
+const twitchApi = require("../utils/twitch-api");
+const kickApi = require("../utils/kick-api");
+const { getYouTubeChannelId } = require("../utils/api_checks");
+const { exitCycleTLSInstance } = require("../utils/tls-manager"); // Corrected import
 const {getBrowser} = require("../utils/browserManager");
 const logger = require("../utils/logger");
-const initCycleTLS = require("cycletls");
 
 module.exports = {
   data: new SlashCommandBuilder().setName("importcsv").setDescription("Bulk adds/updates streamer subscriptions from a CSV file.")
@@ -24,7 +26,6 @@ module.exports = {
 
     const added = [], updated = [], failed = [];
     let browser = null;
-    let cycleTLS = null;
 
     try {
       const fileContent = await axios.get(file.url, {responseType: "text"}).then(res => res.data);
@@ -35,17 +36,8 @@ module.exports = {
 
       const platformsInCsv = new Set(rows.map(r => r.platform).filter(Boolean));
 
-      if (platformsInCsv.has("tiktok") || platformsInCsv.has("trovo") || platformsInCsv.has("youtube")) {
+      if (platformsInCsv.has("youtube")) {
         browser = await getBrowser();
-      }
-
-      if (platformsInCsv.has("kick")) {
-        try {
-          cycleTLS = await initCycleTLS({timeout: 60000});
-        } catch (cycleTLSError) {
-          logger.error("[Import CSV] Error initializing cycleTLS. Kick platform lookups may fail:", cycleTLSError);
-          // Continue without cycleTLS, Kick platform IDs will likely fail.
-        }
       }
 
       for (const row of rows) {
@@ -67,26 +59,14 @@ module.exports = {
           if (!streamerId) {
             let streamerInfo = null;
             if (platform === "twitch") {
-              const u = await apiChecks.getTwitchUser(username);
-              if (u) {
-                streamerInfo = {puid: u.id, dbUsername: u.login};
-              }
+              const u = await twitchApi.getTwitchUser(username);
+              if (u) streamerInfo = {puid: u.id, dbUsername: u.login};
             } else if (platform === "kick") {
-              if (cycleTLS) {
-                const u = await apiChecks.getKickUser(cycleTLS, username);
-                if (u) {
-                  streamerInfo = {puid: u.id.toString(), dbUsername: u.user.username};
-                }
-              } else {
-                logger.warn(`[Import CSV] Skipping Kick API lookup for ${username} due to cycleTLS initialization failure.`);
-                failed.push(`${username} (Kick API Unavailable)`);
-                continue;
-              }
+              const u = await kickApi.getKickUser(username);
+              if (u) streamerInfo = {puid: u.id.toString(), dbUsername: u.user.username};
             } else if (platform === "youtube") {
-              const c = await apiChecks.getYouTubeChannelId(username);
-              if (c?.channelId) {
-                streamerInfo = {puid: c.channelId, dbUsername: c.channelName || username};
-              }
+              const c = await getYouTubeChannelId(username);
+              if (c?.channelId) streamerInfo = {puid: c.channelId, dbUsername: c.channelName || username};
             } else if (["tiktok", "trovo"].includes(platform)) {
               streamerInfo = {puid: username, dbUsername: username};
             }
@@ -125,16 +105,8 @@ module.exports = {
       logger.error("[Import CSV] Main Error:", e);
       return await interaction.editReply({content: "A critical error occurred processing the file."});
     } finally {
-      if (browser) {
-        await browser.close();
-      }
-      if (cycleTLS) {
-        try {
-          cycleTLS.exit();
-        } catch (e) {
-          logger.error("[Import CSV] Error exiting cycleTLS:", e);
-        }
-      }
+      if (browser) await browser.close();
+      await exitCycleTLSInstance();
     }
 
     const embed = new EmbedBuilder().setTitle("CSV Import Complete").setColor("#5865F2");

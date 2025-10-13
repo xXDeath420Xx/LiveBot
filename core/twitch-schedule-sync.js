@@ -1,6 +1,6 @@
 const db = require('../utils/db');
 const logger = require('../utils/logger');
-const apiChecks = require('../utils/api_checks');
+const twitchApi = require('../utils/twitch-api');
 const { EmbedBuilder } = require('discord.js');
 
 async function syncTwitchSchedules(client) {
@@ -22,14 +22,13 @@ async function syncTwitchSchedules(client) {
                     continue;
                 }
 
-                const accessToken = await apiChecks.getTwitchAccessToken();
-                if (!accessToken) {
-                    logger.error('Failed to get Twitch access token. Skipping sync for all.', { category: 'twitch-schedule' });
-                    break;
+                const response = await twitchApi.getStreamSchedule(twitchUserId);
+                if (!response) {
+                    logger.warn(`Failed to fetch Twitch schedule for user ${twitchUserId}. Skipping sync for this user.`, { guildId, category: 'twitch-schedule' });
+                    continue;
                 }
 
-                const response = await apiChecks.fetchTwitchSchedule(twitchUserId, accessToken);
-                const scheduleSegments = response?.data?.segments || [];
+                const scheduleSegments = response?.data?.data?.segments || [];
 
                 const guild = client.guilds.cache.get(guildId);
                 if (!guild) {

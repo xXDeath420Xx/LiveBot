@@ -1,7 +1,8 @@
-const {EmbedBuilder} = require("discord.js");
+const { EmbedBuilder, PermissionsBitField } = require("discord.js");
 const db = require("../../../utils/db");
-const apiChecks = require("../../../utils/api_checks");
-const initCycleTLS = require("cycletls");
+const twitchApi = require("../../../utils/twitch-api");
+const kickApi = require("../../../utils/kick-api");
+const { getYouTubeChannelId } = require("../../../utils/api_checks");
 
 module.exports = {
   customId: /^approve_channels_/,
@@ -26,20 +27,14 @@ module.exports = {
       try {
         let streamerInfo = null;
         if (platform === "twitch") {
-          const u = await apiChecks.getTwitchUser(username);
-          if (u) {
-            streamerInfo = {puid: u.id, dbUsername: u.login};
-          }
+          const u = await twitchApi.getTwitchUser(username);
+          if (u) streamerInfo = {puid: u.id, dbUsername: u.login};
         } else if (platform === "kick") {
-          const u = await apiChecks.getKickUser(await initCycleTLS({timeout: 60000}), username);
-          if (u) {
-            streamerInfo = {puid: u.id.toString(), dbUsername: u.user.username};
-          }
+          const u = await kickApi.getKickUser(username);
+          if (u) streamerInfo = {puid: u.id.toString(), dbUsername: u.user.username};
         } else if (platform === "youtube") {
-          const c = await apiChecks.getYouTubeChannelId(username);
-          if (c?.channelId) {
-            streamerInfo = {puid: c.channelId, dbUsername: c.channelName || username};
-          }
+          const c = await getYouTubeChannelId(username);
+          if (c?.channelId) streamerInfo = {puid: c.channelId, dbUsername: c.channelName || username};
         } else {
           streamerInfo = {puid: username, dbUsername: username};
         }
@@ -69,10 +64,8 @@ module.exports = {
         .addFields({name: "Approved for Channels", value: channelIds.map(id => `<#${id}>`).join(", ")});
 
       await originalMessage.edit({embeds: [updatedEmbed], components: []});
-      await interaction.editReply({content: `Approved request and added ${addedCount} subscriptions.`, components: []});
     } catch (error) {
       console.error("Error updating original request message:", error);
-      await interaction.editReply({content: `Approved request and added ${addedCount} subscriptions, but failed to update the original message.`, components: []});
     }
   },
 };

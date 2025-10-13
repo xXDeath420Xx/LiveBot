@@ -1,10 +1,10 @@
 const db = require('./utils/db');
-const apiChecks = require('./utils/api_checks');
-const initCycleTLS = require('cycletls');
+const twitchApi = require('./utils/twitch-api');
+const kickApi = require('./utils/kick-api');
+const { exitCycleTLSInstance } = require('./utils/tls-manager'); // Corrected import
 
 async function migrateAvatars() {
     console.log('[MIGRATE] Starting avatar migration script...');
-    let cycleTLS = null;
 
     try {
         const [streamers] = await db.execute('SELECT streamer_id, platform, username, platform_user_id FROM streamers');
@@ -15,31 +15,16 @@ async function migrateAvatars() {
 
         console.log(`[MIGRATE] Found ${streamers.length} streamer(s) to process...`);
         let updatedCount = 0;
-        
-        const needsCycleTLS = streamers.some(s => s.platform === 'kick');
-        if (needsCycleTLS) {
-            try {
-                cycleTLS = await initCycleTLS({ timeout: 60000 });
-                console.log('[MIGRATE] cycleTLS initialized for Kick platform.');
-            } catch (cycleTLSError) {
-                console.error('[MIGRATE] Error initializing cycleTLS. Kick platform avatars may not be updateable:', cycleTLSError.message);
-                // Continue without cycleTLS, Kick platform avatars will likely fail.
-            }
-        }
 
         for (const streamer of streamers) {
             let profileImageUrl = null;
             try {
                 if (streamer.platform === 'twitch') {
-                    const twitchUser = await apiChecks.getTwitchUser(streamer.platform_user_id);
+                    const twitchUser = await twitchApi.getTwitchUser(streamer.username);
                     if (twitchUser) profileImageUrl = twitchUser.profile_image_url;
                 } else if (streamer.platform === 'kick') {
-                    if (cycleTLS) {
-                        const kickUser = await apiChecks.getKickUser(cycleTLS, streamer.username);
-                        if (kickUser) profileImageUrl = kickUser.user.profile_pic;
-                    } else {
-                        console.log(`[MIGRATE]   ❌ SKIPPED: Kick avatar for ${streamer.username} because cycleTLS failed to initialize.`);
-                    }
+                    const kickUser = await kickApi.getKickUser(streamer.username);
+                    if (kickUser) profileImageUrl = kickUser.user.profile_pic;
                 }
                 
                 if (profileImageUrl) {
@@ -52,7 +37,7 @@ async function migrateAvatars() {
                 } else {
                     console.log(`[MIGRATE]  ⚠️  Could not find avatar for ${streamer.username} (${streamer.platform}). Skipping.`);
                 }
-                 await new Promise(resolve => setTimeout(resolve, 250));
+                 await new Promise(resolve => setTimeout(resolve, 250)); // Rate limit to be safe
             } catch (e) {
                 console.error(`[MIGRATE]  ❌  Error processing ${streamer.username}: ${e.message}`);
             }
@@ -64,9 +49,8 @@ async function migrateAvatars() {
     } catch (error) {
         console.error('[MIGRATE] A critical error occurred during avatar migration:', error);
     } finally {
-        if (cycleTLS) {
-            try { cycleTLS.exit(); } catch(e){ console.error('[MIGRATE] Error exiting cycleTLS:', e); }
-        }
+        // Clean up shared resources
+        await exitCycleTLSInstance();
         if (db) {
             try { await db.end(); } catch(e){ console.error('[MIGRATE] Error closing database connection:', e); }
         }

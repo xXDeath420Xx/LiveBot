@@ -6,6 +6,7 @@ const {DefaultExtractors} = require("@discord-player/extractor");
 const {YtDlp} = require("ytdlp-nodejs");
 const path = require("path");
 const fs = require("fs");
+const { getCycleTLSInstance } = require("./utils/tls-manager.js"); // Corrected import
 
 // --- ytdlp-nodejs Setup ---
 const ytdlp = new YtDlp();
@@ -119,7 +120,6 @@ async function start() {
 
   const logger = require("./utils/logger");
   const db = require("./utils/db");
-  const apiChecks = require("./utils/api_checks.js");
   const dashboard = require(path.join(__dirname, "dashboard", "server.js"));
   const {handleInteraction} = require("./core/interaction-handler");
   const {handleMessageXP} = require("./core/xp-manager");
@@ -154,11 +154,12 @@ async function start() {
   const {scheduleSocialFeedChecks} = require("./jobs/social-feed-scheduler.js");
   const {scheduleTicketChecks} = require("./jobs/ticket-scheduler.js");
   const {startupCleanup} = require("./core/startup.js");
+  const streamManager = require("./core/stream-manager.js"); // Added stream-manager
 
   setStatus(Status.STARTING);
 
   try {
-    await apiChecks.getCycleTLSInstance();
+    await getCycleTLSInstance(); // Corrected call
   } catch (cycleTlsError) {
     setStatus(Status.ERROR, "Failed to initialize CycleTLS.");
     console.error(" Error initializing CycleTLS:", cycleTlsError.stack);
@@ -372,18 +373,6 @@ async function start() {
       logManager.logMemberNicknameUpdate(oldMember, newMember);
     }
   });
-  if (logManager.logChannelCreate) {
-    client.on(Events.ChannelCreate, logManager.logChannelCreate);
-  }
-  if (logManager.logChannelDelete) {
-    client.on(Events.ChannelDelete, logManager.logChannelDelete);
-  }
-  if (logManager.logRoleCreate) {
-    client.on(Events.RoleCreate, logManager.logRoleCreate);
-  }
-  if (logManager.logRoleDelete) {
-    client.on(Events.RoleDelete, logManager.logRoleDelete);
-  }
   client.on(Events.VoiceStateUpdate, (oldState, newState) => {
     if (handleTempChannel) {
       handleTempChannel(oldState, newState);
@@ -464,6 +453,9 @@ async function start() {
     if (syncTwitchSchedules) {
       setInterval(() => syncTwitchSchedules(c), 5 * 60 * 1000);
     }
+
+    // Initialize stream manager
+    streamManager.init(c);
 
     try {
       await startupCleanup(c);

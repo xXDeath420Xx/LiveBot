@@ -1,6 +1,8 @@
 const {EmbedBuilder} = require("discord.js");
 const db = require("../../utils/db");
-const apiChecks = require("../../utils/api_checks");
+const twitchApi = require("../../utils/twitch-api");
+const kickApi = require("../../utils/kick-api");
+const { getYouTubeChannelId } = require("../../utils/api_checks");
 const {pendingInteractions} = require("../../commands/addstreamer");
 
 module.exports = {
@@ -30,19 +32,19 @@ module.exports = {
         try {
           let streamerInfo = null, pfp = null;
           if (platform === "twitch") {
-            const u = await apiChecks.getTwitchUser(data.username);
+            const u = await twitchApi.getTwitchUser(data.username);
             if (u) {
               streamerInfo = {puid: u.id, dbUsername: u.login};
               pfp = u.profile_image_url;
             }
           } else if (platform === "kick") {
-            const u = await apiChecks.getKickUser(data.username);
+            const u = await kickApi.getKickUser(data.username);
             if (u) {
               streamerInfo = {puid: u.id.toString(), dbUsername: u.user.username};
               pfp = u.user.profile_pic;
             }
           } else if (platform === "youtube") {
-            const c = await apiChecks.getYouTubeChannelId(data.username);
+            const c = await getYouTubeChannelId(data.username);
             if (c?.channelId) {
               streamerInfo = {puid: c.channelId, dbUsername: c.channelName || data.username};
             }
