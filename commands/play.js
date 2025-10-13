@@ -31,11 +31,28 @@ module.exports = {
         return interaction.editReply({ content: 'No results found for your query.' });
       }
 
+      // ** THE DEFINITIVE FIX - PART 1 **
+      // Sanitize the `requestedBy` property on each track to prevent circular references.
+      const cleanUser = {
+        id: interaction.user.id,
+        tag: interaction.user.tag,
+      };
+      searchResult.tracks.forEach(track => {
+        track.requestedBy = cleanUser;
+      });
+
+      // ** THE DEFINITIVE FIX - PART 2 **
+      // Sanitize the `playlist.author` property, which can also be a complex object.
+      if (searchResult.playlist && searchResult.playlist.author && typeof searchResult.playlist.author === 'object') {
+        searchResult.playlist.author = {
+          name: searchResult.playlist.author.name || 'N/A'
+        };
+      }
+
       await player.play(interaction.member.voice.channel, searchResult, {
         nodeOptions: {
           metadata: {
-            channel: interaction.channel,
-            requestedBy: interaction.user
+            channelId: interaction.channel.id,
           },
           volume: 80,
         }

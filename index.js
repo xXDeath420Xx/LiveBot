@@ -68,7 +68,7 @@ class YtDlpExtractor extends BaseExtractor {
             author: entry.uploader,
             requestedBy: searchOptions.requestedBy,
             source: 'youtube',
-            extractor: this, // Use `extractor` instead of `engine` to prevent circular reference errors
+            extractor: this,
         };
     }
 }
@@ -202,22 +202,65 @@ async function start() {
     }
     console.log(` ${client.buttons.size} buttons, ${client.modals.size} modals, and ${client.selects.size} select menus loaded.`);
 
-    client.player.events.on('playerStart', (queue, track) => {
-        const embed = new EmbedBuilder().setColor('#57F287').setAuthor({ name: 'Now Playing' }).setTitle(track.title).setURL(track.url).setThumbnail(track.thumbnail).addFields({ name: 'Channel', value: track.author || 'N/A', inline: true }, { name: 'Duration', value: track.duration || '0:00', inline: true }).setFooter({ text: `Requested by ${track.requestedBy.tag}` });
-        queue.metadata.channel.send({ embeds: [embed] });
+    client.player.events.on('playerStart', async (queue, track) => {
+        const channel = await client.channels.cache.get(queue.metadata.channelId);
+        if (!channel) return;
+
+        const embed = new EmbedBuilder()
+            .setColor('#57F287')
+            .setAuthor({ name: 'Now Playing' })
+            .setTitle(track.title)
+            .setURL(track.url)
+            .setThumbnail(track.thumbnail)
+            .addFields(
+                { name: 'Channel', value: track.author || 'N/A', inline: true },
+                { name: 'Duration', value: track.duration || '0:00', inline: true }
+            )
+            .setFooter({ text: `Requested by ${track.requestedBy.tag}` });
+
+        channel.send({ embeds: [embed] });
     });
-    client.player.events.on('audioTrackAdd', (queue, track) => {
-        const embed = new EmbedBuilder().setColor('#3498DB').setAuthor({ name: 'Added to Queue' }).setTitle(track.title).setURL(track.url).setThumbnail(track.thumbnail).addFields({ name: 'Position in queue', value: `${queue.tracks.size}`.toString(), inline: true }, { name: 'Duration', value: track.duration || '0:00', inline: true }).setFooter({ text: `Requested by ${track.requestedBy.tag}` });
-        queue.metadata.channel.send({ embeds: [embed] });
+
+    client.player.events.on('audioTrackAdd', async (queue, track) => {
+        const channel = await client.channels.cache.get(queue.metadata.channelId);
+        if (!channel) return;
+
+        const embed = new EmbedBuilder()
+            .setColor('#3498DB')
+            .setAuthor({ name: 'Added to Queue' })
+            .setTitle(track.title)
+            .setURL(track.url)
+            .setThumbnail(track.thumbnail)
+            .addFields(
+                { name: 'Position in queue', value: `${queue.tracks.size}`.toString(), inline: true },
+                { name: 'Duration', value: track.duration || '0:00', inline: true }
+            )
+            .setFooter({ text: `Requested by ${track.requestedBy.tag}` });
+
+        channel.send({ embeds: [embed] });
     });
-    client.player.events.on('audioTracksAdd', (queue, tracks) => queue.metadata.channel.send(`✅ | Added ${tracks.length} songs to queue!`));
-    client.player.events.on('error', (queue, error) => {
+    
+    client.player.events.on('audioTracksAdd', async (queue, tracks) => {
+        const channel = await client.channels.cache.get(queue.metadata.channelId);
+        if (channel) {
+            channel.send(`✅ | Added ${tracks.length} songs to queue!`);
+        }
+    });
+    
+    client.player.events.on('error', async (queue, error) => {
         logger.error('[Player Error]', { guildId: queue.guild.id, error: error.message, stack: error.stack, category: 'music' });
-        if (queue.metadata.channel) queue.metadata.channel.send(`❌ | An error occurred: ${error.message.slice(0, 1900)}`);
+        const channel = await client.channels.cache.get(queue.metadata.channelId);
+        if (channel) {
+            channel.send(`❌ | An error occurred: ${error.message.slice(0, 1900)}`);
+        }
     });
-    client.player.events.on('playerError', (queue, error) => {
+
+    client.player.events.on('playerError', async (queue, error) => {
         logger.error('[Player Connection Error]', { guildId: queue.guild.id, error: error.message, stack: error.stack, category: 'music' });
-        if (queue.metadata.channel) queue.metadata.channel.send(`❌ | A connection error encountered: ${error.message.slice(0, 1900)}`);
+        const channel = await client.channels.cache.get(queue.metadata.channelId);
+        if (channel) {
+            channel.send(`❌ | A connection error encountered: ${error.message.slice(0, 1900)}`);
+        }
     });
 
     if (handleInteraction) client.on(Events.InteractionCreate, handleInteraction);
