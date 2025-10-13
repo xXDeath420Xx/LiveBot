@@ -302,19 +302,25 @@ function start(botClient) {
             for (const memberId of uniqueMemberIds) {
                 try {
                     const user = await botClient.users.fetch(memberId);
-                    const memberLivePlatforms = [...liveAnnouncements.keys()]
+
+                    const memberLivePlatformsRaw = [...liveAnnouncements.keys()]
                         .filter(k => k.split('-')[1] === memberId)
                         .map(k => k.split('-')[2]);
                     
-                    const [streamerDetails] = await db.execute('SELECT username FROM streamers WHERE discord_user_id = ? LIMIT 1', [memberId]);
+                    const uniqueLivePlatforms = [...new Set(memberLivePlatformsRaw)];
+
+                    const [streamerDetails] = await db.execute('SELECT username, platform FROM streamers WHERE discord_user_id = ?', [memberId]);
 
                     liveStreamers.push({
                         username: user.username,
                         avatar_url: user.displayAvatarURL(),
-                        live_platforms: memberLivePlatforms.map(p => ({ platform: p, url: getPlatformUrl(streamerDetails[0]?.username, p) }))
+                        live_platforms: uniqueLivePlatforms.map(p => {
+                            const detail = streamerDetails.find(sd => sd.platform === p);
+                            return { platform: p, url: getPlatformUrl(detail?.username, p) };
+                        })
                     });
                 } catch (e) {
-                    logger.warn(`[Status Page] Could not fetch user ${memberId}`, { error: e.message });
+                    logger.warn(`[Status Page] Could not fetch user ${memberId}`, { error: e.message, stack: e.stack });
                 }
             }
 
