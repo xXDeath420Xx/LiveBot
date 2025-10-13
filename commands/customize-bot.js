@@ -123,5 +123,5 @@ module.exports = {
       await interaction.editReply({content: `An error occurred: ${error.message}`});
     }
   },
-  category: "Utility",
+  category: "Moderation",
 };

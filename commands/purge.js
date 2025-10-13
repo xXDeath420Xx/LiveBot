@@ -56,5 +56,5 @@ module.exports = {
       await interaction.editReply("An error occurred. I may not have permission to delete messages, or the messages are older than 14 days.");
     }
   },
-  category: "Utility",
+  category: "Moderation",
 };

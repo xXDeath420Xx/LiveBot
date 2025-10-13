@@ -52,5 +52,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while fetching the rank information."});
     }
   },
-  category: "Utility",
+  category: "Community",
 };

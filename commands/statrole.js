@@ -90,5 +90,5 @@ module.exports = {
       }
     }
   },
-  category: "Utility",
+  category: "Community",
 };

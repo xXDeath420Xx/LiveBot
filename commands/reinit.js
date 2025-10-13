@@ -39,5 +39,5 @@ module.exports = {
       ephemeral: true
     });
   },
-  category: "Utility",
+  category: "Streamer Management",
 };

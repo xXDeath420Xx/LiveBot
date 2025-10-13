@@ -97,5 +97,5 @@ module.exports = {
       }
     }
   },
-  category: "Utility",
+  category: "Streamer Management",
 };

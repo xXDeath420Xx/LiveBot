@@ -32,5 +32,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while setting the channel."});
     }
   },
-  category: "Utility",
+  category: "Streamer Management",
 };

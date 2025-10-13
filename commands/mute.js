@@ -114,5 +114,5 @@ module.exports = {
       await interaction.editReply("An unexpected error occurred while trying to mute this user.");
     }
   },
-  category: "Utility",
+  category: "Music",
 };

@@ -58,5 +58,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while saving logging settings."});
     }
   },
-  category: "Utility",
+  category: "Moderation",
 };

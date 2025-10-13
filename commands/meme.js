@@ -32,5 +32,5 @@ module.exports = {
       await interaction.editReply("Sorry, I couldn't fetch a meme right now. The meme-lords are resting.");
     }
   },
-  category: "Utility",
+  category: "Fun",
 };

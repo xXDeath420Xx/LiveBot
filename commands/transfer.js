@@ -62,5 +62,5 @@ module.exports = {
       }
     }
   },
-  category: "Utility",
+  category: "Moderation",
 };

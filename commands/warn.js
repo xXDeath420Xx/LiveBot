@@ -54,5 +54,5 @@ module.exports = {
 
     await interaction.editReply({embeds: [replyEmbed]});
   },
-  category: "Utility",
+  category: "Moderation",
 };

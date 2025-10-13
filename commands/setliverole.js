@@ -38,5 +38,5 @@ module.exports = {
       await interaction.editReply({content: "A critical database error occurred."});
     }
   },
-  category: "Utility",
+  category: "Streamer Management",
 };

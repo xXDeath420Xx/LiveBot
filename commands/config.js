@@ -75,5 +75,5 @@ module.exports = {
     }
     // ... other execute logic
   },
-  category: "Utility",
+  category: "Super Admin",
 };

@@ -132,5 +132,5 @@ module.exports = {
       await interaction.editReply(`An error occurred while updating the streamer customization: ${error.message}`);
     }
   },
-  category: "Utility",
+  category: "Streamer Management",
 };

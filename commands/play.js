@@ -66,5 +66,5 @@ module.exports = {
       return interaction.editReply({content: `An error occurred: ${e.message}`});
     }
   },
-  category: "Utility",
+  category: "Music",
 };

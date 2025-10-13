@@ -40,5 +40,5 @@ module.exports = {
       await interaction.editReply({content: "Failed to lock the channel. Do I have the Manage Channels permission?"});
     }
   },
-  category: "Utility",
+  category: "Moderation",
 };

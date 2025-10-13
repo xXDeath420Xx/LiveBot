@@ -102,5 +102,5 @@ module.exports = {
       await interaction.editReply("An error occurred while managing the giveaway.");
     }
   },
-  category: "Utility",
+  category: "Community",
 };

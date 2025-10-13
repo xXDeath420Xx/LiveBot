@@ -187,5 +187,5 @@ module.exports = {
       return interaction.reply({content: "❌ An error occurred while executing this command.", ephemeral: true});
     }
   },
-  category: "Utility",
+  category: "Music",
 };

@@ -98,5 +98,5 @@ module.exports = {
       interaction.editReply({content: "An error occurred while fetching subscription data."});
     }
   },
-  category: "Utility",
+  category: "Streamer Management",
 };

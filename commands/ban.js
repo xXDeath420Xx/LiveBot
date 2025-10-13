@@ -56,5 +56,5 @@ module.exports = {
       await interaction.editReply("An unexpected error occurred while trying to ban this user.");
     }
   },
-  category: "Utility",
+  category: "Moderation",
 };

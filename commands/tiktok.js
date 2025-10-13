@@ -99,5 +99,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while processing your request."});
     }
   },
-  category: "Utility",
+  category: "Streamer Management",
 };

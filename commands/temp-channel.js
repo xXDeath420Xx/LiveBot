@@ -59,5 +59,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while managing the temporary channel system."});
     }
   },
-  category: "Utility",
+  category: "Community",
 };

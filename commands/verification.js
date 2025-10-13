@@ -72,5 +72,5 @@ module.exports = {
       }
     }
   },
-  category: "Utility",
+  category: "Super Admin",
 };

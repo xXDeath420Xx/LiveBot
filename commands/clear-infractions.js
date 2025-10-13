@@ -47,5 +47,5 @@ module.exports = {
       await interaction.editReply("An error occurred while trying to clear this user's history.");
     }
   },
-  category: "Utility",
+  category: "Moderation",
 };

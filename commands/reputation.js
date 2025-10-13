@@ -93,5 +93,5 @@ module.exports = {
       await interaction.editReply({content: "An error occurred while handling reputation.", ephemeral: true});
     }
   },
-  category: "Utility",
+  category: "Community",
 };

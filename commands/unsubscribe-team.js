@@ -44,5 +44,5 @@ module.exports = {
       await interaction.editReply({content: "A database error occurred while trying to unsubscribe from the team."});
     }
   },
-  category: "Utility",
+  category: "Team Management",
 };
