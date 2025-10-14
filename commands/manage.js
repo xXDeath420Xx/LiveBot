@@ -16,110 +16,110 @@ const { invalidateCommandCache } = require("../core/custom-command-handler");
 const crypto = require("crypto");
 
 async function sendPaginatedEmbed(interaction, pages) {
-  if (!pages || pages.length === 0) {
-    return;
-  }
-  let currentPage = 0;
-  const uniqueId = `listpage:${interaction.id}`;
-
-  const createButtons = (ended = false) => new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`prev:${uniqueId}`).setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(currentPage === 0 || ended),
-    new ButtonBuilder().setCustomId(`next:${uniqueId}`).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(currentPage >= pages.length - 1 || ended)
-  );
-
-  const message = await interaction.editReply({embeds: [pages[currentPage]], components: pages.length > 1 ? [createButtons()] : [], ephemeral: true});
-
-  if (!message || pages.length <= 1) {
-    return;
-  }
-
-  const collector = message.createMessageComponentCollector({componentType: ComponentType.Button, time: 300000});
-
-  collector.on("collect", async i => {
-    if (i.user.id !== interaction.user.id) {
-      return i.reply({content: "You cannot use these buttons.", ephemeral: true});
+    if (!pages || pages.length === 0) {
+        return;
     }
-    i.customId.startsWith("next") ? currentPage++ : currentPage--;
-    await i.update({embeds: [pages[currentPage]], components: [createButtons()]});
-  });
+    let currentPage = 0;
+    const uniqueId = `listpage:${interaction.id}`;
 
-  collector.on("end", (collected, reason) => {
-    if (reason === "time") {
-      message.edit({components: [createButtons(true)]}).catch(e => logger.warn(`[List Streamers] Failed to disable pagination buttons: ${e.message}`));
+    const createButtons = (ended = false) => new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`prev:${uniqueId}`).setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(currentPage === 0 || ended),
+        new ButtonBuilder().setCustomId(`next:${uniqueId}`).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(currentPage >= pages.length - 1 || ended)
+    );
+
+    const message = await interaction.editReply({embeds: [pages[currentPage]], components: pages.length > 1 ? [createButtons()] : [], ephemeral: true});
+
+    if (!message || pages.length <= 1) {
+        return;
     }
-  });
+
+    const collector = message.createMessageComponentCollector({componentType: ComponentType.Button, time: 300000});
+
+    collector.on("collect", async i => {
+        if (i.user.id !== interaction.user.id) {
+            return i.reply({content: "You cannot use these buttons.", ephemeral: true});
+        }
+        i.customId.startsWith("next") ? currentPage++ : currentPage--;
+        await i.update({embeds: [pages[currentPage]], components: [createButtons()]});
+    });
+
+    collector.on("end", (collected, reason) => {
+        if (reason === "time") {
+            message.edit({components: [createButtons(true)]}).catch(e => logger.warn(`[List Streamers] Failed to disable pagination buttons: ${e.message}`));
+        }
+    });
 }
 
 // Simple time string parser (e.g., "5m", "1h", "2d")
 function parseDuration(durationStr) {
-  const match = durationStr.match(/^(\\d+)(s|m|h|d)$/);
-  if (!match) {
-    return null;
-  }
+    const match = durationStr.match(/^(\d+)(s|m|h|d)$/);
+    if (!match) {
+        return null;
+    }
 
-  const value = parseInt(match[1]);
-  const unit = match[2];
-  let milliseconds = 0;
+    const value = parseInt(match[1]);
+    const unit = match[2];
+    let milliseconds = 0;
 
-  switch (unit) {
-    case "s":
-      milliseconds = value * 1000;
-      break;
-    case "m":
-      milliseconds = value * 60 * 1000;
-      break;
-    case "h":
-      milliseconds = value * 60 * 60 * 1000;
-      break;
-    case "d":
-      milliseconds = value * 24 * 60 * 60 * 1000;
-      break;
-  }
-  // Discord timeout max is 28 days
-  if (milliseconds > 28 * 24 * 60 * 60 * 1000) {
-    return 28 * 24 * 60 * 60 * 1000;
-  }
-  return milliseconds;
+    switch (unit) {
+        case "s":
+            milliseconds = value * 1000;
+            break;
+        case "m":
+            milliseconds = value * 60 * 1000;
+            break;
+        case "h":
+            milliseconds = value * 60 * 60 * 1000;
+            break;
+        case "d":
+            milliseconds = value * 24 * 60 * 60 * 1000;
+            break;
+    }
+    // Discord timeout max is 28 days
+    if (milliseconds > 28 * 24 * 60 * 60 * 1000) {
+        return 28 * 24 * 60 * 60 * 1000;
+    }
+    return milliseconds;
 }
 
 // Helper to parse time strings like "10s", "5m", "1h" into seconds
 function parseTimeToSeconds(timeStr) {
-  if (timeStr === "off" || timeStr === "0") {
-    return 0;
-  }
-  const match = timeStr.match(/^(\\d+)(s|m|h)$/);
-  if (!match) {
+    if (timeStr === "off" || timeStr === "0") {
+        return 0;
+    }
+    const match = timeStr.match(/^(\d+)(s|m|h)$/);
+    if (!match) {
+        return null;
+    }
+
+    const value = parseInt(match[1]);
+    const unit = match[2];
+
+    switch (unit) {
+        case "s":
+            return value;
+        case "m":
+            return value * 60;
+        case "h":
+            return value * 60 * 60;
+    }
     return null;
-  }
-
-  const value = parseInt(match[1]);
-  const unit = match[2];
-
-  switch (unit) {
-    case "s":
-      return value;
-    case "m":
-      return value * 60;
-    case "h":
-      return value * 60 * 60;
-  }
-  return null;
 }
 
 // In a real scenario, you would use a proper password hashing library like bcrypt.
 // Using crypto for demonstration purposes as it's a built-in Node module.
 function verifyPassword(plainPassword, hash) {
-  const [salt, key] = hash.split(":");
-  const keyBuffer = Buffer.from(key, "hex");
-  const derivedKey = crypto.scryptSync(plainPassword, salt, 64);
-  return crypto.timingSafeEqual(keyBuffer, derivedKey);
+    const [salt, key] = hash.split(":");
+    const keyBuffer = Buffer.from(key, "hex");
+    const derivedKey = crypto.scryptSync(plainPassword, salt, 64);
+    return crypto.timingSafeEqual(keyBuffer, derivedKey);
 }
 
 const logOptions = [
-  {name: "Message Deleted", value: "messageDelete"},
-  {name: "Message Edited", value: "messageUpdate"},
-  {name: "Member Roles Updated", value: "memberUpdate"},
-  // Add more loggable events here in the future
+    {name: "Message Deleted", value: "messageDelete"},
+    {name: "Message Edited", value: "messageUpdate"},
+    {name: "Member Roles Updated", value: "memberUpdate"},
+    // Add more loggable events here in the future
 ];
 
 module.exports = {
@@ -127,597 +127,638 @@ module.exports = {
         .setName('manage')
         .setDescription('Commands for managing streamers, teams, and other server configurations.')
         .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-        .addSubcommandGroup(group =>
-            group
-                .setName('streamer')
-                .setDescription('Manage streamer profiles.')
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('add')
-                        .setDescription('Adds a streamer to the notification list using an interactive form.')
-                        .addStringOption(option =>
-                            option.setName("username")
-                                .setDescription("The streamer's username or channel ID. Must be the same on all chosen platforms.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('remove')
-                        .setDescription('Removes a streamer and all their subscriptions from this server.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('edit')
-                        .setDescription('Edit settings for a specific streamer subscription.')
-                        .addStringOption(option =>
-                            option.setName("username")
-                                .setDescription("The username of the streamer to edit.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('list')
-                        .setDescription('Lists all tracked streamers and their live status.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('check-live')
-                        .setDescription("Instantly lists all currently live streamers for this server."))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('massadd')
-                        .setDescription('Adds multiple streamers from a platform.')
-                        .addStringOption(o => o.setName("platform").setDescription("The platform to add streamers to.").setRequired(true).addChoices(
-                            {name: "Twitch", value: "twitch"}, {name: "YouTube", value: "youtube"},
-                            {name: "Kick", value: "kick"}, {name: "TikTok", value: "tiktok"}, {name: "Trovo", value: "trovo"}
-                        ))
-                        .addStringOption(o => o.setName("usernames").setDescription("A comma-separated list of usernames or Channel IDs.").setRequired(true))
-                        .addChannelOption(o => o.setName("channel").setDescription("Announce all streamers in this list to a specific channel.").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false))
-                        .addStringOption(o => o.setName("nickname").setDescription("Apply a custom webhook nickname to all streamers in this list."))
-                        .addAttachmentOption(o => o.setName("avatar").setDescription("Apply a custom webhook avatar to all streamers in this list.").setRequired(false)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('massremove')
-                        .setDescription('Removes multiple streamers and purges their active announcements.')
-                        .addStringOption(o => o.setName("platform").setDescription("The platform to remove streamers from.").setRequired(true).addChoices(
-                            {name: "Twitch", value: "twitch"}, {name: "YouTube", value: "youtube"},
-                            {name: "Kick", value: "kick"}, {name: "TikTok", value: "tiktok"}, {name: "Trovo", value: "trovo"}
-                        ))
-                        .addStringOption(o => o.setName("usernames").setDescription("A comma-separated list of usernames.").setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('importcsv')
-                        .setDescription('Bulk adds/updates streamer subscriptions from a CSV file.')
-                        .addAttachmentOption(o => o.setName("csvfile")
-                            .setDescription("CSV Headers: platform,username,announcement_channel_id,discord_user_id,etc.")
-                            .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('exportcsv')
-                        .setDescription('Exports all streamer subscriptions on this server to a CSV file.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('clear')
-                        .setDescription('⚠️ Deletes ALL tracked streamers from this server and purges their announcements.')))
-        .addSubcommandGroup(group =>
-            group
-                .setName('team')
-                .setDescription('Manage streaming teams.')
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('add')
-                        .setDescription('Adds all members of a Twitch Team to the announcement list for a channel.')
-                        .addStringOption(option =>
-                            option.setName("team")
-                                .setDescription("The name of the Twitch Team (e.g., the \\\"reeferrealm\\\" in twitch.tv/team/reeferrealm).")
-                                .setRequired(true)))
-                        .addChannelOption(option =>
-                            option.setName("channel")
-                                .setDescription("The channel where the team members will be announced.")
-                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('remove')
-                        .setDescription('Removes all members of a Twitch Team from a channel and purges their active announcements.')
-                        .addStringOption(option =>
-                            option.setName("team")
-                                .setDescription("The name of the Twitch Team to remove (e.g., reeferrealm).")
-                                .setRequired(true))
-                        .addChannelOption(option =>
-                            option.setName("channel")
-                                .setDescription("The channel to remove the team members and announcements from.")
-                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('subscribe')
-                        .setDescription('Automate syncing a Twitch Team with a channel (adds/removes members).')
-                        .addStringOption(option =>
-                            option.setName("team")
-                                .setDescription("The name of the Twitch Team to monitor (e.g., reeferrealm).")
-                                .setRequired(true))
-                        .addChannelOption(option =>
-                            option.setName("channel")
-                                .setDescription("The channel the team was synced with.")
-                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('unsubscribe')
-                        .setDescription('Stops automatically syncing a Twitch Team with a channel.')
-                        .addStringOption(option =>
-                            option.setName("team")
-                                .setDescription("The name of the Twitch Team to stop monitoring.")
-                                .setRequired(true))
-                        .addChannelOption(option =>
-                            option.setName("channel")
-                                .setDescription("The channel the team was synced with.")
-                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('importcsv')
-                        .setDescription('Syncs a specific channel with a CSV, adding/updating and removing streamers.')
-                        .addAttachmentOption(o => o.setName("csvfile")
-                            .setDescription("CSV with headers: platform, username, discord_user_id, etc.")
-                            .setRequired(true))
-                        .addChannelOption(o => o.setName("channel")
-                            .setDescription("The single channel to sync this team with.")
-                            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                            .setRequired(true)))
-        .addSubcommandGroup(group =>
-            group
-                .setName('config')
-                .setDescription('Manage server-specific configurations.')
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('setchannel')
-                        .setDescription('Sets the channel for live stream announcements.')
-                        .addChannelOption(o => o.setName("channel").setDescription("The channel for notifications").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('setliverole')
-                        .setDescription('Sets or clears the role to be assigned when a linked user goes live.')
-                        .addRoleOption(option => option.setName("role").setDescription("The role to assign. Leave blank to clear/disable.").setRequired(false)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('set-dj-role')
-                        .setDescription("Sets the DJ role. Users with this role can manage the music queue.")
-                        .addRoleOption(option => option.setName("role").setDescription("The role to set as the DJ role.").setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName("logging")
-                        .setDescription("Configure the server audit log.")
-                        .addChannelOption(option =>
-                          option.setName("channel")
-                            .setDescription("The channel where logs will be sent.")
-                            .addChannelTypes(ChannelType.GuildText)
-                            .setRequired(true)
-                        )
-                        .addStringOption(option =>
-                          option.setName("event1")
-                            .setDescription("The first event to log.")
-                            .setRequired(true)
-                            .addChoices(...logOptions)
-                        )
-                        .addStringOption(option => option.setName("event2").setDescription("An additional event to log.").addChoices(...logOptions))
-                        .addStringOption(option => option.setName("event3").setDescription("An additional event to log.").addChoices(...logOptions)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('customizebot')
-                        .setDescription('Changes the bot\'s appearance (nickname/avatar) on this server.')
-                        .addStringOption(option =>
-                            option.setName("nickname")
-                                .setDescription("The new nickname for the bot on this server (32 chars max). Type \\\"reset\\\" to remove.")
-                                .setRequired(false))
-                        .addAttachmentOption(option =>
-                            option.setName("avatar")
-                                .setDescription("The new avatar the bot will use for announcements.")
-                                .setRequired(false))
-                        .addBooleanOption(option =>
-                            option.setName("reset_avatar")
-                                .setDescription("Set to true to reset the custom announcement avatar to bot default.")
-                                .setRequired(false)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('customizechannel')
-                        .setDescription('Sets a default webhook appearance for all announcements in a specific channel.')
-                        .addChannelOption(option =>
-                            option.setName("channel")
-                                .setDescription("The channel to customize.")
-                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                                .setRequired(true))
-                        .addStringOption(option => option.setName("nickname").setDescription("Default name for announcements in this channel. Type \\\"reset\\\" to clear."))
-                        .addAttachmentOption(option => option.setName("avatar").setDescription("Default avatar for announcements in this channel (upload file)."))
-                        .addStringOption(option => option.setName("avatar_url_text").setDescription("Default avatar URL (overrides file upload). Type \\\"reset\\\" to clear.")))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('customizestreamer')
-                        .setDescription('Sets a custom name, avatar, or message for a specific streamer\'s announcements.')
-                        .addStringOption(option =>
-                            option.setName("platform")
-                                .setDescription("The platform of the streamer to customize.")
-                                .setRequired(true)
-                                .addChoices(
-                                    {name: "Twitch", value: "twitch"}, {name: "Kick", value: "kick"},
-                                    {name: "YouTube", value: "youtube"}, {name: "tiktok", value: "tiktok"},
-                                    {name: "Trovo", value: "trovo"}
-                                ))
-                        .addStringOption(option => option.setName("username").setDescription("The username of the streamer to customize.").setRequired(true).setAutocomplete(true))
-                        .addChannelOption(option =>
-                            option.setName("channel")
-                                .setDescription("The specific channel to customize. Leave blank for the server default channel.")
-                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                                .setRequired(false))
-                        .addStringOption(option => option.setName("nickname").setDescription("Custom name for announcements (max 80 chars). Type \\\"reset\\\" to clear.").setMaxLength(80))
-                        .addAttachmentOption(option =>
-                            option.setName("avatar").setDescription("Custom avatar for announcements (upload file)."))
-                        .addStringOption(option =>
-                            option.setName("avatar_url_text").setDescription("Custom avatar URL (overrides file upload). Type \\\"reset\\\" to clear."))
-                        .addStringOption(option => option.setName("message").setDescription("Custom message. Placeholders: {username}, {url}, etc. Type \\\"reset\\\" to clear.")))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('permissions')
-                        .setDescription('Manage command permissions for roles on this server.')
-                        .addRoleOption(option => option.setName("role").setDescription("The role to grant permission to.").setRequired(true))
-                        .addStringOption(option => option.setName("command").setDescription("The command to grant permission for.").setRequired(true).setAutocomplete(true)))
-        .addSubcommandGroup(group =>
-            group
-                .setName('moderation')
-                .setDescription('Moderation commands.')
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('ban')
-                        .setDescription('Bans a user from the server.')
-                        .addUserOption(option =>
-                            option.setName("user")
-                                .setDescription("The user to ban.")
-                                .setRequired(true))
-                        .addStringOption(option =>
-                            option.setName("reason")
-                                .setDescription("The reason for the ban.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('unban')
-                        .setDescription('Revokes a ban for a user.')
-                        .addStringOption(option =>
-                            option.setName("user-id")
-                                .setDescription("The ID of the user to unban.")
-                                .setRequired(true))
-                        .addStringOption(option =>
-                            option.setName("reason")
-                                .setDescription("The reason for the unban.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('kick')
-                        .setDescription('Kicks a user from the server.')
-                        .addUserOption(option =>
-                            option.setName("user")
-                                .setDescription("The user to kick.")
-                                .setRequired(true))
-                        .addStringOption(option =>
-                            option.setName("reason")
-                                .setDescription("The reason for the kick.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('mute')
-                        .setDescription('Times out a user, preventing them from talking or speaking.')
-                        .addUserOption(option =>
-                            option.setName("user")
-                                .setDescription("The user to mute.")
-                                .setRequired(true))
-                        .addStringOption(option =>
-                            option.setName("duration")
-                                .setDescription("The duration of the mute (e.g., 5m, 1h, 3d). Max 28d.")
-                                .setRequired(true))
-                        .addStringOption(option =>
-                            option.setName("reason")
-                                .setDescription("The reason for the mute.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('unmute')
-                        .setDescription('Removes a timeout from a user.')
-                        .addUserOption(option =>
-                            option.setName("user")
-                                .setDescription("The user to unmute.")
-                                .setRequired(true))
-                        .addStringOption(option =>
-                            option.setName("reason")
-                                .setDescription("The reason for the unban.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('warn')
-                        .setDescription('Issues a formal warning to a user.')
-                        .addUserOption(option =>
-                            option.setName("user")
-                                .setDescription("The user to warn.")
-                                .setRequired(true))
-                        .addStringOption(option =>
-                            option.setName("reason")
-                                .setDescription("The reason for the warning.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('clearinfractions')
-                        .setDescription('Clears a user\'s moderation history.')
-                        .addUserOption(option =>
-                            option.setName("user")
-                                .setDescription("The user whose history you want to clear.")
-                                .setRequired(true))
-                        .addStringOption(option =>
-                            option.setName("reason")
-                                .setDescription("The reason for clearing the history.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('history')
-                        .setDescription("Checks a user\'s moderation history.")
-                        .addUserOption(option =>
-                          option.setName("user")
-                            .setDescription("The user to check.")
-                            .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('purge')
-                        .setDescription('Advanced message cleaning with filters.')
-                        .addIntegerOption(option =>
-                            option.setName("amount")
-                                .setDescription("Number of messages to scan (up to 100).")
-                                .setRequired(true)
-                                .setMinValue(1)
-                                .setMaxValue(100)
-                        )
-                        .addStringOption(option =>
-                            option.setName("filter")
-                                .setDescription("The type of message to clean.")
-                                .setRequired(true)
-                                .addChoices(
-                                    {name: "All", value: "all"},
-                                    {name: "User", value: "user"},
-                                    {name: "Bots", value: "bots"},
-                                    {name: "Contains Text", value: "text"},
-                                    {name: "Has Link", value: "links"},
-                                    {name: "Has Attachment", value: "files"}
-                                )
-                        )
-                        .addUserOption(option =>
-                            option.setName("user")
-                                .setDescription("The user whose messages to delete (required if filter is \\\"User\\\").")
-                        )
-                        .addStringOption(option =>
-                            option.setName("text")
-                                .setDescription("The text to search for (required if filter is \\\"Contains Text\\\").")
-                        )))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('quarantine')
-                        .setDescription('Quarantines a user, temporarily restricting their permissions.')
-                        .addUserOption(option =>
-                            option.setName("user")
-                                .setDescription("The user to quarantine.")
-                                .setRequired(true))
-                        .addBooleanOption(option =>
-                            option.setName("enable")
-                                .setDescription("Enable or disable quarantine for the user.")
-                                .setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('slowmode')
-                        .setDescription('Sets or removes a slowmode cooldown for the current channel.')
-                        .addStringOption(option =>
-                            option.setName("duration")
-                                .setDescription("The slowmode duration (e.g., 10m, 5m, 1h) or \\\"off\\\".")
-                                .setRequired(true)
-                        )
-                        .addStringOption(option =>
-                            option.setName("reason")
-                                .setDescription("The reason for changing the slowmode.")
-                        )))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('lock')
-                        .setDescription('Locks the current channel, preventing @everyone from sending messages.')
-                        .addStringOption(option =>
-                            option.setName("reason")
-                                .setDescription("The reason for locking the channel.")
-                        ))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('unlock')
-                        .setDescription('Unlocks the current channel, allowing @everyone to send messages.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('lockdown')
-                        .setDescription('Locks the current channel, preventing messages. Requires a special password.')
-                        .addStringOption(option =>
-                            option.setName("password")
-                                .setDescription("The password required to execute this sensitive action.")
-                                .setRequired(true)))
-                        .addBooleanOption(option =>
-                            option.setName("unlock")
-                                .setDescription("Set to true to unlock the channel.")
-                                .setRequired(false)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName("announce")
-                        .setDescription("Sends an announcement to a specified channel.")
-                        .addChannelOption(option =>
-                            option.setName("channel")
-                                .setDescription("The channel to send the announcement to.")
-                                .addChannelTypes(ChannelType.GuildText)
-                                .setRequired(true)
-                        )
-                        .addStringOption(option =>
-                            option.setName("message")
-                                .setDescription("The main content of the announcement.")
-                                .setRequired(true)
-                        )
-                        .addStringOption(option =>
-                            option.setName("title")
-                                .setDescription("An optional title for the embed.")
-                        )
-                        .addStringOption(option =>
-                            option.setName("color")
-                                .setDescription("An optional hex color for the embed (e.g., #3498DB).")
-                        )
-                        .addRoleOption(option =>
-                            option.setName("mention")
-                                .setDescription("An optional role to mention with the announcement.")
-        .addSubcommandGroup(group =>
-            group
-                .setName("backup")
-                .setDescription("Manage server structure backups (roles & channels).")
-                .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-                .addSubcommand(subcommand =>
-                  subcommand
-                    .setName("create")
-                    .setDescription("Creates a new backup of the server's roles and channels.")
-                    .addStringOption(option => option.setName("name").setDescription("A descriptive name for this backup.").setRequired(true)))
-                .addSubcommand(subcommand =>
-                  subcommand
-                    .setName("list")
-                    .setDescription("Lists all available backups for this server."))
-                .addSubcommand(subcommand =>
-                  subcommand
-                    .setName("load")
-                    .setDescription("Restores the server structure from a backup. THIS IS DESTRUCTIVE.")
-                    .addStringOption(option => option.setName("backup_id").setDescription("The ID of the backup to load.").setRequired(true)))
-                .addSubcommand(subcommand =>
-                  subcommand
-                    .setName("delete")
-                    .setDescription("Deletes a server backup.")
-                    .addStringOption(option => option.setName("backup_id").setDescription("The ID of the backup to delete.").setRequired(true)))
-        )
-        .addSubcommandGroup(group =>
-            group
-                .setName('fun')
-                .setDescription('Fun commands.')
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('coinflip')
-                        .setDescription('Flips a coin.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('meme')
-                        .setDescription('Sends a random meme from Reddit.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('roll')
-                        .setDescription('Rolls a dice.')
-                        .addIntegerOption(option => option.setName('sides').setDescription('The number of sides on the dice (default 6).').setMinValue(2).setMaxValue(100)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('cat')
-                        .setDescription('Sends a random cat picture.')))
-        .addSubcommandGroup(group =>
-            group
-                .setName('events')
-                .setDescription('Event management commands.')
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('giveaway')
-                        .setDescription('Start a giveaway.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('remind')
-                        .setDescription('Set a reminder.')
-                        .addStringOption(option => option.setName('time').setDescription('When to remind (e.g., 1h, 30m).').setRequired(true))
-                        .addStringOption(option => option.setName('message').setDescription('What to remind you about.').setRequired(true)))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('reactionroles')
-                        .setDescription('Manage reaction roles.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('starboard')
-                        .setDescription('Manage starboard settings.'))
-        .addSubcommandGroup(group =>
-            group
-                .setName('core')
-                .setDescription('Core bot commands.')
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('stats')
-                        .setDescription('Display bot statistics.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('status')
-                        .setDescription('Display bot status.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('ping')
-                        .setDescription('Check bot latency.'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('globalreinit')
-                        .setDescription('Reinitialize global commands (Bot Owner Only).'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('reinit')
-                        .setDescription('Reinitialize guild commands (Admin Only).'))
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('resetdatabase')
-                        .setDescription('Reset the bot\'s database (Bot Owner Only).'))
-        .addSubcommandGroup(group =>
-            group
-                .setName("custom-command")
-                .setDescription("Manage custom commands for this server.")
-                .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-                .addSubcommand(subcommand =>
-                  subcommand
-                    .setName("create")
-                    .setDescription("Creates a new, advanced custom command.")
-                    .addStringOption(option => option.setName("name").setDescription("The name of the command.").setRequired(true))
-                    .addStringOption(option =>
-                      option.setName("action-type")
-                        .setDescription("The action this command will perform.")
-                        .setRequired(true)
-                        .addChoices(
-                          {name: "Reply with Text", value: "reply"},
-                          {name: "Add Role to User", value: "add_role"},
-                          {name: "Remove Role from User", value: "remove_role"}
-                        )
-                    )
-                    .addStringOption(option => option.setName("response-or-role-id").setDescription("The text response or the ID of the role to manage.").setRequired(true))
-                    .addStringOption(option => option.setName("required-roles").setDescription("Comma-separated list of role IDs required to use this command."))
-                    .addStringOption(option => option.setName("allowed-channels").setDescription("Comma-separated list of channel IDs where this command can be used."))
+        .addSubcommandGroup(group => group
+            .setName('streamer')
+            .setDescription('Manage streamer profiles.')
+            .addSubcommand(subcommand => subcommand
+                .setName('add')
+                .setDescription('Adds a streamer to the notification list using an interactive form.')
+                .addStringOption(option => option
+                    .setName("username")
+                    .setDescription("The streamer's username or channel ID. Must be the same on all chosen platforms.")
+                    .setRequired(true)
                 )
-                .addSubcommand(subcommand =>
-                  subcommand
-                    .setName("remove")
-                    .setDescription("Removes a custom command.")
-                    .addStringOption(option => option.setName("name").setDescription("The name of the command to remove.").setRequired(true).setAutocomplete(true)))
-                .addSubcommand(subcommand =>
-                  subcommand
-                    .setName("list")
-                    .setDescription("Lists all custom commands on this server."))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('remove')
+                .setDescription('Removes a streamer and all their subscriptions from this server.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('edit')
+                .setDescription('Edit settings for a specific streamer subscription.')
+                .addStringOption(option => option
+                    .setName("username")
+                    .setDescription("The username of the streamer to edit.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('list')
+                .setDescription('Lists all tracked streamers and their live status.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('check-live')
+                .setDescription("Instantly lists all currently live streamers for this server.")
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('massadd')
+                .setDescription('Adds multiple streamers from a platform.')
+                .addStringOption(o => o.setName("platform").setDescription("The platform to add streamers to.").setRequired(true).addChoices(
+                    {name: "Twitch", value: "twitch"}, {name: "YouTube", value: "youtube"},
+                    {name: "Kick", value: "kick"}, {name: "TikTok", value: "tiktok"}, {name: "Trovo", value: "trovo"}
+                ))
+                .addStringOption(o => o.setName("usernames").setDescription("A comma-separated list of usernames or Channel IDs.").setRequired(true))
+                .addChannelOption(o => o.setName("channel").setDescription("Announce all streamers in this list to a specific channel.").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false))
+                .addStringOption(o => o.setName("nickname").setDescription("Apply a custom webhook nickname to all streamers in this list."))
+                .addAttachmentOption(o => o.setName("avatar").setDescription("Apply a custom webhook avatar to all streamers in this list.").setRequired(false))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('massremove')
+                .setDescription('Removes multiple streamers and purges their active announcements.')
+                .addStringOption(o => o.setName("platform").setDescription("The platform to remove streamers from.").setRequired(true).addChoices(
+                    {name: "Twitch", value: "twitch"}, {name: "YouTube", value: "youtube"},
+                    {name: "Kick", value: "kick"}, {name: "TikTok", value: "tiktok"}, {name: "Trovo", value: "trovo"}
+                ))
+                .addStringOption(o => o.setName("usernames").setDescription("A comma-separated list of usernames.").setRequired(true))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('importcsv')
+                .setDescription('Bulk adds/updates streamer subscriptions from a CSV file.')
+                .addAttachmentOption(o => o.setName("csvfile")
+                    .setDescription("CSV Headers: platform,username,announcement_channel_id,discord_user_id,etc.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('exportcsv')
+                .setDescription('Exports all streamer subscriptions on this server to a CSV file.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('clear')
+                .setDescription('⚠️ Deletes ALL tracked streamers from this server and purges their announcements.')
+            )
+        )
+        .addSubcommandGroup(group => group
+            .setName('team')
+            .setDescription('Manage streaming teams.')
+            .addSubcommand(subcommand => subcommand
+                .setName('add')
+                .setDescription('Adds all members of a Twitch Team to the announcement list for a channel.')
+                .addStringOption(option => option
+                    .setName("team")
+                    .setDescription("The name of the Twitch Team (e.g., the \"reeferrealm\" in twitch.tv/team/reeferrealm).")
+                    .setRequired(true)
+                )
+                .addChannelOption(option => option
+                    .setName("channel")
+                    .setDescription("The channel where the team members will be announced.")
+                    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('remove')
+                .setDescription('Removes all members of a Twitch Team from a channel and purges their active announcements.')
+                .addStringOption(option => option
+                    .setName("team")
+                    .setDescription("The name of the Twitch Team to remove (e.g., reeferrealm).")
+                    .setRequired(true)
+                )
+                .addChannelOption(option => option
+                    .setName("channel")
+                    .setDescription("The channel to remove the team members and announcements from.")
+                    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('subscribe')
+                .setDescription('Automate syncing a Twitch Team with a channel (adds/removes members).')
+                .addStringOption(option => option
+                    .setName("team")
+                    .setDescription("The name of the Twitch Team to monitor (e.g., reeferrealm).")
+                    .setRequired(true)
+                )
+                .addChannelOption(option => option
+                    .setName("channel")
+                    .setDescription("The channel the team was synced with.")
+                    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('unsubscribe')
+                .setDescription('Stops automatically syncing a Twitch Team with a channel.')
+                .addStringOption(option => option
+                    .setName("team")
+                    .setDescription("The name of the Twitch Team to stop monitoring.")
+                    .setRequired(true)
+                )
+                .addChannelOption(option => option
+                    .setName("channel")
+                    .setDescription("The channel the team was synced with.")
+                    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('importcsv')
+                .setDescription('Syncs a specific channel with a CSV, adding/updating and removing streamers.')
+                .addAttachmentOption(o => o.setName("csvfile")
+                    .setDescription("CSV with headers: platform, username, discord_user_id, etc.")
+                    .setRequired(true)
+                )
+                .addChannelOption(o => o.setName("channel")
+                    .setDescription("The single channel to sync this team with.")
+                    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                    .setRequired(true)
+                )
+            )
+        )
+        .addSubcommandGroup(group => group
+            .setName('config')
+            .setDescription('Manage server-specific configurations.')
+            .addSubcommand(subcommand => subcommand
+                .setName('setchannel')
+                .setDescription('Sets the channel for live stream announcements.')
+                .addChannelOption(o => o.setName("channel").setDescription("The channel for notifications").addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('setliverole')
+                .setDescription('Sets or clears the role to be assigned when a linked user goes live.')
+                .addRoleOption(option => option.setName("role").setDescription("The role to assign. Leave blank to clear/disable.").setRequired(false))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('set-dj-role')
+                .setDescription("Sets the DJ role. Users with this role can manage the music queue.")
+                .addRoleOption(option => option.setName("role").setDescription("The role to set as the DJ role.").setRequired(true))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName("logging")
+                .setDescription("Configure the server audit log.")
+                .addChannelOption(option => option
+                    .setName("channel")
+                    .setDescription("The channel where logs will be sent.")
+                    .addChannelTypes(ChannelType.GuildText)
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("event1")
+                    .setDescription("The first event to log.")
+                    .setRequired(true)
+                    .addChoices(...logOptions)
+                )
+                .addStringOption(option => option.setName("event2").setDescription("An additional event to log.").addChoices(...logOptions))
+                .addStringOption(option => option.setName("event3").setDescription("An additional event to log.").addChoices(...logOptions))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('customizebot')
+                .setDescription('Changes the bot\'s appearance (nickname/avatar) on this server.')
+                .addStringOption(option => option
+                    .setName("nickname")
+                    .setDescription("The new nickname for the bot on this server (32 chars max). Type \"reset\" to remove.")
+                    .setRequired(false)
+                )
+                .addAttachmentOption(option => option
+                    .setName("avatar")
+                    .setDescription("The new avatar the bot will use for announcements.")
+                    .setRequired(false)
+                )
+                .addBooleanOption(option => option
+                    .setName("reset_avatar")
+                    .setDescription("Set to true to reset the custom announcement avatar to bot default.")
+                    .setRequired(false)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('customizechannel')
+                .setDescription('Sets a default webhook appearance for all announcements in a specific channel.')
+                .addChannelOption(option => option
+                    .setName("channel")
+                    .setDescription("The channel to customize.")
+                    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                    .setRequired(true)
+                )
+                .addStringOption(option => option.setName("nickname").setDescription("Default name for announcements in this channel. Type \"reset\" to clear."))
+                .addAttachmentOption(option => option.setName("avatar").setDescription("Default avatar for announcements in this channel (upload file)."))
+                .addStringOption(option => option.setName("avatar_url_text").setDescription("Default avatar URL (overrides file upload). Type \"reset\" to clear."))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('customizestreamer')
+                .setDescription('Sets a custom name, avatar, or message for a specific streamer\'s announcements.')
+                .addStringOption(option => option
+                    .setName("platform")
+                    .setDescription("The platform of the streamer to customize.")
+                    .setRequired(true)
+                    .addChoices(
+                        {name: "Twitch", value: "twitch"}, {name: "Kick", value: "kick"},
+                        {name: "YouTube", value: "youtube"}, {name: "tiktok", value: "tiktok"},
+                        {name: "Trovo", value: "trovo"}
+                    )
+                )
+                .addStringOption(option => option.setName("username").setDescription("The username of the streamer to customize.").setRequired(true).setAutocomplete(true))
+                .addChannelOption(option => option
+                    .setName("channel")
+                    .setDescription("The specific channel to customize. Leave blank for the server default channel.")
+                    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                    .setRequired(false)
+                )
+                .addStringOption(option => option.setName("nickname").setDescription("Custom name for announcements (max 80 chars). Type \"reset\" to clear.").setMaxLength(80))
+                .addAttachmentOption(option => option
+                    .setName("avatar").setDescription("Custom avatar for announcements (upload file).")
+                )
+                .addStringOption(option => option
+                    .setName("avatar_url_text").setDescription("Custom avatar URL (overrides file upload). Type \"reset\" to clear.")
+                )
+                .addStringOption(option => option.setName("message").setDescription("Custom message. Placeholders: {username}, {url}, etc. Type \"reset\" to clear."))
+            )
+        )
+        .addSubcommandGroup(group => group
+            .setName('permissions')
+            .setDescription('Manage command permissions for roles on this server.')
+            .addSubcommand(subcommand => subcommand
+                .setName("grant")
+                .setDescription("Grants a role permission to use a command.")
+                .addRoleOption(option => option.setName("role").setDescription("The role to grant permission to.").setRequired(true))
+                .addStringOption(option => option.setName("command").setDescription("The command to grant permission for.").setRequired(true).setAutocomplete(true))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName("revoke")
+                .setDescription("Revokes a role's permission to use a command.")
+                .addRoleOption(option => option.setName("role").setDescription("The role to revoke permission from.").setRequired(true))
+                .addStringOption(option => option.setName("command").setDescription("The command to revoke permission for.").setRequired(true).setAutocomplete(true))
+            )
+        )
+        .addSubcommandGroup(group => group
+            .setName('moderation')
+            .setDescription('Moderation commands.')
+            .addSubcommand(subcommand => subcommand
+                .setName('ban')
+                .setDescription('Bans a user from the server.')
+                .addUserOption(option => option
+                    .setName("user")
+                    .setDescription("The user to ban.")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("reason")
+                    .setDescription("The reason for the ban.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('unban')
+                .setDescription('Revokes a ban for a user.')
+                .addStringOption(option => option
+                    .setName("user-id")
+                    .setDescription("The ID of the user to unban.")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("reason")
+                    .setDescription("The reason for the unban.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('kick')
+                .setDescription('Kicks a user from the server.')
+                .addUserOption(option => option
+                    .setName("user")
+                    .setDescription("The user to kick.")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("reason")
+                    .setDescription("The reason for the kick.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('mute')
+                .setDescription('Times out a user, preventing them from talking or speaking.')
+                .addUserOption(option => option
+                    .setName("user")
+                    .setDescription("The user to mute.")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("duration")
+                    .setDescription("The duration of the mute (e.g., 5m, 1h, 3d). Max 28d.")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("reason")
+                    .setDescription("The reason for the mute.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('unmute')
+                .setDescription('Removes a timeout from a user.')
+                .addUserOption(option => option
+                    .setName("user")
+                    .setDescription("The user to unmute.")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("reason")
+                    .setDescription("The reason for the unban.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('warn')
+                .setDescription('Issues a formal warning to a user.')
+                .addUserOption(option => option
+                    .setName("user")
+                    .setDescription("The user to warn.")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("reason")
+                    .setDescription("The reason for the warning.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('clearinfractions')
+                .setDescription('Clears a user\'s moderation history.')
+                .addUserOption(option => option
+                    .setName("user")
+                    .setDescription("The user whose history you want to clear.")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("reason")
+                    .setDescription("The reason for clearing the history.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('history')
+                .setDescription("Checks a user's moderation history.")
+                .addUserOption(option => option
+                    .setName("user")
+                    .setDescription("The user to check.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('purge')
+                .setDescription('Advanced message cleaning with filters.')
+                .addIntegerOption(option => option
+                    .setName("amount")
+                    .setDescription("Number of messages to scan (up to 100).")
+                    .setRequired(true)
+                    .setMinValue(1)
+                    .setMaxValue(100)
+                )
+                .addStringOption(option => option
+                    .setName("filter")
+                    .setDescription("The type of message to clean.")
+                    .setRequired(true)
+                    .addChoices(
+                        {name: "All", value: "all"},
+                        {name: "User", value: "user"},
+                        {name: "Bots", value: "bots"},
+                        {name: "Contains Text", value: "text"},
+                        {name: "Has Link", value: "links"},
+                        {name: "Has Attachment", value: "files"}
+                    )
+                )
+                .addUserOption(option => option
+                    .setName("user")
+                    .setDescription("The user whose messages to delete (required if filter is \"User\").")
+                )
+                .addStringOption(option => option
+                    .setName("text")
+                    .setDescription("The text to search for (required if filter is \"Contains Text\").")
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('quarantine')
+                .setDescription('Quarantines a user, temporarily restricting their permissions.')
+                .addUserOption(option => option
+                    .setName("user")
+                    .setDescription("The user to quarantine.")
+                    .setRequired(true)
+                )
+                .addBooleanOption(option => option
+                    .setName("enable")
+                    .setDescription("Enable or disable quarantine for the user.")
+                    .setRequired(true)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('slowmode')
+                .setDescription('Sets or removes a slowmode cooldown for the current channel.')
+                .addStringOption(option => option
+                    .setName("duration")
+                    .setDescription("The slowmode duration (e.g., 10m, 5m, 1h) or \"off\".")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("reason")
+                    .setDescription("The reason for changing the slowmode.")
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('lock')
+                .setDescription('Locks the current channel, preventing @everyone from sending messages.')
+                .addStringOption(option => option
+                    .setName("reason")
+                    .setDescription("The reason for locking the channel.")
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('unlock')
+                .setDescription('Unlocks the current channel, allowing @everyone to send messages.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('lockdown')
+                .setDescription('Locks the current channel, preventing messages. Requires a special password.')
+                .addStringOption(option => option
+                    .setName("password")
+                    .setDescription("The password required to execute this sensitive action.")
+                    .setRequired(true)
+                )
+                .addBooleanOption(option => option
+                    .setName("unlock")
+                    .setDescription("Set to true to unlock the channel.")
+                    .setRequired(false)
+                )
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName("announce")
+                .setDescription("Sends an announcement to a specified channel.")
+                .addChannelOption(option => option
+                    .setName("channel")
+                    .setDescription("The channel to send the announcement to.")
+                    .addChannelTypes(ChannelType.GuildText)
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("message")
+                    .setDescription("The main content of the announcement.")
+                    .setRequired(true)
+                )
+                .addStringOption(option => option
+                    .setName("title")
+                    .setDescription("An optional title for the embed.")
+                )
+                .addStringOption(option => option
+                    .setName("color")
+                    .setDescription("An optional hex color for the embed (e.g., #3498DB).")
+                )
+                .addRoleOption(option => option
+                    .setName("mention")
+                    .setDescription("An optional role to mention with the announcement.")
+                )
+            )
+        )
+        .addSubcommandGroup(group => group
+            .setName("backup")
+            .setDescription("Manage server structure backups (roles & channels).")
+            .addSubcommand(subcommand => subcommand
+                .setName("create")
+                .setDescription("Creates a new backup of the server's roles and channels.")
+                .addStringOption(option => option.setName("name").setDescription("A descriptive name for this backup.").setRequired(true))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName("list")
+                .setDescription("Lists all available backups for this server.")
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName("load")
+                .setDescription("Restores the server structure from a backup. THIS IS DESTRUCTIVE.")
+                .addStringOption(option => option.setName("backup_id").setDescription("The ID of the backup to load.").setRequired(true))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName("delete")
+                .setDescription("Deletes a server backup.")
+                .addStringOption(option => option.setName("backup_id").setDescription("The ID of the backup to delete.").setRequired(true))
+            )
+        )
+        .addSubcommandGroup(group => group
+            .setName('fun')
+            .setDescription('Fun commands.')
+            .addSubcommand(subcommand => subcommand
+                .setName('coinflip')
+                .setDescription('Flips a coin.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('meme')
+                .setDescription('Sends a random meme from Reddit.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('roll')
+                .setDescription('Rolls a dice.')
+                .addIntegerOption(option => option.setName('sides').setDescription('The number of sides on the dice (default 6).').setMinValue(2).setMaxValue(100))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('cat')
+                .setDescription('Sends a random cat picture.')
+            )
+        )
+        .addSubcommandGroup(group => group
+            .setName('events')
+            .setDescription('Event management commands.')
+            .addSubcommand(subcommand => subcommand
+                .setName('giveaway')
+                .setDescription('Start a giveaway.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('remind')
+                .setDescription('Set a reminder.')
+                .addStringOption(option => option.setName('time').setDescription('When to remind (e.g., 1h, 30m).').setRequired(true))
+                .addStringOption(option => option.setName('message').setDescription('What to remind you about.').setRequired(true))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('reactionroles')
+                .setDescription('Manage reaction roles.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('starboard')
+                .setDescription('Manage starboard settings.')
+            )
+        )
+        .addSubcommandGroup(group => group
+            .setName('core')
+            .setDescription('Core bot commands.')
+            .addSubcommand(subcommand => subcommand
+                .setName('stats')
+                .setDescription('Display bot statistics.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('status')
+                .setDescription('Display bot status.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('ping')
+                .setDescription('Check bot latency.')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('globalreinit')
+                .setDescription('Reinitialize global commands (Bot Owner Only).')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('reinit')
+                .setDescription('Reinitialize guild commands (Admin Only).')
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName('resetdatabase')
+                .setDescription('Reset the bot\'s database (Bot Owner Only).')
+            )
+        )
+        .addSubcommandGroup(group => group
+            .setName("custom-command")
+            .setDescription("Manage custom commands for this server.")
+            .addSubcommand(subcommand => subcommand
+                .setName("create")
+                .setDescription("Creates a new, advanced custom command.")
+                .addStringOption(option => option.setName("name").setDescription("The name of the command.").setRequired(true))
+                .addStringOption(option => option
+                    .setName("action-type")
+                    .setDescription("The action this command will perform.")
+                    .setRequired(true)
+                    .addChoices(
+                        {name: "Reply with Text", value: "reply"},
+                        {name: "Add Role to User", value: "add_role"},
+                        {name: "Remove Role from User", value: "remove_role"}
+                    )
+                )
+                .addStringOption(option => option.setName("response-or-role-id").setDescription("The text response or the ID of the role to manage.").setRequired(true))
+                .addStringOption(option => option.setName("required-roles").setDescription("Comma-separated list of role IDs required to use this command."))
+                .addStringOption(option => option.setName("allowed-channels").setDescription("Comma-separated list of channel IDs where this command can be used."))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName("remove")
+                .setDescription("Removes a custom command.")
+                .addStringOption(option => option.setName("name").setDescription("The name of the command to remove.").setRequired(true).setAutocomplete(true))
+            )
+            .addSubcommand(subcommand => subcommand
+                .setName("list")
+                .setDescription("Lists all custom commands on this server.")
+            )
         ),
     async autocomplete(interaction) {
         const focusedOption = interaction.options.getFocused(true);
         const subcommandGroup = interaction.options.getSubcommandGroup();
+        const subcommand = interaction.options.getSubcommand(false);
 
-        if (subcommandGroup === 'playlist' && focusedOption.name === "name") {
+
+        if (subcommandGroup === 'config' && subcommand === 'customizestreamer' && focusedOption.name === "username") {
+            const platform = interaction.options.getString("platform");
             const focusedValue = focusedOption.value;
+            if (!platform) return await interaction.respond([]);
             try {
-                const [playlists] = await db.execute("SELECT name FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name LIKE ? LIMIT 25", [interaction.guild.id, interaction.user.id, `${focusedValue}%`]);
-                await interaction.respond(playlists.map(p => ({name: p.name, value: p.name})));
+                const [streamers] = await db.execute("SELECT username FROM streamers WHERE guild_id = ? AND platform = ? AND username LIKE ? LIMIT 25", [interaction.guild.id, platform, `${focusedValue}%`]);
+                await interaction.respond(streamers.map(s => ({name: s.username, value: s.username})));
             } catch (error) {
-                console.error("[Playlist Autocomplete Error]", error);
                 await interaction.respond([]);
             }
-        } else if (subcommandGroup === 'tag' && focusedOption.name === "name") {
-            const focusedValue = focusedOption.value;
-            try {
-                const [tags] = await db.execute("SELECT tag_name FROM tags WHERE guild_id = ? AND tag_name LIKE ? LIMIT 25", [interaction.guild.id, `${focusedValue}%`]);
-                await interaction.respond(tags.map(tag => ({name: tag.tag_name, value: tag.tag_name})));
-            } catch (error) {
-                console.error("[Tag Autocomplete Error]", error);
-                await interaction.respond([]);
-            }
-        } else if (subcommandGroup === 'config' && focusedOption.name === "command") {
+        } else if (subcommandGroup === 'permissions' && (subcommand === 'grant' || subcommand === 'revoke') && focusedOption.name === "command") {
             const focusedValue = focusedOption.value;
             try {
                 const commandNames = Array.from(interaction.client.commands.keys());
@@ -727,13 +768,13 @@ module.exports = {
                 logger.error("[Permissions Command Autocomplete Error]", error);
                 await interaction.respond([]);
             }
-        } else if (subcommandGroup === 'custom-command' && focusedOption.name === "name") {
+        } else if (subcommandGroup === 'custom-command' && subcommand === 'remove' && focusedOption.name === "name") {
             const focusedValue = focusedOption.value;
             try {
-              const [commands] = await db.execute("SELECT command_name FROM custom_commands WHERE guild_id = ? AND command_name LIKE ? LIMIT 25", [interaction.guild.id, `${focusedValue}%`]);
-              await interaction.respond(commands.map(cmd => ({name: cmd.command_name, value: cmd.command_name})));
+                const [commands] = await db.execute("SELECT command_name FROM custom_commands WHERE guild_id = ? AND command_name LIKE ? LIMIT 25", [interaction.guild.id, `${focusedValue}%`]);
+                await interaction.respond(commands.map(cmd => ({name: cmd.command_name, value: cmd.command_name})));
             } catch (error) {
-              await interaction.respond([]);
+                await interaction.respond([]);
             }
         }
     },
@@ -808,10 +849,10 @@ module.exports = {
                     const guildId = interaction.guild.id;
 
                     const [streamers] = await db.execute(
-                        `SELECT s.streamer_id, s.username, s.platform 
-                         FROM streamers s 
-                         JOIN subscriptions sub ON s.streamer_id = sub.streamer_id 
-                         WHERE sub.guild_id = ? 
+                        `SELECT s.streamer_id, s.username, s.platform
+                         FROM streamers s
+                                  JOIN subscriptions sub ON s.streamer_id = sub.streamer_id
+                         WHERE sub.guild_id = ?
                          GROUP BY s.streamer_id, s.username, s.platform`,
                         [guildId]
                     );
@@ -837,7 +878,7 @@ module.exports = {
                     const replyMessage = await interaction.reply({content: "Please select the streamer(s) you want to remove:", components: [row], ephemeral: true});
 
                     const filter = i => i.customId === "remove_streamer_select" && i.user.id === interaction.user.id;
-                    const collector = replyMessage.createMessageComponentCollector({componentType: ComponentType.Button, time: 60000});
+                    const collector = replyMessage.createMessageComponentCollector({componentType: ComponentType.StringSelect, time: 60000});
 
                     collector.on("collect", async i => {
                         await i.deferUpdate();
@@ -876,10 +917,6 @@ module.exports = {
                         if (reason === "time" && collected.size === 0) {
                             // Only edit if no interaction was collected (i.e., timeout without selection)
                             interaction.editReply({content: "Time has run out, no streamers were removed.", components: []}).catch(e => logger.warn(`[RemoveStreamer] Failed to edit reply after timeout: ${e.message}`));
-                        } else if (reason !== "time") {
-                            // If collector stopped for other reasons (e.g., 'collect' event called collector.stop()),
-                            // the interaction has already been updated by i.editReply.
-                            // No need to editReply again.
                         }
                     });
                     break;
@@ -893,7 +930,7 @@ module.exports = {
                         const [subscriptions] = await db.execute(`
                             SELECT sub.subscription_id, sub.announcement_channel_id, s.platform, s.username, s.streamer_id
                             FROM subscriptions sub
-                            JOIN streamers s ON sub.streamer_id = s.streamer_id
+                                     JOIN streamers s ON sub.streamer_id = s.streamer_id
                             WHERE sub.guild_id = ? AND s.username = ? AND sub.team_subscription_id IS NULL
                         `, [guildId, username]);
 
@@ -924,7 +961,7 @@ module.exports = {
                         });
 
                         const filter = i => i.customId === `editstreamer_select_${interaction.id}` && i.user.id === interaction.user.id;
-                        const collector = reply.createMessageComponentCollector({componentType: ComponentType.Button, time: 60000});
+                        const collector = reply.createMessageComponentCollector({componentType: ComponentType.StringSelect, time: 60000});
 
                         collector.on("collect", async i => {
                             await i.deferUpdate();
@@ -957,13 +994,6 @@ module.exports = {
                             if (reason === "time" && collected.size === 0) {
                                 // Only edit if no interaction was collected (i.e., timeout without selection)
                                 interaction.editReply({content: "You did not make a selection in time.", components: []}).catch(e => logger.warn(`[EditStreamer] Failed to edit reply after timeout: ${e.message}`));
-                            } else if (reason !== "time") {
-                                // If collector stopped for other reasons (e.g., 'collect' event called collector.stop()),
-                                // the interaction has already been updated by i.editReply.
-                                // No need to editReply again.
-                            }
-                            if (reason === "time" && collected.size === 0) {
-                                logger.info(`[EditStreamer] Select menu interaction timed out for user ${interaction.user.id}.`);
                             }
                         });
 
@@ -977,14 +1007,14 @@ module.exports = {
                     await interaction.deferReply({ephemeral: true});
                     try {
                         const [allStreamers] = await db.execute(`
-                            SELECT s.platform, s.username, s.discord_user_id, s.platform_user_id,
-                                   a.announcement_id IS NOT NULL AS isLive
-                            FROM subscriptions sub
-                            JOIN streamers s ON sub.streamer_id = s.streamer_id
-                            LEFT JOIN announcements a ON s.streamer_id = a.streamer_id AND sub.guild_id = a.guild_id
-                            WHERE sub.guild_id = ?
-                            GROUP BY s.streamer_id, s.platform, s.username, s.discord_user_id, s.platform_user_id, isLive
-                            ORDER BY isLive DESC, s.platform, s.username`,
+                                    SELECT s.platform, s.username, s.discord_user_id, s.platform_user_id,
+                                           a.announcement_id IS NOT NULL AS isLive
+                                    FROM subscriptions sub
+                                             JOIN streamers s ON sub.streamer_id = s.streamer_id
+                                             LEFT JOIN announcements a ON s.streamer_id = a.streamer_id AND sub.guild_id = a.guild_id
+                                    WHERE sub.guild_id = ?
+                                    GROUP BY s.streamer_id, s.platform, s.username, s.discord_user_id, s.platform_user_id, isLive
+                                    ORDER BY isLive DESC, s.platform, s.username`,
                             [interaction.guild.id]
                         );
 
@@ -1024,7 +1054,7 @@ module.exports = {
                                 }
                                 const usernameDisplay = url ? `[**${escapeMarkdown(s.username)}**](${url})` : `**${escapeMarkdown(s.username)}**`;
                                 return `${status} ${usernameDisplay} (${s.platform}) ${user}`;
-                            }).join("\\n");
+                            }).join("\n");
 
                             pages.push(new EmbedBuilder()
                                 .setTitle(`Tracked Streamers (${liveCount} Live / ${totalCount} Total)`)
@@ -1048,85 +1078,81 @@ module.exports = {
                     let browser;
 
                     try {
-                      const [subscriptions] = await db.execute(`
-                        SELECT s.streamer_id, s.platform, s.username, s.discord_user_id, s.platform_user_id
-                        FROM subscriptions sub
-                        JOIN streamers s ON sub.streamer_id = s.streamer_id
-                        WHERE sub.guild_id = ?`,
-                        [interaction.guild.id]
-                      );
+                        const [subscriptions] = await db.execute(`
+                                    SELECT s.platform, s.username, s.discord_user_id, s.platform_user_id
+                                    FROM subscriptions sub
+                                             JOIN streamers s ON sub.streamer_id = s.streamer_id
+                                    WHERE sub.guild_id = ?`,
+                            [interaction.guild.id]
+                        );
 
-                      if (subscriptions.length === 0) {
-                        return interaction.editReply("There are no streamers being tracked on this server.");
-                      }
-
-                      const uniqueStreamersMap = new Map();
-                      subscriptions.forEach(streamer => {
-                        uniqueStreamersMap.set(streamer.streamer_id, streamer);
-                      });
-                      const streamersToCheck = Array.from(uniqueStreamersMap.values());
-
-                      if (streamersToCheck.some(s => ["tiktok", "youtube", "trovo"].includes(s.platform))) {
-                        browser = await getBrowser();
-                      }
-
-                      const checkPromises = streamersToCheck.map(async (streamer) => {
-                        let liveData = {isLive: false};
-                        if (streamer.platform === "twitch") {
-                          liveData = await apiChecks.checkTwitch(streamer);
-                        } else if (streamer.platform === "kick") {
-                          liveData = await apiChecks.checkKick(streamer.username);
-                        } else if (streamer.platform === "youtube" && browser) {
-                          liveData = await apiChecks.checkYouTube(streamer.platform_user_id);
-                        } else if (streamer.platform === "tiktok" && browser) {
-                          liveData = await apiChecks.checkTikTok(streamer.username);
-                        } else if (streamer.platform === "trovo" && browser) {
-                          liveData = await apiChecks.checkTrovo(streamer.username);
+                        if (subscriptions.length === 0) {
+                            return interaction.editReply("There are no streamers being tracked on this server.");
                         }
 
-                        if (liveData.isLive) {
-                          return {...streamer, ...liveData};
+                        const uniqueStreamersMap = new Map();
+                        subscriptions.forEach(streamer => {
+                            uniqueStreamersMap.set(streamer.streamer_id, streamer);
+                        });
+                        const streamersToCheck = Array.from(uniqueStreamersMap.values());
+
+                        if (streamersToCheck.some(s => ["tiktok", "youtube", "trovo"].includes(s.platform))) {
+                            browser = await getBrowser();
                         }
-                        return null;
-                      });
 
-                      const results = await Promise.allSettled(checkPromises);
-                      const liveStreamers = results
-                        .filter(result => result.status === "fulfilled" && result.value !== null)
-                        .map(result => result.value);
+                        const checkPromises = streamersToCheck.map(async (streamer) => {
+                            let liveData = {isLive: false};
+                            if (streamer.platform === "twitch") {
+                                liveData = await apiChecks.checkTwitch(streamer);
+                            } else if (streamer.platform === "kick") {
+                                liveData = await apiChecks.checkKick(streamer.username);
+                            } else if (streamer.platform === "youtube" && browser) {
+                                liveData = await apiChecks.checkYouTube(streamer.platform_user_id);
+                            } else if (streamer.platform === "tiktok" && browser) {
+                                liveData = await apiChecks.checkTikTok(streamer.username);
+                            } else if (streamer.platform === "trovo" && browser) {
+                                liveData = await apiChecks.checkTrovo(streamer.username);
+                            }
 
-                      if (liveStreamers.length === 0) {
+                            if (liveData.isLive) {
+                                return {...streamer, ...liveData};
+                            }
+                            return null;
+                        });
+
+                        const results = await Promise.allSettled(checkPromises);
+                        const liveStreamers = results
+                            .filter(result => result.status === "fulfilled" && result.value !== null)
+                            .map(result => result.value);
+
+                        if (liveStreamers.length === 0) {
+                            const embed = new EmbedBuilder()
+                                .setColor("#ED4245")
+                                .setTitle("No One is Live")
+                                .setDescription("None of the tracked streamers on this server are currently live.");
+                            return interaction.editReply({embeds: [embed]});
+                        }
+
+                        const platformEmojis = {twitch: "🟣", kick: "🟢", youtube: "🔴", tiktok: "⚫", trovo: "🟢", default: "⚪"};
+
+                        const descriptionLines = liveStreamers.sort((a, b) => a.username.localeCompare(b.username)).map(s => {
+                            const statusEmoji = platformEmojis[s.platform] || platformEmojis.default;
+                            const discordLink = s.discord_user_id ? ` (<@${s.discord_user_id}>)` : "";
+                            const platformName = s.platform.charAt(0).toUpperCase() + s.platform.slice(1);
+                            return `${statusEmoji} [**${escapeMarkdown(s.username)}**](${s.url}) (${platformName})${discordLink}`;
+                        });
+
                         const embed = new EmbedBuilder()
-                          .setColor("#ED4245")
-                          .setTitle("No One is Live")
-                          .setDescription("None of the tracked streamers on this server are currently live.");
-                        return interaction.editReply({embeds: [embed]});
-                      }
+                            .setColor("#57F287")
+                            .setTitle(`🟢 ${liveStreamers.length} Streamer(s) Currently Live`)
+                            .setDescription(descriptionLines.join("\n"))
+                            .setTimestamp();
 
-                      const platformEmojis = {twitch: "🟣", kick: "🟢", youtube: "🔴", tiktok: "⚫", trovo: "🟢", default: "⚪"};
-
-                      const descriptionLines = liveStreamers.sort((a, b) => a.username.localeCompare(b.username)).map(s => {
-                        const statusEmoji = platformEmojis[s.platform] || platformEmojis.default;
-                        const discordLink = s.discord_user_id ? ` (<@${s.discord_user_id}>)` : "";
-                        const platformName = s.platform.charAt(0).toUpperCase() + s.platform.slice(1);
-                        return `${statusEmoji} [**${escapeMarkdown(s.username)}**](${s.url}) (${platformName})${discordLink}`;
-                      });
-
-                      const embed = new EmbedBuilder()
-                        .setColor("#57F287")
-                        .setTitle(`🟢 ${liveStreamers.length} Streamer(s) Currently Live`)
-                        .setDescription(descriptionLines.join("\\n"))
-                        .setTimestamp();
-
-                      await interaction.editReply({embeds: [embed]});
+                        await interaction.editReply({embeds: [embed]});
 
                     } catch (e) {
-                      console.error("--- Critical Error in /check-live ---", e);
-                      await interaction.editReply({content: "A critical error occurred while fetching live statuses."});
-                    } finally {
-                      if (browser) {
-                        await browser.close();
-                      }
+                        console.error("--- Critical Error in /check-live ---", e);
+                        await interaction.editReply({content: "A critical error occurred while fetching live statuses."});
                     }
                     break;
                 }
@@ -1298,7 +1324,7 @@ module.exports = {
                                     return interaction.client.channels.fetch(ann.channel_id)
                                         .then(channel => channel?.messages.delete(ann.message_id))
                                         .catch(e => logger.warn(`[Mass Remove Streamer] Failed to delete message ${ann.message_id} in channel ${ann.channel_id}: ${e.message}`));
-                            });
+                                });
                                 await Promise.allSettled(purgePromises);
                                 purgedMessageCount = announcementsToPurge.length;
                             }
@@ -1440,16 +1466,16 @@ module.exports = {
 
                     try {
                         const [subscriptions] = await db.execute(
-                            `SELECT 
-                                s.platform, 
-                                s.username, 
-                                s.discord_user_id, 
-                                sub.custom_message,
-                                sub.override_nickname,
-                                sub.override_avatar_url,
-                                sub.announcement_channel_id
-                             FROM streamers s 
-                             JOIN subscriptions sub ON s.streamer_id = sub.streamer_id 
+                            `SELECT
+                                 s.platform,
+                                 s.username,
+                                 s.discord_user_id,
+                                 sub.custom_message,
+                                 sub.override_nickname,
+                                 sub.override_avatar_url,
+                                 sub.announcement_channel_id
+                             FROM streamers s
+                                      JOIN subscriptions sub ON s.streamer_id = sub.streamer_id
                              WHERE sub.guild_id = ?
                              ORDER BY s.platform, s.username, sub.announcement_channel_id`,
                             [interaction.guild.id]
@@ -1523,15 +1549,15 @@ module.exports = {
                                         return interaction.client.channels.fetch(ann.channel_id)
                                             .then(channel => channel?.messages.delete(ann.message_id))
                                             .catch(e => logger.warn(`Failed to delete message ${ann.message_id} in channel ${ann.channel_id}: ${e.message}`));
-                            });
-                                await Promise.allSettled(purgePromises);
-                                purgedMessageCount = announcementsToPurge.length;
-                            }
+                                    });
+                                    await Promise.allSettled(purgePromises);
+                                    purgedMessageCount = announcementsToPurge.length;
+                                }
 
                                 const [result] = await db.execute("DELETE FROM subscriptions WHERE guild_id = ?", [interaction.guild.id]);
 
                                 await interaction.editReply({
-                                    content: `✅ **Operation Complete!**\\nRemoved **${result.affectedRows}** streamer subscriptions.\\nPurged **${purgedMessageCount}** active announcement message(s).`,
+                                    content: `✅ **Operation Complete!**\nRemoved **${result.affectedRows}** streamer subscriptions.\nPurged **${purgedMessageCount}** active announcement message(s).`,
                                 });
 
                             } catch (dbError) {
@@ -1569,17 +1595,17 @@ module.exports = {
                     try {
                         const teamMembers = await apiChecks.getTwitchTeamMembers(teamName);
                         if (!teamMembers) {
-                            return interaction.editReply({content: `❌ Could not find a Twitch Team named \\\"${teamName}\\\". Please check the name and try again.`});
+                            return interaction.editReply({content: `❌ Could not find a Twitch Team named \`${teamName}\`. Please check the name and try again.`});
                         }
                         if (teamMembers.length === 0) {
-                            return interaction.editReply({content: `ℹ️ The Twitch Team \\\"${teamName}\\\" does not have any members.`});
+                            return interaction.editReply({content: `ℹ️ The Twitch Team \`${teamName}\` does not have any members.`});
                         }
 
                         for (const member of teamMembers) {
                             try {
                                 await db.execute(
                                     `INSERT INTO streamers (platform, platform_user_id, username) VALUES ('twitch', ?, ?)
-                                                 ON DUPLICATE KEY UPDATE username = VALUES(username)`,
+                                     ON DUPLICATE KEY UPDATE username = VALUES(username)`,
                                     [member.user_id, member.user_login]
                                 );
 
@@ -1587,7 +1613,7 @@ module.exports = {
 
                                 const [subResult] = await db.execute(
                                     `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)
-                                                 ON DUPLICATE KEY UPDATE streamer_id = VALUES(streamer_id)`,
+                                     ON DUPLICATE KEY UPDATE streamer_id = VALUES(streamer_id)`,
                                     [guildId, streamer.streamer_id, channel.id]
                                 );
 
@@ -1604,7 +1630,7 @@ module.exports = {
                         }
 
                         const embed = new EmbedBuilder()
-                            .setTitle(`Twitch Team Import Report for \\"${teamName}\\\"`) // Escaped backslashes
+                            .setTitle(`Twitch Team Import Report for "${teamName}"`)
                             .setDescription(`All members have been added/updated for announcements in ${channel}.`)
                             .setColor("#5865F2")
                             .addFields(
@@ -1744,7 +1770,6 @@ module.exports = {
                         } else {
                             await interaction.editReply({content: `No subscription was found for the Twitch Team **${teamName}** in that channel.`});
                         }
-
                     } catch (error) {
                         logger.error("[UnsubscribeTeam command error]", error);
                         await interaction.editReply({content: "A database error occurred while trying to unsubscribe from the team."});
@@ -1825,7 +1850,7 @@ module.exports = {
 
                                     const [result] = await db.execute(
                                         `INSERT INTO streamers (platform, platform_user_id, username, discord_user_id) VALUES (?, ?, ?, ?)
-                                                 ON DUPLICATE KEY UPDATE username=VALUES(username), discord_user_id=VALUES(discord_user_id)`,
+                                         ON DUPLICATE KEY UPDATE username=VALUES(username), discord_user_id=VALUES(discord_user_id)`,
                                         [platform, streamerInfo.puid, streamerInfo.dbUsername, correctedDiscordId]
                                     );
                                     const streamerId = result.insertId || (await db.execute("SELECT streamer_id FROM streamers WHERE platform=? AND platform_user_id=?", [platform, streamerInfo.puid]))[0][0].streamer_id;
@@ -1834,7 +1859,7 @@ module.exports = {
 
                                     const [subResult] = await db.execute(
                                         `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, custom_message, override_nickname, override_avatar_url) VALUES (?, ?, ?, ?, ?, ?)
-                                                 ON DUPLICATE KEY UPDATE custom_message=VALUES(custom_message), override_nickname=VALUES(override_nickname), override_avatar_url=VALUES(override_avatar_url)`,
+                                         ON DUPLICATE KEY UPDATE custom_message=VALUES(custom_message), override_nickname=VALUES(override_nickname), override_avatar_url=VALUES(override_avatar_url)`,
                                         [interaction.guild.id, streamerId, targetChannelId, custom_message || null, override_nickname || null, override_avatar_url || null]
                                     );
 
@@ -1843,11 +1868,10 @@ module.exports = {
                                     } else {
                                         added.push(username);
                                     }
-
-                                } catch (err) {
-                                    logger.error(`[Import Team CSV] Row Error for ${username}:`, err);
-                                    failed.push(`${username} (DB Error)`);
                                 }
+                            } catch (err) {
+                                logger.error(`[Import Team CSV] Row Error for ${username}:`, err);
+                                failed.push(`${username} (DB Error)`);
                             }
                         }
 
@@ -1875,7 +1899,7 @@ module.exports = {
                         await exitCycleTLSInstance();
                     }
 
-                    const embed = new EmbedBuilder().setTitle(`Team Sync Complete for #${targetChannel.name}`).setColor("#5865F2");
+                    const embed = new EmbedBuilder().setTitle(`Team Sync Complete for #${interaction.options.getChannel("channel").name}`).setColor("#5865F2");
                     const field = (l) => l.length > 0 ? [...new Set(l)].join(", ").substring(0, 1020) : "None";
                     embed.addFields(
                         {name: `✅ Added (${[...new Set(added)].length})`, value: field(added)},
@@ -1950,11 +1974,11 @@ module.exports = {
                     const guildId = interaction.guild.id;
 
                     try {
-                      await db.execute("INSERT INTO music_config (guild_id, dj_role_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE dj_role_id = ?", [guildId, role.id, role.id]);
-                      await interaction.reply({content: `✅ The DJ role has been set to <@&${role.id}>.`, ephemeral: true});
+                        await db.execute("INSERT INTO music_config (guild_id, dj_role_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE dj_role_id = ?", [guildId, role.id, role.id]);
+                        await interaction.reply({content: `✅ The DJ role has been set to <@&${role.id}>.`, ephemeral: true});
                     } catch (error) {
-                      logger.error("[Config DJ Role Error]", error);
-                      await interaction.reply({content: "❌ An error occurred while setting the DJ role.", ephemeral: true});
+                        logger.error("[Config DJ Role Error]", error);
+                        await interaction.reply({content: "❌ An error occurred while setting the DJ role.", ephemeral: true});
                     }
                     break;
                 }
@@ -1963,28 +1987,28 @@ module.exports = {
 
                     const channel = interaction.options.getChannel("channel");
                     const enabledLogs = [
-                      interaction.options.getString("event1"),
-                      interaction.options.getString("event2"),
-                      interaction.options.getString("event3"),
+                        interaction.options.getString("event1"),
+                        interaction.options.getString("event2"),
+                        interaction.options.getString("event3"),
                     ].filter(Boolean); // Filter out null values
 
                     try {
-                      await db.execute(
-                        "INSERT INTO log_config (guild_id, log_channel_id, enabled_logs) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE log_channel_id = VALUES(log_channel_id), enabled_logs = VALUES(enabled_logs)",
-                        [interaction.guild.id, channel.id, JSON.stringify(enabledLogs)]
-                      );
+                        await db.execute(
+                            "INSERT INTO log_config (guild_id, log_channel_id, enabled_logs) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE log_channel_id = VALUES(log_channel_id), enabled_logs = VALUES(enabled_logs)",
+                            [interaction.guild.id, channel.id, JSON.stringify(enabledLogs)]
+                        );
 
-                      const embed = new EmbedBuilder()
-                        .setColor("#57F287")
-                        .setTitle("✅ Logging Settings Updated")
-                        .setDescription(`Logs will now be sent to ${channel}.`)
-                        .addFields({name: "Enabled Events", value: enabledLogs.map(log => `\`${log}\``).join(", ")});
+                        const embed = new EmbedBuilder()
+                            .setColor("#57F287")
+                            .setTitle("✅ Logging Settings Updated")
+                            .setDescription(`Logs will now be sent to ${channel}.`)
+                            .addFields({name: "Enabled Events", value: enabledLogs.map(log => `\`${log}\``).join(", ")});
 
-                      await interaction.editReply({embeds: [embed]});
+                        await interaction.editReply({embeds: [embed]});
 
                     } catch (error) {
-                      logger.error("[Logging Command Error]", error);
-                      await interaction.editReply({content: "An error occurred while saving logging settings."});
+                        logger.error("[Logging Command Error]", error);
+                        await interaction.editReply({content: "An error occurred while saving logging settings."});
                     }
                     break;
                 }
@@ -2018,7 +2042,7 @@ module.exports = {
                         } else if (newNickname) {
                             try {
                                 await botMember.setNickname(newNickname);
-                                await db.execute("UPDATE guilds SET bot_nickname = ? WHERE guild_id = ?", [newNickname, guildId]);
+                                await db.execute("UPDATE guilds SET bot_nickname = ?", [newNickname, guildId]);
                                 nicknameUpdated = true;
                             }
                             catch (e) {
@@ -2046,10 +2070,11 @@ module.exports = {
                                     throw new Error("Temporary upload channel not found.");
                                 }
                                 const tempMessage = await tempChannel.send({files: [{attachment: newAvatar.url, name: newAvatar.name}]});
-                                finalAvatarUrl = tempMessage.attachments.first().url;
+                                permanentAvatarUrl = tempMessage.attachments.first().url;
+                                avatarUpdated = true;
                             } catch (uploadError) {
                                 logger.error("[Customize Bot Command] Error uploading temporary avatar to Discord:", uploadError);
-                                return interaction.editReply({content: "Failed to upload custom avatar. Please check bot\\'s permissions or TEMP_UPLOAD_CHANNEL_ID."});
+                                return interaction.editReply({content: "Failed to upload custom avatar. Please check bot's permissions or TEMP_UPLOAD_CHANNEL_ID."});
                             }
                         }
 
@@ -2065,16 +2090,15 @@ module.exports = {
                         const embed = new EmbedBuilder().setColor("#57F287").setTitle("Bot Appearance Updated!");
                         let description = "";
                         if (shouldResetNickname) {
-                            description += "Bot nickname has been reset to default.\\n";
-                        }
-                        if (nicknameUpdated) {
-                            description += `Nickname set to: **${newNickname}**\\n`;
+                            description += "Bot nickname has been reset to default.\n";
+                        } else if (nicknameUpdated) {
+                            description += `Nickname set to: **${newNickname}**\n`;
                         }
 
                         if (avatarReset) {
-                            description += "Announcement avatar has been reset to default.\\n";
+                            description += "Announcement avatar has been reset to default.\n";
                         } else if (avatarUpdated) {
-                            description += "Announcement avatar has been updated.\\n";
+                            description += "Announcement avatar has been updated.\n";
                         }
 
                         embed.setDescription(description.trim());
@@ -2082,7 +2106,6 @@ module.exports = {
                         if (avatarUpdated && finalAvatarUrlForEmbed) {
                             embed.setThumbnail(finalAvatarUrlForEmbed);
                         }
-
                         await interaction.editReply({embeds: [embed]});
 
                     } catch (error) {
@@ -2124,14 +2147,14 @@ module.exports = {
                                 finalAvatarUrl = tempMessage.attachments.first().url;
                             } catch (uploadError) {
                                 logger.error("[Customize Channel Command] Error uploading temporary avatar to Discord:", uploadError);
-                                return interaction.editReply({content: "Failed to upload custom avatar. Please check bot\\'s permissions or TEMP_UPLOAD_CHANNEL_ID."});
+                                return interaction.editReply({content: "Failed to upload custom avatar. Please check bot's permissions or TEMP_UPLOAD_CHANNEL_ID."});
                             }
                         } else if (newAvatarUrlText !== null) {
                             if (newAvatarUrlText?.toLowerCase() === "reset" || newAvatarUrlText === "") {
                                 finalAvatarUrl = null;
                             }
                             else {
-                                if (!/^https?:\\/\\//.test(newAvatarUrlText)) {
+                                if (!/^https?:\/\//.test(newAvatarUrlText)) {
                                     return interaction.editReply("The provided avatar URL must start with `http://` or `https://`.");
                                 }
                                 finalAvatarUrl = newAvatarUrlText;
@@ -2162,9 +2185,7 @@ module.exports = {
                         }
 
                         await db.execute(
-                            `INSERT INTO channel_settings (${insertColumns.join(", ")}) 
-                                 VALUES (${insertPlaceholders.join(", ")}) 
-                                 ON DUPLICATE KEY UPDATE ${updateClauses.join(", ")}`,
+                            `INSERT INTO channel_settings (${insertColumns.join(", ")}) \n                                 VALUES (${insertPlaceholders.join(", ")}) \n                                 ON DUPLICATE KEY UPDATE ${updateClauses.join(", ")}`,
                             [...insertValues, ...updateValuesForDuplicateKey]
                         );
 
@@ -2172,15 +2193,14 @@ module.exports = {
                         let description = "";
 
                         if (newNickname?.toLowerCase() === "reset") {
-                            description += "Nickname has been reset to default.\\n";
-                        }
-                        if (newNickname) {
-                            description += `Nickname set to: **${newNickname}**\\n`;
+                            description += "Nickname has been reset to default.\n";
+                        } else if (newNickname) {
+                            description += `Nickname set to: **${newNickname}**\n`;
                         }
                         if (finalAvatarUrl === null) {
-                            description += "Avatar has been reset to default.\\n";
+                            description += "Avatar has been reset to default.\n";
                         } else if (finalAvatarUrl !== undefined) {
-                            description += "Avatar has been updated.\\n";
+                            description += "Avatar has been updated.\n";
                         }
 
                         embed.setDescription(description.trim());
@@ -2222,7 +2242,7 @@ module.exports = {
                                 finalAvatarUrl = null;
                             }
                             else {
-                                if (!/^https?:\\/\\//.test(newAvatarUrlText)) {
+                                if (!/^https?:\/\//.test(newAvatarUrlText)) {
                                     return interaction.editReply("The provided avatar URL must start with `http://` or `https://`.");
                                 }
                                 finalAvatarUrl = newAvatarUrlText;
@@ -2245,7 +2265,7 @@ module.exports = {
                                 finalAvatarUrl = tempMessage.attachments.first().url;
                             } catch (uploadError) {
                                 logger.error("[Customize Streamer Command] Error uploading temporary avatar to Discord:", uploadError);
-                                return interaction.editReply({content: "Failed to upload custom avatar. Please check bot\\'s permissions or TEMP_UPLOAD_CHANNEL_ID."});
+                                return interaction.editReply({content: "Failed to upload custom avatar. Please check bot's permissions or TEMP_UPLOAD_CHANNEL_ID."});
                             }
                         }
 
@@ -2301,7 +2321,14 @@ module.exports = {
                     }
                     break;
                 }
-                case 'permissions': {
+                default:
+                    await interaction.reply({ content: 'Invalid config subcommand.', ephemeral: true });
+                    break;
+            }
+        } else if (subcommandGroup === 'permissions') {
+            switch (subcommand) {
+                case 'grant':
+                case 'revoke': {
                     await interaction.deferReply({ephemeral: true});
                     const role = interaction.options.getRole("role");
                     const commandName = interaction.options.getString("command");
@@ -2311,20 +2338,18 @@ module.exports = {
                     }
 
                     try {
-                        // This was missing
-                        const action = interaction.options.getSubcommand(); // This line was missing
-                        if (action === "grant") {
+                        if (subcommand === "grant") {
                             await db.execute(
                                 "INSERT INTO bot_permissions (guild_id, role_id, command) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE command=command",
                                 [interaction.guild.id, role.id, commandName]
                             );
                             await interaction.editReply({embeds: [new EmbedBuilder().setColor("#57F287").setTitle("✅ Permission Granted").setDescription(`The role ${role} can now use the \`/${commandName}\` command.`)]});
-                        } else if (action === "revoke") {
+                        } else if (subcommand === "revoke") {
                             await db.execute(
                                 "DELETE FROM bot_permissions WHERE guild_id = ? AND role_id = ? AND command = ?",
                                 [interaction.guild.id, role.id, commandName]
                             );
-                            await interaction.editReply({embeds: [new EmbedBuilder().setColor("#ED4245").setTitle("✅ Permission Revoked").setDescription(`The role ${role} can no longer use the \`/${commandName}\` command.`)]});
+                            await interaction.editReply({embeds: [new EmbedBuilder().setColor("#ED4245").setTitle("🗑️ Permission Revoked").setDescription(`The role ${role} can no longer use the \`/${commandName}\` command.`)]});
                         }
                     } catch (error) {
                         logger.error("[Permissions Command Error]", error);
@@ -2333,7 +2358,7 @@ module.exports = {
                     break;
                 }
                 default:
-                    await interaction.reply({ content: 'Invalid config subcommand.', ephemeral: true });
+                    await interaction.reply({ content: 'Invalid permissions subcommand.', ephemeral: true });
                     break;
             }
         } else if (subcommandGroup === 'moderation') {
@@ -2427,7 +2452,6 @@ module.exports = {
                     if (!member.kickable) {
                         return interaction.editReply("I cannot kick this user. They may have a higher role than me or I lack permissions.");
                     }
-
                     try {
                         // Attempt to DM the user first
                         const dmEmbed = new EmbedBuilder()
@@ -2512,7 +2536,7 @@ module.exports = {
                         await interaction.editReply({embeds: [replyEmbed]});
 
                     } catch (error) {
-                        logger.error("[Mute Command Error]", error);
+                        logger.error("[Mute Command]", error);
                         await interaction.editReply("An unexpected error occurred while trying to mute this user.");
                     }
                     break;
@@ -2557,7 +2581,7 @@ module.exports = {
                         await interaction.editReply({embeds: [replyEmbed]});
 
                     } catch (error) {
-                        logger.error("[Unmute Command Error]", error);
+                        logger.error("[Unmute Command]", error);
                         await interaction.editReply("An unexpected error occurred. I may be missing permissions to remove timeouts.");
                     }
                     break;
@@ -2588,7 +2612,9 @@ module.exports = {
                                 {name: "Moderator", value: interaction.user.tag}
                             )
                             .setTimestamp();
-                        await targetUser.send({embeds: [dmEmbed]}).catch((e) => logger.warn(`[Warn Command] Could not DM user ${targetUser.tag}: ${e.message}`));
+                        await targetUser.send({embeds: [dmEmbed]});
+                    } catch(e) {
+                        logger.warn(`[Warn Command] Could not DM user ${targetUser.tag}: ${e.message}`)
                     }
 
                     const replyEmbed = new EmbedBuilder()
@@ -2635,22 +2661,22 @@ module.exports = {
                     const targetUser = interaction.options.getUser("user");
 
                     const [infractions] = await db.execute(
-                      "SELECT id, moderator_id, type, reason, created_at FROM infractions WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 10",
-                      [interaction.guild.id, targetUser.id]
+                        "SELECT id, moderator_id, type, reason, created_at FROM infractions WHERE guild_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 10",
+                        [interaction.guild.id, targetUser.id]
                     );
 
                     if (infractions.length === 0) {
-                      return interaction.editReply(`${targetUser.tag} has a clean record.`);
+                        return interaction.editReply(`${targetUser.tag} has a clean record.`);
                     }
 
                     const embed = new EmbedBuilder()
-                      .setColor("#5865F2")
-                      .setAuthor({name: `Moderation History for ${targetUser.tag}`, iconURL: targetUser.displayAvatarURL()})
-                      .setDescription(infractions.map(inf =>
-                        `**Case #${inf.id} | ${inf.type}** - <t:${Math.floor(new Date(inf.created_at).getTime() / 1000)}:R>\\n` +
-                        `**Moderator:** <@${inf.moderator_id}>\\n` +
-                        `**Reason:** ${inf.reason}`
-                      ).join("\\n\\n"));
+                        .setColor("#5865F2")
+                        .setAuthor({name: `Moderation History for ${targetUser.tag}`, iconURL: targetUser.displayAvatarURL()})
+                        .setDescription(infractions.map(inf =>
+                            `**Case #${inf.id} | ${inf.type}** - <t:${Math.floor(new Date(inf.created_at).getTime() / 1000)}:R>\n` +
+                            `**Moderator:** <@${inf.moderator_id}>\n` +
+                            `**Reason:** ${inf.reason}`
+                        ).join("\n\n"));
 
                     await interaction.editReply({embeds: [embed]});
                     break;
@@ -2665,58 +2691,59 @@ module.exports = {
                     const channel = interaction.channel;
 
                     if (channel.type !== ChannelType.GuildText) {
-                      return interaction.editReply("This command can only be used in text channels.");
+                        return interaction.editReply("This command can only be used in text channels.");
                     }
 
                     if (filter === "user" && !targetUser) {
-                      return interaction.editReply("You must specify a user when using the \\\"User\\\" filter.");
+                        return interaction.editReply("You must specify a user when using the \"User\" filter.");
                     }
                     if (filter === "text" && !searchText) {
-                      return interaction.editReply("You must specify text to search for when using the \\\"Contains Text\\\" filter.");
+                        return interaction.editReply("You must specify text to search for when using the \"Contains Text\" filter.");
                     }
 
                     try {
-                      const fetchedMessages = await channel.messages.fetch({limit: amount});
-                      let messagesToDelete;
+                        const fetchedMessages = await channel.messages.fetch({limit: amount});
+                        let messagesToDelete;
 
-                      switch (filter) {
-                        case "all":
-                          messagesToDelete = fetchedMessages;
-                          break;
-                        case "user":
-                          messagesToDelete = fetchedMessages.filter(msg => msg.author.id === targetUser.id);
-                          break;
-                        case "bots":
-                          messagesToDelete = fetchedMessages.filter(msg => msg.author.bot);
-                          break;
-                        case "text":
-                          messagesToDelete = fetchedMessages.filter(msg => msg.content.toLowerCase().includes(searchText.toLowerCase()));
-                          break;
-                        case "links":
-                          messagesToDelete = fetchedMessages.filter(msg => /https?:\\/\\/[^\\s]+/g.test(msg.content));
-                          break;
-                        case "files":
-                          messagesToDelete = fetchedMessages.filter(msg => msg.attachments.size > 0);
-                          break;
-                        default:
-                          messagesToDelete = fetchedMessages;
-                      }
+                        switch (filter) {
+                            case "all":
+                                messagesToDelete = fetchedMessages;
+                                break;
+                            case "user":
+                                messagesToDelete = fetchedMessages.filter(msg => msg.author.id === targetUser.id);
+                                break;
+                            case "bots":
+                                messagesToDelete = fetchedMessages.filter(msg => msg.author.bot);
+                                break;
+                            case "text":
+                                messagesToDelete = fetchedMessages.filter(msg => msg.content.toLowerCase().includes(searchText.toLowerCase()));
+                                break;
+                            case "links":
+                                // V-- THIS IS THE CORRECTED LINE --V
+                                messagesToDelete = fetchedMessages.filter(msg => /https?:\/\/[^\s]+/g.test(msg.content));
+                                break;
+                            case "files":
+                                messagesToDelete = fetchedMessages.filter(msg => msg.attachments.size > 0);
+                                break;
+                            default:
+                                messagesToDelete = fetchedMessages;
+                        }
 
-                      if (messagesToDelete.size === 0) {
-                        return interaction.editReply("No messages found matching the specified filter.");
-                      }
+                        if (messagesToDelete.size === 0) {
+                            return interaction.editReply("No messages found matching the specified filter.");
+                        }
 
-                      const deleted = await channel.bulkDelete(messagesToDelete, true);
+                        const deleted = await channel.bulkDelete(messagesToDelete, true);
 
-                      const replyEmbed = new EmbedBuilder()
-                        .setColor("#57F287")
-                        .setDescription(`✅ Successfully cleaned **${deleted.size}** message(s) using the \`${filter}\` filter.`);
+                        const replyEmbed = new EmbedBuilder()
+                            .setColor("#57F287")
+                            .setDescription(`✅ Successfully cleaned **${deleted.size}** message(s) using the \`${filter}\` filter.`);
 
-                      await interaction.editReply({embeds: [replyEmbed]});
+                        await interaction.editReply({embeds: [replyEmbed]});
 
                     } catch (error) {
-                      console.error("[Clean Command Error]", error);
-                      await interaction.editReply("An error occurred. I may not have permission to delete messages, or the messages are older than 14 days.");
+                        console.error("[Clean Command Error]", error);
+                        await interaction.editReply("An error occurred. I may not have permission to delete messages, or the messages are older than 14 days.");
                     }
                     break;
                 }
@@ -2778,7 +2805,7 @@ module.exports = {
                     const seconds = parseTimeToSeconds(durationStr);
 
                     if (seconds === null) {
-                        return interaction.editReply({content: "Invalid duration format. Use formats like `10m`, `2h`, `1d`."});
+                        return interaction.editReply({content: "Invalid duration format. Use formats like `10s`, `5m`, or `off`."});
                     }
 
                     if (seconds > 21600) { // Discord's max is 6 hours (21600 seconds)
@@ -2874,14 +2901,7 @@ module.exports = {
                     try {
                         // This is a placeholder for the new table `protected_actions_config`
                         // We will simulate fetching a password hash for the user's highest role that has one.
-                        // const [protectedRoles] = await db.execute('SELECT role_id, password_hash FROM protected_actions_config WHERE guild_id = ?', [interaction.guild.id]);
-
-                        // --- SIMULATED LOGIC START ---
-                        const protectedRoles = [
-                            // Example data you would have in your `protected_actions_config` table
-                            {role_id: "YOUR_ADMIN_ROLE_ID", password_hash: "e4a23c3b5e...:..."} // Replace with a real role ID and hash
-                        ];
-                        // --- SIMULATED LOGIC END ---
+                        const [protectedRoles] = await db.execute('SELECT role_id, password_hash FROM protected_actions_config WHERE guild_id = ?', [interaction.guild.id]);
 
                         const userProtectedRole = protectedRoles.find(p_role => memberRoles.has(p_role.role_id));
 
@@ -2889,8 +2909,7 @@ module.exports = {
                             return interaction.editReply({content: "You do not have a role configured for protected actions."});
                         }
 
-                        // const isVerified = verifyPassword(password, userProtectedRole.password_hash);
-                        const isVerified = (password === "override-password-123"); // Placeholder verification
+                        const isVerified = verifyPassword(password, userProtectedRole.password_hash);
 
                         if (!isVerified) {
                             logger.warn(`Failed lockdown attempt by ${interaction.user.tag}. Incorrect password.`, {guildId: interaction.guild.id, category: "security"});
@@ -2899,19 +2918,21 @@ module.exports = {
 
                         const channel = interaction.channel;
                         await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
-                            SendMessages: shouldUnlock
+                            SendMessages: shouldUnlock ? null : false
                         });
 
-                        const action = shouldUnlock ? "unlocked" : "locked";
+                        const action = shouldUnlock ? "unlocked" : "locked down";
                         await interaction.editReply(`✅ Channel has been ${action}.`);
                         logger.info(`Channel ${channel.name} was ${action} by ${interaction.user.tag} using a protected command.`, {guildId: interaction.guild.id, category: "security"});
 
                     } catch (error) {
-                        // This will likely fail if the table doesn't exist yet.
-                        if (error.code !== "ER_NO_SUCH_TABLE") {
-                            logger.error("[Lockdown Command Error]", error);
+                        if (error.code === "ER_NO_SUCH_TABLE") {
+                            await interaction.editReply({content: "This feature has not been configured by the bot owner yet."});
                         }
-                        await interaction.editReply({content: "An error occurred, or this feature has not been fully configured by the bot owner yet."});
+                        else {
+                            logger.error("[Lockdown Command Error]", error);
+                            await interaction.editReply({content: "An error occurred executing this command."});
+                        }
                     }
                     break;
                 }
@@ -2926,35 +2947,35 @@ module.exports = {
 
                     // Validate color input
                     if (color && !/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
-                      return interaction.editReply({content: "❌ Invalid color format. Please use a valid hex color code (e.g., #3498DB).", ephemeral: true});
+                        return interaction.editReply({content: "❌ Invalid color format. Please use a valid hex color code (e.g., #3498DB).", ephemeral: true});
                     }
 
                     try {
-                      const announcementContent = {
-                        content: mentionRole ? `${mentionRole}` : undefined,
-                      };
+                        const announcementContent = {
+                            content: mentionRole ? `${mentionRole}` : undefined,
+                        };
 
-                      if (title) {
-                        // If a title is provided, send as an embed
-                        const embed = new EmbedBuilder()
-                          .setTitle(title)
-                          .setDescription(message)
-                          .setColor(color || "#5865F2") // Default color if none provided or invalid
-                          .setTimestamp();
+                        if (title) {
+                            // If a title is provided, send as an embed
+                            const embed = new EmbedBuilder()
+                                .setTitle(title)
+                                .setDescription(message)
+                                .setColor(color || "#5865F2") // Default color if none provided
+                                .setTimestamp();
 
-                        announcementContent.embeds = [embed];
-                      } else {
-                        // Otherwise, send as a plain message
-                        announcementContent.content = `${announcementContent.content || ""} ${message}`.trim();
-                      }
+                            announcementContent.embeds = [embed];
+                        } else {
+                            // Otherwise, send as a plain message
+                            announcementContent.content = `${announcementContent.content || ""} ${message}`.trim();
+                        }
 
-                      await channel.send(announcementContent);
+                        await channel.send(announcementContent);
 
-                      await interaction.editReply(`✅ Announcement successfully sent to ${channel}.`);
+                        await interaction.editReply(`✅ Announcement successfully sent to ${channel}.`);
 
                     } catch (error) {
-                      console.error("[Announce Command Error]", error);
-                      await interaction.editReply("Failed to send the announcement. Please check my permissions for that channel.");
+                        console.error("[Announce Command Error]", error);
+                        await interaction.editReply("Failed to send the announcement. Please check my permissions for that channel.");
                     }
                     break;
                 }
@@ -2964,73 +2985,73 @@ module.exports = {
             }
         } else if (subcommandGroup === 'backup') {
             try {
-              if (subcommand === "create") {
-                await interaction.deferReply({ephemeral: true});
-                const name = interaction.options.getString("name");
+                if (subcommand === "create") {
+                    await interaction.deferReply({ephemeral: true});
+                    const name = interaction.options.getString("name");
 
-                let snapshot;
-                try {
-                  snapshot = await createSnapshot(guild);
-                } catch (snapshotError) {
-                  logger.error(`[Backup Command] Error creating snapshot for guild ${guild.id}:`, {error: snapshotError});
-                  return interaction.editReply({content: "❌ Failed to create backup snapshot. Please check bot permissions and try again."});
+                    let snapshot;
+                    try {
+                        snapshot = await createSnapshot(guild);
+                    } catch (snapshotError) {
+                        logger.error(`[Backup Command] Error creating snapshot for guild ${guild.id}:`, {error: snapshotError});
+                        return interaction.editReply({content: "❌ Failed to create backup snapshot. Please check bot permissions and try again."});
+                    }
+
+                    await db.execute(
+                        "INSERT INTO server_backups (guild_id, snapshot_name, snapshot_json, created_by_id) VALUES (?, ?, ?, ?)",
+                        [guild.id, name, JSON.stringify(snapshot), interaction.user.id]
+                    );
+
+                    await interaction.editReply(`✅ Successfully created backup named **${name}**.`);
+
+                } else if (subcommand === "list") {
+                    await interaction.deferReply({ephemeral: true});
+                    const [backups] = await db.execute("SELECT id, snapshot_name, created_at, created_by_id FROM server_backups WHERE guild_id = ? ORDER BY created_at DESC", [guild.id]);
+
+                    if (backups.length === 0) {
+                        return interaction.editReply("No backups found for this server.");
+                    }
+
+                    const description = backups.map(b => `**ID:** \`${b.id}\`\n**Name:** ${b.snapshot_name}\n**Date:** ${new Date(b.created_at).toLocaleString()}`).join("\n\n");
+                    const embed = new EmbedBuilder()
+                        .setTitle(`Backups for ${guild.name}`)
+                        .setColor("#5865F2")
+                        .setDescription(description);
+
+                    await interaction.editReply({embeds: [embed]});
+
+                } else if (subcommand === "load") {
+                    const backupId = interaction.options.getString("backup_id");
+                    const [[backup]] = await db.execute("SELECT * FROM server_backups WHERE id = ? AND guild_id = ?", [backupId, guild.id]);
+
+                    if (!backup) {
+                        return interaction.reply({content: "Backup not found.", ephemeral: true});
+                    }
+
+                    const confirmationEmbed = new EmbedBuilder()
+                        .setTitle("⚠️ FINAL CONFIRMATION REQUIRED ⚠️")
+                        .setDescription(`You are about to restore the server to the state from **${new Date(backup.created_at).toLocaleString()}** named **"${backup.snapshot_name}"**.\n\n**THIS WILL DELETE ALL CURRENT ROLES AND CHANNELS** and replace them with the ones from the backup. This action is irreversible.\n\nOnly the server owner can confirm this action.`)
+                        .setColor("Red");
+
+                    const confirmButton = new ButtonBuilder().setCustomId(`backup_confirm_${backupId}`).setLabel("Confirm & Restore Server").setStyle(ButtonStyle.Danger);
+                    const cancelButton = new ButtonBuilder().setCustomId("backup_cancel").setLabel("Cancel").setStyle(ButtonStyle.Secondary);
+                    const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
+
+                    await interaction.reply({embeds: [confirmationEmbed], components: [row], ephemeral: true});
+
+                } else if (subcommand === "delete") {
+                    await interaction.deferReply({ephemeral: true});
+                    const backupId = interaction.options.getString("backup_id");
+                    const [result] = await db.execute("DELETE FROM server_backups WHERE id = ? AND guild_id = ?", [backupId, guild.id]);
+                    if (result.affectedRows > 0) {
+                        await interaction.editReply(`✅ Successfully deleted backup with ID \`${backupId}\`.`);
+                    } else {
+                        await interaction.editReply(`❌ No backup found with ID \`${backupId}\` for this server.`);
+                    }
                 }
-
-                await db.execute(
-                  "INSERT INTO server_backups (guild_id, snapshot_name, snapshot_json, created_by_id) VALUES (?, ?, ?, ?)",
-                  [guild.id, name, JSON.stringify(snapshot), interaction.user.id]
-                );
-
-                await interaction.editReply(`✅ Successfully created backup named **${name}**.`);
-
-              } else if (subcommand === "list") {
-                await interaction.deferReply({ephemeral: true});
-                const [backups] = await db.execute("SELECT id, snapshot_name, created_at, created_by_id FROM server_backups WHERE guild_id = ? ORDER BY created_at DESC", [guild.id]);
-
-                if (backups.length === 0) {
-                  return interaction.editReply("No backups found for this server.");
-                }
-
-                const description = backups.map(b => `**ID:** \`${b.id}\`\\n**Name:** ${b.snapshot_name}\\n**Date:** ${new Date(b.created_at).toLocaleString()}`).join("\\n\\n");
-                const embed = new EmbedBuilder()
-                  .setTitle(`Backups for ${guild.name}`)
-                  .setColor("#5865F2")
-                  .setDescription(description);
-
-                await interaction.editReply({embeds: [embed]});
-
-              } else if (subcommand === "load") {
-                const backupId = interaction.options.getString("backup_id");
-                const [[backup]] = await db.execute("SELECT * FROM server_backups WHERE id = ? AND guild_id = ?", [backupId, guild.id]);
-
-                if (!backup) {
-                  return interaction.reply({content: "Backup not found.", ephemeral: true});
-                }
-
-                const confirmationEmbed = new EmbedBuilder()
-                  .setTitle("⚠️ FINAL CONFIRMATION REQUIRED ⚠️")
-                  .setDescription(`You are about to restore the server to the state from **${new Date(backup.created_at).toLocaleString()}** named **\\"${backup.snapshot_name}\\"**.\\n\\n**THIS WILL DELETE ALL CURRENT ROLES AND CHANNELS** and replace them with the ones from the backup. This action is irreversible.\\n\\nOnly the server owner can confirm this action.`)
-                  .setColor("Red");
-
-                const confirmButton = new ButtonBuilder().setCustomId(`backup_confirm_${backupId}`).setLabel("Confirm & Restore Server").setStyle(ButtonStyle.Danger);
-                const cancelButton = new ButtonBuilder().setCustomId("backup_cancel").setLabel("Cancel").setStyle(ButtonStyle.Secondary);
-                const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
-
-                await interaction.reply({embeds: [confirmationEmbed], components: [row], ephemeral: true});
-
-              } else if (subcommand === "delete") {
-                await interaction.deferReply({ephemeral: true});
-                const backupId = interaction.options.getString("backup_id");
-                const [result] = await db.execute("DELETE FROM server_backups WHERE id = ? AND guild_id = ?", [backupId, guild.id]);
-                if (result.affectedRows > 0) {
-                  await interaction.editReply(`✅ Successfully deleted backup with ID \`${backupId}\`.`);
-                } else {
-                  await interaction.editReply(`❌ No backup found with ID \`${backupId}\` for this server.`);
-                }
-              }
             } catch (error) {
-              logger.error(`[Backup Command] Subcommand: ${subcommand}`, {error});
-              await interaction.editReply({content: "An error occurred while executing this command."});
+                logger.error(`[Backup Command] Subcommand: ${subcommand}`, {error});
+                await interaction.editReply({content: "An error occurred while executing this command."});
             }
         } else if (subcommandGroup === 'fun') {
             switch (subcommand) {
@@ -3104,7 +3125,7 @@ module.exports = {
                         await interaction.editReply({embeds: [embed]});
                     } catch (error) {
                         console.error('[Cat Command Error]', error);
-                        await interaction.editReply('Sorry, I couldn\\'t fetch a cat picture right now.');
+                        await interaction.editReply('Sorry, I couldn\'t fetch a cat picture right now.');
                     }
                     break;
                 }
@@ -3113,58 +3134,56 @@ module.exports = {
                     break;
             }
         } else if (subcommandGroup === 'events') {
-            // Event management logic will go here
+            await interaction.reply({ content: 'This command group is not yet implemented.', ephemeral: true });
         } else if (subcommandGroup === 'core') {
-            // Core commands logic will go here
+            await interaction.reply({ content: 'This command group is not yet implemented.', ephemeral: true });
         } else if (subcommandGroup === 'custom-command') {
             try {
-              if (subcommand === "create") {
-                await interaction.deferReply({ephemeral: true});
-                const name = interaction.options.getString("name").toLowerCase();
-                const actionType = interaction.options.getString("action-type");
-                const actionContent = interaction.options.getString("response-or-role-id");
-                const requiredRoles = interaction.options.getString("required-roles")?.split(",").map(id => id.trim());
-                const allowedChannels = interaction.options.getString("allowed-channels")?.split(",").map(id => id.trim());
+                if (subcommand === "create") {
+                    await interaction.deferReply({ephemeral: true});
+                    const name = interaction.options.getString("name").toLowerCase();
+                    const actionType = interaction.options.getString("action-type");
+                    const actionContent = interaction.options.getString("response-or-role-id");
+                    const requiredRoles = interaction.options.getString("required-roles")?.split(",").map(id => id.trim());
+                    const allowedChannels = interaction.options.getString("allowed-channels")?.split(",").map(id => id.trim());
 
-                await db.execute(
-                  `INSERT INTO custom_commands (guild_id, command_name, response, action_type, action_content, required_roles, allowed_channels) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?) 
-                     ON DUPLICATE KEY UPDATE response=VALUES(response), action_type=VALUES(action_type), action_content=VALUES(action_content), required_roles=VALUES(required_roles), allowed_channels=VALUES(allowed_channels)`,
-                  [guild.id, name, actionContent, actionType, actionContent, JSON.stringify(requiredRoles || []), JSON.stringify(allowedChannels || [])]
-                );
-                invalidateCommandCache(guild.id, name);
-                await interaction.editReply(`✅ Advanced custom command \`${name}\` has been created/updated.`);
+                    await db.execute(
+                        `INSERT INTO custom_commands (guild_id, command_name, action_type, action_content, required_roles, allowed_channels) \n                     VALUES (?, ?, ?, ?, ?, ?) \n                     ON DUPLICATE KEY UPDATE action_type=VALUES(action_type), action_content=VALUES(action_content), required_roles=VALUES(required_roles), allowed_channels=VALUES(allowed_channels)`,
+                        [guild.id, name, actionType, actionContent, JSON.stringify(requiredRoles || []), JSON.stringify(allowedChannels || [])]
+                    );
+                    invalidateCommandCache(guild.id, name);
+                    await interaction.editReply(`✅ Advanced custom command \`${name}\` has been created/updated.`);
 
-              } else if (subcommand === "remove") {
-                await interaction.deferReply({ephemeral: true});
-                const name = interaction.options.getString("name").toLowerCase();
-                const [result] = await db.execute("DELETE FROM custom_commands WHERE guild_id = ? AND command_name = ?", [guild.id, name]);
-                if (result.affectedRows > 0) {
-                  invalidateCommandCache(guild.id, name);
-                  await interaction.editReply(`🗑️ Custom command \`${name}\` has been deleted.`);
-                } else {
-                  await interaction.editReply(`❌ No custom command found with the name \`${name}\`.`);
+                } else if (subcommand === "remove") {
+                    await interaction.deferReply({ephemeral: true});
+                    const name = interaction.options.getString("name").toLowerCase();
+                    const [result] = await db.execute("DELETE FROM custom_commands WHERE guild_id = ? AND command_name = ?", [guild.id, name]);
+                    if (result.affectedRows > 0) {
+                        invalidateCommandCache(guild.id, name);
+                        await interaction.editReply(`🗑️ Custom command \`${name}\` has been deleted.`);
+                    } else {
+                        await interaction.editReply(`❌ No custom command found with the name \`${name}\`.`);
+                    }
+
+                } else if (subcommand === "list") {
+                    await interaction.deferReply({ephemeral: true});
+                    const [commands] = await db.execute("SELECT command_name, action_type FROM custom_commands WHERE guild_id = ? ORDER BY command_name", [guild.id]);
+                    if (commands.length === 0) {
+                        return interaction.editReply("There are no custom commands on this server.");
+                    }
+                    const embed = new EmbedBuilder()
+                        .setColor("#5865F2")
+                        .setTitle(`Custom Commands for ${interaction.guild.name}`)
+                        .setDescription(commands.map(cmd => `\`${cmd.command_name}\` (*${cmd.action_type}*)`).join("\n"));
+                    await interaction.editReply({embeds: [embed]});
                 }
-
-              } else if (subcommand === "list") {
-                await interaction.deferReply({ephemeral: true});
-                const [commands] = await db.execute("SELECT command_name, action_type FROM custom_commands WHERE guild_id = ? ORDER BY command_name", [guild.id]);
-                if (commands.length === 0) {
-                  return interaction.editReply("There are no custom commands on this server.");
-                }
-                const embed = new EmbedBuilder()
-                  .setColor("#5865F2")
-                  .setTitle(`Custom Commands for ${interaction.guild.name}`)
-                  .setDescription(commands.map(cmd => `\`${cmd.command_name}\` (*${cmd.action_type}*)`).join("\\n"));
-                await interaction.editReply({embeds: [embed]});
-              }
             } catch (error) {
-              if (error.code === "ER_BAD_FIELD_ERROR") {
-                await interaction.editReply("The database tables for this feature have not been fully updated yet. Please ask the bot owner to update the schema.");
-              } else {
-                logger.error("[CustomCommand Error]", error);
-                await interaction.editReply({content: "An error occurred while managing custom commands."});
-              }
+                if (error.code === "ER_BAD_FIELD_ERROR" || error.code === "ER_NO_SUCH_TABLE") {
+                    await interaction.editReply("The database tables for this feature have not been fully updated yet. Please ask the bot owner to update the schema.");
+                } else {
+                    logger.error("[CustomCommand Error]", error);
+                    await interaction.editReply({content: "An error occurred while managing custom commands."});
+                }
             }
         } else {
             await interaction.reply({ content: 'Invalid manage subcommand group.', ephemeral: true });
