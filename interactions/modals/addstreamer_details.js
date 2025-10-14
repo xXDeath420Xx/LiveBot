@@ -3,7 +3,7 @@ const db = require("../../utils/db");
 const twitchApi = require("../../utils/twitch-api");
 const kickApi = require("../../utils/kick-api");
 const { getYouTubeChannelId } = require("../../utils/api_checks");
-const {pendingInteractions} = require("../../commands/addstreamer");
+const {pendingInteractions} = require("../pending-interactions");
 
 module.exports = {
   customId: /^addstreamer_details_/,

@@ -334,6 +334,30 @@ function start(botClient) {
     }
   });
 
+  app.post("/manage/:guildId/music/dj", checkAuth, checkGuildAdmin, async (req, res) => {
+    const { guildId } = req.params;
+    const { djEnabled, djVoice } = req.body;
+
+    const isDjEnabled = djEnabled === 'on' ? 1 : 0;
+    const voice = ['male', 'female'].includes(djVoice) ? djVoice : 'female';
+
+    try {
+        await db.execute(
+            `INSERT INTO music_config (guild_id, dj_enabled, dj_voice)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+                dj_enabled = VALUES(dj_enabled),
+                dj_voice = VALUES(dj_voice)`,
+            [guildId, isDjEnabled, voice]
+        );
+        logger.info(`[Dashboard] AI DJ settings updated for guild ${guildId}.`, { guildId, category: "music" });
+        res.redirect(`/manage/${guildId}/music?success=AI DJ settings saved successfully.`);
+    } catch (error) {
+        logger.error(`[Dashboard] Failed to update AI DJ settings for guild ${guildId}:`, { guildId, error: error.message, stack: error.stack, category: "music" });
+        res.redirect(`/manage/${guildId}/music?error=Failed to save AI DJ settings.`);
+    }
+  });
+
   app.post("/manage/:guildId/update-channel-webhooks", checkAuth, checkGuildAdmin, async (req, res) => {
     const {guildId} = req.params;
     const {channel_webhooks} = req.body;

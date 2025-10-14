@@ -26,6 +26,7 @@
     "dotenv": "^16.4.5",
     "dotenv-flow": "^4.1.0",
     "ejs": "^3.1.10",
+    "elevenlabs": "^1.59.0",
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "fast-xml-parser": "^4.2.5",
@@ -39,6 +40,7 @@
     "passport-discord": "^0.1.4",
     "playwright-core": "^1.45.1",
     "pm2": "^6.0.13",
+    "spotify-web-api-node": "^5.0.2",
     "undici": "^5.28.2",
     "winston": "^3.13.0",
     "ytdlp-nodejs": "^2.1.1"

@@ -7,6 +7,7 @@ const {YtDlp} = require("ytdlp-nodejs");
 const path = require("path");
 const fs = require("fs");
 const { getCycleTLSInstance } = require("./utils/tls-manager.js"); // Corrected import
+const DJManager = require("./core/dj-manager.js"); // Import the manager
 
 // --- ytdlp-nodejs Setup ---
 const ytdlp = new YtDlp();
@@ -111,6 +112,10 @@ async function start() {
   client.player = player;
   console.log(" Player Initialized.");
 
+  // Initialize the DJ Manager
+  client.djManager = new DJManager(client.player); // Attach it to the client
+  console.log(" DJ Manager Initialized.");
+
   client.player.events.on("debug", (queue, message) => {
     if (message.includes("")) {
       return;
@@ -213,26 +218,44 @@ async function start() {
 
   client.player.events.on("playerStart", async (queue, track) => {
     const channel = await client.channels.cache.get(queue.metadata.channelId);
-    if (!channel) {
-      return;
+    if (channel && !track.isDJCommentary) {
+        const embed = new EmbedBuilder()
+            .setColor("#57F287")
+            .setAuthor({name: "Now Playing"})
+            .setTitle(track.title)
+            .setURL(track.url)
+            .setThumbnail(track.thumbnail)
+            .addFields(
+                {name: "Channel", value: track.author || "N/A", inline: true},
+                {name: "Duration", value: track.duration || "0:00", inline: true}
+            )
+            .setFooter({text: `Requested by ${track.requestedBy.tag}`});
+
+        channel.send({embeds: [embed]});
     }
 
-    const embed = new EmbedBuilder()
-      .setColor("#57F287")
-      .setAuthor({name: "Now Playing"})
-      .setTitle(track.title)
-      .setURL(track.url)
-      .setThumbnail(track.thumbnail)
-      .addFields(
-        {name: "Channel", value: track.author || "N/A", inline: true},
-        {name: "Duration", value: track.duration || "0:00", inline: true}
-      )
-      .setFooter({text: `Requested by ${track.requestedBy.tag}`});
-
-    channel.send({embeds: [embed]});
+    // Log to music_history table
+    if (track.requestedBy && !track.isDJCommentary) { // Don't log DJ commentary tracks or tracks without a requester
+        try {
+            await db.execute(
+                `INSERT INTO music_history (guild_id, user_id, song_title, song_url, artist, timestamp)
+                 VALUES (?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE timestamp = NOW()`, // Update timestamp if song is replayed
+                [
+                    queue.guild.id,
+                    track.requestedBy.id,
+                    track.title,
+                    track.url,
+                    track.author
+                ]
+            );
+        } catch (error) {
+            logger.error(`[DB] Failed to log song to music_history for guild ${queue.guild.id}`, { error: error.message });
+        }
+    }
   });
 
   client.player.events.on("audioTrackAdd", async (queue, track) => {
+    if (track.isDJCommentary) return;
     const channel = await client.channels.cache.get(queue.metadata.channelId);
     if (!channel) {
       return;

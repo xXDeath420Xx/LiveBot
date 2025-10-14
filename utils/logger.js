@@ -76,7 +76,14 @@ class DiscordTransport extends Transport {
                 }
             }
 
-            await channel.send({ embeds: [embed] });
+            const webhooks = await channel.fetchWebhooks();
+            let webhook = webhooks.find(wh => wh.owner.id === botClient.user.id);
+
+            if (webhook) {
+                await webhook.send({ embeds: [embed] });
+            } else {
+                await channel.send({ embeds: [embed] });
+            }
         } catch (error) {
             console.error('[Logger] CRITICAL: Failed to send log to Discord:', error);
         }
