@@ -262,10 +262,10 @@ function start(botClient) {
     const {
         channel_id,
         message,
-        card_enabled,
-        card_title_text,
-        card_subtitle_text,
-        card_background_url,
+        banner_enabled,
+        banner_title_text,
+        banner_subtitle_text,
+        banner_background_url,
         goodbye_enabled,
         goodbye_channel_id,
         goodbye_message
@@ -273,10 +273,10 @@ function start(botClient) {
 
     const welcomeChannelId = channel_id || null;
     const welcomeMessage = message || '';
-    const cardEnabled = card_enabled === 'on' ? 1 : 0;
-    const cardTitle = card_title_text || 'Welcome, {user}!';
-    const cardSubtitle = card_subtitle_text || 'Welcome to {server}!';
-    const cardBackground = card_background_url || null;
+    const bannerEnabled = banner_enabled === 'on' ? 1 : 0;
+    const bannerTitle = banner_title_text || 'Welcome, {user}!';
+    const bannerSubtitle = banner_subtitle_text || 'Welcome to {server}!';
+    const bannerBackground = banner_background_url || null;
     const goodbyeEnabled = goodbye_enabled === 'on' ? 1 : 0;
     const goodbyeChannelId = goodbye_channel_id || null;
     const goodbyeMessage = goodbye_message || '';
@@ -284,23 +284,23 @@ function start(botClient) {
     try {
         await db.execute(
             `INSERT INTO welcome_settings (
-                guild_id, channel_id, message, card_enabled, card_title_text, 
-                card_subtitle_text, card_background_url, goodbye_enabled, 
+                guild_id, channel_id, message, banner_enabled, banner_title_text, 
+                banner_subtitle_text, banner_background_url, goodbye_enabled, 
                 goodbye_channel_id, goodbye_message
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE 
                 channel_id = VALUES(channel_id), 
                 message = VALUES(message), 
-                card_enabled = VALUES(card_enabled), 
-                card_title_text = VALUES(card_title_text), 
-                card_subtitle_text = VALUES(card_subtitle_text), 
-                card_background_url = VALUES(card_background_url), 
+                banner_enabled = VALUES(banner_enabled), 
+                banner_title_text = VALUES(banner_title_text), 
+                banner_subtitle_text = VALUES(banner_subtitle_text), 
+                banner_background_url = VALUES(banner_background_url), 
                 goodbye_enabled = VALUES(goodbye_enabled), 
                 goodbye_channel_id = VALUES(goodbye_channel_id), 
                 goodbye_message = VALUES(goodbye_message)`,
             [
-                guildId, welcomeChannelId, welcomeMessage, cardEnabled, cardTitle,
-                cardSubtitle, cardBackground, goodbyeEnabled, goodbyeChannelId, goodbyeMessage
+                guildId, welcomeChannelId, welcomeMessage, bannerEnabled, bannerTitle,
+                bannerSubtitle, bannerBackground, goodbyeEnabled, goodbyeChannelId, goodbyeMessage
             ]
         );
         logger.info(`[Dashboard] Welcome settings updated for guild ${guildId}.`, { guildId, category: "welcome" });

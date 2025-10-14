@@ -27,13 +27,13 @@ async function handleGuildMemberAdd(member) {
             .replace(/{server}/g, member.guild.name)
             .replace(/{memberCount}/g, member.guild.memberCount);
 
-        if (config.card_enabled) {
+        if (config.banner_enabled) {
             const canvas = Canvas.createCanvas(700, 250);
             const ctx = canvas.getContext('2d');
 
             // Background
             try {
-                const background = await Canvas.loadImage(config.card_background_url || path.join(__dirname, '..', 'assets', 'images', 'default-welcome-bg.png'));
+                const background = await Canvas.loadImage(config.banner_background_url || path.join(__dirname, '..', 'assets', 'images', 'default-welcome-bg.png'));
                 ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
             } catch (e) {
                 logger.error('Failed to load welcome card background.', { guildId, category: 'greeting', error: e.stack });
