@@ -226,11 +226,16 @@ function start(botClient) {
   app.get("/status", (req, res) => res.render("status", {user: getSanitizedUser(req)}));
   app.get("/donate", (req, res) => res.render("donate", {user: getSanitizedUser(req)}));
 
-  app.get("/manage/:guildId/:page?", checkAuth, checkGuildAdmin, async (req, res, next) => {
-    const page = req.params.page || "streamers";
-    const viewPath = path.join(__dirname, "views", "partials", "manage", `${page}.ejs`);
+  // --- Manage Pages --- 
+  const managePages = [
+    'streamers', 'teams', 'appearance', 'welcome', 'reaction-roles', 'starboard',
+    'leveling', 'giveaways', 'polls', 'music', 'moderation', 'automod', 'security',
+    'stat-roles', 'logging', 'feeds', 'twitch-schedules', 'utilities', 'custom-commands',
+    'embed-builder', 'tickets', 'record', 'backups'
+  ];
 
-    if (fs.existsSync(viewPath)) {
+  managePages.forEach(page => {
+    app.get(`/manage/:guildId/${page}`, checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const data = await getManagePageData(req.params.guildId, req.guildObject);
             res.render("manage", {
@@ -240,15 +245,72 @@ function start(botClient) {
                 page: page
             });
         } catch (error) {
-            logger.error(`[CRITICAL] Error rendering manage page:`, { guildId: req.params.guildId, error: error.message, stack: error.stack });
+            logger.error(`[CRITICAL] Error rendering manage page '${page}':`, { guildId: req.params.guildId, error: error.message, stack: error.stack });
             res.status(500).render("error", { user: getSanitizedUser(req), error: "Critical error loading server data." });
         }
-    } else {
-        next();
-    }
-});
+    });
+  });
 
-  // Music Configuration Update Route
+  app.get("/manage/:guildId", checkAuth, checkGuildAdmin, (req, res) => {
+      res.redirect(`/manage/${req.params.guildId}/streamers`);
+  });
+
+  // --- Form Submissions ---
+
+  app.post("/manage/:guildId/update-welcome", checkAuth, checkGuildAdmin, async (req, res) => {
+    const { guildId } = req.params;
+    const {
+        channel_id,
+        message,
+        card_enabled,
+        card_title_text,
+        card_subtitle_text,
+        card_background_url,
+        goodbye_enabled,
+        goodbye_channel_id,
+        goodbye_message
+    } = req.body;
+
+    const welcomeChannelId = channel_id || null;
+    const welcomeMessage = message || '';
+    const cardEnabled = card_enabled === 'on' ? 1 : 0;
+    const cardTitle = card_title_text || 'Welcome, {user}!';
+    const cardSubtitle = card_subtitle_text || 'Welcome to {server}!';
+    const cardBackground = card_background_url || null;
+    const goodbyeEnabled = goodbye_enabled === 'on' ? 1 : 0;
+    const goodbyeChannelId = goodbye_channel_id || null;
+    const goodbyeMessage = goodbye_message || '';
+
+    try {
+        await db.execute(
+            `INSERT INTO welcome_settings (
+                guild_id, channel_id, message, card_enabled, card_title_text, 
+                card_subtitle_text, card_background_url, goodbye_enabled, 
+                goodbye_channel_id, goodbye_message
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+                channel_id = VALUES(channel_id), 
+                message = VALUES(message), 
+                card_enabled = VALUES(card_enabled), 
+                card_title_text = VALUES(card_title_text), 
+                card_subtitle_text = VALUES(card_subtitle_text), 
+                card_background_url = VALUES(card_background_url), 
+                goodbye_enabled = VALUES(goodbye_enabled), 
+                goodbye_channel_id = VALUES(goodbye_channel_id), 
+                goodbye_message = VALUES(goodbye_message)`,
+            [
+                guildId, welcomeChannelId, welcomeMessage, cardEnabled, cardTitle,
+                cardSubtitle, cardBackground, goodbyeEnabled, goodbyeChannelId, goodbyeMessage
+            ]
+        );
+        logger.info(`[Dashboard] Welcome settings updated for guild ${guildId}.`, { guildId, category: "welcome" });
+        res.redirect(`/manage/${guildId}/welcome?success=Welcome and farewell settings saved successfully.`);
+    } catch (error) {
+        logger.error(`[Dashboard] Failed to update welcome settings for guild ${guildId}:`, { guildId, error: error.message, stack: error.stack, category: "welcome" });
+        res.redirect(`/manage/${guildId}/welcome?error=Failed to save welcome and farewell settings.`);
+    }
+  });
+
   app.post("/manage/:guildId/music/config", checkAuth, checkGuildAdmin, async (req, res) => {
     const {guildId} = req.params;
     const {enabled, djRoleId} = req.body;
@@ -272,7 +334,6 @@ function start(botClient) {
     }
   });
 
-  // DEFINITIVE FIX: Add route for updating channel webhook overrides
   app.post("/manage/:guildId/update-channel-webhooks", checkAuth, checkGuildAdmin, async (req, res) => {
     const {guildId} = req.params;
     const {channel_webhooks} = req.body;
@@ -398,7 +459,7 @@ function start(botClient) {
         }
     });
 
-    app.get("/api/authenticated-logs", checkAuth, checkSuperAdmin, async (req, res) => {
+    app.get("//api/authenticated-logs", checkAuth, checkSuperAdmin, async (req, res) => {
         try {
             const logDir = path.join(__dirname, '..', 'logs');
             const files = await fs.promises.readdir(logDir);
