@@ -80,7 +80,7 @@
                     'automod': { partial: 'automod', data: { guild, rules: automodRules, heatConfig } },
                     'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles } },
                     'stat-roles': { partial: 'stat-roles', data: { guild, statroles: statroleConfigs, roles } },
-                    'logging': { partial: 'logging', data: { guild, settings: logConfig, actionLogs, channels } },
+                    'logging': { partial: 'logging', data: { guild, settings: logConfig, actionLogs, channels, channelSettingsMap: channelSettingsMap } },
                     'feeds': { partial: 'feeds', data: { guild, redditFeeds, youtubeFeeds, twitterFeeds, channels } },
                     'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
                     'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },

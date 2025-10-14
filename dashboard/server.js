@@ -226,16 +226,27 @@ function start(botClient) {
   app.get("/status", (req, res) => res.render("status", {user: getSanitizedUser(req)}));
   app.get("/donate", (req, res) => res.render("donate", {user: getSanitizedUser(req)}));
 
-  app.get("/manage/:guildId/:page?", checkAuth, checkGuildAdmin, async (req, res) => {
-    try {
-      const page = req.params.page || "streamers";
-      const data = await getManagePageData(req.params.guildId, req.guildObject);
-      res.render("manage", {...data, user: getSanitizedUser(req), guild: sanitizeGuild(req.guildObject), page});
-    } catch (error) {
-      logger.error(`[CRITICAL] Error rendering manage page:`, {guildId: req.params.guildId, error: error.message, stack: error.stack});
-      res.status(500).render("error", {user: getSanitizedUser(req), error: "Critical error loading server data."});
+  app.get("/manage/:guildId/:page?", checkAuth, checkGuildAdmin, async (req, res, next) => {
+    const page = req.params.page || "streamers";
+    const viewPath = path.join(__dirname, "views", "partials", "manage", `${page}.ejs`);
+
+    if (fs.existsSync(viewPath)) {
+        try {
+            const data = await getManagePageData(req.params.guildId, req.guildObject);
+            res.render("manage", {
+                ...data,
+                user: getSanitizedUser(req),
+                guild: sanitizeGuild(req.guildObject),
+                page: page
+            });
+        } catch (error) {
+            logger.error(`[CRITICAL] Error rendering manage page:`, { guildId: req.params.guildId, error: error.message, stack: error.stack });
+            res.status(500).render("error", { user: getSanitizedUser(req), error: "Critical error loading server data." });
+        }
+    } else {
+        next();
     }
-  });
+});
 
   // Music Configuration Update Route
   app.post("/manage/:guildId/music/config", checkAuth, checkGuildAdmin, async (req, res) => {
@@ -287,6 +298,31 @@ function start(botClient) {
     } catch (error) {
       logger.error(`[Dashboard] Failed to update webhook overrides for guild ${guildId}:`, {guildId, error: error.message, stack: error.stack, category: "dashboard"});
       res.redirect(`/manage/${guildId}/logging?error=Failed to save webhook overrides.`);
+    }
+  });
+
+  app.post("/manage/:guildId/update-logging", checkAuth, checkGuildAdmin, async (req, res) => {
+    const { guildId } = req.params;
+    const { log_channel_id, enabled_logs, log_categories } = req.body;
+
+    const defaultLogChannelId = log_channel_id || null;
+    const enabledLogsJson = JSON.stringify(enabled_logs || []);
+    const categoryChannelsJson = JSON.stringify(log_categories || {});
+
+    try {
+        await db.execute(
+            `INSERT INTO log_config (guild_id, log_channel_id, enabled_logs, log_categories)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE log_channel_id = VALUES(log_channel_id),
+                               enabled_logs   = VALUES(enabled_logs),
+                               log_categories = VALUES(log_categories)`,
+            [guildId, defaultLogChannelId, enabledLogsJson, categoryChannelsJson]
+        );
+        logger.info(`[Dashboard] Log config updated for guild ${guildId}.`, { guildId, category: "logging" });
+        res.redirect(`/manage/${guildId}/logging?success=Log configuration saved successfully.`);
+    } catch (error) {
+        logger.error(`[Dashboard] Failed to update log config for guild ${guildId}:`, { guildId, error: error.message, stack: error.stack, category: "logging" });
+        res.redirect(`/manage/${guildId}/logging?error=Failed to save log configuration.`);
     }
   });
 
