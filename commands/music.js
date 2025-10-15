@@ -1,22 +1,22 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionsBitField } = require('discord.js');
-const { useMainPlayer, QueueRepeatMode } = require("discord-player");
+const { useMainPlayer, QueueRepeatMode, QueryType } = require("discord-player");
 const { checkMusicPermissions } = require("../utils/music_helpers");
 const db = require("../utils/db");
 const axios = require("axios");
 const path = require("path");
-const spotifyApiModule = require("../utils/spotify-api.js"); // Changed import to use direct relative path
+const spotifyApiModule = require("../utils/spotify-api.js");
+const elevenlabsApi = require("../utils/elevenlabs-api.js");
+const geminiApi = require("../utils/gemini-api.js");
 const { joinVoiceChannel, createAudioReceiver, EndBehaviorType } = require("@discordjs/voice");
 const fs = require("fs");
 const prism = require("prism-media");
-const logger = require("../utils/logger");
 
 function toMilliseconds(timeString) {
-    const timeRegex = /(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/;
+    const timeRegex = /(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?/;
     const matches = timeString.match(timeRegex);
     if (!matches) {
         return 0;
     }
-
     const hours = parseInt(matches[1], 10) || 0;
     const minutes = parseInt(matches[2], 10) || 0;
     const seconds = parseInt(matches[3], 10) || 0;
@@ -36,11 +36,11 @@ module.exports = {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('skip')
-                .setDescription('Skips the current song.'))
+                .setDescription('Skips the current song'))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('stop')
-                .setDescription('Stops the music and clears the queue.'))
+                .setDescription('Stops the music and clears the queue'))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('pause')
@@ -52,141 +52,157 @@ module.exports = {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('queue')
-                .setDescription('Displays the current music queue.'))
+                .setDescription('Displays the current music queue'))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('nowplaying')
-                .setDescription('Displays information about the currently playing song.'))
+                .setDescription('Displays information about the currently playing song'))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('loop')
-                .setDescription('Sets the loop mode for the music player.')
+                .setDescription('Sets the loop mode for the music player')
                 .addIntegerOption(option =>
                     option.setName("mode")
-                        .setDescription("The loop mode to set.")
+                        .setDescription("The loop mode to set")
                         .setRequired(true)
                         .addChoices(
-                            {name: "Off", value: QueueRepeatMode.OFF},
-                            {name: "Track", value: QueueRepeatMode.TRACK},
-                            {name: "Queue", value: QueueRepeatMode.QUEUE},
-                            {name: "Autoplay", value: QueueRepeatMode.AUTOPLAY},
+                            { name: "Off", value: QueueRepeatMode.OFF },
+                            { name: "Track", value: QueueRepeatMode.TRACK },
+                            { name: "Queue", value: QueueRepeatMode.QUEUE },
+                            { name: "Autoplay", value: QueueRepeatMode.AUTOPLAY },
                         )))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('lyrics')
-                .setDescription('Gets the lyrics for the currently playing song.'))
+                .setDescription('Gets the lyrics for the currently playing song'))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('volume')
-                .setDescription('Adjusts the playback volume.')
+                .setDescription('Adjusts the playback volume')
                 .addIntegerOption(option =>
                     option.setName("level")
-                        .setDescription("The volume level (0-100).")
+                        .setDescription("The volume level (0-100)")
                         .setRequired(true)
                         .setMinValue(0)
                         .setMaxValue(100)))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('shuffle')
-                .setDescription('Shuffles the current queue.'))
+                .setDescription('Shuffles the current queue'))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('remove')
-                .setDescription('Removes a song from the queue.')
+                .setDescription('Removes a song from the queue')
                 .addIntegerOption(option =>
                     option.setName("track")
-                        .setDescription("The track number to remove.")
+                        .setDescription("The track number to remove")
                         .setRequired(true)
                         .setMinValue(1)))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('search')
-                .setDescription('Searches for a song and lets you choose from the top results.')
+                .setDescription('Searches for a song and lets you choose from the top results')
                 .addStringOption(option =>
                     option.setName("query")
-                        .setDescription("The song to search for.")
+                        .setDescription("The song to search for")
                         .setRequired(true)))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('clear')
-                .setDescription('Clears all songs from the queue.'))
+                .setDescription('Clears all songs from the queue'))
         .addSubcommand(subcommand =>
             subcommand
                 .setName("filter")
-                .setDescription("Applies an audio filter to the music.")
+                .setDescription("Applies an audio filter to the music")
                 .addStringOption(option =>
-                  option.setName("filter")
-                    .setDescription("The filter to apply or remove.")
-                    .setRequired(true)
-                    .addChoices(
-                      {name: "Bassboost", value: "bassboost"},
-                      {name: "Nightcore", value: "nightcore"},
-                      {name: "Vaporwave", value: "vaporwave"},
-                      {name: "8D", value: "8D"},
-                      {name: "Treble", value: "treble"},
-                      {name: "Normalizer", value: "normalizer"}
-                    ))
+                    option.setName("filter")
+                        .setDescription("The filter to apply or remove")
+                        .setRequired(true)
+                        .addChoices(
+                            { name: "Bassboost", value: "bassboost" },
+                            { name: "Nightcore", value: "nightcore" },
+                            { name: "Vaporwave", value: "vaporwave" },
+                            { name: "8D", value: "8D" },
+                            { name: "Treble", value: "treble" },
+                            { name: "Normalizer", value: "normalizer" }
+                        )
+                )
                 .addStringOption(option =>
-                  option.setName("action")
-                    .setDescription("Whether to enable or disable the filter.")
-                    .setRequired(true)
-                    .addChoices(
-                      {name: "Enable", value: "enable"},
-                      {name: "Disable", value: "disable"}
-                    )))
+                    option.setName("action")
+                        .setDescription("Whether to enable or disable the filter")
+                        .setRequired(true)
+                        .addChoices(
+                            { name: "Enable", value: "enable" },
+                            { name: "Disable", value: "disable" }
+                        )
+                )
+        )
         .addSubcommandGroup(group =>
             group
                 .setName('playlist')
-                .setDescription('Manages your custom playlists.')
+                .setDescription('Manages your custom playlists')
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName('create')
-                        .setDescription('Creates a new playlist.')
-                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist.').setRequired(true)))
+                        .setDescription('Creates a new playlist')
+                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist').setRequired(true)))
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName('delete')
-                        .setDescription('Deletes a playlist.')
-                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist to delete.').setRequired(true).setAutocomplete(true)))
+                        .setDescription('Delates a playlist')
+                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist to delete').setRequired(true).setAutocomplete(true)))
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName('add')
-                        .setDescription('Adds the current song to a playlist.')
-                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist.').setRequired(true).setAutocomplete(true)))
+                        .setDescription('Adds the current song to a playlist')
+                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist').setRequired(true).setAutocomplete(true)))
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName('remove')
-                        .setDescription('Removes a song from a playlist.')
-                        .addIntegerOption(option => option.setName('position').setDescription('The position of the song to remove.').setRequired(true).setMinValue(1)))
+                        .setDescription('Removes a song from a playlist')
+                        .addIntegerOption(option => option.setName('position').setDescription('The position of the song to remove').setRequired(true).setMinValue(1)))
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName('list')
-                        .setDescription('Lists all of your playlists.'))
+                        .setDescription('Lists all of your playlists'))
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName('show')
-                        .setDescription('Shows the songs in a playlist.')
-                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist.').setRequired(true).setAutocomplete(true)))
+                        .setDescription('Shows the songs in a playlist')
+                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist').setRequired(true).setAutocomplete(true)))
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName('play')
-                        .setDescription('Plays a playlist.')
-                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist to play.').setRequired(true).setAutocomplete(true))))
+                        .setDescription('Plays a playlist')
+                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist to play').setRequired(true).setAutocomplete(true))))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('dj')
-                .setDescription('Starts an AI DJ session in your voice channel.'))
+                .setDescription('Starts an AI DJ session in your voice channel')
+                .addStringOption(option => option.setName('song').setDescription('A song title to influence the DJ').setRequired(false))
+                .addStringOption(option => option.setName('artist').setDescription('An artist to influence the DJ').setRequired(false))
+                .addStringOption(option => option.setName('genre').setDescription('A genre to influence the DJ').setRequired(false))
+                .addStringOption(option => option.setName('playlist_link').setDescription('A link to a Spotify or YouTube playlist to play').setRequired(false)))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('dj-voice')
+                .setDescription('Sets the AI DJ\'s voice')
+                .addStringOption(option =>
+                    option.setName('voice')
+                        .setDescription('The ElevenLabs voice to use')
+                        .setRequired(true)
+                        .setAutocomplete(true)))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('record')
-                .setDescription('Records the audio in a voice channel.'))
+                .setDescription('Records the audio in a voice channel'))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('seek')
-                .setDescription('Seeks to a specific time in the current song.')
+                .setDescription('Seeks to a specific time in the current song')
                 .addStringOption(option =>
                     option.setName("time")
-                        .setDescription("The time to seek to (e.g., 1m30s, 2h, 45s).")
+                        .setDescription("The time to seek to (e.g., 1m30s, 2h, 45s)")
                         .setRequired(true))),
 
     async autocomplete(interaction) {
@@ -195,10 +211,29 @@ module.exports = {
             const focusedValue = focusedOption.value;
             try {
                 const [playlists] = await db.execute("SELECT name FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name LIKE ? LIMIT 25", [interaction.guild.id, interaction.user.id, `${focusedValue}%`]);
-                await interaction.respond(playlists.map(p => ({name: p.name, value: p.name})));
+                await interaction.respond(playlists.map(p => ({ name: p.name, value: p.name })));
             } catch (error) {
-                console.error("[Playlist Autocomplete Error]", error);
-                await interaction.respond([]);
+                console.error("[Playlist Autocomplete Error]", error.message);
+                await interaction.respond();
+            }
+        } else if (focusedOption.name === "voice") {
+            const focusedValue = interaction.options.getString('voice');
+            try {
+                const voices = await elevenlabsApi.getVoices();
+                if (!voices) {
+                    await interaction.respond();
+                    return;
+                }
+                const filteredVoices = voices.filter(voice =>
+                    voice.name.toLowerCase().includes(focusedValue.toLowerCase())
+                ).map(voice => ({
+                    name: voice.name,
+                    value: voice.voice_id
+                }));
+                await interaction.respond(filteredVoices.slice(0, 25));
+            } catch (error) {
+                console.error("[ElevenLabs Voice Autocomplete Error]", error.message);
+                await interaction.respond();
             }
         }
     },
@@ -215,61 +250,61 @@ module.exports = {
             try {
                 switch (subcommand) {
                     case "create": {
-                        await db.execute("INSERT INTO user_playlists (guild_id, user_id, name, songs) VALUES (?, ?, ?, ?)", [guildId, userId, name, JSON.stringify([])]);
-                        return interaction.reply({content: `✅ Playlist **${name}** created.`, ephemeral: true});
+                        await db.execute("INSERT INTO user_playlists (guild_id, user_id, name, songs) VALUES (?,?,?,?)", [guildId, userId, name, "[]"]);
+                        return interaction.reply({ content: `✅ Playlist **${name}** created.`, ephemeral: true });
                     }
                     case "delete": {
                         const [result] = await db.execute("DELETE FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (result.affectedRows > 0) {
-                            return interaction.reply({content: `🗑️ Playlist **${name}** deleted.`, ephemeral: true});
+                            return interaction.reply({ content: `🗑️ Playlist **${name}** deleted.`, ephemeral: true });
                         } else {
-                            return interaction.reply({content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true});
+                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
                         }
                     }
                     case "add": {
                         const queue = interaction.client.player.nodes.get(guildId);
                         if (!queue || !queue.isPlaying()) {
-                            return interaction.reply({content: "There is nothing playing to add!", ephemeral: true});
+                            return interaction.reply({ content: "There is nothing playing to add!", ephemeral: true });
                         }
                         const currentTrack = queue.currentTrack;
 
                         const [[playlist]] = await db.execute("SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (!playlist) {
-                            return interaction.reply({content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true});
+                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
                         }
 
                         const songs = JSON.parse(playlist.songs);
-                        songs.push({title: currentTrack.title, url: currentTrack.url});
+                        songs.push({ title: currentTrack.title, url: currentTrack.url });
                         await db.execute("UPDATE user_playlists SET songs = ? WHERE playlist_id = ?", [JSON.stringify(songs), playlist.playlist_id]);
 
-                        return interaction.reply({content: `✅ Added **${currentTrack.title}** to the **${name}** playlist.`, ephemeral: true});
+                        return interaction.reply({ content: `✅ Added **${currentTrack.title}** to the **${name}** playlist.`, ephemeral: true });
                     }
                     case "remove": {
                         const position = interaction.options.getInteger("position") - 1;
                         const [[playlist]] = await db.execute("SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (!playlist) {
-                            return interaction.reply({content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true});
+                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
                         }
 
                         const songs = JSON.parse(playlist.songs);
                         if (position < 0 || position >= songs.length) {
-                            return interaction.reply({content: "❌ Invalid song position.", ephemeral: true});
+                            return interaction.reply({ content: "❌ Invalid song position.", ephemeral: true });
                         }
 
-                        const removedSong = songs.splice(position, 1);
+                        const removedSong = songs.splice(position, 1)[0];
                         await db.execute("UPDATE user_playlists SET songs = ? WHERE playlist_id = ?", [JSON.stringify(songs), playlist.playlist_id]);
 
-                        return interaction.reply({content: `🗑️ Removed **${removedSong[0].title}** from the **${name}** playlist.`, ephemeral: true});
+                        return interaction.reply({ content: `🗑️ Removed **${removedSong.title}** from the **${name}** playlist.`, ephemeral: true });
                     }
                     case "list": {
                         const [playlists] = await db.execute("SELECT name FROM user_playlists WHERE guild_id = ? AND user_id = ?", [guildId, userId]);
                         if (playlists.length === 0) {
-                            return interaction.reply({content: "You don't have any playlists yet.", ephemeral: true});
+                            return interaction.reply({ content: "You don't have any playlists yet.", ephemeral: true });
                         }
 
                         const embed = new EmbedBuilder()
                             .setColor("#3498DB")
-                            .setAuthor({name: `${interaction.user.username}\'s Playlists`})
+                            .setAuthor({name: "Server Queue"})
                             .setDescription(playlists.map(p => `• ${p.name}`).join("\n"));
 
                         return interaction.reply({embeds: [embed], ephemeral: true});
@@ -277,7 +312,7 @@ module.exports = {
                     case "show": {
                         const [[playlist]] = await db.execute("SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (!playlist) {
-                            return interaction.reply({content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true});
+                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
                         }
 
                         const songs = JSON.parse(playlist.songs);
@@ -291,50 +326,50 @@ module.exports = {
                     case "play": {
                         const permissionCheck = await checkMusicPermissions(interaction);
                         if (!permissionCheck.permitted) {
-                            return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                            return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                         }
 
                         if (!interaction.member.voice.channel) {
-                            return interaction.reply({content: "You must be in a voice channel to play music!", ephemeral: true});
+                            return interaction.reply({ content: "You must be in a voice channel to play music!", ephemeral: true });
                         }
 
                         const [[playlist]] = await db.execute("SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (!playlist) {
-                            return interaction.reply({content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true});
+                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
                         }
 
                         const songs = JSON.parse(playlist.songs);
                         if (songs.length === 0) {
-                            return interaction.reply({content: `The **${name}** playlist is empty.`, ephemeral: true});
+                            return interaction.reply({ content: `The **${name}** playlist is empty.`, ephemeral: true });
                         }
 
                         await interaction.deferReply();
 
                         try {
-                            // Correctly use the global player to play the playlist tracks
-                            await interaction.client.player.play(interaction.member.voice.channel, songs.map(s => s.url).join("\n"), {
+                            const user = { id: interaction.user.id, tag: interaction.user.tag };
+                            await interaction.client.player.play(interaction.member.voice.channel.id, songs.map(s => s.url).join("\n"), {
                                 nodeOptions: {
                                     metadata: {
-                                        channel: interaction.channel
+                                        channelId: interaction.channel.id
                                     }
                                 },
-                                requestedBy: interaction.user
+                                requestedBy: user
                             });
 
-                            return interaction.followUp({content: `▶️ Now playing the **${name}** playlist.`});
+                            return interaction.followUp({ content: `▶️ Now playing the **${name}** playlist.` });
 
                         } catch (e) {
-                            console.error("[Playlist Play Error]", e);
-                            return interaction.followUp({content: `❌ An error occurred while trying to play the playlist: ${e.message}`});
+                            console.error("[Playlist Play Error]", e.message);
+                            return interaction.followUp({ content: `❌ An error occurred while trying to play the playlist: ${e.message}` });
                         }
                     }
                 }
             } catch (error) {
-                console.error("[Playlist Command Error]", error);
+                console.error("[Playlist Command Error]", error.message);
                 if (error.code === "ER_DUP_ENTRY") {
-                    return interaction.reply({content: `❌ You already have a playlist named **${name}**.`, ephemeral: true});
+                    return interaction.reply({ content: `❌ You already have a playlist named **${name}**.`, ephemeral: true });
                 }
-                return interaction.reply({content: "❌ An error occurred while executing this command.", ephemeral: true});
+                return interaction.reply({ content: "❌ An error occurred while executing this command.", ephemeral: true });
             }
         } else {
             switch (subcommand) {
@@ -344,127 +379,119 @@ module.exports = {
                         return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
+                    if (!interaction.member.voice.channel) {
+                        return interaction.reply({ content: "You must be in a voice channel to play music!", ephemeral: true });
+                    }
+
                     await interaction.deferReply();
 
                     const player = useMainPlayer();
                     const query = interaction.options.getString("query");
 
                     try {
-                        const searchResult = await player.search(query, {
-                            requestedBy: interaction.user
-                        });
-
-                        if (!searchResult.hasTracks()) {
-                            return interaction.editReply({ content: "No results found for your query." });
-                        }
-
-                        // ** THE DEFINITIVE FIX - PART 1 **
-                        // Sanitize the `requestedBy` property on each track to prevent circular references.
-                        const cleanUser = {
-                            id: interaction.user.id,
-                            tag: interaction.user.tag,
-                        };
-                        searchResult.tracks.forEach(track => {
-                            track.requestedBy = cleanUser;
-                        });
-
-                        // ** THE DEFINITIVE FIX - PART 2 **
-                        // Sanitize the `playlist.author` property, which can also be a complex object.
-                        if (searchResult.playlist && searchResult.playlist.author && typeof searchResult.playlist.author === "object") {
-                            searchResult.playlist.author = {
-                                name: searchResult.playlist.author.name || "N/A"
-                            };
-                        }
-
-                        await player.play(interaction.channel.id, searchResult, {
+                        const user = { id: interaction.user.id, tag: interaction.user.tag };
+                        await player.play(interaction.member.voice.channel.id, query, {
                             nodeOptions: {
                                 metadata: {
-                                    channelId: interaction.channel.id,
+                                    channelId: interaction.channel.id
                                 },
                                 volume: 80,
-                            }
+                            },
+                            requestedBy: user,
+                            searchEngine: 'com.livebot.ytdlp' // Force our custom extractor
                         });
 
-                        const message = searchResult.playlist ? `Loading your playlist...` : `Loading your track...`;
-                        return interaction.editReply({ content: `⏱️ | ${message}` });
+                        return interaction.editReply({ content: `⏱️ | Loading your track...` });
 
                     } catch (e) {
-                        console.error("[Play Command Error]", e);
+                        console.error("[Play Command Error]", e.message);
                         return interaction.editReply({ content: `An error occurred: ${e.message}` });
                     }
+                    break;
                 }
                 case 'pause': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing playing right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     if (queue.node.isPaused()) {
-                        return interaction.reply({content: "The music is already paused!", ephemeral: true});
+                        return interaction.reply({ content: "The music is already paused!", ephemeral: true });
                     }
 
                     try {
                         queue.node.setPaused(true);
-                        await interaction.reply({content: "⏸️ Paused the music."});
-                    } catch (e) {
-                        await interaction.reply({content: `❌ Error: ${e.message}`});
+                        await interaction.reply({ content: "⏸️ Paused the music." });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'resume': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing playing right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     if (!queue.node.isPaused()) {
-                        return interaction.reply({content: "The music is not paused!", ephemeral: true});
+                        return interaction.reply({ content: "The music is not paused!", ephemeral: true });
                     }
 
                     try {
                         queue.node.setPaused(false);
-                        await interaction.reply({content: "▶️ Resumed the music."});
-                    } catch (e) {
-                        await interaction.reply({content: `❌ Error: ${e.message}`});
+                        await interaction.reply({ content: "▶️ Resumed the music." });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'queue': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing in the queue right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing in the queue right now!", ephemeral: true });
                     }
 
-                    const tracks = queue.tracks.toArray(); // Get all tracks
+                    const tracks = queue.tracks.toArray();
                     const currentTrack = queue.currentTrack;
 
                     if (!currentTrack && tracks.length === 0) {
-                        return interaction.reply({content: "The queue is empty.", ephemeral: true});
+                        return interaction.reply({ content: "The queue is empty.", ephemeral: true });
                     }
 
                     const queueString = tracks.slice(0, 10).map((track, i) => {
-                        return `**${i + 1}.** \`${track.title}\` - ${track.requestedBy.tag}`;
+                        console.log(`[DEBUG] Queue Track ${i}:`, JSON.stringify(track.requestedBy));
+                        const trackRequesterTag = track.requestedBy?.tag ?? 'DJ Bot';
+                        return `**${i + 1}.** \`${track.title}\` - ${trackRequesterTag}`;
                     }).join("\n");
+
+                    console.log(`[DEBUG] Current Track:`, JSON.stringify(currentTrack?.requestedBy));
+                    const currentTrackRequesterTag = currentTrack?.requestedBy?.tag ?? 'DJ Bot';
 
                     const embed = new EmbedBuilder()
                         .setColor("#3498DB")
                         .setAuthor({name: "Server Queue"})
-                        .setDescription(`**Currently Playing:**\n\`${currentTrack.title}\` - ${currentTrack.requestedBy.tag}\n\n**Up Next:**\n${queueString || "Nothing"}`)
+                        .setDescription(
+                            currentTrack
+                                ? `**Currently Playing:**\n\`${currentTrack.title}\` - ${currentTrackRequesterTag}\n\n**Up Next:**\n${queueString || "Nothing"}`
+                                : `**Currently Playing:**\nNothing\n\n**Up Next:**\n${queueString || "Nothing"}`
+                        )
                         .setFooter({text: `Total songs in queue: ${tracks.length}`});
 
                     await interaction.reply({embeds: [embed]});
@@ -473,31 +500,32 @@ module.exports = {
                 case 'skip': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing playing to skip!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing to skip!", ephemeral: true });
                     }
 
                     try {
                         const success = queue.node.skip();
-                        await interaction.reply({content: success ? "⏭️ Skipped! Now playing the next song." : "❌ Something went wrong while skipping."});
-                    } catch (e) {
-                        await interaction.reply({content: `❌ Error: ${e.message}`});
+                        await interaction.reply({ content: success ? "⏭️ Skipped! Now playing the next song." : "❌ Something went wrong while skipping." });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'loop': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing playing right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     const loopMode = interaction.options.getInteger("mode");
@@ -505,27 +533,27 @@ module.exports = {
                     try {
                         queue.setRepeatMode(loopMode);
                         const modeName = Object.keys(QueueRepeatMode).find(key => QueueRepeatMode[key] === loopMode);
-                        await interaction.reply({content: `🔄 Loop mode set to **${modeName}**.`});
-                    } catch (e) {
-                        await interaction.reply({content: `❌ Error: ${e.message}`});
+                        await interaction.reply({ content: `🔄 Loop mode set to **${modeName}**.` });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'lyrics': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing playing right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     await interaction.deferReply();
 
                     const track = queue.currentTrack;
-                    // Clean up the title to improve search results
                     const trackTitle = track.title.replace(/\(official.*?\)/i, "").replace(/\(feat.*?\)/i, "").trim();
 
                     try {
@@ -533,7 +561,7 @@ module.exports = {
                         const lyrics = response.data.lyrics;
 
                         if (!lyrics) {
-                            return interaction.editReply({content: `❌ No lyrics found for **${track.title}**.`});
+                            return interaction.editReply({ content: `❌ No lyrics found for **${track.title}**.` });
                         }
 
                         const embed = new EmbedBuilder()
@@ -543,28 +571,36 @@ module.exports = {
 
                         await interaction.editReply({embeds: [embed]});
 
-                    } catch (error) {
+                    }
+                    catch (error) {
                         if (error.response && error.response.status === 404) {
-                            return interaction.editReply({content: `❌ No lyrics found for **${track.title}**.`});
+                            return interaction.editReply({ content: `❌ No lyrics found for **${track.title}**.` });
                         }
-                        console.error("[Lyrics Command Error]", error);
-                        await interaction.editReply({content: "❌ An error occurred while fetching the lyrics."});
+                        console.error("[Lyrics Command Error]", error.message);
+                        await interaction.editReply({ content: "❌ An error occurred while fetching the lyrics." });
                     }
                     break;
                 }
                 case 'nowplaying': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing playing right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     const track = queue.currentTrack;
+
+                    if (!track) { // Add a check for null track
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
+                    }
+
                     const progress = queue.node.createProgressBar();
+                    console.log(`[DEBUG] Now Playing Track:`, JSON.stringify(track.requestedBy));
+                    const trackRequesterTag = track.requestedBy?.tag ?? 'DJ Bot';
 
                     const embed = new EmbedBuilder()
                         .setColor("#57F287")
@@ -575,7 +611,7 @@ module.exports = {
                         .addFields(
                             {name: "Channel", value: track.author, inline: true},
                             {name: "Duration", value: track.duration, inline: true},
-                            {name: "Requested by", value: `${track.requestedBy.tag}`, inline: true},
+                            {name: "Requested by", value: trackRequesterTag, inline: true},
                             {name: "Progress", value: progress, inline: false}
                         );
 
@@ -585,111 +621,118 @@ module.exports = {
                 case 'stop': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing playing right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     try {
                         queue.delete();
-                        await interaction.reply({content: "⏹️ Music stopped and queue cleared."});
-                    } catch (e) {
-                        await interaction.reply({content: `❌ Error: ${e.message}`});
+                        await interaction.reply({ content: "⏹️ Music stopped and queue cleared." });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'volume': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing playing right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     const volume = interaction.options.getInteger("level");
 
                     try {
                         queue.node.setVolume(volume);
-                        await interaction.reply({content: `🔊 Volume set to **${volume}%**.`});
-                    } catch (e) {
-                        await interaction.reply({content: `❌ Error: ${e.message}`});
+                        await interaction.reply({ content: `🔊 Volume set to **${volume}%**.` });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'shuffle': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying() || queue.tracks.size < 2) {
-                        return interaction.reply({content: "There are not enough songs in the queue to shuffle!", ephemeral: true});
+                        return interaction.reply({ content: "There are not enough songs in the queue to shuffle!", ephemeral: true });
                     }
 
                     try {
                         queue.tracks.shuffle();
-                        await interaction.reply({content: "🔀 The queue has been shuffled."});
-                    } catch (e) {
-                        await interaction.reply({content: `❌ Error: ${e.message}`});
+                        await interaction.reply({ content: "🔀 The queue has been shuffled." });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'remove': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing in the queue right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing in the queue right now!", ephemeral: true });
                     }
 
                     const position = interaction.options.getInteger("track") - 1;
                     const tracks = queue.tracks.toArray();
 
                     if (position >= tracks.length) {
-                        return interaction.reply({content: "❌ Invalid track position.", ephemeral: true});
+                        return interaction.reply({ content: "❌ Invalid song position.", ephemeral: true });
                     }
 
                     try {
                         const removedTrack = queue.node.remove(tracks[position]);
-                        await interaction.reply({content: `🗑️ Removed **${removedTrack.title}** from the queue.`});
-                    } catch (e) {
-                        await interaction.reply({content: `❌ Error: ${e.message}`});
+                        await interaction.reply({ content: `🗑️ Removed **${removedTrack.title}** from the queue.` });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'search': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const query = interaction.options.getString("query");
-                    const {member, guild} = interaction;
+                    const { member, guild } = interaction;
 
                     if (!member.voice.channel) {
-                        return interaction.reply({content: "You must be in a voice channel to search for music!", ephemeral: true});
+                        return interaction.reply({ content: "You must be in a voice channel to search for music!", ephemeral: true });
                     }
 
                     await interaction.deferReply();
 
                     try {
-                        const results = await interaction.client.player.search(query, {requestedBy: interaction.user});
+                        const user = { id: interaction.user.id, tag: interaction.user.tag };
+                        const results = await interaction.client.player.search(query, {
+                            requestedBy: user,
+                        });
 
                         if (!results || !results.hasTracks()) {
-                            return interaction.editReply({ content: `❌ | No results found for \`${query}\`.` });
+                            return interaction.editReply({ content: "No results found for your query." });
                         }
 
-                        const tracks = results.tracks.slice(0, 10); // Get the top 10 results
+                        const tracks = results.tracks.slice(0, 10);
 
                         const embed = new EmbedBuilder()
                             .setColor("#3498DB")
@@ -700,39 +743,46 @@ module.exports = {
                         await interaction.editReply({embeds: [embed]});
 
                         const filter = m => m.author.id === interaction.user.id && parseInt(m.content) >= 1 && parseInt(m.content) <= tracks.length;
-                        const collector = interaction.channel.createMessageCollector({filter, time: 30000, max: 1});
+                        const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
 
                         collector.on("collect", async m => {
                             const choice = parseInt(m.content) - 1;
                             const track = tracks[choice];
 
-                            await interaction.client.player.play(member.voice.channel, track, {
+                            await interaction.client.player.play(member.voice.channel.id, track, {
                                 nodeOptions: {
                                     metadata: {
-                                        channel: interaction.channel,
+                                        channelId: interaction.channel.id
                                     }
                                 },
-                                requestedBy: interaction.user
+                                requestedBy: user
                             });
 
                             m.delete().catch(() => {
                             });
-                            interaction.editReply({content: `✅ | Added **${track.title}** to the queue.`, embeds: []});
+                            interaction.editReply({ content: `✅ | Added **${track.title}** to the queue.` });
                         });
 
                         collector.on("end", (collected, reason) => {
                             if (reason === "time") {
-                                interaction.editReply({content: "❌ | You did not make a selection in time.", embeds: []});
+                                interaction.editReply({ content: "❌ | You did not make a selection in time." });
                             }
                         });
-                    } catch (error) {
-                        console.error("[Search Command Error]", error);
-                        await interaction.editReply({content: `❌ An error occurred: ${error.message}`});
+                    }
+                    catch (error) {
+                        console.error("[Search Command Error]", error.message);
+                        return interaction.editReply({ content: `An error occurred: ${e.message}` });
                     }
                     break;
                 }
                 case 'dj': {
                     const { member, guild, client } = interaction;
+                    const inputSong = interaction.options.getString('song');
+                    const inputArtist = interaction.options.getString('artist');
+                    const inputGenre = interaction.options.getString('genre');
+                    const playlistLink = interaction.options.getString('playlist_link');
+
+                    console.log(`[DJ Command] Initial inputs: song=${inputSong}, artist=${inputArtist}, genre=${inputGenre}`);
 
                     if (!member.voice.channel) {
                         return interaction.reply({ content: "You must be in a voice channel to start a DJ session.", ephemeral: true });
@@ -748,14 +798,13 @@ module.exports = {
                     await interaction.deferReply();
 
                     try {
-                        const queue = client.player.nodes.create(guild, {
+                        const user = { id: member.user.id, tag: member.user.tag };
+                        const queue = client.player.nodes.create(guild.id, {
                             metadata: {
-                                channel: interaction.channel,
-                                client: guild.members.me,
-                                requestedBy: member.user,
+                                channelId: interaction.channel.id,
                                 djMode: true,
                                 djVoice: musicConfig.dj_voice || 'female',
-                                voiceChannel: member.voice.channel
+                                voiceChannelId: member.voice.channel.id
                             },
                             selfDeaf: true,
                             volume: 80,
@@ -766,46 +815,53 @@ module.exports = {
                         });
 
                         if (!queue.connection) {
-                            await queue.connect(member.voice.channel);
+                            await queue.connect(member.voice.channel.id);
                         }
 
-                        // --- Spotify Recommendation Logic ---
-                        let seed_artists = [];
-                        const [historyRows] = await db.execute(
-                            `SELECT artist FROM music_history WHERE user_id = ? AND artist IS NOT NULL GROUP BY artist ORDER BY MAX(timestamp) DESC LIMIT 5`,
-                            [member.id]
-                        );
+                        if (playlistLink) {
+                            try {
+                                const searchResult = await client.player.search(playlistLink, {
+                                    requestedBy: user,
+                                });
 
-                        if (historyRows.length > 0) {
-                            for (const row of historyRows) {
-                                const artist = await spotifyApiModule.searchArtists(row.artist); // Changed call
-                                if (artist) {
-                                    seed_artists.push(artist.id);
+                                if (!searchResult.hasTracks()) {
+                                    return interaction.followUp({ content: `❌ | No tracks found for the provided playlist link.` });
                                 }
+
+                                searchResult.tracks.forEach(track => {
+                                    track.requestedBy = user;
+                                });
+
+                                await queue.addTrack(searchResult.tracks);
+
+                                if (!queue.isPlaying()) {
+                                    await queue.node.play();
+                                }
+                                return interaction.followUp({ content: `▶️ Now playing the playlist from your link.` });
+
+                            } catch (e) {
+                                console.error("[DJ Playlist Play Error]", e.message);
+                                return interaction.followUp({ content: `❌ An error occurred while trying to play the playlist: ${e.message}` });
                             }
-                        } else {
-                            // Fallback seeds if user has no history
-                            seed_artists = ['4NHQUGzhtTLFvgF5SZesLK']; // Lo-fi Girl artist ID
                         }
 
-                        if (seed_artists.length === 0) {
-                            seed_artists = ['4NHQUGzhtTLFvgF5SZesLK']; // Default if no artists could be found
+                        console.log(`[DJ Command] Generating playlist with Gemini AI based on: song=${inputSong}, artist=${inputArtist}, genre=${inputGenre}`);
+                        const geminiRecommendedTracks = await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre);
+
+                        if (!geminiRecommendedTracks || geminiRecommendedTracks.length === 0) {
+                            return interaction.followUp({ content: `❌ | Gemini AI could not generate a playlist based on your request. Please try again with different inputs.` });
                         }
 
-                        const recommendedTracks = await spotifyApiModule.getRecommendations(seed_artists, [], []); // Changed call
-
-                        if (!recommendedTracks || recommendedTracks.length === 0) {
-                            return interaction.followUp({ content: `❌ | Could not generate a playlist. Please try again later.` });
-                        }
-
-                        // Search for each recommended track on YouTube and add to queue
-                        for (const track of recommendedTracks) {
-                            const query = `${track.name} ${track.artists.map(a => a.name).join(' ')}`;
+                        let addedTrackCount = 0;
+                        for (const recTrack of geminiRecommendedTracks) {
+                            const query = `${recTrack.title} ${recTrack.artist}`;
                             const searchResult = await client.player.search(query, {
-                                requestedBy: member.user,
+                                requestedBy: user,
+                                searchEngine: 'com.livebot.ytdlp'
                             });
                             if (searchResult.hasTracks()) {
                                 queue.addTrack(searchResult.tracks[0]);
+                                addedTrackCount++;
                             }
                         }
 
@@ -817,41 +873,66 @@ module.exports = {
                             await queue.node.play();
                         }
 
-                        return interaction.followUp({ content: `🎧 | AI DJ session started! I've created a playlist of ${queue.tracks.size} songs based on your listening habits.` });
+                        return interaction.followUp({ content: `🎧 | Gemini AI DJ session started! I've added ${addedTrackCount} songs to the queue based on your preferences.` });
 
                     } catch (e) {
-                        console.error(e);
+                        console.error("[DJ Command Error]", e.message);
                         return interaction.followUp({ content: `An error occurred: ${e.message}` });
                     }
                     break;
                 }
+                case 'dj-voice': {
+                    const { guild } = interaction;
+                    const voiceId = interaction.options.getString('voice');
+
+                    await interaction.deferReply({ ephemeral: true });
+
+                    try {
+                        const voices = await elevenlabsApi.getVoices();
+                        const selectedVoice = voices.find(v => v.voice_id === voiceId);
+
+                        if (!selectedVoice) {
+                            return interaction.editReply({ content: "❌ Invalid voice selected. Please choose from the autocomplete options." });
+                        }
+
+                        await db.execute(
+                            "INSERT INTO music_config (guild_id, dj_voice) VALUES (?,?) ON DUPLICATE KEY UPDATE dj_voice = ?",
+                            [guild.id, voiceId, voiceId]
+                        );
+
+                        return interaction.editReply({ content: `✅ AI DJ voice set to **${selectedVoice.name}**.` });
+
+                    } catch (e) {
+                        console.error("[DJ Voice Command Error]", e.message);
+                        return interaction.editReply({ content: `❌ An error occurred while setting the DJ voice: ${e.message}` });
+                    }
+                    break;
+                }
                 case 'record': {
-                    await interaction.deferReply({ephemeral: true});
+                    await interaction.deferReply({ ephemeral: true });
 
                     const guildId = interaction.guild.id;
                     const member = interaction.member;
 
-                    // Fetch record configuration from the database
                     const [[recordConfig]] = await db.execute("SELECT is_enabled, allowed_role_ids, output_channel_id FROM record_config WHERE guild_id = ?", [guildId]);
 
                     if (!recordConfig || !recordConfig.is_enabled) {
-                        return interaction.editReply({content: "Voice recording is not enabled for this server."});
+                        return interaction.editReply({ content: "Voice recording is not enabled for this server." });
                     }
 
                     const allowedRoleIds = recordConfig.allowed_role_ids ? JSON.parse(recordConfig.allowed_role_ids) : [];
                     const outputChannelId = recordConfig.output_channel_id;
 
-                    // Check permissions
                     const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
                     const hasAllowedRole = allowedRoleIds.some(roleId => member.roles.cache.has(roleId));
 
                     if (!isAdmin && !hasAllowedRole) {
-                        return interaction.editReply({content: "You do not have permission to use this command."});
+                        return interaction.editReply({ content: "You do not have permission to use this command." });
                     }
 
                     const voiceChannel = member.voice.channel;
                     if (!voiceChannel) {
-                        return interaction.editReply({content: "You must be in a voice channel to use this command."});
+                        return interaction.editReply({ content: "You must be in a voice channel to use this command." });
                     }
 
                     let outputChannel = null;
@@ -859,7 +940,7 @@ module.exports = {
                         try {
                             outputChannel = await interaction.client.channels.fetch(outputChannelId);
                         } catch (e) {
-                            logger.error(`[Record Command] Could not fetch output channel ${outputChannelId} for guild ${guildId}:`, e);
+                            console.error(`[Record Command] Could not fetch output channel ${outputChannelId} for guild ${guildId}:`, e.message);
                         }
                     }
 
@@ -879,14 +960,14 @@ module.exports = {
                             },
                         });
 
-                        const recordingsDir = "./temp_audio"; // Changed to temp_audio
+                        const recordingsDir = "./temp_audio";
                         if (!fs.existsSync(recordingsDir)) {
                             fs.mkdirSync(recordingsDir);
                         }
 
                         const filename = `${recordingsDir}/${Date.now()}-${member.user.username}.pcm`;
                         const fileStream = fs.createWriteStream(filename);
-                        const pcmStream = audioStream.pipe(new prism.opus.Decoder({rate: 48000, channels: 2, frameSize: 960}));
+                        const pcmStream = audioStream.pipe(new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 }));
 
                         pcmStream.pipe(fileStream);
 
@@ -898,12 +979,13 @@ module.exports = {
 
                         if (outputChannel) {
                             try {
-                                await outputChannel.send({embeds: [startEmbed]});
-                            } catch (sendError) {
-                                logger.error(`[Record Command] Failed to send start embed to output channel ${outputChannel.id}:`, sendError);
+                                await outputChannel.send({ embeds: [startEmbed] });
+                            }
+                            catch (sendError) {
+                                console.error(`[Record Command] Failed to send start embed to output channel ${outputChannel.id}:`, sendError.message);
                             }
                         }
-                        await interaction.editReply({content: `✅ Recording started. The recording will be saved.`, ephemeral: true});
+                        await interaction.editReply({ content: `✅ Recording started. The recording will be saved.`, ephemeral: true });
 
                         fileStream.on("finish", async () => {
                             const durationSeconds = Math.floor((Date.now() - recordingStartTime) / 1000);
@@ -913,100 +995,104 @@ module.exports = {
 
                             if (outputChannel) {
                                 try {
-                                    await outputChannel.send({embeds: [endEmbed]});
-                                } catch (sendError) {
-                                    logger.error(`[Record Command] Failed to send end embed to output channel ${outputChannel.id}:`, sendError);
+                                    await outputChannel.send({ embeds: [endEmbed] });
+                                }
+                                catch (sendError) {
+                                    console.error(`[Record Command] Failed to send end embed to output channel ${outputChannel.id}:`, sendError.message);
                                 }
                             }
-                            logger.info(`[Record Command] Recording for ${member.user.tag} in ${voiceChannel.name} finished. Saved to ${filename}`);
+                            console.log(` Recording for ${member.user.tag} in ${voiceChannel.name} finished. Saved to ${filename}`);
                         });
 
                         connection.on("stateChange", (oldState, newState) => {
                             if (newState.status === "disconnected") {
                                 fileStream.end();
-                                logger.info(`[Record Command] Voice connection disconnected for ${member.user.tag}.`);
+                                console.log(` Voice connection disconnected for ${member.user.tag}.`);
                             }
                         });
 
                     } catch (error) {
-                        logger.error("[Record Command Error]", error);
-                        await interaction.editReply({content: "An error occurred while trying to start the recording."});
+                        console.error("[Record Command Error]", error.message);
+                        return interaction.editReply({ content: "An error occurred while trying to start the recording." });
                     }
                     break;
                 }
                 case 'seek': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                        return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                        return interaction.reply({content: "There is nothing playing right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     const timeString = interaction.options.getString("time");
                     const timeMs = toMilliseconds(timeString);
 
                     if (timeMs <= 0) {
-                        return interaction.reply({content: "❌ Invalid time format. Use format like `1m30s`, `2h`, `45s`.", ephemeral: true});
+                        return interaction.reply({ content: "❌ Invalid time format. Use format like `1m30s`, `2h`, `45s`.", ephemeral: true });
                     }
 
                     try {
                         await queue.node.seek(timeMs);
-                        await interaction.reply({content: `⏩ Seeked to **${timeString}**.`});
-                    } catch (e) {
-                        await interaction.reply({content: `❌ Error: ${e.message}`});
+                        await interaction.reply({ content: `⏩ Seeked to **${timeString}**.` });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'clear': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                      return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                      return interaction.reply({content: "There is nothing in the queue to clear!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing in the queue to clear!", ephemeral: true });
                     }
 
                     if (queue.tracks.size < 1) {
-                      return interaction.reply({content: "The queue is already empty.", ephemeral: true});
+                        return interaction.reply({ content: "The queue is already empty.", ephemeral: true });
                     }
 
                     try {
-                      queue.tracks.clear();
-                      await interaction.reply({content: "🗑️ The queue has been cleared."});
-                    } catch (e) {
-                      await interaction.reply({content: `❌ Error: ${e.message}`});
+                        queue.tracks.clear();
+                        await interaction.reply({ content: "🗑️ The queue has been cleared." });
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }
                 case 'filter': {
                     const permissionCheck = await checkMusicPermissions(interaction);
                     if (!permissionCheck.permitted) {
-                      return interaction.reply({content: permissionCheck.message, ephemeral: true});
+                        return interaction.reply({ content: permissionCheck.message, ephemeral: true });
                     }
 
                     const queue = interaction.client.player.nodes.get(interaction.guildId);
                     if (!queue || !queue.isPlaying()) {
-                      return interaction.reply({content: "There is nothing playing right now!", ephemeral: true});
+                        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     const filterName = interaction.options.getString("filter");
                     const action = interaction.options.getString("action");
 
                     try {
-                      if (action === "enable") {
-                        queue.filters.ffmpeg.toggle(filterName);
-                        await interaction.reply({content: `✅ **${filterName}** filter enabled.`});
-                      } else {
-                        queue.filters.ffmpeg.toggle(filterName);
-                        await interaction.reply({content: `❌ **${filterName}** filter disabled.`});
-                      }
-                    } catch (e) {
-                      await interaction.reply({content: `❌ Error: ${e.message}`});
+                        if (action === "enable") {
+                            queue.filters.ffmpeg.toggle(filterName);
+                            await interaction.reply({ content: `✅ **${filterName}** filter enabled.` });
+                        } else {
+                            queue.filters.ffmpeg.toggle(filterName);
+                            await interaction.reply({ content: `❌ **${filterName}** filter disabled.` });
+                        }
+                    }
+                    catch (e) {
+                        await interaction.reply({ content: `❌ Error: ${e.message}` });
                     }
                     break;
                 }

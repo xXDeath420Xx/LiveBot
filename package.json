@@ -40,7 +40,7 @@
     "passport-discord": "^0.1.4",
     "playwright-core": "^1.45.1",
     "pm2": "^6.0.13",
-    "spotify-web-api-node": "^5.0.2",
+    "spotify-web-api-node": "^5.0.0",
     "undici": "^5.28.2",
     "winston": "^3.13.0",
     "ytdlp-nodejs": "^2.1.1"

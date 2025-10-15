@@ -2,6 +2,8 @@ const { ElevenLabsClient } = require("elevenlabs");
 const fs = require("fs");
 const path = require("path");
 const logger = require("../utils/logger");
+const { Readable } = require('stream');
+const { Track } = require('discord-player');
 
 const elevenlabs = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
 
@@ -14,68 +16,109 @@ const voices = {
 class DJManager {
   constructor(player) {
     this.player = player;
-    // Hook into the event that fires when a track finishes playing
     this.player.events.on("playerFinish", (queue, track) => this.onTrackFinish(queue, track));
   }
 
   async onTrackFinish(queue, track) {
-    // If DJ mode is not active, or if the queue is now empty, do nothing.
+    logger.info(`[DJ] onTrackFinish event triggered for guild ${queue.guild.id}. Track: ${track.title}`);
+
     if (!queue.metadata.djMode || queue.tracks.size === 0) {
+        logger.info(`[DJ] Skipping commentary: DJ mode not active or queue empty for guild ${queue.guild.id}.`);
         return;
     }
 
-    // Don't generate commentary for our own commentary tracks!
-    if (track.isDJCommentary) {
+    // Check if the current track's metadata indicates it's a DJ commentary
+    if (track.metadata && track.metadata.isDJCommentary) {
+        logger.info(`[DJ] Skipping commentary: Current track is already a DJ commentary for guild ${queue.guild.id}.`);
         return;
     }
 
-    const nextTrack = queue.tracks.toArray()[0]; // Peek at the next track
-    if (!nextTrack || nextTrack.isDJCommentary) {
-        // Don't generate commentary if the queue is about to end or if the next track is already a commentary
+    const nextTrack = queue.tracks.toArray()[0];
+    // Check if the next track's metadata indicates it's a DJ commentary
+    if (!nextTrack || (nextTrack.metadata && nextTrack.metadata.isDJCommentary)) {
+        logger.info(`[DJ] Skipping commentary: No next track or next track is commentary for guild ${queue.guild.id}.`);
         return;
     }
 
     try {
-        // 1. Generate the script
         const script = `That was ${track.title} by ${track.author}. Up next, we have ${nextTrack.title} by ${nextTrack.author}.`;
         logger.info(`[DJ] Generated Script for guild ${queue.guild.id}: ${script}`);
 
-        // 2. Select voice based on guild settings
-        const selectedVoice = queue.metadata.djVoice || 'female'; // Default to female
-        const voiceId = voices[selectedVoice] || voices['female'];
+        const selectedVoiceSetting = queue.metadata.djVoice || 'Rachel'; 
+        const voiceId = voices[selectedVoiceSetting] || selectedVoiceSetting;
+        logger.info(`[DJ] Using voice ID: ${voiceId} for guild ${queue.guild.id}.`);
 
-        // 3. Generate TTS audio
-        const audioStream = await elevenlabs.generate({
+        logger.info(`[DJ] Calling ElevenLabs generate for guild ${queue.guild.id}...`);
+        const elevenLabsAudioStream = await elevenlabs.generate({
             voice: voiceId,
             text: script,
             model_id: "eleven_multilingual_v2"
         });
+        logger.info(`[DJ] ElevenLabs generate call completed for guild ${queue.guild.id}.`);
+
+        const audioStream = Readable.fromWeb(elevenLabsAudioStream);
+        logger.info(`[DJ] Converted WebStream to Node.js Readable for guild ${queue.guild.id}.`);
 
         const tempFilePath = path.join(__dirname, `../temp_audio/${queue.guild.id}_commentary.mp3`);
 
-        // 4. Save the audio to a file, waiting for it to finish writing
         const fileStream = fs.createWriteStream(tempFilePath);
         const writePromise = new Promise((resolve, reject) => {
             audioStream.pipe(fileStream);
-            fileStream.on('finish', resolve);
-            fileStream.on('error', reject);
+            fileStream.on('finish', () => {
+                logger.info(`[DJ] Commentary audio saved to ${tempFilePath} for guild ${queue.guild.id}.`);
+                resolve();
+            });
+            fileStream.on('error', (err) => {
+                logger.error(`[DJ] Error writing commentary audio to file for guild ${queue.guild.id}:`, { error: err.message, stack: err.stack });
+                reject(err);
+            });
         });
         await writePromise;
         
-        // 5. Create a track from the local file and inject it
-        const { track: commentaryTrack } = await this.player.search(tempFilePath, { requestedBy: queue.client.user });
-        if (!commentaryTrack) {
-            logger.error(`[DJ] Could not create a track from the commentary file for guild ${queue.guild.id}.`);
+        const requestedBy = this.player.client.user ? { id: this.player.client.user.id, tag: this.player.client.user.tag } : { id: 'bot', tag: 'DJ Bot' };
+        logger.info(`[DJ] Searching for commentary track from ${tempFilePath} for guild ${queue.guild.id}...`);
+        
+        const searchResult = await this.player.search(tempFilePath, { 
+            requestedBy: requestedBy,
+            searchEngine: "com.livebot.ytdlp"
+        });
+        
+        if (!searchResult || searchResult.tracks.length === 0) {
+            logger.error(`[DJ] Could not create a track from the commentary file for guild ${queue.guild.id}. Search result was empty.`);
             return;
         }
-        commentaryTrack.isDJCommentary = true; // Custom flag to identify our track
+
+        const existingTrack = searchResult.tracks[0]; // This is already a Track object
+        logger.debug(`[DJ] existingTrack (from searchResult.tracks[0]) title: ${existingTrack.title}, url: ${existingTrack.url}`);
+
+        // Manually extract properties to avoid circular reference issues with toJSON()
+        const rawCommentaryTrackData = {
+            url: existingTrack.url,
+            title: existingTrack.title,
+            description: existingTrack.description,
+            views: existingTrack.views,
+            author: existingTrack.author,
+            thumbnail: existingTrack.thumbnail,
+            duration: existingTrack.duration,
+            requestedBy: requestedBy, // Set requestedBy here
+            metadata: {
+                ...(existingTrack.metadata || {}),
+                localPath: tempFilePath,
+                isDJCommentary: true, // Moved isDJCommentary into metadata
+            }
+        };
+        logger.debug(`[DJ] rawCommentaryTrackData (after manual construction and modification) title: ${rawCommentaryTrackData.title}, url: ${rawCommentaryTrackData.url}`);
+
+        const commentaryTrack = new Track(this.player, rawCommentaryTrackData);
+        logger.debug(`[DJ] commentaryTrack (after new Track construction) title: ${commentaryTrack.title}, url: ${commentaryTrack.url}`);
+
+        logger.info(`[DJ] Successfully created commentary track: ${commentaryTrack.title} for guild ${queue.guild.id}.`);
         
-        // Insert the commentary to be played next
         queue.insertTrack(commentaryTrack, 0); 
         logger.info(`[DJ] Injected commentary for ${nextTrack.title} in guild ${queue.guild.id}`);
 
     } catch (error) {
-        logger.error(`[DJ] Failed to generate or inject commentary for guild ${queue.guild.id}:`, { error: error.message, stack: error.stack });
+        logger.error(`[DJ] Failed to generate or inject commentary for guild ${queue.guild.id}:`, { error: error.message, stack: error.stack, fullError: error });
     }
   }
 }

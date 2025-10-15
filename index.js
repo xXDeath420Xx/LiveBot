@@ -2,20 +2,19 @@ require("dotenv-flow").config();
 
 const {Client, GatewayIntentBits, Collection, Events, Partials, EmbedBuilder} = require("discord.js");
 const {Player, BaseExtractor} = require("discord-player");
-const {DefaultExtractors} = require("@discord-player/extractor");
+const { DefaultExtractors } = require("@discord-player/extractor");
 const {YtDlp} = require("ytdlp-nodejs");
 const path = require("path");
 const fs = require("fs");
-const { getCycleTLSInstance } = require("./utils/tls-manager.js"); // Corrected import
-const DJManager = require("./core/dj-manager.js"); // Import the manager
+const { getCycleTLSInstance } = require("./utils/tls-manager.js");
+const DJManager = require("./core/dj-manager.js");
+const logger = require("./utils/logger.js");
 
 // --- ytdlp-nodejs Setup ---
 const ytdlp = new YtDlp();
 const cookieFilePath = process.env.YOUTUBE_COOKIE_PATH || path.join(__dirname, "cookies.txt");
 if (fs.existsSync(cookieFilePath)) {
   console.log(`[YtDlp] Using cookie file at: ${cookieFilePath}`);
-} else {
-  console.warn(`[YtDlp] Cookie file not found at ${cookieFilePath}. Age-restricted and private content may fail.`);
 }
 
 // --- Custom Extractor using ytdlp-nodejs ---
@@ -27,12 +26,29 @@ class YtDlpExtractor extends BaseExtractor {
   }
 
   async handle(query, searchOptions) {
+    try {
+        // Handle local file paths
+        if (fs.existsSync(query) && fs.statSync(query).isFile()) {
+            const track = this.buildTrack({
+                title: path.basename(query, path.extname(query)),
+                url: query,
+                duration: 0,
+                thumbnail: null,
+                uploader: 'Local File',
+            }, searchOptions);
+            return { playlist: null, tracks: track ? [track] : [] };
+        }
+    } catch (e) { /* Not a file path, continue to youtube search */ }
+
     const isUrl = query.includes("youtube.com") || query.includes("youtu.be");
-    const search = isUrl ? query : `ytsearch:${query}`;
+
+    // If it's not a URL, we force it to be a single video search.
+    const search = isUrl ? query : `ytsearch1:${query}`;
 
     const info = await ytdlp.getInfoAsync(search, {cookies: cookieFilePath});
 
-    if (info.entries) { // Playlist
+    // If it was a URL and it's a playlist, process all entries.
+    if (isUrl && info.entries) {
       const tracks = info.entries.map(entry => this.buildTrack(entry, searchOptions)).filter(t => t !== null);
       return {
         playlist: {
@@ -43,36 +59,87 @@ class YtDlpExtractor extends BaseExtractor {
         },
         tracks,
       };
-    } else { // Single video
-      const track = this.buildTrack(info, searchOptions);
-      return {playlist: null, tracks: track ? [track] : []};
     }
+    
+    // For searches, or single video URLs.
+    // If the search returned a playlist, info will have an 'entries' property. We take the first one.
+    const entry = info.entries ? info.entries[0] : info;
+    const track = this.buildTrack(entry, searchOptions);
+    return {playlist: null, tracks: track ? [track] : []};
   }
 
   async stream(info) {
+    const isLocalFile = !info.url.startsWith('http');
+
+    if (isLocalFile) {
+        // It's a local file (like commentary), just stream it.
+        console.log(`[Player] Streaming local file: ${info.url}`);
+        return fs.createReadStream(info.url);
+    }
+
+    // It's a youtube URL, download it first.
+    const tempDir = path.join(__dirname, 'temp_audio');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    
+    const videoId = info.url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})(?=&|#|$)/)?.[1];
+    const fileName = `${videoId || info.id || Date.now()}.opus`;
+    const filePath = path.join(tempDir, fileName);
+
+    // Attach local path for cleanup
+    info.metadata = { ...info.metadata, localPath: filePath };
+
+    if (fs.existsSync(filePath)) {
+        console.log(`[Player] Using cached file for ${info.title}: ${filePath}`);
+        return fs.createReadStream(filePath);
+    }
+
+    console.log(`[Player] Downloading ${info.title} to ${filePath}`);
+
     const ytdlpProcess = ytdlp.exec(info.url, {
-      output: "-",
+      output: filePath,
       format: "bestaudio[ext=opus]/bestaudio/best",
       "audio-quality": 0,
       cookies: cookieFilePath,
     });
-    return ytdlpProcess.stdout;
+
+    await new Promise((resolve, reject) => {
+        ytdlpProcess.on('close', (code) => {
+            if (code === 0) resolve();
+            else {
+                if (fs.existsSync(filePath)) fs.unlink(filePath, ()=>{}); // cleanup failed download
+                reject(new Error(`ytdlp exited with code ${code}`));
+            }
+        });
+        ytdlpProcess.on('error', (err) => {
+            if (fs.existsSync(filePath)) fs.unlink(filePath, ()=>{}); // cleanup failed download
+            reject(err);
+        });
+    });
+
+    console.log(`[Player] Finished downloading ${info.title}.`);
+    return fs.createReadStream(filePath);
   }
 
   buildTrack(entry, searchOptions) {
-    if (!entry || !entry.webpage_url || !entry.title) {
+    const trackUrl = entry.url || entry.webpage_url;
+    if (!entry || !trackUrl || !entry.title) {
       return null;
     }
 
+    // Create a plain object for `requestedBy` to avoid circular references
+    const requestedBy = searchOptions.requestedBy ? {
+        id: searchOptions.requestedBy.id,
+        tag: searchOptions.requestedBy.tag
+    } : null;
+
     return {
       title: entry.title,
-      url: entry.webpage_url,
+      url: trackUrl,
       durationMS: entry.duration ? (entry.duration * 1000) : 0,
       thumbnail: entry.thumbnail,
       author: entry.uploader,
-      requestedBy: searchOptions.requestedBy,
-      source: "youtube",
-      extractor: this,
+      requestedBy: requestedBy,
+      source: "youtube", // Keep as youtube to be handled by this extractor
     };
   }
 }
@@ -100,12 +167,23 @@ const client = new Client({
 async function start() {
   console.log(" Initializing Player...");
 
-  const player = new Player(client);
+  const player = new Player(client, {
+    fallbackExtractor: YtDlpExtractor
+  });
 
-  const customExtractors = DefaultExtractors.filter(ext => ext.identifier !== "youtube");
-  await player.extractors.loadMulti(customExtractors);
-  console.log("[Player] Loaded default extractors minus YouTube.");
+  // Load all default extractors
+  await player.extractors.loadMulti(DefaultExtractors);
+  console.log('[Player] Loaded default extractors.');
 
+  // Unregister all the extractors we don't want to use for search
+  await player.extractors.unregister('YouTubeExtractor');
+  await player.extractors.unregister('SoundCloudExtractor');
+  await player.extractors.unregister('AppleMusicExtractor');
+  await player.extractors.unregister('VimeoExtractor');
+  await player.extractors.unregister('ReverbnationExtractor');
+  console.log('[Player] Unregistered unwanted online extractors.');
+
+  // Register our custom one to handle search and youtube playback
   await player.extractors.register(YtDlpExtractor, {});
   console.log("[Player] Registered custom YtDlp Extractor.");
 
@@ -113,17 +191,23 @@ async function start() {
   console.log(" Player Initialized.");
 
   // Initialize the DJ Manager
-  client.djManager = new DJManager(client.player); // Attach it to the client
+  client.djManager = new DJManager(client.player);
   console.log(" DJ Manager Initialized.");
 
-  client.player.events.on("debug", (queue, message) => {
-    if (message.includes("")) {
-      return;
+  // Add cleanup hook for downloaded files
+  client.player.events.on("trackEnd", (queue, track) => {
+    if (track.metadata && track.metadata.localPath) {
+        fs.unlink(track.metadata.localPath, (err) => {
+            if (err) console.error(`[Cleanup] Failed to delete temp file: ${track.metadata.localPath}`, err.message);
+            else console.log(`[Cleanup] Deleted temp file: ${track.metadata.localPath}`);
+        });
     }
-    console.log(` Guild ${queue.guild.id}: ${message}`);
   });
 
-  const logger = require("./utils/logger");
+  // client.player.events.on("debug", (queue, message) => {
+  //   console.log(`[Player Debug] Guild ${queue.guild.id}: ${message}`);
+  // });
+
   const db = require("./utils/db");
   const dashboard = require(path.join(__dirname, "dashboard", "server.js"));
   const {handleInteraction} = require("./core/interaction-handler");
@@ -159,12 +243,12 @@ async function start() {
   const {scheduleSocialFeedChecks} = require("./jobs/social-feed-scheduler.js");
   const {scheduleTicketChecks} = require("./jobs/ticket-scheduler.js");
   const {startupCleanup} = require("./core/startup.js");
-  const streamManager = require("./core/stream-manager.js"); // Added stream-manager
+  const streamManager = require("./core/stream-manager.js");
 
   setStatus(Status.STARTING);
 
   try {
-    await getCycleTLSInstance(); // Corrected call
+    await getCycleTLSInstance();
   } catch (cycleTlsError) {
     setStatus(Status.ERROR, "Failed to initialize CycleTLS.");
     console.error(" Error initializing CycleTLS:", cycleTlsError.stack);
@@ -218,28 +302,28 @@ async function start() {
 
   client.player.events.on("playerStart", async (queue, track) => {
     const channel = await client.channels.cache.get(queue.metadata.channelId);
-    if (channel && !track.isDJCommentary) {
+    if (channel && !(track.metadata && track.metadata.isDJCommentary)) {
         const embed = new EmbedBuilder()
             .setColor("#57F287")
             .setAuthor({name: "Now Playing"})
             .setTitle(track.title)
-            .setURL(track.url)
+            // Conditionally set URL
+            .setURL(track.url && !(track.metadata && track.metadata.isDJCommentary) ? track.url : null)
             .setThumbnail(track.thumbnail)
             .addFields(
                 {name: "Channel", value: track.author || "N/A", inline: true},
                 {name: "Duration", value: track.duration || "0:00", inline: true}
             )
-            .setFooter({text: `Requested by ${track.requestedBy.tag}`});
+            .setFooter({text: `Requested by ${track.requestedBy ? track.requestedBy.tag : 'Unknown'}`});
 
         channel.send({embeds: [embed]});
     }
 
-    // Log to music_history table
-    if (track.requestedBy && !track.isDJCommentary) { // Don't log DJ commentary tracks or tracks without a requester
+    if (track.requestedBy && !(track.metadata && track.metadata.isDJCommentary)) {
         try {
             await db.execute(
                 `INSERT INTO music_history (guild_id, user_id, song_title, song_url, artist, timestamp)
-                 VALUES (?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE timestamp = NOW()`, // Update timestamp if song is replayed
+                 VALUES (?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE timestamp = NOW()`,
                 [
                     queue.guild.id,
                     track.requestedBy.id,
@@ -249,13 +333,13 @@ async function start() {
                 ]
             );
         } catch (error) {
-            logger.error(`[DB] Failed to log song to music_history for guild ${queue.guild.id}`, { error: error.message });
+            console.error(`[DB] Failed to log song to music_history for guild ${queue.guild.id}`, error.message);
         }
     }
   });
 
   client.player.events.on("audioTrackAdd", async (queue, track) => {
-    if (track.isDJCommentary) return;
+    if (track.metadata && track.metadata.isDJCommentary) return;
     const channel = await client.channels.cache.get(queue.metadata.channelId);
     if (!channel) {
       return;
@@ -265,13 +349,14 @@ async function start() {
       .setColor("#3498DB")
       .setAuthor({name: "Added to Queue"})
       .setTitle(track.title)
-      .setURL(track.url)
+      // Conditionally set URL
+      .setURL(track.url && !(track.metadata && track.metadata.isDJCommentary) ? track.url : null)
       .setThumbnail(track.thumbnail)
       .addFields(
         {name: "Position in queue", value: `${queue.tracks.size}`, inline: true},
         {name: "Duration", value: track.duration || "0:00", inline: true}
       )
-      .setFooter({text: `Requested by ${track.requestedBy.tag}`});
+      .setFooter({text: `Requested by ${track.requestedBy ? track.requestedBy.tag : 'Unknown'}`});
 
     channel.send({embeds: [embed]});
   });
@@ -284,7 +369,7 @@ async function start() {
   });
 
   client.player.events.on("error", async (queue, error) => {
-    logger.error("[Player Error]", {guildId: queue.guild.id, error: error.message, stack: error.stack, category: "music"});
+    console.error(`[Player Error] Guild: ${queue.guild.id}, Error: ${error.message}`);
     const channel = await client.channels.cache.get(queue.metadata.channelId);
     if (channel) {
       channel.send(`❌ | An error occurred: ${error.message.slice(0, 1900)}`);
@@ -292,7 +377,7 @@ async function start() {
   });
 
   client.player.events.on("playerError", async (queue, error) => {
-    logger.error("[Player Connection Error]", {guildId: queue.guild.id, error: error.message, stack: error.stack, category: "music"});
+    console.error(`[Player Connection Error] Guild: ${queue.guild.id}, Error: ${error.message}`);
     const channel = await client.channels.cache.get(queue.metadata.channelId);
     if (channel) {
       channel.send(`❌ | A connection error encountered: ${error.message.slice(0, 1900)}`);
@@ -439,11 +524,6 @@ async function start() {
       console.error(" Error starting announcement worker:", e);
     }
     try {
-      startSocialFeedWorker(c, db);
-    } catch (e) {
-      console.error(" Error starting social feed worker:", e);
-    }
-    try {
       startPollScheduler(c, db);
     } catch (e) {
       console.error(" Error starting poll scheduler:", e);
@@ -477,7 +557,6 @@ async function start() {
       setInterval(() => syncTwitchSchedules(c), 5 * 60 * 1000);
     }
 
-    // Initialize stream manager
     streamManager.init(c);
 
     try {
