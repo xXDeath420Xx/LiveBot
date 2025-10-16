@@ -195,14 +195,15 @@ async function start() {
   console.log(" DJ Manager Initialized.");
 
   // Add cleanup hook for downloaded files
-  client.player.events.on("trackEnd", (queue, track) => {
-    if (track.metadata && track.metadata.localPath) {
-        fs.unlink(track.metadata.localPath, (err) => {
-            if (err) console.error(`[Cleanup] Failed to delete temp file: ${track.metadata.localPath}`, err.message);
-            else console.log(`[Cleanup] Deleted temp file: ${track.metadata.localPath}`);
-        });
-    }
-  });
+  // Removed automatic deletion of temp files to enable caching
+  // client.player.events.on("trackEnd", (queue, track) => {
+  //   if (track.metadata && track.metadata.localPath) {
+  //       fs.unlink(track.metadata.localPath, (err) => {
+  //           if (err) console.error(`[Cleanup] Failed to delete temp file: ${track.metadata.localPath}`, err.message);
+  //           else console.log(`[Cleanup] Deleted temp file: ${track.metadata.localPath}`);
+  //       });
+  //   }
+  // });
 
   // client.player.events.on("debug", (queue, message) => {
   //   console.log(`[Player Debug] Guild ${queue.guild.id}: ${message}`);
@@ -301,6 +302,11 @@ async function start() {
   console.log(` ${client.buttons.size} buttons, ${client.modals.size} modals, and ${client.selects.size} select menus loaded.`);
 
   client.player.events.on("playerStart", async (queue, track) => {
+    // Proactively prepare commentary for the next track
+    if (client.djManager) {
+        await client.djManager.prepareNextCommentary(queue, track);
+    }
+
     const channel = await client.channels.cache.get(queue.metadata.channelId);
     if (channel && !(track.metadata && track.metadata.isDJCommentary)) {
         const embed = new EmbedBuilder()
