@@ -5,11 +5,13 @@ const db = require("../utils/db");
 const axios = require("axios");
 const path = require("path");
 const spotifyApiModule = require("../utils/spotify-api.js");
-const elevenlabsApi = require("../utils/elevenlabs-api.js");
 const geminiApi = require("../utils/gemini-api.js");
 const { joinVoiceChannel, createAudioReceiver, EndBehaviorType } = require("@discordjs/voice");
 const fs = require("fs");
 const prism = require("prism-media");
+// const DJManager = require("../core/dj-manager"); // DJManager is now instantiated in index.js and attached to client
+
+// Temporary comment to force file write - Gemini Fix - 2025-10-16 02:15:00 - Attempt 3
 
 function toMilliseconds(timeString) {
     const timeRegex = /(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?/;
@@ -174,7 +176,7 @@ module.exports = {
                     subcommand
                         .setName('play')
                         .setDescription('Plays a playlist')
-                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist to play').setRequired(true).setAutocomplete(true))))
+                        .addStringOption(option => option.setName('name').setDescription('The name of the playlist').setRequired(true).setAutocomplete(true))))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('dj')
@@ -183,17 +185,8 @@ module.exports = {
                 .addStringOption(option => option.setName('artist').setDescription('An artist to influence the DJ').setRequired(false))
                 .addStringOption(option => option.setName('genre').setDescription('A genre to influence the DJ').setRequired(false))
                 .addStringOption(option => option.setName('playlist_link').setDescription('A link to a Spotify or YouTube playlist to play').setRequired(false)))
-        .addSubcommand(subcommand =>
-            subcommand
-                .setName('dj-voice')
-                .setDescription('Sets the AI DJ\'s voice')
-                .addStringOption(option =>
-                    option.setName('voice')
-                        .setDescription('The ElevenLabs voice to use')
-                        .setRequired(true)
-                        .setAutocomplete(true)))
-        .addSubcommand(subcommand =>
-            subcommand
+        .addSubcommand(
+            subcommand => subcommand
                 .setName('record')
                 .setDescription('Records the audio in a voice channel'))
         .addSubcommand(subcommand =>
@@ -208,31 +201,12 @@ module.exports = {
     async autocomplete(interaction) {
         const focusedOption = interaction.options.getFocused(true);
         if (focusedOption.name === "name") {
-            const focusedValue = focusedOption.value;
+            const focusedValue = interaction.options.getString('name');
             try {
                 const [playlists] = await db.execute("SELECT name FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name LIKE ? LIMIT 25", [interaction.guild.id, interaction.user.id, `${focusedValue}%`]);
                 await interaction.respond(playlists.map(p => ({ name: p.name, value: p.name })));
             } catch (error) {
                 console.error("[Playlist Autocomplete Error]", error.message);
-                await interaction.respond();
-            }
-        } else if (focusedOption.name === "voice") {
-            const focusedValue = interaction.options.getString('voice');
-            try {
-                const voices = await elevenlabsApi.getVoices();
-                if (!voices) {
-                    await interaction.respond();
-                    return;
-                }
-                const filteredVoices = voices.filter(voice =>
-                    voice.name.toLowerCase().includes(focusedValue.toLowerCase())
-                ).map(voice => ({
-                    name: voice.name,
-                    value: voice.voice_id
-                }));
-                await interaction.respond(filteredVoices.slice(0, 25));
-            } catch (error) {
-                console.error("[ElevenLabs Voice Autocomplete Error]", error.message);
                 await interaction.respond();
             }
         }
@@ -257,7 +231,8 @@ module.exports = {
                         const [result] = await db.execute("DELETE FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (result.affectedRows > 0) {
                             return interaction.reply({ content: `🗑️ Playlist **${name}** deleted.`, ephemeral: true });
-                        } else {
+                        }
+                        else {
                             return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
                         }
                     }
@@ -304,10 +279,10 @@ module.exports = {
 
                         const embed = new EmbedBuilder()
                             .setColor("#3498DB")
-                            .setAuthor({name: "Server Queue"})
+                            .setAuthor({ name: "Server Queue" })
                             .setDescription(playlists.map(p => `• ${p.name}`).join("\n"));
 
-                        return interaction.reply({embeds: [embed], ephemeral: true});
+                        return interaction.reply({ embeds: [embed], ephemeral: true });
                     }
                     case "show": {
                         const [[playlist]] = await db.execute("SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
@@ -318,10 +293,10 @@ module.exports = {
                         const songs = JSON.parse(playlist.songs);
                         const embed = new EmbedBuilder()
                             .setColor("#3498DB")
-                            .setAuthor({name: `Playlist: ${name}`})
+                            .setAuthor({ name: `Playlist: ${name}` })
                             .setDescription(songs.length > 0 ? songs.map((s, i) => `**${i + 1}.** [${s.title}](${s.url})`).join("\n") : "This playlist is empty.");
 
-                        return interaction.reply({embeds: [embed], ephemeral: true});
+                        return interaction.reply({ embeds: [embed], ephemeral: true });
                     }
                     case "play": {
                         const permissionCheck = await checkMusicPermissions(interaction);
@@ -371,7 +346,8 @@ module.exports = {
                 }
                 return interaction.reply({ content: "❌ An error occurred while executing this command.", ephemeral: true });
             }
-        } else {
+        }
+        else {
             switch (subcommand) {
                 case 'play': {
                     const permissionCheck = await checkMusicPermissions(interaction);
@@ -387,21 +363,53 @@ module.exports = {
 
                     const player = useMainPlayer();
                     const query = interaction.options.getString("query");
+                    let queue = player.nodes.get(interaction.guild.id); // Use 'let' because we might create it
 
                     try {
                         const user = { id: interaction.user.id, tag: interaction.user.tag };
-                        await player.play(interaction.member.voice.channel.id, query, {
-                            nodeOptions: {
-                                metadata: {
-                                    channelId: interaction.channel.id
-                                },
-                                volume: 80,
-                            },
+
+                        // Search for the requested track first to get its Track object
+                        const searchResult = await player.search(query, {
                             requestedBy: user,
-                            searchEngine: 'com.livebot.ytdlp' // Force our custom extractor
+                            searchEngine: 'com.livebot.ytdlp'
                         });
 
-                        return interaction.editReply({ content: `⏱️ | Loading your track...` });
+                        if (!searchResult || !searchResult.tracks.length) {
+                            return interaction.editReply({ content: `❌ | No results found for your query: ${query}` });
+                        }
+                        const requestedTrack = searchResult.tracks[0];
+
+                        // Create queue if it doesn't exist
+                        if (!queue) {
+                            queue = player.nodes.create(interaction.guild.id, {
+                                metadata: {
+                                    channelId: interaction.channel.id,
+                                    djMode: false, // Default to false, will be updated if DJ command is used
+                                    voiceChannelId: interaction.member.voice.channel.id
+                                },
+                                selfDeaf: true,
+                                volume: 80,
+                                leaveOnEmpty: true,
+                                leaveOnEmptyCooldown: 300000,
+                                leaveOnEnd: true,
+                                leaveOnEndCooldown: 300000,
+                            });
+                        }
+
+                        // Connect to voice channel if not already connected
+                        if (!queue.connection) {
+                            await queue.connect(interaction.member.voice.channel.id);
+                        }
+
+                        // Add the requested track to the queue
+                        queue.addTrack(requestedTrack);
+
+                        // If nothing is currently playing, start playback
+                        if (!queue.isPlaying()) {
+                            await queue.node.play();
+                        }
+
+                        return interaction.editReply({ content: `✅ | Added **${requestedTrack.title}** to the queue.` });
 
                     } catch (e) {
                         console.error("[Play Command Error]", e.message);
@@ -486,15 +494,15 @@ module.exports = {
 
                     const embed = new EmbedBuilder()
                         .setColor("#3498DB")
-                        .setAuthor({name: "Server Queue"})
+                        .setAuthor({ name: "Server Queue" })
                         .setDescription(
                             currentTrack
                                 ? `**Currently Playing:**\n\`${currentTrack.title}\` - ${currentTrackRequesterTag}\n\n**Up Next:**\n${queueString || "Nothing"}`
                                 : `**Currently Playing:**\nNothing\n\n**Up Next:**\n${queueString || "Nothing"}`
                         )
-                        .setFooter({text: `Total songs in queue: ${tracks.length}`});
+                        .setFooter({ text: `Total songs in queue: ${tracks.length}` });
 
-                    await interaction.reply({embeds: [embed]});
+                    await interaction.reply({ embeds: [embed] });
                     break;
                 }
                 case 'skip': {
@@ -566,10 +574,10 @@ module.exports = {
 
                         const embed = new EmbedBuilder()
                             .setColor("#3498DB")
-                            .setAuthor({name: `Lyrics for ${track.title}`})
+                            .setAuthor({ name: `Lyrics for ${track.title}` })
                             .setDescription(lyrics.length > 4096 ? lyrics.substring(0, 4093) + "..." : lyrics);
 
-                        await interaction.editReply({embeds: [embed]});
+                        await interaction.editReply({ embeds: [embed] });
 
                     }
                     catch (error) {
@@ -577,7 +585,7 @@ module.exports = {
                             return interaction.editReply({ content: `❌ No lyrics found for **${track.title}**.` });
                         }
                         console.error("[Lyrics Command Error]", error.message);
-                        await interaction.editReply({ content: "❌ An error occurred while fetching the lyrics." });
+                        await interaction.editReply({ content: `An error occurred: ${e.message}` });
                     }
                     break;
                 }
@@ -594,7 +602,7 @@ module.exports = {
 
                     const track = queue.currentTrack;
 
-                    if (!track) { // Add a check for null track
+                    if (!track) { 
                         return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
@@ -604,18 +612,18 @@ module.exports = {
 
                     const embed = new EmbedBuilder()
                         .setColor("#57F287")
-                        .setAuthor({name: "Now Playing"})
-                        .setTitle(track.title)
-                        .setURL(track.url)
-                        .setThumbnail(track.thumbnail)
+                        .setAuthor({ name: "Now Playing" })
+                        .setTitle(track.title || "Unknown Title")
+                        .setURL(track.url || null)
+                        .setThumbnail(track.thumbnail || null)
                         .addFields(
-                            {name: "Channel", value: track.author, inline: true},
-                            {name: "Duration", value: track.duration, inline: true},
-                            {name: "Requested by", value: trackRequesterTag, inline: true},
-                            {name: "Progress", value: progress, inline: false}
+                            { name: "Channel", value: track.author || "N/A", inline: true },
+                            { name: "Duration", value: track.duration || "0:00", inline: true },
+                            { name: "Requested by", value: trackRequesterTag, inline: true },
+                            { name: "Progress", value: progress, inline: false }
                         );
 
-                    await interaction.reply({embeds: [embed]});
+                    await interaction.reply({ embeds: [embed] });
                     break;
                 }
                 case 'stop': {
@@ -736,11 +744,11 @@ module.exports = {
 
                         const embed = new EmbedBuilder()
                             .setColor("#3498DB")
-                            .setAuthor({name: `Top 10 Search Results for "${query}"`})
+                            .setAuthor({ name: `Top 10 Search Results for "${query}"` })
                             .setDescription(tracks.map((track, i) => `**${i + 1}.** ${track.title} - \`${track.duration}\``).join("\n"))
-                            .setFooter({text: "Type the number of the song you want to play. You have 30 seconds."});
+                            .setFooter({ text: "Type the number of the song you want to play. You have 30 seconds." });
 
-                        await interaction.editReply({embeds: [embed]});
+                        await interaction.editReply({ embeds: [embed] });
 
                         const filter = m => m.author.id === interaction.user.id && parseInt(m.content) >= 1 && parseInt(m.content) <= tracks.length;
                         const collector = interaction.channel.createMessageCollector({ filter, time: 30000, max: 1 });
@@ -803,7 +811,6 @@ module.exports = {
                             metadata: {
                                 channelId: interaction.channel.id,
                                 djMode: true,
-                                djVoice: musicConfig.dj_voice || 'female',
                                 voiceChannelId: member.voice.channel.id
                             },
                             selfDeaf: true,
@@ -817,6 +824,9 @@ module.exports = {
                         if (!queue.connection) {
                             await queue.connect(member.voice.channel.id);
                         }
+
+                        let tracksToAdd = [];
+                        let firstTrackToPlay = null;
 
                         if (playlistLink) {
                             try {
@@ -832,79 +842,87 @@ module.exports = {
                                     track.requestedBy = user;
                                 });
 
-                                await queue.addTrack(searchResult.tracks);
-
-                                if (!queue.isPlaying()) {
-                                    await queue.node.play();
+                                tracksToAdd = searchResult.tracks;
+                                if (tracksToAdd.length > 0) {
+                                    firstTrackToPlay = tracksToAdd.shift();
                                 }
-                                return interaction.followUp({ content: `▶️ Now playing the playlist from your link.` });
 
                             } catch (e) {
                                 console.error("[DJ Playlist Play Error]", e.message);
                                 return interaction.followUp({ content: `❌ An error occurred while trying to play the playlist: ${e.message}` });
                             }
                         }
+                        else {
+                            console.log(`[DJ Command] Generating playlist with Gemini AI based on: song=${inputSong}, artist=${inputArtist}, genre=${inputGenre}`);
+                            const geminiRecommendedTracks = await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre);
 
-                        console.log(`[DJ Command] Generating playlist with Gemini AI based on: song=${inputSong}, artist=${inputArtist}, genre=${inputGenre}`);
-                        const geminiRecommendedTracks = await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre);
+                            if (!geminiRecommendedTracks || geminiRecommendedTracks.length === 0) {
+                                return interaction.followUp({ content: `❌ | Gemini AI could not generate a playlist based on your request. Please try again with different inputs.` });
+                            }
 
-                        if (!geminiRecommendedTracks || geminiRecommendedTracks.length === 0) {
-                            return interaction.followUp({ content: `❌ | Gemini AI could not generate a playlist based on your request. Please try again with different inputs.` });
-                        }
-
-                        let addedTrackCount = 0;
-                        for (const recTrack of geminiRecommendedTracks) {
-                            const query = `${recTrack.title} ${recTrack.artist}`;
-                            const searchResult = await client.player.search(query, {
+                            // Get the first recommended track and search for it immediately
+                            const firstRecTrack = geminiRecommendedTracks.shift(); // Remove first track from recommendations
+                            const firstTrackQuery = `${firstRecTrack.title} ${firstRecTrack.artist}`;
+                            const firstSearchResult = await client.player.search(firstTrackQuery, {
                                 requestedBy: user,
                                 searchEngine: 'com.livebot.ytdlp'
                             });
-                            if (searchResult.hasTracks()) {
-                                queue.addTrack(searchResult.tracks[0]);
-                                addedTrackCount++;
+
+                            if (firstSearchResult.hasTracks()) {
+                                firstTrackToPlay = firstSearchResult.tracks[0];
+                            } else {
+                                console.warn(`[DJ Command] Could not find playable track for first recommendation: ${firstRecTrack.title} by ${firstRecTrack.artist}`);
                             }
+
+                            // Process the rest of the recommendations asynchronously
+                            const remainingTracksPromises = geminiRecommendedTracks.map(async (recTrack) => {
+                                const query = `${recTrack.title} ${recTrack.artist}`;
+                                const searchResult = await client.player.search(query, {
+                                    requestedBy: user,
+                                    searchEngine: 'com.livebot.ytdlp'
+                                });
+                                if (searchResult.hasTracks()) {
+                                    return searchResult.tracks[0];
+                                }
+                                return null;
+                            });
+
+                            const resolvedRemainingTracks = await Promise.all(remainingTracksPromises);
+                            tracksToAdd = resolvedRemainingTracks.filter(track => track !== null);
                         }
 
-                        if (queue.tracks.size === 0) {
+                        if (!firstTrackToPlay && tracksToAdd.length === 0) {
                             return interaction.followUp({ content: `❌ | Could not find any playable tracks for the generated playlist.` });
                         }
 
-                        if (!queue.isPlaying()) {
-                            await queue.node.play();
+                        // Play the first track immediately if found
+                        if (firstTrackToPlay) {
+                            await queue.play(firstTrackToPlay.url, {
+                                nodeOptions: {
+                                    metadata: {
+                                        channelId: interaction.channel.id,
+                                        djMode: true,
+                                        voiceChannelId: member.voice.channel.id
+                                    }
+                                },
+                                requestedBy: user
+                            });
                         }
 
-                        return interaction.followUp({ content: `🎧 | Gemini AI DJ session started! I've added ${addedTrackCount} songs to the queue based on your preferences.` });
+                        // Add the remaining tracks to the queue
+                        if (tracksToAdd.length > 0) {
+                            queue.addTrack(tracksToAdd);
+                        }
+
+                        const replyContent = firstTrackToPlay
+                            ? `🎧 | Gemini AI DJ session started! Now playing **${firstTrackToPlay.title}**. I've added ${tracksToAdd.length} more songs to the queue based on your preferences.`
+                            : `🎧 | Gemini AI DJ session started! I've added ${tracksToAdd.length} songs to the queue based on your preferences.`;
+
+                        return interaction.followUp({ content: replyContent });
 
                     } catch (e) {
                         console.error("[DJ Command Error]", e.message);
                         return interaction.followUp({ content: `An error occurred: ${e.message}` });
-                    }
-                    break;
-                }
-                case 'dj-voice': {
-                    const { guild } = interaction;
-                    const voiceId = interaction.options.getString('voice');
-
-                    await interaction.deferReply({ ephemeral: true });
-
-                    try {
-                        const voices = await elevenlabsApi.getVoices();
-                        const selectedVoice = voices.find(v => v.voice_id === voiceId);
-
-                        if (!selectedVoice) {
-                            return interaction.editReply({ content: "❌ Invalid voice selected. Please choose from the autocomplete options." });
-                        }
-
-                        await db.execute(
-                            "INSERT INTO music_config (guild_id, dj_voice) VALUES (?,?) ON DUPLICATE KEY UPDATE dj_voice = ?",
-                            [guild.id, voiceId, voiceId]
-                        );
-
-                        return interaction.editReply({ content: `✅ AI DJ voice set to **${selectedVoice.name}**.` });
-
-                    } catch (e) {
-                        console.error("[DJ Voice Command Error]", e.message);
-                        return interaction.editReply({ content: `❌ An error occurred while setting the DJ voice: ${e.message}` });
                     }
                     break;
                 }
@@ -939,7 +957,8 @@ module.exports = {
                     if (outputChannelId) {
                         try {
                             outputChannel = await interaction.client.channels.fetch(outputChannelId);
-                        } catch (e) {
+                        }
+                        catch (e) {
                             console.error(`[Record Command] Could not fetch output channel ${outputChannelId} for guild ${guildId}:`, e.message);
                         }
                     }
@@ -1086,7 +1105,8 @@ module.exports = {
                         if (action === "enable") {
                             queue.filters.ffmpeg.toggle(filterName);
                             await interaction.reply({ content: `✅ **${filterName}** filter enabled.` });
-                        } else {
+                        }
+                        else {
                             queue.filters.ffmpeg.toggle(filterName);
                             await interaction.reply({ content: `❌ **${filterName}** filter disabled.` });
                         }
