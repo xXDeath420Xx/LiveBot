@@ -633,7 +633,7 @@ module.exports = {
                         .setURL(track.url || null)
                         .setThumbnail(track.thumbnail || null)
                         .addFields(
-                            { name: "Channel", value: track.author || "N/A", inline: true },
+                            { name: "Artist", value: track.author || "N/A", inline: true },
                             { name: "Duration", value: track.duration || "0:00", inline: true },
                             { name: "Requested by", value: requesterTag, inline: true },
                             { name: "Progress", value: progress, inline: false }
@@ -821,19 +821,24 @@ module.exports = {
                     await interaction.deferReply();
 
                     try {
-                        const queue = client.player.nodes.create(guild.id, {
-                            metadata: {
-                                channelId: interaction.channel.id,
-                                djMode: true,
-                                voiceChannelId: member.voice.channel.id
-                            },
-                            selfDeaf: true,
-                            volume: 80,
-                            leaveOnEmpty: true,
-                            leaveOnEmptyCooldown: 300000,
-                            leaveOnEnd: true,
-                            leaveOnEndCooldown: 300000,
-                        });
+                        let queue = client.player.nodes.get(guild.id);
+                        if (!queue) {
+                            queue = client.player.nodes.create(guild.id, {
+                                metadata: {
+                                    channelId: interaction.channel.id,
+                                    djMode: true,
+                                    voiceChannelId: member.voice.channel.id,
+                                    playedTracks: []
+                                },
+                                selfDeaf: true,
+                                volume: 80,
+                                leaveOnEmpty: true,
+                                leaveOnEmptyCooldown: 300000,
+                                leaveOnEnd: false,
+                                leaveOnEndCooldown: 300000,
+                            });
+                        }
+
 
                         if (!queue.connection) {
                             await queue.connect(member.voice.channel.id);
@@ -860,7 +865,7 @@ module.exports = {
                         }
                         else {
                             console.log(`[DJ Command] Generating playlist with Gemini AI based on: song=${inputSong}, artist=${inputArtist}, genre=${inputGenre}`);
-                            const geminiRecommendedTracks = await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre);
+                            const geminiRecommendedTracks = await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre, queue.metadata.playedTracks);
 
                             if (!geminiRecommendedTracks || geminiRecommendedTracks.length === 0) {
                                 return interaction.followUp({ content: `❌ | Gemini AI could not generate a playlist based on your request. Please try again with different inputs.` });
@@ -870,7 +875,7 @@ module.exports = {
                                 const query = `${recTrack.title} ${recTrack.artist}`;
                                 const searchResult = await client.player.search(query, {
                                     searchEngine: 'com.livebot.ytdlp',
-                                    metadata: { requesterId: interaction.user.id }
+                                    metadata: { requesterId: interaction.user.id, artist: recTrack.artist }
                                 });
                                 if (searchResult.hasTracks()) {
                                     return searchResult.tracks[0];
@@ -885,6 +890,9 @@ module.exports = {
                         if (allPlaylistTracks.length === 0) {
                             return interaction.followUp({ content: `❌ | Could not find any playable tracks for the generated playlist.` });
                         }
+
+                        queue.metadata.playedTracks.push(...allPlaylistTracks.map(t => t.title));
+
 
                         try {
                             console.log('[DJ Command] Attempting to call client.djManager.playPlaylistIntro...');

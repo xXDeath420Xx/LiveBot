@@ -308,7 +308,7 @@ async function start() {
         }
         
         embed.addFields(
-                {name: "Channel", value: track.author || "N/A", inline: true},
+                {name: "Artist", value: track.author || "N/A", inline: true},
                 {name: "Duration", value: track.duration || "0:00", inline: true}
             )
             .setFooter({text: `Requested by ${requester ? requester.tag : 'Unknown'}`});
@@ -392,6 +392,55 @@ async function start() {
     const channel = await client.channels.cache.get(queue.metadata.channelId);
     if (channel) {
       channel.send(`❌ | A connection error encountered: ${error.message.slice(0, 1900)}`);
+    }
+  });
+
+  client.player.events.on("playerFinish", async (queue, finishedTrack) => {
+    logger.info(`[DJ] onPlayerFinish event triggered for guild ${queue.guild.id}. Track: ${finishedTrack.title}`);
+
+    if (queue.metadata.djMode && !finishedTrack.metadata?.isDJCommentary) {
+        logger.info(`[DJ] DJ mode active and a regular track finished. Checking for next playlist.`);
+
+        // If the queue is empty after the current song, generate new recommendations
+        if (queue.tracks.size === 0 && queue.currentTrack === null) {
+            logger.info(`[DJ] Queue is empty. Generating new recommendations.`);
+            const { inputSong, inputArtist, inputGenre } = queue.metadata;
+            const geminiRecommendedTracks = await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre, queue.metadata.playedTracks);
+
+            if (geminiRecommendedTracks && geminiRecommendedTracks.length > 0) {
+                const trackPromises = geminiRecommendedTracks.map(async (recTrack) => {
+                    const query = `${recTrack.title} ${recTrack.artist}`;
+                    const searchResult = await client.player.search(query, {
+                        searchEngine: 'com.livebot.ytdlp',
+                        metadata: { requesterId: client.user.id, artist: recTrack.artist }
+                    });
+                    if (searchResult.hasTracks()) {
+                        return searchResult.tracks[0];
+                    }
+                    return null;
+                });
+
+                const resolvedTracks = await Promise.all(trackPromises);
+                const newPlaylistTracks = resolvedTracks.filter(track => track !== null);
+
+                if (newPlaylistTracks.length > 0) {
+                    queue.metadata.playedTracks.push(...newPlaylistTracks.map(t => t.title));
+                    await client.djManager.playPlaylistIntro(queue, newPlaylistTracks);
+                    if (!queue.isPlaying()) {
+                        await queue.node.play();
+                    }
+                } else {
+                    logger.warn(`[DJ] No playable tracks found for new recommendations.`);
+                }
+            } else {
+                logger.info(`[DJ] Gemini AI did not return new recommendations. Ending DJ session.`);
+                const channel = await client.channels.cache.get(queue.metadata.channelId);
+                if (channel) {
+                    channel.send("🎧 | The AI DJ has run out of new recommendations. Ending the session.");
+                }
+                queue.delete(); // Stop the queue if no new songs can be found
+            }
+        }
     }
   });
 

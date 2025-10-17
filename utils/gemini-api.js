@@ -13,7 +13,7 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 const model = genAI.getGenerativeModel({ model: "models/gemini-pro-latest" });
 
-async function generatePlaylistRecommendations(song, artist, genre) {
+async function generatePlaylistRecommendations(song, artist, genre, playedTracks = []) {
     if (!GEMINI_API_KEY) {
         logger.error("[Gemini API] Cannot generate recommendations: API key is missing.");
         return [];
@@ -36,6 +36,10 @@ async function generatePlaylistRecommendations(song, artist, genre) {
 
     if (criteria.length > 0) {
         prompt += ` based on the following criteria: ${criteria.join(" and ")}.`;
+    }
+
+    if (playedTracks.length > 0) {
+        prompt += ` Avoid recommending any of the following songs that have already been played: ${playedTracks.join(", ")}.`;
     }
 
     prompt += `\n\nIt's okay to include the original song in the list. Ensure the playlist is not repetitive and explores a good variety of tracks within the requested style. Please ensure the songs are not all from the same artist and that the list is varied. The goal is a creative and surprising playlist, not just a list of the artist's most popular songs. Focus on deep cuts and lesser-known tracks where possible.`;
@@ -69,4 +73,32 @@ async function generatePlaylistRecommendations(song, artist, genre) {
     }
 }
 
-module.exports = { generatePlaylistRecommendations };
+async function generatePlaylistCommentary(playlistTracks) {
+    if (!GEMINI_API_KEY) {
+        logger.error("[Gemini API] Cannot generate commentary: API key is missing.");
+        return "";
+    }
+
+    if (!playlistTracks || playlistTracks.length === 0) {
+        return "";
+    }
+
+    const trackList = playlistTracks.map(track => `"${track.title}" by ${track.author}`).join(", ");
+
+    const prompt = `Generate a concise and engaging introductory commentary for the following playlist. Focus on the songs, artists, and a brief summary of the genre or timeframe of the songs. Do not include YouTube channel names or information about every individual song. Keep it under 60 seconds when spoken. Examples: "Up next, we have a modern classic by Taylor Swift. Following her, we've got some contemporary country" or "Welcome to a journey through 80s synth-pop with hits from A-Ha and Eurythmics."\n\nPlaylist: ${trackList}`;
+
+    logger.info(`[Gemini API] Sending commentary prompt to Gemini: ${prompt}`);
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const commentary = response.text();
+        logger.info(`[Gemini API] Generated commentary: ${commentary}`);
+        return commentary;
+    } catch (error) {
+        logger.error("[Gemini API] Error generating playlist commentary from Gemini:", { error: error.message, stack: error.stack, fullError: error });
+        return `Get ready for some great music!`;
+    }
+}
+
+module.exports = { generatePlaylistRecommendations, generatePlaylistCommentary };

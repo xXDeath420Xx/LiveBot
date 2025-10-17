@@ -3,6 +3,7 @@ const path = require("path");
 const logger = require("../utils/logger");
 const { Track } = require('discord-player');
 const { spawn } = require('child_process');
+const geminiApi = require("../utils/gemini-api.js");
 
 // --- Piper TTS Configuration ---
 const PIPER_PATH = process.env.PIPER_PATH || '/root/.local/bin/piper';
@@ -94,18 +95,13 @@ class DJManager {
 
     if (!playlistTracks || playlistTracks.length === 0) {
         logger.warn(`[DJ] No playlist tracks provided for intro commentary for guild ${queue.guild.id}.`);
+        queue.addTrack(playlistTracks);
         return;
     }
 
     try {
-        let script = `Here's your upcoming playlist featuring: `;
-        const tracksToMention = playlistTracks.slice(0, Math.min(playlistTracks.length, 3));
-        tracksToMention.forEach((track, index) => {
-            script += `${track.title} by ${track.author}`;
-            if (index < tracksToMention.length - 1) script += ", ";
-        });
-        if (playlistTracks.length > tracksToMention.length) script += `, and more!`;
-        else script += `!`;
+        const commentaryText = await geminiApi.generatePlaylistCommentary(playlistTracks);
+        let script = commentaryText || `Here's your upcoming playlist!`;
 
         logger.info(`[DJ] Generated intro script for guild ${queue.guild.id}: ${script}`);
 
@@ -166,7 +162,52 @@ class DJManager {
         return;
     }
 
-    logger.info(`[DJ] Regular track finished. No inter-song commentary will be played.`);
+    if (queue.metadata.djMode && queue.tracks.size === 0 && queue.currentTrack === null) {
+        logger.info(`[DJ] DJ mode active and queue is empty. Generating new recommendations.`);
+        const { inputSong, inputArtist, inputGenre } = queue.metadata;
+        const geminiRecommendedTracks = await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre, queue.metadata.playedTracks);
+
+        if (geminiRecommendedTracks && geminiRecommendedTracks.length > 0) {
+            const trackPromises = geminiRecommendedTracks.map(async (recTrack) => {
+                const query = `${recTrack.title} ${recTrack.artist}`;
+                const searchResult = await this.player.search(query, {
+                    searchEngine: 'com.livebot.ytdlp',
+                    metadata: { requesterId: this.client.user.id, artist: recTrack.artist }
+                });
+                if (searchResult.hasTracks()) {
+                    return searchResult.tracks[0];
+                }
+                return null;
+            });
+
+            const resolvedTracks = await Promise.all(trackPromises);
+            const newPlaylistTracks = resolvedTracks.filter(track => track !== null);
+
+            if (newPlaylistTracks.length > 0) {
+                queue.metadata.playedTracks.push(...newPlaylistTracks.map(t => t.title));
+                await this.playPlaylistIntro(queue, newPlaylistTracks);
+                if (!queue.isPlaying()) {
+                    await queue.node.play();
+                }
+            } else {
+                logger.warn(`[DJ] No playable tracks found for new recommendations.`);
+                const channel = await this.client.channels.cache.get(queue.metadata.channelId);
+                if (channel) {
+                    channel.send("🎧 | The AI DJ has run out of new recommendations. Ending the session.");
+                }
+                queue.delete();
+            }
+        } else {
+            logger.info(`[DJ] Gemini AI did not return new recommendations. Ending DJ session.`);
+            const channel = await this.client.channels.cache.get(queue.metadata.channelId);
+            if (channel) {
+                channel.send("🎧 | The AI DJ has run out of new recommendations. Ending the session.");
+            }
+            queue.delete(); // Stop the queue if no new songs can be found
+        }
+    } else {
+        logger.info(`[DJ] Regular track finished. No inter-song commentary will be played.`);
+    }
   }
 }
 
