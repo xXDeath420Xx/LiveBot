@@ -9,12 +9,9 @@ const geminiApi = require("../utils/gemini-api.js");
 const { joinVoiceChannel, createAudioReceiver, EndBehaviorType } = require("@discordjs/voice");
 const fs = require("fs");
 const prism = require("prism-media");
-// const DJManager = require("../core/dj-manager"); // DJManager is now instantiated in index.js and attached to client
-
-// Temporary comment to force file write - Gemini Fix - 2025-10-16 02:15:00 - Attempt 3
 
 function toMilliseconds(timeString) {
-    const timeRegex = /(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?/;
+    const timeRegex = /(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/;
     const matches = timeString.match(timeRegex);
     if (!matches) {
         return 0;
@@ -151,7 +148,7 @@ module.exports = {
                 .addSubcommand(subcommand =>
                     subcommand
                         .setName('delete')
-                        .setDescription('Delates a playlist')
+                        .setDescription('Deletes a playlist')
                         .addStringOption(option => option.setName('name').setDescription('The name of the playlist to delete').setRequired(true).setAutocomplete(true)))
                 .addSubcommand(subcommand =>
                     subcommand
@@ -233,7 +230,7 @@ module.exports = {
                             return interaction.reply({ content: `🗑️ Playlist **${name}** deleted.`, ephemeral: true });
                         }
                         else {
-                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
+                            return interaction.reply({ content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true });
                         }
                     }
                     case "add": {
@@ -245,7 +242,7 @@ module.exports = {
 
                         const [[playlist]] = await db.execute("SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (!playlist) {
-                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
+                            return interaction.reply({ content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true });
                         }
 
                         const songs = JSON.parse(playlist.songs);
@@ -258,7 +255,7 @@ module.exports = {
                         const position = interaction.options.getInteger("position") - 1;
                         const [[playlist]] = await db.execute("SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (!playlist) {
-                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
+                            return interaction.reply({ content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true });
                         }
 
                         const songs = JSON.parse(playlist.songs);
@@ -274,7 +271,7 @@ module.exports = {
                     case "list": {
                         const [playlists] = await db.execute("SELECT name FROM user_playlists WHERE guild_id = ? AND user_id = ?", [guildId, userId]);
                         if (playlists.length === 0) {
-                            return interaction.reply({ content: "You don't have any playlists yet.", ephemeral: true });
+                            return interaction.reply({ content: "You don\'t have any playlists yet.", ephemeral: true });
                         }
 
                         const embed = new EmbedBuilder()
@@ -287,7 +284,7 @@ module.exports = {
                     case "show": {
                         const [[playlist]] = await db.execute("SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (!playlist) {
-                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
+                            return interaction.reply({ content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true });
                         }
 
                         const songs = JSON.parse(playlist.songs);
@@ -310,7 +307,7 @@ module.exports = {
 
                         const [[playlist]] = await db.execute("SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?", [guildId, userId, name]);
                         if (!playlist) {
-                            return interaction.reply({ content: `❌ You don't have a playlist named **${name}**.`, ephemeral: true });
+                            return interaction.reply({ content: `❌ You don\'t have a playlist named **${name}**.`, ephemeral: true });
                         }
 
                         const songs = JSON.parse(playlist.songs);
@@ -321,14 +318,13 @@ module.exports = {
                         await interaction.deferReply();
 
                         try {
-                            const user = { id: interaction.user.id, tag: interaction.user.tag };
                             await interaction.client.player.play(interaction.member.voice.channel.id, songs.map(s => s.url).join("\n"), {
                                 nodeOptions: {
                                     metadata: {
-                                        channelId: interaction.channel.id
+                                        channelId: interaction.channel.id,
+                                        requesterId: interaction.user.id
                                     }
-                                },
-                                requestedBy: user
+                                }
                             });
 
                             return interaction.followUp({ content: `▶️ Now playing the **${name}** playlist.` });
@@ -363,15 +359,12 @@ module.exports = {
 
                     const player = useMainPlayer();
                     const query = interaction.options.getString("query");
-                    let queue = player.nodes.get(interaction.guild.id); // Use 'let' because we might create it
+                    let queue = player.nodes.get(interaction.guild.id);
 
                     try {
-                        const user = { id: interaction.user.id, tag: interaction.user.tag };
-
-                        // Search for the requested track first to get its Track object
                         const searchResult = await player.search(query, {
-                            requestedBy: user,
-                            searchEngine: 'com.livebot.ytdlp'
+                            searchEngine: 'com.livebot.ytdlp',
+                            metadata: { requesterId: interaction.user.id }
                         });
 
                         if (!searchResult || !searchResult.tracks.length) {
@@ -379,12 +372,11 @@ module.exports = {
                         }
                         const requestedTrack = searchResult.tracks[0];
 
-                        // Create queue if it doesn't exist
                         if (!queue) {
                             queue = player.nodes.create(interaction.guild.id, {
                                 metadata: {
                                     channelId: interaction.channel.id,
-                                    djMode: false, // Default to false, will be updated if DJ command is used
+                                    djMode: false,
                                     voiceChannelId: interaction.member.voice.channel.id
                                 },
                                 selfDeaf: true,
@@ -396,15 +388,12 @@ module.exports = {
                             });
                         }
 
-                        // Connect to voice channel if not already connected
                         if (!queue.connection) {
                             await queue.connect(interaction.member.voice.channel.id);
                         }
 
-                        // Add the requested track to the queue
                         queue.addTrack(requestedTrack);
 
-                        // If nothing is currently playing, start playback
                         if (!queue.isPlaying()) {
                             await queue.node.play();
                         }
@@ -483,22 +472,40 @@ module.exports = {
                         return interaction.reply({ content: "The queue is empty.", ephemeral: true });
                     }
 
-                    const queueString = tracks.slice(0, 10).map((track, i) => {
-                        console.log(`[DEBUG] Queue Track ${i}:`, JSON.stringify(track.requestedBy));
-                        const trackRequesterTag = track.requestedBy?.tag ?? 'DJ Bot';
-                        return `**${i + 1}.** \`${track.title}\` - ${trackRequesterTag}`;
-                    }).join("\n");
+                    const trackStrings = await Promise.all(tracks.slice(0, 10).map(async (track, i) => {
+                        let requesterTag = 'DJ Bot';
+                        const requesterId = track.metadata?.requesterId || track.requestedBy?.id;
+                        if (requesterId) {
+                            try {
+                                const requester = await interaction.client.users.fetch(requesterId);
+                                requesterTag = requester.tag;
+                            } catch {
+                                requesterTag = 'Unknown User';
+                            }
+                        }
+                        return `**${i + 1}.** \`${track.title}\` - ${requesterTag}`;
+                    }));
 
-                    console.log(`[DEBUG] Current Track:`, JSON.stringify(currentTrack?.requestedBy));
-                    const currentTrackRequesterTag = currentTrack?.requestedBy?.tag ?? 'DJ Bot';
+                    const queueString = trackStrings.join("\n");
+
+                    let currentTrackRequesterTag = 'DJ Bot';
+                    const currentRequesterId = currentTrack?.metadata?.requesterId || currentTrack?.requestedBy?.id;
+                    if (currentTrack && currentRequesterId) {
+                        try {
+                            const currentRequester = await interaction.client.users.fetch(currentRequesterId);
+                            currentTrackRequesterTag = currentRequester.tag;
+                        } catch {
+                            currentTrackRequesterTag = 'Unknown User';
+                        }
+                    }
 
                     const embed = new EmbedBuilder()
                         .setColor("#3498DB")
                         .setAuthor({ name: "Server Queue" })
                         .setDescription(
                             currentTrack
-                                ? `**Currently Playing:**\n\`${currentTrack.title}\` - ${currentTrackRequesterTag}\n\n**Up Next:**\n${queueString || "Nothing"}`
-                                : `**Currently Playing:**\nNothing\n\n**Up Next:**\n${queueString || "Nothing"}`
+                                ? `**Currently Playing:**\\n\`${currentTrack.title}\` - ${currentTrackRequesterTag}\\n\\n**Up Next:**\\n${queueString || "Nothing"}`
+                                : `**Currently Playing:**\\nNothing\\n\\n**Up Next:**\\n${queueString || "Nothing"}`
                         )
                         .setFooter({ text: `Total songs in queue: ${tracks.length}` });
 
@@ -585,7 +592,7 @@ module.exports = {
                             return interaction.editReply({ content: `❌ No lyrics found for **${track.title}**.` });
                         }
                         console.error("[Lyrics Command Error]", error.message);
-                        await interaction.editReply({ content: `An error occurred: ${e.message}` });
+                        await interaction.editReply({ content: `An error occurred: ${error.message}` });
                     }
                     break;
                 }
@@ -602,13 +609,22 @@ module.exports = {
 
                     const track = queue.currentTrack;
 
-                    if (!track) { 
+                    if (!track) {
                         return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
                     }
 
                     const progress = queue.node.createProgressBar();
-                    console.log(`[DEBUG] Now Playing Track:`, JSON.stringify(track.requestedBy));
-                    const trackRequesterTag = track.requestedBy?.tag ?? 'DJ Bot';
+                    
+                    let requesterTag = 'DJ Bot';
+                    const requesterId = track.metadata?.requesterId || track.requestedBy?.id;
+                    if (requesterId) {
+                        try {
+                            const requester = await interaction.client.users.fetch(requesterId);
+                            requesterTag = requester.tag;
+                        } catch {
+                            requesterTag = 'Unknown User';
+                        }
+                    }
 
                     const embed = new EmbedBuilder()
                         .setColor("#57F287")
@@ -619,7 +635,7 @@ module.exports = {
                         .addFields(
                             { name: "Channel", value: track.author || "N/A", inline: true },
                             { name: "Duration", value: track.duration || "0:00", inline: true },
-                            { name: "Requested by", value: trackRequesterTag, inline: true },
+                            { name: "Requested by", value: requesterTag, inline: true },
                             { name: "Progress", value: progress, inline: false }
                         );
 
@@ -731,9 +747,8 @@ module.exports = {
                     await interaction.deferReply();
 
                     try {
-                        const user = { id: interaction.user.id, tag: interaction.user.tag };
                         const results = await interaction.client.player.search(query, {
-                            requestedBy: user,
+                            metadata: { requesterId: interaction.user.id },
                         });
 
                         if (!results || !results.hasTracks()) {
@@ -760,10 +775,10 @@ module.exports = {
                             await interaction.client.player.play(member.voice.channel.id, track, {
                                 nodeOptions: {
                                     metadata: {
-                                        channelId: interaction.channel.id
+                                        channelId: interaction.channel.id,
+                                        requesterId: interaction.user.id
                                     }
-                                },
-                                requestedBy: user
+                                }
                             });
 
                             m.delete().catch(() => {
@@ -779,7 +794,7 @@ module.exports = {
                     }
                     catch (error) {
                         console.error("[Search Command Error]", error.message);
-                        return interaction.editReply({ content: `An error occurred: ${e.message}` });
+                        return interaction.editReply({ content: `An error occurred: ${error.message}` });
                     }
                     break;
                 }
@@ -806,7 +821,6 @@ module.exports = {
                     await interaction.deferReply();
 
                     try {
-                        const user = { id: member.user.id, tag: member.user.tag };
                         const queue = client.player.nodes.create(guild.id, {
                             metadata: {
                                 channelId: interaction.channel.id,
@@ -825,27 +839,19 @@ module.exports = {
                             await queue.connect(member.voice.channel.id);
                         }
 
-                        let tracksToAdd = [];
-                        let firstTrackToPlay = null;
+                        let allPlaylistTracks = [];
 
                         if (playlistLink) {
                             try {
                                 const searchResult = await client.player.search(playlistLink, {
-                                    requestedBy: user,
+                                    metadata: { requesterId: interaction.user.id },
                                 });
 
                                 if (!searchResult.hasTracks()) {
                                     return interaction.followUp({ content: `❌ | No tracks found for the provided playlist link.` });
                                 }
 
-                                searchResult.tracks.forEach(track => {
-                                    track.requestedBy = user;
-                                });
-
-                                tracksToAdd = searchResult.tracks;
-                                if (tracksToAdd.length > 0) {
-                                    firstTrackToPlay = tracksToAdd.shift();
-                                }
+                                allPlaylistTracks = searchResult.tracks;
 
                             } catch (e) {
                                 console.error("[DJ Playlist Play Error]", e.message);
@@ -860,26 +866,11 @@ module.exports = {
                                 return interaction.followUp({ content: `❌ | Gemini AI could not generate a playlist based on your request. Please try again with different inputs.` });
                             }
 
-                            // Get the first recommended track and search for it immediately
-                            const firstRecTrack = geminiRecommendedTracks.shift(); // Remove first track from recommendations
-                            const firstTrackQuery = `${firstRecTrack.title} ${firstRecTrack.artist}`;
-                            const firstSearchResult = await client.player.search(firstTrackQuery, {
-                                requestedBy: user,
-                                searchEngine: 'com.livebot.ytdlp'
-                            });
-
-                            if (firstSearchResult.hasTracks()) {
-                                firstTrackToPlay = firstSearchResult.tracks[0];
-                            } else {
-                                console.warn(`[DJ Command] Could not find playable track for first recommendation: ${firstRecTrack.title} by ${firstRecTrack.artist}`);
-                            }
-
-                            // Process the rest of the recommendations asynchronously
-                            const remainingTracksPromises = geminiRecommendedTracks.map(async (recTrack) => {
+                            const trackPromises = geminiRecommendedTracks.map(async (recTrack) => {
                                 const query = `${recTrack.title} ${recTrack.artist}`;
                                 const searchResult = await client.player.search(query, {
-                                    requestedBy: user,
-                                    searchEngine: 'com.livebot.ytdlp'
+                                    searchEngine: 'com.livebot.ytdlp',
+                                    metadata: { requesterId: interaction.user.id }
                                 });
                                 if (searchResult.hasTracks()) {
                                     return searchResult.tracks[0];
@@ -887,38 +878,37 @@ module.exports = {
                                 return null;
                             });
 
-                            const resolvedRemainingTracks = await Promise.all(remainingTracksPromises);
-                            tracksToAdd = resolvedRemainingTracks.filter(track => track !== null);
+                            const resolvedTracks = await Promise.all(trackPromises);
+                            allPlaylistTracks = resolvedTracks.filter(track => track !== null);
                         }
 
-                        if (!firstTrackToPlay && tracksToAdd.length === 0) {
+                        if (allPlaylistTracks.length === 0) {
                             return interaction.followUp({ content: `❌ | Could not find any playable tracks for the generated playlist.` });
                         }
 
-                        // Play the first track immediately if found
-                        if (firstTrackToPlay) {
-                            await queue.play(firstTrackToPlay.url, {
-                                nodeOptions: {
-                                    metadata: {
-                                        channelId: interaction.channel.id,
-                                        djMode: true,
-                                        voiceChannelId: member.voice.channel.id
-                                    }
-                                },
-                                requestedBy: user
-                            });
+                        try {
+                            console.log('[DJ Command] Attempting to call client.djManager.playPlaylistIntro...');
+                            await client.djManager.playPlaylistIntro(queue, allPlaylistTracks);
+                            console.log('[DJ Command] client.djManager.playPlaylistIntro call completed.');
+                        } catch (introError) {
+                            console.error('[DJ Command] Error calling playPlaylistIntro:', introError.message);
+                            queue.addTrack(allPlaylistTracks);
+                            return interaction.followUp({ content: `❌ | An error occurred while generating DJ intro: ${introError.message}. Playing playlist without intro.` });
                         }
 
-                        // Add the remaining tracks to the queue
-                        if (tracksToAdd.length > 0) {
-                            queue.addTrack(tracksToAdd);
+                        console.log(`[DJ Command] Checking queue.isPlaying(): ${queue.isPlaying()}`);
+                        if (!queue.isPlaying()) {
+                            console.log('[DJ Command] Queue not playing, initiating playback...');
+                            try {
+                                await queue.node.play();
+                                console.log('[DJ Command] Playback initiated successfully.');
+                            } catch (playError) {
+                                console.error('[DJ Command] Error initiating playback:', playError.message);
+                                return interaction.followUp({ content: `❌ | An error occurred while starting playback: ${playError.message}` });
+                            }
                         }
 
-                        const replyContent = firstTrackToPlay
-                            ? `🎧 | Gemini AI DJ session started! Now playing **${firstTrackToPlay.title}**. I've added ${tracksToAdd.length} more songs to the queue based on your preferences.`
-                            : `🎧 | Gemini AI DJ session started! I've added ${tracksToAdd.length} songs to the queue based on your preferences.`;
-
-                        return interaction.followUp({ content: replyContent });
+                        return interaction.followUp({ content: `🎧 | Gemini AI DJ session started! An introductory commentary will play, followed by ${allPlaylistTracks.length} songs based on your preferences.` });
 
                     } catch (e) {
                         console.error("[DJ Command Error]", e.message);

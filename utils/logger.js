@@ -94,10 +94,9 @@ class DiscordTransport extends Transport {
 
 const baseLogger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
-    // DO NOT add format.json() here as it disrupts the console transport
     format: winston.format.combine(
         winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-        winston.format.errors({ stack: true }) // This will add the stack trace to the meta object
+        winston.format.errors({ stack: true })
     ),
     transports: [
         new winston.transports.Console({
@@ -106,24 +105,30 @@ const baseLogger = winston.createLogger({
                 winston.format.printf(info => {
                     const { timestamp, level, message, stack, ...meta } = info;
                     let metaString = '';
-                    if (meta && Object.keys(meta).length) {
-                        metaString = safeStringify(meta, null);
+                    if (meta && Object.keys(meta).length > 0) {
+                        metaString = ` - ${safeStringify(meta, null)}`;
                     }
-                    // The stack will be automatically included by `winston.format.errors`
-                    return `${timestamp} ${level}: ${message}${stack ? `\n${stack}` : ''}${metaString ? ` - ${metaString}` : ''}`;
+                    return `${timestamp} ${level}: ${message}${stack ? `\n${stack}` : ''}${metaString}`;
                 })
             )
         }),
         new winston.transports.File({
             filename: logPath,
-            format: winston.format.json() // JSON format is fine for file logging
+            format: winston.format.printf(info => {
+                const { timestamp, level, message, stack, ...meta } = info;
+                let metaString = '';
+                if (meta && Object.keys(meta).length > 0) {
+                    metaString = ` - ${safeStringify(meta, null)}`;
+                }
+                return `${timestamp} ${level}: ${message}${stack ? `\n${stack}` : ''}${metaString}`;
+            })
         })
     ]
 });
 
 const logger = {
     init: (client, database) => {
-        if (botClient && db) return; // Prevent re-initialization
+        if (botClient && db) return;
         botClient = client;
         db = database;
         baseLogger.add(new DiscordTransport({}));
