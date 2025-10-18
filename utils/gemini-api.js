@@ -1,3 +1,4 @@
+
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const logger = require("./logger");
 
@@ -6,12 +7,25 @@ const GEMINI_API_KEY = process.env.GOOGLE_API_KEY;
 if (!GEMINI_API_KEY) {
     logger.error("[Gemini API] GOOGLE_API_KEY is not set in environment variables.");
 } else {
-    logger.info(`[Gemini API] GOOGLE_API_KEY is loaded. Length: ${GEMINI_API_KEY.length}, Starts with: ${GEMINI_API_KEY.substring(0, 5)}...`);
+    logger.info(`[Gemini API] GOOGLE_API_KEY is loaded.`);
 }
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-
 const model = genAI.getGenerativeModel({ model: "models/gemini-pro-latest" });
+
+async function withRetry(fn, retries = 3, delay = 1000) {
+    let lastError;
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+            logger.warn(`[Retry] Attempt ${i + 1} failed. Retrying in ${delay * (i + 1)}ms...`, { error: error.message });
+            await new Promise(res => setTimeout(res, delay * (i + 1)));
+        }
+    }
+    throw lastError;
+}
 
 async function generatePlaylistRecommendations(song, artist, genre, playedTracks = []) {
     if (!GEMINI_API_KEY) {
@@ -23,15 +37,15 @@ async function generatePlaylistRecommendations(song, artist, genre, playedTracks
     const criteria = [];
 
     if (song && artist) {
-        criteria.push(`similar to the song "${song}" by "${artist}"`);
+        criteria.push(`similar to the song \"${song}\" by \"${artist}\"`);
     } else if (song) {
-        criteria.push(`similar to the song "${song}"`);
+        criteria.push(`similar to the song \"${song}\"`);
     } else if (artist) {
-        criteria.push(`by artists similar to "${artist}"`);
+        criteria.push(`by artists similar to \"${artist}\"`);
     }
 
     if (genre) {
-        criteria.push(`in the genre of "${genre}"`);
+        criteria.push(`in the genre of \"${genre}\"`);
     }
 
     if (criteria.length > 0) {
@@ -48,7 +62,7 @@ async function generatePlaylistRecommendations(song, artist, genre, playedTracks
     logger.info(`[Gemini API] Sending prompt to Gemini: ${prompt}`);
 
     try {
-        const result = await model.generateContent(prompt);
+        const result = await withRetry(() => model.generateContent(prompt));
         const response = await result.response;
         let text = response.text();
         logger.info(`[Gemini API] Raw response from Gemini: ${text}`);
@@ -83,17 +97,25 @@ async function generatePlaylistCommentary(playlistTracks) {
         return "";
     }
 
-    const trackList = playlistTracks.map(track => `"${track.title}" by ${track.author}`).join(", ");
+    const trackList = playlistTracks.map(track => `\"${track.title}\" by ${track.author}`).join(", ");
 
-    const prompt = `Generate a concise and engaging introductory commentary for the following playlist. Focus on the songs, artists, and a brief summary of the genre or timeframe of the songs. Do not include YouTube channel names or information about every individual song. Keep it under 60 seconds when spoken. Examples: "Up next, we have a modern classic by Taylor Swift. Following her, we've got some contemporary country" or "Welcome to a journey through 80s synth-pop with hits from A-Ha and Eurythmics."\n\nPlaylist: ${trackList}`;
+    const prompt = `Generate a single, concise, and engaging introductory commentary for the following playlist. The commentary should be under 60 seconds when spoken. Focus on the songs, artists, and a brief summary of the genre or timeframe. Do not include YouTube channel names or information about every individual song. Do not provide multiple options. Examples: "Up next, we have a modern classic by Taylor Swift. Following her, we\'ve got some contemporary country" or "Welcome to a journey through 80s synth-pop with hits from A-Ha and Eurythmics."\n\nPlaylist: ${trackList}`;
 
     logger.info(`[Gemini API] Sending commentary prompt to Gemini: ${prompt}`);
 
     try {
-        const result = await model.generateContent(prompt);
+        const result = await withRetry(() => model.generateContent(prompt));
         const response = await result.response;
-        const commentary = response.text();
+        let commentary = response.text();
         logger.info(`[Gemini API] Generated commentary: ${commentary}`);
+
+        const options = commentary.split(/\n\*\*Option \d+.*:\*\*\n/i).filter(s => s.trim().length > 0);
+        if (options.length > 1) {
+            const randomIndex = Math.floor(Math.random() * options.length);
+            commentary = options[randomIndex].trim();
+            logger.info(`[Gemini API] Multiple options detected. Randomly selected: ${commentary}`);
+        }
+
         return commentary;
     } catch (error) {
         logger.error("[Gemini API] Error generating playlist commentary from Gemini:", { error: error.message, stack: error.stack, fullError: error });
@@ -101,4 +123,37 @@ async function generatePlaylistCommentary(playlistTracks) {
     }
 }
 
-module.exports = { generatePlaylistRecommendations, generatePlaylistCommentary };
+async function generatePassiveAggressiveCommentary(metrics) {
+    if (!GEMINI_API_KEY) {
+        logger.error("[Gemini API] Cannot generate commentary: API key is missing.");
+        return "You skipped a song.";
+    }
+
+    const {
+        total_plays,
+        total_skips,
+        user_play_count,
+        user_skip_count,
+        user_skip_button_presses
+    } = metrics;
+
+    let prompt = `Generate a passive-aggressive comment for a user who just skipped a song. The user has pressed the skip button ${user_skip_button_presses} times in this session. This specific song has been played ${total_plays} times and skipped ${total_skips} times in total by everyone in this server. This user has played this song ${user_play_count} times and skipped it ${user_skip_count} times.`;
+
+    prompt += `\n\nThe comment should be under 30 seconds when spoken, witty, and get more passive-aggressive as the user's skip counts increase. Do not provide multiple options.`;
+
+    logger.info(`[Gemini API] Sending passive-aggressive commentary prompt to Gemini: ${prompt}`);
+
+    try {
+        const result = await withRetry(() => model.generateContent(prompt));
+        const response = await result.response;
+        let commentary = response.text();
+        logger.info(`[Gemini API] Generated passive-aggressive commentary: ${commentary}`);
+
+        return commentary;
+    } catch (error) {
+        logger.error("[Gemini API] Error generating passive-aggressive commentary from Gemini:", { error: error.message, stack: error.stack, fullError: error });
+        return "Fine, have it your way.";
+    }
+}
+
+module.exports = { generatePlaylistRecommendations, generatePlaylistCommentary, generatePassiveAggressiveCommentary };

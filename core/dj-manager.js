@@ -1,9 +1,11 @@
+
 const fs = require("fs");
 const path = require("path");
 const logger = require("../utils/logger");
 const { Track } = require('discord-player');
 const { spawn } = require('child_process');
 const geminiApi = require("../utils/gemini-api.js");
+const musicMetrics = require("./music-metrics.js");
 
 // --- Piper TTS Configuration ---
 const PIPER_PATH = process.env.PIPER_PATH || '/root/.local/bin/piper';
@@ -18,6 +20,7 @@ class DJManager {
     this.client = client;
     this.player = client.player;
     this.player.events.on("playerFinish", (queue, finishedTrack) => this.onPlayerFinish(queue, finishedTrack));
+    this.player.events.on("queueEnd", (queue) => this.onQueueEnd(queue));
   }
 
   async generatePiperAudio(text, modelName, finalOutputPath) {
@@ -84,7 +87,7 @@ class DJManager {
     });
   }
 
-  async playPlaylistIntro(queue, playlistTracks) {
+  async playPlaylistIntro(queue, playlistTracks, addToEnd = false) {
     logger.info(`[DJ] playPlaylistIntro triggered for guild ${queue.guild.id}.`);
 
     if (!queue.metadata.djMode) {
@@ -95,13 +98,12 @@ class DJManager {
 
     if (!playlistTracks || playlistTracks.length === 0) {
         logger.warn(`[DJ] No playlist tracks provided for intro commentary for guild ${queue.guild.id}.`);
-        queue.addTrack(playlistTracks);
         return;
     }
 
     try {
         const commentaryText = await geminiApi.generatePlaylistCommentary(playlistTracks);
-        let script = commentaryText || `Here's your upcoming playlist!`;
+        let script = commentaryText || `Here\'s your upcoming playlist!`;
 
         logger.info(`[DJ] Generated intro script for guild ${queue.guild.id}: ${script}`);
 
@@ -118,7 +120,7 @@ class DJManager {
 
         const commentarySearchResult = await this.player.search(audioFilePath, {
             searchEngine: 'com.livebot.ytdlp',
-            metadata: { requesterId: this.client.user.id, isDJCommentary: true }
+            metadata: { isDJCommentary: true }
         });
 
         if (!commentarySearchResult || !commentarySearchResult.hasTracks()) {
@@ -128,17 +130,19 @@ class DJManager {
         }
 
         const commentaryTrack = commentarySearchResult.tracks[0];
-
-        // The track from the extractor is already a Track instance, but we can override properties if needed
+        
         commentaryTrack.title = 'DJ Playlist Intro';
         commentaryTrack.description = 'DJ Intro for upcoming playlist';
         commentaryTrack.author = 'DJ Bot';
         commentaryTrack.thumbnail = 'https://i.imgur.com/GBp9Ahl.png';
 
-        queue.insertTrack(commentaryTrack, 0);
-        logger.info(`[DJ] Inserted intro commentary track for guild ${queue.guild.id}.`);
-
-        queue.addTrack(playlistTracks);
+        if (addToEnd) {
+            queue.addTrack(commentaryTrack);
+            queue.addTrack(playlistTracks);
+        } else {
+            queue.insertTrack(commentaryTrack, 0);
+            queue.addTrack(playlistTracks);
+        }
         logger.info(`[DJ] Added ${playlistTracks.length} playlist tracks after intro commentary.`);
 
     } catch (error) {
@@ -147,11 +151,40 @@ class DJManager {
     }
   }
 
+  async playSkipBanter(queue, skippedTrack, user) {
+    if (!queue.metadata.djMode) return;
+
+    try {
+        await musicMetrics.incrementSkipCount(skippedTrack.url, queue.guild.id, user.id);
+        await musicMetrics.incrementSkipButtonPresses(queue.guild.id, user.id);
+
+        const metrics = await musicMetrics.getMusicMetrics(skippedTrack.url, queue.guild.id, user.id);
+        const commentaryText = await geminiApi.generatePassiveAggressiveCommentary(metrics);
+
+        const filePath = path.join(__dirname, `../temp_audio/${queue.guild.id}_skip_banter.opus`);
+        const audioFilePath = await this.generatePiperAudio(commentaryText, PIPER_DEFAULT_MODEL, filePath);
+
+        const searchResult = await this.player.search(audioFilePath, {
+            searchEngine: 'com.livebot.ytdlp',
+            metadata: { isDJCommentary: true, isSkipBanter: true }
+        });
+
+        if (searchResult.hasTracks()) {
+            const banterTrack = searchResult.tracks[0];
+            banterTrack.title = 'DJ Banter';
+            queue.insertTrack(banterTrack, 0);
+            logger.info(`[DJ] Inserted skip banter for guild ${queue.guild.id}.`);
+        }
+    } catch (error) {
+        logger.error(`[DJ] Failed to play skip banter for guild ${queue.guild.id}:`, { error: error.message, stack: error.stack });
+    }
+  }
+
   async onPlayerFinish(queue, finishedTrack) {
     logger.info(`[DJ] onPlayerFinish event triggered for guild ${queue.guild.id}. Track: ${finishedTrack.title}`);
 
-    if (finishedTrack.metadata && finishedTrack.metadata.isDJCommentary) {
-        logger.info(`[DJ] Finished track was a commentary. Cleaning up temp file if exists.`);
+    if (finishedTrack.metadata && (finishedTrack.metadata.isDJCommentary || finishedTrack.metadata.isSkipBanter)) {
+        logger.info(`[DJ] Finished track was a commentary/banter. Cleaning up temp file if exists.`);
         const localPath = finishedTrack.url;
         if (localPath && fs.existsSync(localPath)) {
             fs.unlink(localPath, (err) => {
@@ -159,11 +192,17 @@ class DJManager {
                 else logger.info(`[Cleanup] Deleted commentary temp file: ${localPath}`);
             });
         }
-        return;
+    } else if (finishedTrack.requestedBy) {
+        await musicMetrics.incrementPlayCount(finishedTrack.url, queue.guild.id, finishedTrack.requestedBy.id);
     }
+  }
 
-    if (queue.metadata.djMode && queue.tracks.size === 0 && queue.currentTrack === null) {
-        logger.info(`[DJ] DJ mode active and queue is empty. Generating new recommendations.`);
+  async onQueueEnd(queue) {
+    logger.info(`[DJ] queueEnd event triggered for guild ${queue.guild.id}.`);
+
+    if (queue.metadata.djMode) {
+        logger.info(`[DJ] DJ mode is active and queue has ended. Generating new playlist.`);
+        
         const { inputSong, inputArtist, inputGenre } = queue.metadata;
         const geminiRecommendedTracks = await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre, queue.metadata.playedTracks);
 
@@ -185,6 +224,7 @@ class DJManager {
 
             if (newPlaylistTracks.length > 0) {
                 queue.metadata.playedTracks.push(...newPlaylistTracks.map(t => t.title));
+                this.player.extractors.get('com.livebot.ytdlp').preloadTracks(newPlaylistTracks);
                 await this.playPlaylistIntro(queue, newPlaylistTracks);
                 if (!queue.isPlaying()) {
                     await queue.node.play();
@@ -203,10 +243,8 @@ class DJManager {
             if (channel) {
                 channel.send("🎧 | The AI DJ has run out of new recommendations. Ending the session.");
             }
-            queue.delete(); // Stop the queue if no new songs can be found
+            queue.delete();
         }
-    } else {
-        logger.info(`[DJ] Regular track finished. No inter-song commentary will be played.`);
     }
   }
 }
