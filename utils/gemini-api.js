@@ -27,42 +27,50 @@ async function withRetry(fn, retries = 3, delay = 1000) {
     throw lastError;
 }
 
-async function generatePlaylistRecommendations(song, artist, genre, playedTracks = []) {
+async function generatePlaylistRecommendations(song, artist, genre, playedTracks = [], prompt) {
     if (!GEMINI_API_KEY) {
         logger.error("[Gemini API] Cannot generate recommendations: API key is missing.");
         return [];
     }
 
-    let prompt = `Generate a diverse and somewhat random list of 10 song recommendations.`;
-    const criteria = [];
+    let criteriaPrompt;
 
-    if (song && artist) {
-        criteria.push(`similar to the song \"${song}\" by \"${artist}\"`);
-    } else if (song) {
-        criteria.push(`similar to the song \"${song}\"`);
-    } else if (artist) {
-        criteria.push(`by artists similar to \"${artist}\"`);
+    if (prompt) {
+        // If a direct prompt is provided, use it as the primary instruction.
+        criteriaPrompt = prompt;
+    } else {
+        // Otherwise, build the prompt from song/artist/genre.
+        criteriaPrompt = `Generate a diverse and somewhat random list of 10 song recommendations.`;
+        const criteria = [];
+        if (song && artist) {
+            criteria.push(`similar to the song \"${song}\" by \"${artist}\"`);
+        } else if (song) {
+            criteria.push(`similar to the song \"${song}\"`);
+        } else if (artist) {
+            criteria.push(`by artists similar to \"${artist}\"`);
+        }
+
+        if (genre) {
+            criteria.push(`in the genre of \"${genre}\"`);
+        }
+        if (criteria.length > 0) {
+            criteriaPrompt += ` based on the following criteria: ${criteria.join(" and ")}.`;
+        }
+        criteriaPrompt += `\n\nIt\'s okay to include the original song in the list. Ensure the playlist is not repetitive and explores a good variety of tracks within the requested style. Please ensure the songs are not all from the same artist and that the list is varied. The goal is a creative and surprising playlist that balances popular hits with lesser-known gems.`;
     }
 
-    if (genre) {
-        criteria.push(`in the genre of \"${genre}\"`);
-    }
-
-    if (criteria.length > 0) {
-        prompt += ` based on the following criteria: ${criteria.join(" and ")}.`;
-    }
 
     if (playedTracks.length > 0) {
-        prompt += ` Avoid recommending any of the following songs that have already been played: ${playedTracks.join(", ")}.`;
+        criteriaPrompt += ` Avoid recommending any of the following songs that have already been played: ${playedTracks.join(", ")}.`;
     }
 
-    prompt += `\n\nIt's okay to include the original song in the list. Ensure the playlist is not repetitive and explores a good variety of tracks within the requested style. Please ensure the songs are not all from the same artist and that the list is varied. The goal is a creative and surprising playlist, not just a list of the artist's most popular songs. Focus on deep cuts and lesser-known tracks where possible.`;
-    prompt += `\n\nProvide the response as a JSON array of objects, where each object has a "title" and an "artist" property. Do not include any additional text or formatting outside the JSON array.`;
+    // Always add the JSON formatting instruction for reliable parsing.
+    criteriaPrompt += `\n\nProvide the response as a JSON array of objects, where each object has a "title" and an "artist" property. Do not include any additional text or formatting outside the JSON array.`;
 
-    logger.info(`[Gemini API] Sending prompt to Gemini: ${prompt}`);
+    logger.info(`[Gemini API] Sending prompt to Gemini: ${criteriaPrompt}`);
 
     try {
-        const result = await withRetry(() => model.generateContent(prompt));
+        const result = await withRetry(() => model.generateContent(criteriaPrompt));
         const response = await result.response;
         let text = response.text();
         logger.info(`[Gemini API] Raw response from Gemini: ${text}`);
@@ -116,7 +124,7 @@ async function generatePlaylistCommentary(playlistTracks) {
             logger.info(`[Gemini API] Multiple options detected. Randomly selected: ${commentary}`);
         }
 
-        return commentary;
+        return commentary.replace(/[*_`]/g, '');
     } catch (error) {
         logger.error("[Gemini API] Error generating playlist commentary from Gemini:", { error: error.message, stack: error.stack, fullError: error });
         return `Get ready for some great music!`;
@@ -132,12 +140,10 @@ async function generatePassiveAggressiveCommentary(metrics) {
     const {
         total_plays,
         total_skips,
-        user_play_count,
-        user_skip_count,
         user_skip_button_presses
     } = metrics;
 
-    let prompt = `Generate a passive-aggressive comment for a user who just skipped a song. The user has pressed the skip button ${user_skip_button_presses} times in this session. This specific song has been played ${total_plays} times and skipped ${total_skips} times in total by everyone in this server. This user has played this song ${user_play_count} times and skipped it ${user_skip_count} times.`;
+    let prompt = `Generate a passive-aggressive comment for a user who just skipped a song. The user has pressed the skip button ${user_skip_button_presses} times in this session. This specific song has been played ${total_plays} times and skipped ${total_skips} times in total by everyone in this server.`;
 
     prompt += `\n\nThe comment should be under 30 seconds when spoken, witty, and get more passive-aggressive as the user's skip counts increase. Do not provide multiple options.`;
 
@@ -149,7 +155,7 @@ async function generatePassiveAggressiveCommentary(metrics) {
         let commentary = response.text();
         logger.info(`[Gemini API] Generated passive-aggressive commentary: ${commentary}`);
 
-        return commentary;
+        return commentary.replace(/[*_`]/g, '');
     } catch (error) {
         logger.error("[Gemini API] Error generating passive-aggressive commentary from Gemini:", { error: error.message, stack: error.stack, fullError: error });
         return "Fine, have it your way.";

@@ -1,3 +1,4 @@
+
 require("dotenv-flow").config();
 const util = require("util");
 
@@ -8,8 +9,10 @@ const path = require("path");
 const fs = require("fs");
 const { getCycleTLSInstance } = require("./utils/tls-manager.js");
 const DJManager = require("./core/dj-manager.js");
+const MusicPanel = require("./core/music-panel.js");
+const AudioCacheManager = require("./core/audio-cache-manager.js");
 const logger = require("./utils/logger.js");
-const { createAudioResource, StreamType } = require("@discordjs/voice");
+const geminiApi = require("./utils/gemini-api.js");
 
 // --- All Module Imports Moved to Top Level (except dashboard) ---
 const db = require("./utils/db");
@@ -208,7 +211,7 @@ class YtDlpExtractor extends BaseExtractor {
             thumbnail: entry.thumbnail || null,
             author: entry.uploader,
             source: 'com.livebot.ytdlp',
-            requestedBy: null, // Explicitly set to null to prevent discord-player from resolving it
+            requestedBy: searchOptions.requestedBy, // Pass the user object here
             metadata: searchOptions.metadata
         });
 
@@ -251,6 +254,10 @@ async function start() {
 
     client.djManager = new DJManager(client);
     console.log(" DJ Manager Initialized.");
+
+    client.musicPanelManager = new Collection();
+
+    client.audioCacheManager = new AudioCacheManager(client);
 
     client.player.events.on("debug", (queue, message) => {
         logger.debug(`[Player Debug] Guild ${queue?.guild?.id || 'N/A'}: ${message}`);
@@ -328,55 +335,50 @@ async function start() {
     }
     console.log(` ${client.buttons.size} buttons, ${client.modals.size} modals, and ${client.selects.size} select menus loaded.`);
 
-    client.player.events.on("playerStart", async (queue, track) => {
-        logger.info(`[Player Event] playerStart triggered for track: ${track.title}`, { isDJCommentary: !!track.metadata?.isDJCommentary, guildId: queue.guild.id, category: 'music' });
+    // --- Player Event Handlers --- 
 
-        let requester;
-        const requesterId = track.metadata?.requesterId;
-        if (requesterId) {
+    client.player.events.on("playerStart", async (queue, track) => {
+        logger.info(`[Player Event] playerStart triggered for track: ${track.title}`, { guildId: queue.guild.id });
+        const panel = client.musicPanelManager.get(queue.guild.id);
+        if (panel) {
+            await panel.updatePanel(queue);
+        }
+
+        if (track.metadata?.isDJCommentary) return;
+        if (panel && panel.message.channelId === queue.metadata.channelId) return;
+
+        let requesterTag = 'Unknown User';
+        if (track.requestedBy && track.requestedBy.id !== client.user.id) {
+            requesterTag = track.requestedBy.tag;
+        } else if (queue.metadata?.djMode && queue.metadata?.djInitiatorId) {
             try {
-                requester = await client.users.fetch(requesterId);
-            } catch (e) {
-                logger.warn(`Could not fetch user for requesterId: ${requesterId}`);
-            }
+                const djUser = await client.users.fetch(queue.metadata.djInitiatorId);
+                requesterTag = djUser.tag;
+            } catch {}
         }
 
         const channel = await client.channels.cache.get(queue.metadata.channelId);
-        if (channel && !(track.metadata && track.metadata.isDJCommentary)) {
+        if (channel) {
             const embed = new EmbedBuilder()
                 .setColor("#57F287")
                 .setAuthor({name: "Now Playing"})
-                .setTitle(track.title);
-
-            if (track.url && track.url.startsWith('http')) {
-                embed.setURL(track.url);
-            }
-
-            if (track.thumbnail) {
-                embed.setThumbnail(track.thumbnail);
-            }
-
-            embed.addFields(
-                {name: "Artist", value: track.author || "N/A", inline: true},
-                {name: "Duration", value: track.duration || "0:00", inline: true}
-            )
-                .setFooter({text: `Requested by ${requester ? requester.tag : 'Unknown'}`});
-
+                .setTitle(track.title)
+                .setURL(track.url)
+                .setThumbnail(track.thumbnail || null)
+                .addFields(
+                    {name: "Artist", value: track.author || "N/A", inline: true},
+                    {name: "Duration", value: track.duration || "0:00", inline: true}
+                )
+                .setFooter({text: `Requested by ${requesterTag}`});
             channel.send({embeds: [embed]});
         }
 
-        if (requester && !(track.metadata && track.metadata.isDJCommentary)) {
+        if (track.requestedBy) {
             try {
                 await db.execute(
                     `INSERT INTO music_history (guild_id, user_id, song_title, song_url, artist, timestamp)
                      VALUES (?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE timestamp = NOW()`,
-                    [
-                        queue.guild.id,
-                        requester.id,
-                        track.title,
-                        track.url,
-                        track.author
-                    ]
+                    [queue.guild.id, track.requestedBy.id, track.title, track.url, track.author]
                 );
             } catch (error) {
                 console.error(`[DB] Failed to log song to music_history for guild ${queue.guild.id}`, error.message);
@@ -385,68 +387,235 @@ async function start() {
     });
 
     client.player.events.on("audioTrackAdd", async (queue, track) => {
-        if (track.metadata && track.metadata.isDJCommentary) return;
-        const channel = await client.channels.cache.get(queue.metadata.channelId);
-        if (!channel) return;
-
-        let requester;
-        const requesterId = track.metadata?.requesterId;
-        if (requesterId) {
+        if (queue.metadata?.djMode && (!track.requestedBy || track.requestedBy.id === client.user.id) && queue.metadata?.djInitiatorId) {
             try {
-                requester = await client.users.fetch(requesterId);
+                track.requestedBy = await client.users.fetch(queue.metadata.djInitiatorId);
             } catch (e) {
-                logger.warn(`Could not fetch user for requesterId: ${requesterId}`);
+                logger.warn(`[Attribution Fix] Could not fetch DJ initiator user with ID ${queue.metadata.djInitiatorId}`);
             }
         }
 
+        const panel = client.musicPanelManager.get(queue.guild.id);
+        if (panel) await panel.updatePanel(queue);
+
+        if (track.metadata?.isDJCommentary || (panel && panel.message.channelId === queue.metadata.channelId)) return;
+
+        const channel = await client.channels.cache.get(queue.metadata.channelId);
+        if (!channel) return;
+
+        let requesterTag = track.requestedBy ? track.requestedBy.tag : 'Unknown User';
         const embed = new EmbedBuilder()
             .setColor("#3498DB")
             .setAuthor({name: "Added to Queue"})
-            .setTitle(track.title);
-
-        if (track.url && track.url.startsWith('http')) {
-            embed.setURL(track.url);
-        }
-
-        if (track.thumbnail) {
-            embed.setThumbnail(track.thumbnail);
-        }
-
-        embed.addFields(
-            {name: "Position in queue", value: `${queue.tracks.size}`, inline: true},
-            {name: "Duration", value: track.duration || "0:00", inline: true}
-        )
-            .setFooter({text: `Requested by ${requester ? requester.tag : 'Unknown'}`});
-
+            .setTitle(track.title)
+            .setURL(track.url)
+            .setThumbnail(track.thumbnail || null)
+            .addFields(
+                {name: "Position in queue", value: `${queue.tracks.size}`, inline: true},
+                {name: "Duration", value: track.duration || "0:00", inline: true}
+            )
+            .setFooter({text: `Requested by ${requesterTag}`});
         channel.send({embeds: [embed]});
     });
 
     client.player.events.on("audioTracksAdd", async (queue, tracks) => {
+        if (queue.metadata?.djMode && queue.metadata?.djInitiatorId) {
+            try {
+                const djUser = await client.users.fetch(queue.metadata.djInitiatorId);
+                if (djUser) {
+                    tracks.forEach(track => {
+                        if (!track.requestedBy || track.requestedBy.id === client.user.id) track.requestedBy = djUser;
+                    });
+                }
+            } catch (e) {
+                logger.warn(`[Attribution Fix] Could not fetch DJ initiator user for batch add with ID ${queue.metadata.djInitiatorId}`);
+            }
+        }
+
+        const panel = client.musicPanelManager.get(queue.guild.id);
+        if (panel) await panel.updatePanel(queue);
+
+        if (tracks.some(t => t.metadata?.isDJCommentary) || (panel && panel.message.channelId === queue.metadata.channelId)) return;
+
         const channel = await client.channels.cache.get(queue.metadata.channelId);
-        if (channel) {
-            channel.send(`✅ | Added ${tracks.length} songs to queue!`);
+        if (!channel) return;
+
+        const firstTrack = tracks[0];
+        let requesterTag = firstTrack.requestedBy ? firstTrack.requestedBy.tag : 'Unknown User';
+
+        if (firstTrack?.playlist) {
+            const embed = new EmbedBuilder()
+                .setColor("#3498DB")
+                .setAuthor({ name: "Added Playlist to Queue" })
+                .setTitle(firstTrack.playlist.title)
+                .setURL(firstTrack.playlist.url)
+                .setThumbnail(firstTrack.playlist.thumbnail || null)
+                .addFields({ name: "Tracks", value: `${tracks.length}`, inline: true })
+                .setFooter({ text: `Requested by ${requesterTag}` });
+            channel.send({ embeds: [embed] });
+        } else {
+            const embed = new EmbedBuilder()
+                .setColor("#3498DB")
+                .setAuthor({ name: "Added to Queue" })
+                .setDescription(`Added **${tracks.length}** songs to the queue.`)
+                .setFooter({ text: `Requested by ${requesterTag}` });
+            channel.send({ embeds: [embed] });
+        }
+    });
+
+    client.player.events.on("emptyQueue", (queue) => {
+        logger.info(`[Player Event] emptyQueue triggered for guild: ${queue.guild.id}`);
+        const panel = client.musicPanelManager.get(queue.guild.id);
+        if (panel) {
+            panel.updatePanel(queue);
+        }
+    });
+
+    client.player.events.on("playerStop", (queue) => {
+        logger.info(`[Player Event] playerStop triggered for guild: ${queue.guild.id}`);
+        const panel = client.musicPanelManager.get(queue.guild.id);
+        if (panel) {
+            panel.updatePanel(queue);
         }
     });
 
     client.player.events.on("error", async (queue, error) => {
         logger.error(`[Player Error] Guild: ${queue.guild.id}, Error: ${error.message}`);
+        const panel = client.musicPanelManager.get(queue.guild.id);
+        if (panel) await panel.updatePanel(queue);
         const channel = await client.channels.cache.get(queue.metadata.channelId);
-        if (channel) {
+        if (channel && (!panel || panel.message.channelId !== channel.id)) {
             channel.send(`❌ | An error occurred: ${error.message.slice(0, 1900)}`);
         }
     });
 
     client.player.events.on("playerError", async (queue, error) => {
         logger.error(`[Player Connection Error] Guild: ${queue.guild.id}, Error: ${error.message}`);
+        const panel = client.musicPanelManager.get(queue.guild.id);
+        if (panel) await panel.updatePanel(queue);
         const channel = await client.channels.cache.get(queue.metadata.channelId);
-        if (channel) {
-            channel.send(`❌ | A connection error encountered: ${error.message.slice(0, 1900)}`);
+        if (channel && (!panel || panel.message.channelId !== channel.id)) {
+            channel.send(`❌ | A connection error occurred: ${error.message.slice(0, 1900)}`);
         }
     });
 
-    if (handleInteraction) {
-        client.on(Events.InteractionCreate, handleInteraction);
-    }
+    // --- Interaction Handlers ---
+
+    client.on(Events.InteractionCreate, async (interaction) => {
+        if (interaction.isCommand()) {
+            handleInteraction(interaction);
+        } else if (interaction.isButton() && interaction.customId.startsWith('music-')) {
+            const panel = client.musicPanelManager.get(interaction.guildId);
+            if (panel) {
+                panel.handleInteraction(interaction);
+            } else {
+                // This might happen if the bot restarts and the panel message is old
+                await interaction.reply({ content: 'This music panel is no longer active. Please create a new one.', ephemeral: true });
+            }
+        } else if (interaction.isStringSelectMenu() && interaction.customId === 'music-add-song') {
+            const panel = client.musicPanelManager.get(interaction.guildId);
+            if (panel) {
+                panel.handleInteraction(interaction);
+            } else {
+                await interaction.reply({ content: 'This music panel is no longer active. Please create a new one.', ephemeral: true });
+            }
+        } else if (interaction.isModalSubmit() && interaction.customId === 'add-song-modal') {
+            if (!interaction.member.voice.channel) {
+                return interaction.reply({ content: "You must be in a voice channel to add a song!", ephemeral: true });
+            }
+            const query = interaction.fields.getTextInputValue('song-input');
+            await interaction.deferReply({ ephemeral: true });
+            try {
+                const { track } = await client.player.play(interaction.member.voice.channel, query, {
+                    requestedBy: interaction.user,
+                    nodeOptions: {
+                        metadata: { channelId: interaction.channel.id }
+                    }
+                });
+                await interaction.editReply({ content: `✅ | Added **${track.title}** to the queue.` });
+            } catch (e) {
+                logger.error("[Modal Song Add Error]", e);
+                await interaction.editReply({ content: `An error occurred: ${e.message}` });
+            }
+        } else if (interaction.isModalSubmit() && interaction.customId === 'ai-dj-modal') {
+            const { member, guild, client } = interaction;
+            if (!member.voice.channel) {
+                return interaction.reply({ content: "You must be in a voice channel to start a DJ session.", ephemeral: true });
+            }
+
+            const [musicConfigRows] = await db.execute("SELECT * FROM music_config WHERE guild_id = ?", [guild.id]);
+            const musicConfig = musicConfigRows[0];
+            if (!musicConfig || !musicConfig.dj_enabled) {
+                return interaction.reply({ content: "The AI DJ is not enabled on this server. An admin can enable it in the dashboard.", ephemeral: true });
+            }
+
+            await interaction.deferReply({ ephemeral: true });
+
+            const prompt = interaction.fields.getTextInputValue('dj-prompt-input');
+            const inputSong = interaction.fields.getTextInputValue('dj-song-input');
+            const inputArtist = interaction.fields.getTextInputValue('dj-artist-input');
+            const inputGenre = interaction.fields.getTextInputValue('dj-genre-input');
+
+            try {
+                let queue = client.player.nodes.get(guild.id);
+                const isQueueActive = queue && queue.isPlaying();
+                if (!queue) {
+                    queue = client.player.nodes.create(guild.id, {
+                        metadata: { channelId: interaction.channel.id, djMode: true, voiceChannelId: member.voice.channel.id, playedTracks: [], inputSong, inputArtist, inputGenre, prompt, djInitiatorId: interaction.user.id },
+                        selfDeaf: true, volume: 80, leaveOnEmpty: true, leaveOnEmptyCooldown: 300000, leaveOnEnd: false, leaveOnEndCooldown: 300000,
+                    });
+                } else {
+                    queue.metadata.djMode = true;
+                    queue.leaveOnEnd = false;
+                    if (!queue.metadata.djInitiatorId) queue.metadata.djInitiatorId = interaction.user.id;
+                }
+                if (!queue.connection) await queue.connect(member.voice.channel.id);
+                if (!queue.metadata.playedTracks) queue.metadata.playedTracks = [];
+
+                const geminiRecommendedTracks = await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre, queue.metadata.playedTracks, prompt);
+                if (!geminiRecommendedTracks || geminiRecommendedTracks.length === 0) {
+                    return interaction.editReply({ content: `❌ | Gemini AI could not generate a playlist based on your request. Please try again with different inputs.` });
+                }
+
+                const trackPromises = geminiRecommendedTracks.map(async (recTrack) => {
+                    const query = `${recTrack.title} ${recTrack.artist}`;
+                    const searchResult = await client.player.search(query, {
+                        searchEngine: 'com.livebot.ytdlp',
+                        requestedBy: interaction.user,
+                        metadata: { artist: recTrack.artist, fromPanel: true }
+                    });
+                    if (searchResult.hasTracks()) {
+                        const track = searchResult.tracks[0];
+                        if (!track.url.includes('youtube.com/shorts')) return track;
+                    }
+                    return null;
+                });
+
+                const allPlaylistTracks = (await Promise.all(trackPromises)).filter(track => track !== null);
+
+                if (allPlaylistTracks.length === 0) {
+                    return interaction.editReply({ content: `❌ | Could not find any playable tracks for the generated playlist.` });
+                }
+
+                queue.metadata.playedTracks.push(...allPlaylistTracks.map(t => t.title));
+                client.player.extractors.get('com.livebot.ytdlp').preloadTracks(allPlaylistTracks);
+                await client.djManager.playPlaylistIntro(queue, allPlaylistTracks, isQueueActive);
+
+                if (!isQueueActive) {
+                    await queue.node.play();
+                }
+
+                return interaction.editReply({ content: `🎧 | AI DJ session started! I've added ${allPlaylistTracks.length} songs to the queue.` });
+
+            } catch (e) {
+                logger.error("[AI DJ Modal Error]", e);
+                return interaction.editReply({ content: `An error occurred: ${e.message}` });
+            }
+        }
+    });
+
+    // --- Other Event Handlers ---
+
     client.on(Events.MessageCreate, async (message) => {
         if (message.author.bot || !message.guild) return;
         if (checkAfkStatus) await checkAfkStatus(message);
@@ -501,10 +670,37 @@ async function start() {
         if (logVoiceStateUpdate) logVoiceStateUpdate(oldState, newState);
     });
 
+    // --- Client Ready Event ---
+
     client.once(Events.ClientReady, async c => {
         global.client = c;
         console.log(` Logged in as ${c.user.tag}`);
         setStatus(Status.ONLINE);
+
+        try {
+            const [panelConfigs] = await db.execute('SELECT * FROM music_panels');
+            for (const config of panelConfigs) {
+                try {
+                    const guild = await client.guilds.fetch(config.guild_id);
+                    const channel = await guild.channels.fetch(config.channel_id);
+                    const message = await channel.messages.fetch(config.message_id);
+
+                    const panel = new MusicPanel(client, guild.id);
+                    panel.message = message;
+                    client.musicPanelManager.set(guild.id, panel);
+
+                    const queue = client.player.nodes.get(guild.id);
+                    await panel.updatePanel(queue);
+                } catch (e) {
+                    logger.error(`[Music Panel Load] Failed to load panel for guild ${config.guild_id}: ${e.message}`);
+                }
+            }
+            console.log(`Loaded ${client.musicPanelManager.size} music panels.`);
+        } catch (e) {
+            console.error("Error loading music panels from DB:", e);
+        }
+
+        // --- Job Schedulers & Workers ---
 
         try {
             await setupSystemJobs();
