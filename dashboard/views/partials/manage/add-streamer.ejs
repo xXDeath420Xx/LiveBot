@@ -1,24 +1,66 @@
-<div class="content-card">
-    <h2><i class="fas fa-user-plus me-2"></i>Add Streamer</h2>
-    <form action="/manage/<%= guild.id %>/add-streamer" method="POST">
-        <div class="row g-3">
-            <div class="col-md-3"><label class="form-label">Platform</label><select name="platform" class="form-select">
-                    <option value="twitch">Twitch</option>
-                    <option value="youtube">YouTube</option>
-                    <option value="kick">Kick</option>
-                </select></div>
-            <div class="col-md-4"><label class="form-label">Username/ID</label><input type="text" name="username" class="form-control" required></div>
-            <div class="col-md-5
-            "><label class="form-label">Link Discord User ID</label><input type="text" name="discord_user_id" class="form-control" placeholder="Optional: 12345..."></div>
-            <div class="col-md-9"><label class="form-label">Announce In (Hold Ctrl/Cmd for multiple)</label><select name="announcement_channel_id" class="form-select" multiple size="3">
-                    <option value="">-- Use Server Default --</option>
-                    <% channels.forEach(c => { %>
-                        <option value="<%= c.id %>">#<%= c.name %></option>
-                    <% }); %>
-                </select></div>
-            <div class="col-md-3 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus me-2"></i>Add</button>
-            </div>
+<div class="modal fade" id="add-streamer-modal" tabindex="-1" aria-labelledby="addStreamerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form action="/manage/<%= guild.id %>/add-streamer" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addStreamerModalLabel"><i class="fas fa-user-plus me-2"></i>Add Streamer</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Platform</label>
+                            <select name="platform" class="form-select">
+                                <option value="twitch">Twitch</option>
+                                <option value="youtube">YouTube</option>
+                                <option value="kick">Kick</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Username/ID</label>
+                            <input type="text" name="username" class="form-control" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Link Discord User ID</label>
+                            <input type="text" name="discord_user_id" class="form-control" placeholder="Optional: 12345...">
+                        </div>
+
+                        <hr class="my-3">
+                        <h5><i class="fas fa-bullhorn me-2"></i>Announcement Settings</h5>
+                        <p class="text-muted">These settings will apply to all announcement channels selected.</p>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Announce In (Hold Ctrl/Cmd for multiple)</label>
+                            <select name="announcement_channel_id" class="form-select" multiple size="3">
+                                <option value="">-- Use Server Default --</option>
+                                <% channels.forEach(c => { %>
+                                    <option value="<%= c.id %>">#<%= c.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Override Nickname</label>
+                            <input type="text" class="form-control" name="override_nickname" placeholder="Optional: Streamer's Nickname">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Custom Message</label>                            
+                            <textarea class="form-control" name="custom_message" rows="2" placeholder="Optional: A custom message to include in announcements. e.g. Hey @everyone, {streamer} is live!"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="keep_summary_add" name="keep_summary">
+                                <label class="form-check-label" for="keep_summary_add">
+                                    Keep announcement message after stream ends (do not delete or edit)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-2"></i>Add Streamer</button>
+                </div>
+            </form>
         </div>
-    </form>
+    </div>
 </div>

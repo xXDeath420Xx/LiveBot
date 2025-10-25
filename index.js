@@ -74,7 +74,7 @@ class YtDlpExtractor extends BaseExtractor {
     static identifier = "com.livebot.ytdlp";
     static downloading = new Set();
 
-    async _download(url, filePath) {
+    async _download(url, filePath, retries = 3) {
         if (YtDlpExtractor.downloading.has(filePath)) {
             logger.info(`[Download] Already downloading to ${filePath}, waiting.`);
             while (YtDlpExtractor.downloading.has(filePath)) {
@@ -90,28 +90,68 @@ class YtDlpExtractor extends BaseExtractor {
 
         YtDlpExtractor.downloading.add(filePath);
         logger.info(`[Download] Starting download for ${url} to ${filePath}`);
-        try {
-            const ytdlpProcess = ytdlp.exec(url, {
-                output: filePath,
-                format: "bestaudio[ext=opus]/bestaudio/best",
-                "audio-quality": 0,
-                cookies: cookieFilePath,
-            });
-            await new Promise((resolve, reject) => {
-                ytdlpProcess.on('close', (code) => {
-                    if (code === 0) resolve();
-                    else reject(new Error(`ytdlp exited with code ${code}`));
+
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            let stderr = '';
+            try {
+                const ytdlpOptions = {
+                    output: filePath,
+                    format: "bestaudio[ext=opus]/bestaudio/best",
+                    "audio-quality": 0,
+                    cookies: cookieFilePath,
+                    verbose: true,
+                    "-4": true,
+                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+                    "add-header": [
+                        "Referer:https://www.youtube.com/",
+                        "Accept-Language:en-US,en;q=0.9"
+                    ],
+                    "no-check-certificate": true,
+                    "youtube-client": "web_music",
+                };
+
+                if (process.env.YTDLP_PROXY) {
+                    ytdlpOptions.proxy = process.env.YTDLP_PROXY;
+                }
+
+                const ytdlpProcess = ytdlp.exec(url, ytdlpOptions);
+
+                ytdlpProcess.stderr.on('data', (data) => {
+                    stderr += data.toString();
                 });
-                ytdlpProcess.on('error', reject);
-            });
-            logger.info(`[Download] Finished downloading to ${filePath}`);
-        } catch (error) {
-            logger.error(`[Download] Failed to download to ${filePath}: ${error.message}`);
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath); // Clean up failed download
-        } finally {
-            YtDlpExtractor.downloading.delete(filePath);
+
+                await new Promise((resolve, reject) => {
+                    ytdlpProcess.on('close', (code) => {
+                        if (code === 0) {
+                            resolve();
+                        } else {
+                            reject(new Error(`ytdlp exited with code ${code}.`));
+                        }
+                    });
+                    ytdlpProcess.on('error', (err) => {
+                        reject(new Error(`ytdlp process error: ${err}.`));
+                    });
+                });
+
+                logger.info(`[Download] Finished downloading to ${filePath}`);
+                YtDlpExtractor.downloading.delete(filePath);
+                return; // Success
+
+            } catch (error) {
+                logger.error(`[Download] Attempt ${attempt}/${retries} failed for ${filePath}: ${error.message}`);
+                logger.debug(`[ytdlp stderr] ${stderr}`);
+                if (attempt < retries) {
+                    await new Promise(res => setTimeout(res, 2000));
+                } else {
+                    logger.error(`[Download] All ${retries} attempts failed for ${filePath}.`);
+                    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                    YtDlpExtractor.downloading.delete(filePath);
+                    throw new Error(`Failed to download ${url} after ${retries} attempts. Last error: ${error.message}`);
+                }
+            }
         }
     }
+
 
     async preloadTracks(tracks) {
         logger.info(`[Preload] Preloading ${tracks.length} tracks...`);
@@ -130,7 +170,9 @@ class YtDlpExtractor extends BaseExtractor {
         }
         const fileName = `${videoId}.opus`;
         const filePath = path.join(tempDir, fileName);
-        await this._download(track.url, filePath);
+        await this._download(track.url, filePath).catch(err => {
+            logger.error(`[Preload] Unhandled error during track preload for ${track.title}: ${err.message}`)
+        });
     }
 
     async validate(query, searchOptions) {
@@ -159,7 +201,24 @@ class YtDlpExtractor extends BaseExtractor {
         const isUrl = query.includes("youtube.com") || query.includes("youtu.be");
         const search = isUrl ? query : `ytsearch1:${query}`;
 
-        const info = await ytdlp.getInfoAsync(search, {cookies: cookieFilePath});
+        const ytdlpOptions = {
+            cookies: cookieFilePath,
+            verbose: true,
+            "-4": true,
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+            "add-header": [
+                "Referer:https://www.youtube.com/",
+                "Accept-Language:en-US,en;q=0.9"
+            ],
+            "no-check-certificate": true,
+            "youtube-client": "web_music",
+        };
+
+        if (process.env.YTDLP_PROXY) {
+            ytdlpOptions.proxy = process.env.YTDLP_PROXY;
+        }
+
+        const info = await ytdlp.getInfoAsync(search, ytdlpOptions);
 
         if (isUrl && info.entries) {
             const tracks = info.entries.map(entry => this.buildTrack(entry, searchOptions)).filter(t => t !== null);

@@ -5,7 +5,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h4><i class="fas fa-users me-2"></i>Manage Streamers</h4>
-        <p class="text-muted mb-0">Add, edit, or remove streamers for this server. Total: <%= streamers.length %></p>
+        <p class="text-muted mb-0">Add, edit, or remove streamers for this server. Total: <%= consolidatedStreamers.length %></p>
     </div>
     <div>
         <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#add-streamer-modal"><i class="fas fa-plus me-2"></i>Add Streamer</button>
@@ -24,8 +24,8 @@
         </tr>
         </thead>
         <tbody>
-        <% if (streamers && streamers.length > 0) { %>
-            <% streamers.forEach(streamer => { %>
+        <% if (consolidatedStreamers && consolidatedStreamers.length > 0) { %>
+            <% consolidatedStreamers.forEach(streamer => { %>
                 <tr id="streamer-row-<%= streamer.id %>">
                     <td>
                         <% if (streamer.discord_user_id) { %>
@@ -35,7 +35,7 @@
                     </td>
                     <td>
                         <% streamer.platforms.forEach(p => { %>
-                            <span class="badge bg-secondary me-1"><%= p.platform %></span>
+                            <span class="badge bg-secondary me-1"><%= p %></span>
                         <% }); %>
                     </td>
                     <td><%= streamer.subscriptions.length %></td>
@@ -43,7 +43,8 @@
                         <button class="btn btn-sm btn-outline-primary me-1 edit-streamer-btn"
                                 data-bs-toggle="modal"
                                 data-bs-target="#edit-streamer-modal"
-                                data-streamer='<%= JSON.stringify(streamer) %>'>
+                                data-streamer='<%= JSON.stringify(streamer) %>'
+                                data-channels='<%= JSON.stringify(channelOptions) %>'>
                             <i class="fas fa-pencil-alt"></i> Edit
                         </button>
                     </td>
@@ -60,73 +61,3 @@
 
 <%- include('./add-streamer.ejs', { guild, roles, channels }) %>
 <%- include('./edit-streamer-modal.ejs', { guild, roles, channels }) %>
-
-<script>
-    const channelOptions = <%- JSON.stringify(channelOptions) %>;
-    const guildId = '<%= guild.id %>';
-
-    document.addEventListener('DOMContentLoaded', () => {
-        const editStreamerModal = document.getElementById('edit-streamer-modal');
-        if (editStreamerModal) {
-            editStreamerModal.addEventListener('show.bs.modal', event => {
-                const button = event.relatedTarget;
-                const streamer = JSON.parse(button.getAttribute('data-streamer'));
-
-                const editForm = editStreamerModal.querySelector('#edit-streamer-form');
-                editForm.action = `/manage/${guildId}/edit-consolidated-streamer`;
-
-                const deleteForm = editStreamerModal.querySelector('#delete-streamer-form');
-                deleteForm.action = `/manage/${guildId}/delete-streamer`;
-                
-                editForm.querySelector('#consolidated_streamer_id').value = streamer.id;
-                editForm.querySelector('#edit-streamer-name').textContent = streamer.name;
-                editForm.querySelector('#discord_user_id').value = streamer.discord_user_id || '';
-                deleteForm.querySelector('#delete-streamer-id').value = streamer.id;
-
-                const subscriptionsContainer = editForm.querySelector('#subscriptions-container');
-                subscriptionsContainer.innerHTML = '';
-
-                streamer.subscriptions.forEach(sub => {
-                    let optionsHtml = '<option value="">Default</option>';
-                    channelOptions.forEach(c => {
-                        const selected = sub.announcement_channel_id === c.id ? 'selected' : '';
-                        optionsHtml += `<option value="${c.id}" ${selected}>#${c.name}</option>`;
-                    });
-
-                    const subHtml = `
-                        <div class="subscription-card mb-3 p-3 border rounded bg-light">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h6 class="mb-0 text-capitalize">${sub.platform} - ${sub.username}</h6>
-                                <span class="badge bg-info">Sub ID: ${sub.subscription_id}</span>
-                            </div>
-                            <hr>
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Announcement Channel</label>
-                                    <select class="form-select" name="subscriptions[${sub.subscription_id}][announcement_channel_id]">${optionsHtml}</select>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Override Nickname</label>
-                                    <input type="text" class="form-control" name="subscriptions[${sub.subscription_id}][override_nickname]" value="${sub.override_nickname || ''}">
-                                </div>
-                                <div class="col-12">
-                                    <label class="form-label">Custom Message</label>
-                                    <textarea class="form-control" name="subscriptions[${sub.subscription_id}][custom_message]" rows="2">${sub.custom_message || ''}</textarea>
-                                </div>
-                                <div class="col-12">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="keep_summary_${sub.subscription_id}" name="subscriptions[${sub.subscription_id}][keep_summary]" ${sub.delete_on_end === 0 ? 'checked' : ''}>
-                                        <label class="form-check-label" for="keep_summary_${sub.subscription_id}">
-                                            Keep announcement message after stream ends (do not delete or edit)
-                                        </label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    subscriptionsContainer.insertAdjacentHTML('beforeend', subHtml);
-                });
-            });
-        }
-    });
-</script>

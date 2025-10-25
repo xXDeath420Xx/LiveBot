@@ -1,40 +1,187 @@
+<!-- Edit Streamer Modal -->
 <div class="modal fade" id="edit-streamer-modal" tabindex="-1" aria-labelledby="editStreamerModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
-            <form id="edit-streamer-form" method="POST"> 
+            <form id="edit-streamer-form" method="POST">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="editStreamerModalLabel">Edit Settings for <strong id="edit-streamer-name"></strong></h5>
+                    <h5 class="modal-title" id="editStreamerModalLabel">Edit Streamer: <span id="edit-streamer-name"></span></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <input type="hidden" name="consolidated_streamer_id" id="consolidated_streamer_id">
+                    <input type="hidden" name="consolidated_streamer_id" id="consolidated-streamer-id">
 
                     <div class="mb-3">
-                        <label for="discord_user_id" class="form-label"><i class="fab fa-discord me-2"></i>Linked Discord User ID</label>
-                        <input type="text" class="form-control" id="discord_user_id" name="discord_user_id" placeholder="Enter user's Discord ID to link accounts">
-                        <div class="form-text">This allows the bot to assign the live role to the user when they go live.</div>
+                        <label for="discord-user-id" class="form-label">Linked Discord User (ID)</label>
+                        <input type="text" class="form-control" id="discord-user-id" name="discord_user_id" placeholder="Enter Discord User ID (optional)">
                     </div>
 
-                    <hr class="my-4">
+                    <hr>
 
-                    <h5><i class="fas fa-satellite-dish me-2"></i>Channel Subscriptions</h5>
-                    <p class="text-muted">Manage announcement settings for each subscribed channel.</p>
-                    <div id="subscriptions-container">
-                        <!-- Subscription settings will be injected here by JavaScript -->
+                    <div id="subscriptions-container"></div>
+
+                    <hr>
+
+                    <div id="moderation-container">
+                        <h5>Moderation</h5>
+                        <p class="text-muted">Blacklisting a user will remove all their data and prevent them from being added back to the server.</p>
+                        <div id="blacklist-controls">
+                            <!-- Blacklist buttons will be dynamically added here -->
+                        </div>
                     </div>
 
                 </div>
-                <div class="modal-footer justify-content-between">
-                    <form id="delete-streamer-form" method="POST" class="d-inline">
-                        <input type="hidden" name="streamerId" id="delete-streamer-id">
-                        <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to remove ALL subscriptions for this streamer from this server?');"><i class="fas fa-trash-alt me-2"></i>Remove All Subscriptions</button>
-                    </form>
-                    <div>
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Changes</button>
-                    </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const editStreamerModal = document.getElementById('edit-streamer-modal');
+        if (editStreamerModal) {
+            const allChannels = <%- JSON.stringify(channels) %>;
+            const allRoles = <%- JSON.stringify(roles) %>;
+            const subscriptionsContainer = document.getElementById('subscriptions-container');
+            const blacklistControls = document.getElementById('blacklist-controls');
+
+            editStreamerModal.addEventListener('show.bs.modal', event => {
+                const button = event.relatedTarget;
+                const streamer = JSON.parse(button.getAttribute('data-streamer'));
+                
+                const form = document.getElementById('edit-streamer-form');
+                form.action = `/manage/<%= guild.id %>/edit-consolidated-streamer`;
+
+                document.getElementById('edit-streamer-name').textContent = streamer.name;
+                document.getElementById('consolidated-streamer-id').value = streamer.id;
+                document.getElementById('discord-user-id').value = streamer.discord_user_id || '';
+
+                // --- SUBSCRIPTIONS ---
+                subscriptionsContainer.innerHTML = ''; // Clear previous content
+                if (!streamer.subscriptions || streamer.subscriptions.length === 0) {
+                    subscriptionsContainer.innerHTML = '<p class="text-center text-muted">This streamer has no individual subscriptions to edit.</p>';
+                } else {
+                    streamer.subscriptions.forEach(sub => {
+                        const subId = sub.subscription_id;
+                        const subCard = document.createElement('div');
+                        subCard.className = 'card mb-3';
+                        subCard.id = `sub-card-${subId}`;
+                        
+                        let channelOptionsHtml = '<option value="">-- Use Server Default --</option>';
+                        allChannels.forEach(channel => {
+                            channelOptionsHtml += `<option value="${channel.id}" ${sub.announcement_channel_id == channel.id ? 'selected' : ''}>#${channel.name}</option>`;
+                        });
+
+                        let roleOptionsHtml = '<option value="">-- None --</option>';
+                        allRoles.forEach(role => {
+                            roleOptionsHtml += `<option value="${role.id}" ${sub.live_role_id == role.id ? 'selected' : ''}>${role.name}</option>`;
+                        });
+
+                        subCard.innerHTML = `
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <strong>Subscription for <span class="text-primary">${sub.platform.toUpperCase()}</span> in ${sub.announcement_channel_id ? `#${allChannels.find(c => c.id == sub.announcement_channel_id)?.name || 'Unknown Channel'}` : 'Server Default Channel'}</strong>
+                                <form class="delete-subscription-form" action="/manage/<%= guild.id %>/delete-subscription" method="POST" style="margin: 0;">
+                                    <input type="hidden" name="subscriptionId" value="${subId}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="sub-channel-${subId}" class="form-label">Announcement Channel</label>
+                                        <select class="form-select" id="sub-channel-${subId}" name="subscriptions[${subId}][announcement_channel_id]">
+                                            ${channelOptionsHtml}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="sub-role-${subId}" class="form-label">Live Role</label>
+                                        <select class="form-select" id="sub-role-${subId}" name="subscriptions[${subId}][live_role_id]">
+                                            ${roleOptionsHtml}
+                                        </select>
+                                    </div>
+                                    <div class="col-12">
+                                        <label for="sub-message-${subId}" class="form-label">Custom Message</label>
+                                        <textarea class="form-control" id="sub-message-${subId}" name="subscriptions[${subId}][custom_message]" rows="2" placeholder="e.g. Hey @everyone, {streamer} is live!">${sub.custom_message || ''}</textarea>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="sub-keep-${subId}" name="subscriptions[${subId}][keep_summary]" ${!sub.delete_on_end ? 'checked' : ''}>
+                                            <label class="form-check-label" for="sub-keep-${subId}">Keep announcement message after stream ends</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="sub-webhook-name-${subId}" class="form-label">Webhook Name</label>
+                                        <input type="text" class="form-control" id="sub-webhook-name-${subId}" name="subscriptions[${subId}][override_nickname]" value="${sub.override_nickname || ''}" placeholder="Leave blank for default">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="sub-webhook-avatar-${subId}" class="form-label">Webhook Avatar URL</label>
+                                        <input type="url" class="form-control" id="sub-webhook-avatar-${subId}" name="subscriptions[${subId}][override_avatar_url]" value="${sub.override_avatar_url || ''}" placeholder="Leave blank for default">
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        subscriptionsContainer.appendChild(subCard);
+                    });
+                }
+
+                // --- MODERATION ---
+                blacklistControls.innerHTML = ''; // Clear previous content
+                const streamerIdentifier = streamer.discord_user_id || streamer.name;
+
+                if (streamer.is_blacklisted) {
+                    const unblacklistForm = document.createElement('form');
+                    unblacklistForm.action = `/manage/<%= guild.id %>/unblacklist`;
+                    unblacklistForm.method = 'POST';
+                    unblacklistForm.innerHTML = `
+                        <input type="hidden" name="identifier" value="${streamerIdentifier}">
+                        <input type="hidden" name="streamer_id" value="${streamer.id}">
+                        <button type="submit" class="btn btn-success">Unblacklist User</button>
+                    `;
+                    blacklistControls.appendChild(unblacklistForm);
+                } else {
+                    const blacklistForm = document.createElement('form');
+                    blacklistForm.action = `/manage/<%= guild.id %>/blacklist`;
+                    blacklistForm.method = 'POST';
+                    blacklistForm.innerHTML = `
+                        <input type="hidden" name="identifier" value="${streamerIdentifier}">
+                        <button type="submit" class="btn btn-danger">Blacklist User</button>
+                    `;
+                    blacklistControls.appendChild(blacklistForm);
+                }
+            });
+
+            subscriptionsContainer.addEventListener('submit', async (e) => {
+                if (e.target.classList.contains('delete-subscription-form')) {
+                    e.preventDefault();
+                    const form = e.target;
+                    const subId = form.querySelector('input[name="subscriptionId"]').value;
+                    
+                    if (confirm('Are you sure you want to delete this subscription?')) {
+                        try {
+                            const response = await fetch(form.action, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ subscriptionId: subId })
+                            });
+                            const result = await response.json();
+                            if (response.ok && result.success) {
+                                form.closest('.card').remove();
+                                alert('Subscription deleted successfully.');
+                            } else {
+                                throw new Error(result.error || 'Failed to delete subscription.');
+                            }
+                        } catch (error) {
+                            console.error('Error deleting subscription:', error);
+                            alert(`Error: ${error.message}`);
+                        }
+                    }
+                }
+            });
+        }
+    });
+</script>

@@ -1,0 +1,39 @@
+<div class="row">
+    <div class="col-12">
+        <h3>Commands</h3>
+        <p class="text-muted">A list of all available commands for the bot.</p>
+    </div>
+</div>
+
+<% const groupedCommands = commands.reduce((acc, cmd) => { %>
+    <% const category = cmd.category || 'General'; %>
+    <% if (!acc[category]) { acc[category] = []; } %>
+    <% acc[category].push(cmd); %>
+    <% return acc; %>
+<% }, {}); %>
+
+<% for (const category in groupedCommands) { %>
+    <div class="content-card mt-4">
+        <div class="card-body">
+            <h4 class="card-title"><%= category %></h4>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                    <tr>
+                        <th>Command</th>
+                        <th>Description</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <% groupedCommands[category].forEach(command => { %>
+                        <tr>
+                            <td><code>/<%= command.name %></code></td>
+                            <td><%= command.description %></td>
+                        </tr>
+                    <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+<% } %>

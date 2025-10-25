@@ -23,7 +23,7 @@ async function sendPaginatedEmbed(interaction, pages) {
         new ButtonBuilder().setCustomId(`next:${uniqueId}`).setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(currentPage >= pages.length - 1 || ended)
     );
 
-    const message = await interaction.editReply({embeds: [pages[currentPage]], components: pages.length > 1 ? [createButtons()] : [], ephemeral: true});
+    const message = await interaction.editReply({embeds: [pages[currentPage]], components: pages.length > 1 ? [createButtons()] : [], flags: [MessageFlags.Ephemeral]});
 
     if (!message || pages.length <= 1) {
         return;
@@ -33,7 +33,7 @@ async function sendPaginatedEmbed(interaction, pages) {
 
     collector.on("collect", async i => {
         if (i.user.id !== interaction.user.id) {
-            return i.reply({content: "You cannot use these buttons.", ephemeral: true});
+            return i.reply({content: "You cannot use these buttons.", flags: [MessageFlags.Ephemeral]});
         }
         i.customId.startsWith("next") ? currentPage++ : currentPage--;
         await i.update({embeds: [pages[currentPage]], components: [createButtons()]});
@@ -210,7 +210,7 @@ module.exports = {
                 );
 
                 if (streamers.length === 0) {
-                    return interaction.reply({content: "There are no streamers configured for this server.", ephemeral: true});
+                    return interaction.reply({content: "There are no streamers configured for this server.", flags: [MessageFlags.Ephemeral]});
                 }
 
                 const options = streamers.map(s => ({
@@ -227,7 +227,7 @@ module.exports = {
 
                 const row = new ActionRowBuilder().addComponents(selectMenu);
 
-                const replyMessage = await interaction.reply({content: "Please select the streamer(s) you want to remove:", components: [row], ephemeral: true});
+                const replyMessage = await interaction.reply({content: "Please select the streamer(s) you want to remove:", components: [row], flags: [MessageFlags.Ephemeral]});
 
                 const filter = i => i.customId === "remove_streamer_select" && i.user.id === interaction.user.id;
                 const collector = replyMessage.createMessageComponentCollector({componentType: ComponentType.StringSelect, time: 60000});
@@ -274,7 +274,7 @@ module.exports = {
                 break;
             }
             case 'edit': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
                 const username = interaction.options.getString("username");
                 const guildId = interaction.guild.id;
 
@@ -356,7 +356,7 @@ module.exports = {
                 break;
             }
             case 'list': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
                 try {
                     const [allStreamers] = await db.execute(`
                                 SELECT s.platform, s.username, s.discord_user_id, s.platform_user_id,
@@ -425,13 +425,13 @@ module.exports = {
                 break;
             }
             case 'check-live': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
 
                 let browser;
 
                 try {
                     const [subscriptions] = await db.execute(`
-                                SELECT s.platform, s.username, s.discord_user_id, s.platform_user_id
+                                SELECT s.streamer_id, s.platform, s.username, s.discord_user_id, s.platform_user_id
                                 FROM subscriptions sub
                                          JOIN streamers s ON sub.streamer_id = s.streamer_id
                                 WHERE sub.guild_id = ?`,
@@ -509,7 +509,7 @@ module.exports = {
                 break;
             }
             case 'massadd': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
                 const platform = interaction.options.getString("platform");
                 const channelOverride = interaction.options.getChannel("channel");
                 const nickname = interaction.options.getString("nickname");
@@ -632,7 +632,7 @@ module.exports = {
                 break;
             }
             case 'massremove': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
                 const platform = interaction.options.getString("platform");
                 const usernames = [...new Set(interaction.options.getString("usernames").split(",").map(name => name.trim().toLowerCase()).filter(Boolean))];
                 const guildId = interaction.guild.id;
@@ -711,7 +711,7 @@ module.exports = {
                     return interaction.reply({content: "Invalid file type. Must be a `.csv` file.", flags: [MessageFlags.Ephemeral]});
                 }
 
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
 
                 const added = [], updated = [], failed = [];
                 let browser = null;
@@ -814,7 +814,7 @@ module.exports = {
                 break;
             }
             case 'exportcsv': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
 
                 try {
                     const [subscriptions] = await db.execute(
@@ -883,7 +883,7 @@ module.exports = {
                 const response = await interaction.reply({
                     embeds: [embed],
                     components: [row],
-                    ephemeral: true
+                    flags: [MessageFlags.Ephemeral]
                 });
 
                 const collectorFilter = i => i.user.id === interaction.user.id;
@@ -909,7 +909,7 @@ module.exports = {
                             const [result] = await db.execute("DELETE FROM subscriptions WHERE guild_id = ?", [interaction.guild.id]);
 
                             await interaction.editReply({
-                                content: `✅ **Operation Complete!**\nRemoved **${result.affectedRows}** streamer subscriptions.\nPurged **${purgedMessageCount}** active announcement message(s).`,
+                                content: `✅ **Operation Complete!**\\nRemoved **${result.affectedRows}** streamer subscriptions.\\nPurged **${purgedMessageCount}** active announcement message(s).`,
                             });
 
                         } catch (dbError) {
@@ -930,7 +930,7 @@ module.exports = {
                 break;
             }
             default:
-                await interaction.reply({ content: 'Invalid streamer subcommand.', ephemeral: true });
+                await interaction.reply({ content: 'Invalid streamer subcommand.', flags: [MessageFlags.Ephemeral] });
                 break;
         }
     },

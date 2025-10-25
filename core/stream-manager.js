@@ -17,9 +17,13 @@ async function aggressiveCleanup(client) {
     let connection;
     try {
         connection = await db.getConnection();
-        const [guilds] = await connection.query('SELECT guild_id FROM guilds');
+        const [allGuilds] = await connection.query('SELECT guild_id FROM guilds');
 
-        for (const g of guilds) {
+        const membersToProcess = new Map(); // Map<memberId, { member: GuildMember, guilds: Map<guildId, Set<roleId>> }>
+        const liveStatusCache = new Map(); // Cache for live status to avoid re-checking the same streamer account
+
+        // Phase 1: Gather all members with live roles across all guilds
+        for (const g of allGuilds) {
             const guild = await client.guilds.fetch(g.guild_id).catch(() => null);
             if (!guild) continue;
 
@@ -31,59 +35,73 @@ async function aggressiveCleanup(client) {
 
             if (allRoleIds.size === 0) continue;
 
-            await guild.members.fetch();
+            const members = await guild.members.fetch().catch(() => {
+                logger.warn(`Failed to fetch members for guild ${guild.id}.`, { guildId: guild.id, category: "streams" });
+                return new Map();
+            });
 
-            const membersToCheck = new Map();
-            for (const roleId of allRoleIds) {
-                const role = await guild.roles.fetch(roleId).catch(() => null);
-                if (!role) continue;
-
-                if (role.members.size > 0) {
-                    logger.info(`Found ${role.members.size} members with role '${role.name}' for potential cleanup.`, { guildId: guild.id, category: "streams" });
-                }
-
-                for (const [memberId, member] of role.members) {
-                    if (!membersToCheck.has(memberId)) {
-                        membersToCheck.set(memberId, member);
+            for (const member of members.values()) {
+                const memberRoles = member.roles.cache.filter(role => allRoleIds.has(role.id));
+                if (memberRoles.size > 0) {
+                    if (!membersToProcess.has(member.id)) {
+                        membersToProcess.set(member.id, { member, guilds: new Map() });
                     }
+                    membersToProcess.get(member.id).guilds.set(guild.id, new Set(memberRoles.keys()));
                 }
             }
+        }
 
-            if (membersToCheck.size > 0) {
-                logger.info(`Checking a total of ${membersToCheck.size} unique members in guild ${guild.name}.`, { guildId: guild.id, category: "streams" });
-            }
+        logger.info(`Found ${membersToProcess.size} unique members with live roles across all guilds for cleanup check.`);
 
-            for (const member of membersToCheck.values()) {
-                try {
-                    const [streamerRows] = await connection.query('SELECT username, platform FROM streamers WHERE discord_user_id = ?', [member.id]);
-                    
-                    let isActuallyLive = false;
-                    if (streamerRows.length > 0) {
-                        for (const streamer of streamerRows) {
+        // Phase 2: Process unique members
+        for (const { member, guilds } of membersToProcess.values()) {
+            try {
+                const [streamerRows] = await connection.query('SELECT username, platform FROM streamers WHERE discord_user_id = ?', [member.id]);
+                
+                let isActuallyLive = false;
+                if (streamerRows.length > 0) {
+                    for (const streamer of streamerRows) {
+                        const cacheKey = `${streamer.platform}:${streamer.username}`;
+                        if (liveStatusCache.has(cacheKey)) {
+                            isActuallyLive = liveStatusCache.get(cacheKey);
+                        } else {
                             const api = platformModules[streamer.platform];
-                            if (api && await api.isStreamerLive(streamer.username)) {
-                                isActuallyLive = true;
-                                break;
+                            if (api) {
+                                const liveStatus = await api.isStreamerLive(streamer.username);
+                                liveStatusCache.set(cacheKey, liveStatus);
+                                isActuallyLive = liveStatus;
                             }
                         }
+                        if (isActuallyLive) break; // If any account is live, no need to check others
                     }
+                }
 
-                    if (!isActuallyLive) {
-                        for (const roleId of allRoleIds) {
-                            if (member.roles.cache.has(roleId)) {
+                if (!isActuallyLive) {
+                    // User is not live on any platform, remove all live roles from all relevant guilds
+                    for (const [guildId, roleIds] of guilds.entries()) {
+                        const guild = await client.guilds.fetch(guildId).catch(() => null);
+                        if (!guild) continue;
+
+                        // Refetch member for this specific guild to be safe
+                        const guildMember = await guild.members.fetch(member.id).catch(() => null);
+                        if (!guildMember) continue;
+
+                        for (const roleId of roleIds) {
+                            if (guildMember.roles.cache.has(roleId)) {
                                 const roleToRemove = await guild.roles.fetch(roleId).catch(() => null);
                                 if (roleToRemove) {
-                                    logger.info(`Removing stale role '${roleToRemove.name}' from ${member.user.tag}.`, { guildId: guild.id, userId: member.id, category: "streams" });
-                                    await member.roles.remove(roleToRemove);
+                                    logger.info(`Removing stale role '${roleToRemove.name}' from ${guildMember.user.tag} in guild ${guild.name}.`, { guildId: guild.id, userId: guildMember.id, category: "streams" });
+                                    await guildMember.roles.remove(roleToRemove).catch(e => logger.error(`Failed to remove role ${roleId} from member ${guildMember.id} in guild ${guild.id}`, { error: e }));
                                 }
                             }
                         }
                     }
-                } catch (e) {
-                    logger.error(`Error processing member ${member.id} in cleanup`, { error: e, guildId: guild.id, category: "streams" });
                 }
+            } catch (e) {
+                logger.error(`Error processing member ${member.id} in global cleanup`, { error: e, userId: member.id, category: "streams" });
             }
         }
+
     } catch (error) {
         logger.error("Critical error during aggressive cleanup.", { error, category: "streams" });
     } finally {
@@ -131,8 +149,7 @@ async function checkStreamers(client) {
         const [subscriptions, teams, guildSettings] = await Promise.all([
             connection.query(
                 `SELECT sub.guild_id, sub.announcement_channel_id AS sub_channel_id, sub.live_role_id AS sub_role_id, sub.override_nickname, sub.override_avatar_url, sub.team_subscription_id, s.streamer_id, s.discord_user_id, s.username, s.platform
-                 FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id 
-                 WHERE s.discord_user_id IS NOT NULL`
+                 FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id`
             ),
             connection.query('SELECT id, announcement_channel_id AS team_channel_id, live_role_id AS team_role_id, webhook_name AS team_webhook_name, webhook_avatar_url AS team_webhook_avatar FROM twitch_teams'),
             connection.query('SELECT guild_id, announcement_channel_id AS guild_channel_id, live_role_id AS guild_role_id, bot_nickname AS guild_webhook_name, webhook_avatar_url AS guild_webhook_avatar FROM guilds')
@@ -190,8 +207,10 @@ async function processUniqueStreamer(client, streamer, subscriptions, guildsMap,
             const guild = await client.guilds.fetch(sub.guild_id).catch(() => null);
             if (!guild) continue;
 
-            const member = await guild.members.fetch(streamer.discord_user_id).catch(() => null);
-            if (!member) continue;
+            let member = null;
+            if (streamer.discord_user_id) {
+                member = await guild.members.fetch(streamer.discord_user_id).catch(() => null);
+            }
 
             const team = sub.team_subscription_id ? teamsMap.get(sub.team_subscription_id) : null;
 
@@ -200,32 +219,32 @@ async function processUniqueStreamer(client, streamer, subscriptions, guildsMap,
 
             if (!finalRoleId && !finalChannelId) continue;
 
-            const announcementKey = `${guild.id}-${member.id}-${streamer.platform}-${finalChannelId}`;
-            const announcementId = liveAnnouncements.get(announcementKey);
+            const announcementKey = `${guild.id}-${streamer.platform}-${streamer.username}-${finalChannelId}`;
+            const announcementData = liveAnnouncements.get(announcementKey);
 
             let liveRole = null;
             if (finalRoleId) {
                 liveRole = await guild.roles.fetch(finalRoleId).catch(() => null);
             }
 
-            const hasLiveRole = liveRole ? member.roles.cache.has(liveRole.id) : false;
+            const hasLiveRole = member && liveRole ? member.roles.cache.has(liveRole.id) : false;
 
             if (isLive && streamData) {
-                if (liveRole && !hasLiveRole) {
+                if (member && liveRole && !hasLiveRole) {
                     await member.roles.add(liveRole).catch(e => logger.error(`Failed to add role:`, { error: e, guildId: guild.id, memberId: member.id, roleId: liveRole.id, category: "streams" }));
                 }
 
-                if (finalChannelId && !announcementId) {
+                if (finalChannelId && !announcementData) {
                     const announcementChannel = await guild.channels.fetch(finalChannelId).catch(() => null);
                     if (announcementChannel) {
                         const webhookConfig = {
-                            username: member.displayName,
-                            avatarURL: member.user.displayAvatarURL()
+                            username: member?.displayName || streamer.username,
+                            avatarURL: member?.user?.displayAvatarURL() || client.user.displayAvatarURL()
                         };
 
                         const embed = new EmbedBuilder()
                             .setColor(streamer.platform === 'kick' ? 0x00FF00 : 0x6441A5)
-                            .setAuthor({ name: `${member.displayName} is now live on ${streamer.platform.charAt(0).toUpperCase() + streamer.platform.slice(1)}!`, iconURL: member.user.displayAvatarURL() })
+                            .setAuthor({ name: `${streamer.username} is now live on ${streamer.platform.charAt(0).toUpperCase() + streamer.platform.slice(1)}!`, iconURL: webhookConfig.avatarURL })
                             .setTitle(streamData.title)
                             .setURL(streamer.platform === 'kick' ? `https://kick.com/${streamer.username}` : `https://twitch.tv/${streamer.username}`)
                             .setImage(streamData.thumbnail_url?.replace("{width}", "1280").replace("{height}", "720"))
@@ -236,19 +255,27 @@ async function processUniqueStreamer(client, streamer, subscriptions, guildsMap,
                             .setTimestamp();
                         
                         const message = await sendWithWebhook(announcementChannel, { ...webhookConfig, embeds: [embed] });
-                        if (message) liveAnnouncements.set(announcementKey, message.id);
+                        if (message) {
+                            liveAnnouncements.set(announcementKey, {
+                                messageId: message.id,
+                                streamerId: streamer.streamer_id,
+                                platform: streamer.platform,
+                                username: streamer.username,
+                                discordUserId: streamer.discord_user_id
+                            });
+                        }
                     }
                 }
             } else {
-                if (liveRole && hasLiveRole) {
+                if (member && liveRole && hasLiveRole) {
                     await member.roles.remove(liveRole).catch(e => logger.error(`Failed to remove role:`, { error: e, guildId: guild.id, memberId: member.id, roleId: liveRole.id, category: "streams" }));
                 }
-                if (announcementId) {
+                if (announcementData) {
                     const announcementChannel = await guild.channels.fetch(finalChannelId).catch(() => null);
                     if (announcementChannel) {
-                        const message = await announcementChannel.messages.fetch(announcementId).catch(() => null);
+                        const message = await announcementChannel.messages.fetch(announcementData.messageId).catch(() => null);
                         if (message) {
-                            await message.delete().catch(e => logger.error(`Failed to delete announcement:`, { error: e, guildId: guild.id, messageId: announcementId, category: "streams" }));
+                            await message.delete().catch(e => logger.error(`Failed to delete announcement:`, { error: e, guildId: guild.id, messageId: announcementData.messageId, category: "streams" }));
                         }
                     }
                     liveAnnouncements.delete(announcementKey);

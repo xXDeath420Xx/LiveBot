@@ -54,9 +54,7 @@
                 <h6 class="sidebar-heading">Utility</h6>
                 <a class="nav-link" href="/manage/<%= guild.id %>/utilities"><i class="fas fa-wrench fa-fw"></i> General Utilities</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/custom-commands"><i class="fas fa-terminal fa-fw"></i> Custom Commands</a>
-                <a class="nav-link" href="/manage/<%= guild.id %>/embed-builder"><i class="fas fa-file-image fa-fw"></i> Embed Builder</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/tickets"><i class="fas fa-ticket-alt fa-fw"></i> Tickets & Forms</a>
-                <a class="nav-link" href="/manage/<%= guild.id %>/record"><i class="fas fa-record-vinyl fa-fw"></i> Record</a>
                 <a class="nav-link" href="/manage/<%= guild.id %>/backups"><i class="fas fa-save fa-fw"></i> Backups</a>
             </nav>
         </aside>
@@ -64,7 +62,6 @@
         <div class="main-content flex-grow-1">
             <div class="content-card">
                 <%
-                const currentSavedEmbeds = typeof savedEmbeds !== 'undefined' ? savedEmbeds : [];
                 const pageMap = {
                     'streamers': { partial: 'streamers', data: { guild, streamers: consolidatedStreamers, roles, channels } },
                     'teams': { partial: 'teams', data: { guild, teamSubscriptions, roles, channels } },
@@ -85,9 +82,7 @@
                     'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
                     'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
                     'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
-                    'embed-builder': { partial: 'embed-builder', data: { guild, embeds: currentSavedEmbeds } },
                     'tickets': { partial: 'tickets', data: { guild, settings: ticketConfig, forms: forms, categories, roles } },
-                    'record': { partial: 'record', data: { guild, settings: recordConfig, roles, channels } },
                     'backups': { partial: 'backups', data: { guild, backups } }
                 };
                 const activePage = pageMap[page] || pageMap['streamers'];

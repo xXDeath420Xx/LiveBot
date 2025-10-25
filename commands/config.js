@@ -1,11 +1,11 @@
-const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder, AttachmentBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, ChannelType, EmbedBuilder, AttachmentBuilder, MessageFlagsBitField } = require('discord.js');
 const db = require("../utils/db");
 const logger = require("../utils/logger");
 const crypto = require("crypto");
 
 // Simple time string parser (e.g., "5m", "1h", "2d")
 function parseDuration(durationStr) {
-    const match = durationStr.match(/^(\d+)(s|m|h|d)$/);
+    const match = durationStr.match(/^(\\d+)(s|m|h|d)$/);
     if (!match) {
         return null;
     }
@@ -40,7 +40,7 @@ function parseTimeToSeconds(timeStr) {
     if (timeStr === "off" || timeStr === "0") {
         return 0;
     }
-    const match = timeStr.match(/^(\d+)(s|m|h)$/);
+    const match = timeStr.match(/^(\\d+)(s|m|h)$/);
     if (!match) {
         return null;
     }
@@ -199,7 +199,7 @@ module.exports = {
                 const channel = interaction.options.getChannel("channel");
                 const guildId = interaction.guild.id;
 
-                await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
+                await interaction.deferReply({flags: [MessageFlagsBitField.Flags.Ephemeral]});
 
                 try {
                     await db.execute(
@@ -224,13 +224,13 @@ module.exports = {
                 const roleId = role ? role.id : null;
                 const guildId = interaction.guild.id;
 
-                await interaction.deferReply({flags: [MessageFlags.Ephemeral]});
+                await interaction.deferReply({flags: [MessageFlagsBitField.Flags.Ephemeral]});
 
                 try {
                     if (role) {
                         const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
                         if (role.position >= botMember.roles.highest.position) {
-                            return interaction.editReply({content: `Error: The "${role.name}" role is higher than my role in the server hierarchy, so I cannot assign it.`});
+                            return interaction.editReply({content: `Error: The \"${role.name}\" role is higher than my role in the server hierarchy, so I cannot assign it.`});
                         }
                     }
 
@@ -255,15 +255,15 @@ module.exports = {
 
                 try {
                     await db.execute("INSERT INTO music_config (guild_id, dj_role_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE dj_role_id = ?", [guildId, role.id, role.id]);
-                    await interaction.reply({content: `✅ The DJ role has been set to <@&${role.id}>.`, ephemeral: true});
+                    await interaction.reply({content: `✅ The DJ role has been set to <@&${role.id}>.`, flags: [MessageFlagsBitField.Flags.Ephemeral]});
                 } catch (error) {
                     logger.error("[Config DJ Role Error]", error);
-                    await interaction.reply({content: "❌ An error occurred while setting the DJ role.", ephemeral: true});
+                    await interaction.reply({content: "❌ An error occurred while setting the DJ role.", flags: [MessageFlagsBitField.Flags.Ephemeral]});
                 }
                 break;
             }
             case 'logging': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlagsBitField.Flags.Ephemeral]});
 
                 const channel = interaction.options.getChannel("channel");
                 const enabledLogs = [
@@ -293,7 +293,7 @@ module.exports = {
                 break;
             }
             case 'customizebot': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlagsBitField.Flags.Ephemeral]});
 
                 const newNickname = interaction.options.getString("nickname");
                 const newAvatar = interaction.options.getAttachment("avatar");
@@ -322,7 +322,7 @@ module.exports = {
                     } else if (newNickname) {
                         try {
                             await botMember.setNickname(newNickname);
-                            await db.execute("UPDATE guilds SET bot_nickname = ?", [newNickname, guildId]);
+                            await db.execute("UPDATE guilds SET bot_nickname = ? WHERE guild_id = ?", [newNickname, guildId]);
                             nicknameUpdated = true;
                         }
                         catch (e) {
@@ -395,7 +395,7 @@ module.exports = {
                 break;
             }
             case 'customizechannel': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlagsBitField.Flags.Ephemeral]});
 
                 const channel = interaction.options.getChannel("channel");
                 const newNickname = interaction.options.getString("nickname");
@@ -434,7 +434,7 @@ module.exports = {
                             finalAvatarUrl = null;
                         }
                         else {
-                            if (!/^https?:\/\//.test(newAvatarUrlText)) {
+                            if (!newAvatarUrlText.startsWith('http://') && !newAvatarUrlText.startsWith('https://')) {
                                 return interaction.editReply("The provided avatar URL must start with `http://` or `https://`.");
                             }
                             finalAvatarUrl = newAvatarUrlText;
@@ -465,7 +465,7 @@ module.exports = {
                     }
 
                     await db.execute(
-                        `INSERT INTO channel_settings (${insertColumns.join(", ")}) \n                             VALUES (${insertPlaceholders.join(", ")}) \n                             ON DUPLICATE KEY UPDATE ${updateClauses.join(", ")}`,
+                        `INSERT INTO channel_settings (${insertColumns.join(", ")}) VALUES (${insertPlaceholders.join(", ")}) ON DUPLICATE KEY UPDATE ${updateClauses.join(", ")}`,
                         [...insertValues, ...updateValuesForDuplicateKey]
                     );
 
@@ -497,7 +497,7 @@ module.exports = {
                 break;
             }
             case 'customizestreamer': {
-                await interaction.deferReply({ephemeral: true});
+                await interaction.deferReply({flags: [MessageFlagsBitField.Flags.Ephemeral]});
 
                 const platform = interaction.options.getString("platform");
                 const username = interaction.options.getString("username");
@@ -522,7 +522,7 @@ module.exports = {
                             finalAvatarUrl = null;
                         }
                         else {
-                            if (!/^https?:\/\//.test(newAvatarUrlText)) {
+                            if (!newAvatarUrlText.startsWith('http://') && !newAvatarUrlText.startsWith('https://')) {
                                 return interaction.editReply("The provided avatar URL must start with `http://` or `https://`.");
                             }
                             finalAvatarUrl = newAvatarUrlText;
@@ -602,7 +602,7 @@ module.exports = {
                 break;
             }
             default:
-                await interaction.reply({ content: 'Invalid config subcommand.', ephemeral: true });
+                await interaction.reply({ content: 'Invalid config subcommand.', flags: [MessageFlagsBitField.Flags.Ephemeral] });
                 break;
         }
     },

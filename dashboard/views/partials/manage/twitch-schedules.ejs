@@ -7,28 +7,72 @@
 
 <div class="content-card mt-4">
     <div class="card-body">
-        <h4 class="card-title">Twitch Schedule Sync</h4>
+        <h4 class="card-title">Add/Update Schedule Sync</h4>
         <p class="card-subtitle mb-3 text-muted">Automatically sync a streamer's Twitch schedule to a channel.</p>
         <form action="/manage/<%= guild.id %>/twitch-schedules/sync" method="POST">
-            <div class="mb-3">
-                <label for="scheduleStreamer" class="form-label">Streamer</label>
-                <select class="form-select" id="scheduleStreamer" name="streamerId">
-                    <option value="">Select a streamer</option>
-                    <% consolidatedStreamers.forEach(streamer => { %>
-                        <option value="<%= streamer.user_id %>"><%= streamer.display_name %></option>
-                    <% }) %>
-                </select>
+            <div class="row g-3 align-items-end">
+                <div class="col-md-5">
+                    <label for="scheduleStreamer" class="form-label">Streamer</label>
+                    <select class="form-select" id="scheduleStreamer" name="streamerId" required>
+                        <option value="">Select a Twitch streamer</option>
+                        <% consolidatedStreamers.forEach(streamer => { %>
+                            <% if (streamer.platforms.includes('twitch')) { %>
+                                <option value="<%= streamer.id %>"><%= streamer.name %></option>
+                            <% } %>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label for="scheduleChannel" class="form-label">Post Schedule In</label>
+                    <select class="form-select" id="scheduleChannel" name="channelId" required>
+                        <option value="">Select a channel</option>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>" >#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                     <button type="submit" class="btn btn-primary w-100">Save</button>
+                </div>
             </div>
-            <div class="mb-3">
-                <label for="scheduleChannel" class="form-label">Post Schedule In</label>
-                <select class="form-select" id="scheduleChannel" name="channelId">
-                    <option value="">Select a channel</option>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>" >#<%= channel.name %></option>
-                    <% }) %>
-                </select>
-            </div>
-            <button type="submit" class="btn btn-primary">Save Schedule Sync</button>
         </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Existing Schedule Syncs</h4>
+        <p class="card-subtitle mb-3 text-muted">Manage current schedule sync configurations.</p>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                <tr>
+                    <th>Streamer</th>
+                    <th>Channel</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                <% if (twitchScheduleSyncs && twitchScheduleSyncs.length > 0) { %>
+                    <% twitchScheduleSyncs.forEach(sync => { %>
+                        <tr>
+                            <td><%= consolidatedStreamers.find(s => s.id === sync.streamer_id) ? consolidatedStreamers.find(s => s.id === sync.streamer_id).name : 'Unknown Streamer' %></td>
+                            <td>#<%= channels.find(c => c.id === sync.channel_id) ? channels.find(c => c.id === sync.channel_id).name : 'Unknown Channel' %></td>
+                            <td>
+                                <form action="/manage/<%= guild.id %>/twitch-schedules/delete" method="POST" class="d-inline">
+                                    <input type="hidden" name="syncId" value="<%= sync.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }) %>
+                <% } else { %>
+                    <tr>
+                        <td colspan="3" class="text-center">No Twitch schedule syncs configured.</td>
+                    </tr>
+                <% } %>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>

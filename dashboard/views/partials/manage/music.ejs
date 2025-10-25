@@ -1,56 +1,92 @@
 <div class="row">
     <div class="col-12">
-        <h3>Music</h3>
-        <p class="text-muted">Configure the music playback features for your server.</p>
+        <h3>Music Controls</h3>
+        <p class="text-muted">Configure the bot's music features for your server.</p>
     </div>
 </div>
 
 <div class="content-card mt-4">
     <div class="card-body">
-        <h4 class="card-title">Music Bot Configuration</h4>
-        <p class="card-subtitle mb-3 text-muted">Set up the default behavior for the music bot.</p>
+        <h4 class="card-title">General Music Settings</h4>
         <form action="/manage/<%= guild.id %>/music/config" method="POST">
             <div class="form-check form-switch mb-3">
-                <input class="form-check-input" type="checkbox" id="musicEnabled" name="enabled" <%= musicConfig && musicConfig.enabled ? 'checked' : '' %>>
-                <label class="form-check-label" for="musicEnabled">Enable Music System</label>
-                <div class="form-text">Turn on or off all music bot functionality for this server.</div>
+                <input class="form-check-input" type="checkbox" id="musicEnabled" name="enabled" <%= (musicConfig && musicConfig.enabled) ? 'checked' : '' %>>
+                <label class="form-check-label" for="musicEnabled">Enable Music Module</label>
             </div>
-
             <div class="mb-3">
-                <label for="musicDjRole" class="form-label">DJ Role</label>
-                <select class="form-select" id="musicDjRole" name="djRoleId">
-                    <option value="">Select a DJ role (optional)</option>
+                <label for="djRole" class="form-label">DJ Role</label>
+                <select class="form-select" id="djRole" name="djRoleId">
+                    <option value="">None</option>
                     <% roles.forEach(role => { %>
-                        <option value="<%= role.id %>" <%= musicConfig && musicConfig.dj_role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                        <option value="<%= role.id %>" <%= (musicConfig && musicConfig.dj_role_id === role.id) ? 'selected' : '' %>><%= role.name %></option>
                     <% }) %>
                 </select>
-                <div class="form-text">Users with this role can manage the music queue and playback.</div>
+                <div class="form-text">Users with this role can bypass most music command restrictions.</div>
             </div>
-            <button type="submit" class="btn btn-primary">Save Music Settings</button>
+            <button type="submit" class="btn btn-primary">Save General Settings</button>
         </form>
     </div>
 </div>
 
 <div class="content-card mt-4">
     <div class="card-body">
-        <h4 class="card-title">AI DJ Configuration</h4>
-        <p class="card-subtitle mb-3 text-muted">Configure the AI DJ for your server.</p>
+        <h4 class="card-title">AI DJ</h4>
         <form action="/manage/<%= guild.id %>/music/dj" method="POST">
             <div class="form-check form-switch mb-3">
-                <input class="form-check-input" type="checkbox" id="djEnabled" name="djEnabled" <%= musicConfig && musicConfig.dj_enabled ? 'checked' : '' %>>
+                <input class="form-check-input" type="checkbox" id="djEnabled" name="djEnabled" <%= (musicConfig && musicConfig.dj_enabled) ? 'checked' : '' %>>
                 <label class="form-check-label" for="djEnabled">Enable AI DJ</label>
-                <div class="form-text">Let the bot act as a DJ, providing commentary between songs.</div>
+                <div class="form-text">The bot will announce tracks and provide commentary like a radio DJ.</div>
             </div>
-
             <div class="mb-3">
                 <label for="djVoice" class="form-label">DJ Voice</label>
                 <select class="form-select" id="djVoice" name="djVoice">
-                    <option value="male" <%= musicConfig && musicConfig.dj_voice === 'male' ? 'selected' : '' %>>Male</option>
-                    <option value="female" <%= musicConfig && musicConfig.dj_voice === 'female' ? 'selected' : '' %>>Female</option>
+                    <option value="female" <%= (musicConfig && musicConfig.dj_voice === 'female') ? 'selected' : '' %>>Female</option>
+                    <option value="male" <%= (musicConfig && musicConfig.dj_voice === 'male') ? 'selected' : '' %>>Male</option>
                 </select>
-                <div class="form-text">Select the voice for the AI DJ.</div>
             </div>
             <button type="submit" class="btn btn-primary">Save AI DJ Settings</button>
+        </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Playlists</h4>
+        <form action="/manage/<%= guild.id %>/music/playlists" method="POST">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="maxPlaylists" class="form-label">Max Playlists Per User</label>
+                    <input type="number" class="form-control" id="maxPlaylists" name="maxPlaylists" value="<%= musicConfig.max_playlists_per_user || '' %>">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="maxSongsPerPlaylist" class="form-label">Max Songs Per Playlist</label>
+                    <input type="number" class="form-control" id="maxSongsPerPlaylist" name="maxSongsPerPlaylist" value="<%= musicConfig.max_songs_per_playlist || '' %>">
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Playlist Settings</button>
+        </form>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Enabled Filters</h4>
+        <form action="/manage/<%= guild.id %>/music/filters" method="POST">
+            <div class="mb-3">
+                <label class="form-label">Select which audio filters are available for use:</label>
+                <div class="row">
+                    <% const availableFilters = ['bassboost', '8D', 'vaporwave', 'nightcore', 'phaser', 'tremolo', 'vibrato', 'reverse', 'treble', 'normalizer', 'surrounding', 'pulsator', 'subboost', 'karaoke', 'flanger', 'gate', 'haas', 'mcompand']; %>
+                    <% availableFilters.forEach(filter => { %>
+                        <div class="col-md-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="filters[]" value="<%= filter %>" id="filter-<%= filter %>" <%= (musicConfig.enabled_filters && musicConfig.enabled_filters.includes(filter)) ? 'checked' : '' %>>
+                                <label class="form-check-label" for="filter-<%= filter %>"><%= filter %></label>
+                            </div>
+                        </div>
+                    <% }); %>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Filter Settings</button>
         </form>
     </div>
 </div>

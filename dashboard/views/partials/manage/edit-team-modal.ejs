@@ -1,22 +1,21 @@
-<!-- Team Settings Modal -->
+<!-- Edit Team Modal -->
 <div class="modal fade" id="teamSettingsModal" tabindex="-1" aria-labelledby="teamSettingsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="teamSettingsModalLabel">Edit Team: <span id="modal-team-name"></span></h5>
+                <h5 class="modal-title" id="teamSettingsModalLabel">Edit Settings for <span id="modal-team-name"></span></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="/manage/<%= guild.id %>/update-team" method="POST">
+            <form action="/manage/<%= guild.id %>/edit-team" method="POST">
+                <input type="hidden" name="teamSubscriptionId" id="edit-team-subscription-id">
                 <div class="modal-body">
-                    <input type="hidden" name="teamSubscriptionId" id="edit-team-subscription-id">
-                    
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="edit-team-channel-id" class="form-label">Announcement Channel</label>
-                            <select class="form-select" id="edit-team-channel-id" name="channelId">
-                                <option value="">Use Server Default</option>
+                            <select class="form-select" id="edit-team-channel-id" name="announcementChannelId">
+                                <option value="">-- Use Server Default --</option>
                                 <% channels.forEach(channel => { %>
-                                    <option value="<%= channel.id %>"><%= channel.name %></option>
+                                    <option value="<%= channel.id %>">#<%= channel.name %></option>
                                 <% }); %>
                             </select>
                         </div>
@@ -24,16 +23,16 @@
                         <div class="col-md-6">
                             <label for="edit-team-live-role-id" class="form-label">Live Role</label>
                             <select class="form-select" id="edit-team-live-role-id" name="liveRoleId">
-                                <option value="">None</option>
+                                <option value="">-- None --</option>
                                 <% roles.forEach(role => { %>
-                                    <option value="<%= role.id %>"><%= role.name %></option>
+                                    <option value="<%= role.id %>">@<%= role.name %></option>
                                 <% }); %>
                             </select>
                         </div>
 
                         <div class="col-12">
                             <label for="edit-team-custom-message" class="form-label">Custom Message</label>
-                            <textarea class="form-control" id="edit-team-custom-message" name="customMessage" rows="2" placeholder="e.g. Hey @everyone, the {team} is live with {streamer}!"></textarea>
+                            <textarea class="form-control" id="edit-team-custom-message" name="customMessage" rows="2"></textarea>
                         </div>
 
                         <div class="col-12">
@@ -62,7 +61,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-primary">Save changes</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
                 </div>
             </form>
         </div>

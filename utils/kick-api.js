@@ -1,17 +1,8 @@
 const logger = require('./logger');
 const { getCycleTLSInstance } = require('./tls-manager');
 
-const userCache = new Map();
-const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
-
 async function getKickUser(username) {
     if (typeof username !== 'string' || !username) return null;
-
-    const cached = userCache.get(username);
-    if (cached && (Date.now() - cached.timestamp < CACHE_DURATION)) {
-        logger.info(`[Kick API] Returning cached data for ${username}.`);
-        return cached.data;
-    }
 
     logger.info(`[Kick API] getKickUser started for: ${username}`);
     const MAX_RETRIES = 3;
@@ -38,17 +29,14 @@ async function getKickUser(username) {
                 const data = typeof response.body === 'string' ? JSON.parse(response.body) : response.body;
                 if (!data || !data.user) {
                     logger.info(`[Kick API] No 'user' object in response for '${username}', assuming non-existent.`);
-                    userCache.set(username, { data: null, timestamp: Date.now() });
                     return null;
                 }
                 logger.info(`[Kick API] Successfully retrieved Kick user data for ${username}.`);
-                userCache.set(username, { data, timestamp: Date.now() });
                 return data;
             }
 
             if (response.status === 404) {
                 logger.warn(`[Kick API] Received 404 for ${username}, user likely does not exist. Not retrying.`);
-                userCache.set(username, { data: null, timestamp: Date.now() }); // Cache the non-existent user
                 return null;
             }
 
@@ -64,7 +52,6 @@ async function getKickUser(username) {
     }
 
     logger.error(`[Kick API] All retries failed for ${username}.`);
-    userCache.delete(username); // Don't cache failures
     return null;
 }
 

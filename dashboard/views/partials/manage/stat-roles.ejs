@@ -1,0 +1,87 @@
+<div class="row">
+    <div class="col-12">
+        <h3>Stat Roles</h3>
+        <p class="text-muted">Automatically assign roles to users based on their server statistics.</p>
+    </div>
+</div>
+
+<div class="content-card mt-4">
+    <div class="card-body">
+        <h4 class="card-title">Stat Role Configuration</h4>
+        <p class="card-subtitle mb-3 text-muted">Create and manage roles that are automatically assigned to users when they reach certain statistical milestones.</p>
+        <form action="/manage/<%= guild.id %>/stat-roles/update" method="POST">
+            <div id="stat-roles-container">
+                <% statroleConfigs.forEach((config, index) => { %>
+                    <div class="stat-role-group mb-4 p-3 border rounded">
+                        <h5>Role Group <%= index + 1 %></h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Role to Award</label>
+                                <select class="form-select" name="configs[<%= index %>][roleId]">
+                                    <% roles.forEach(role => { %>
+                                        <option value="<%= role.id %>" <%= config.role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                                    <% }) %>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Statistic to Track</label>
+                                <select class="form-select" name="configs[<%= index %>][stat]">
+                                    <option value="messages" <%= config.stat_type === 'messages' ? 'selected' : '' %>>Messages Sent</option>
+                                    <option value="voice_minutes" <%= config.stat_type === 'voice_minutes' ? 'selected' : '' %>>Minutes in Voice</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Required Value</label>
+                            <input type="number" class="form-control" name="configs[<%= index %>][requiredValue]" value="<%= config.required_value %>" placeholder="e.g., 1000">
+                        </div>
+                        <button type="button" class="btn btn-danger btn-sm remove-stat-role">Remove</button>
+                    </div>
+                <% }) %>
+            </div>
+            <button type="button" id="add-stat-role" class="btn btn-secondary">Add Stat Role</button>
+            <button type="submit" class="btn btn-primary">Save Stat Role Settings</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.getElementById('add-stat-role').addEventListener('click', () => {
+        const container = document.getElementById('stat-roles-container');
+        const index = container.children.length;
+        const newGroup = document.createElement('div');
+        newGroup.className = 'stat-role-group mb-4 p-3 border rounded';
+        newGroup.innerHTML = `
+            <h5>Role Group ${index + 1}</h5>
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Role to Award</label>
+                    <select class="form-select" name="configs[${index}][roleId]">
+                        <% roles.forEach(role => { %>
+                            <option value="<%= role.id %>"><%= role.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Statistic to Track</label>
+                    <select class="form-select" name="configs[${index}][stat]">
+                        <option value="messages">Messages Sent</option>
+                        <option value="voice_minutes">Minutes in Voice</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Required Value</label>
+                <input type="number" class="form-control" name="configs[${index}][requiredValue]" placeholder="e.g., 1000">
+            </div>
+            <button type="button" class="btn btn-danger btn-sm remove-stat-role">Remove</button>
+        `;
+        container.appendChild(newGroup);
+    });
+
+    document.getElementById('stat-roles-container').addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-stat-role')) {
+            e.target.closest('.stat-role-group').remove();
+        }
+    });
+</script>
