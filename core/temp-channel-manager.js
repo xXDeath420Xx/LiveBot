@@ -11,32 +11,64 @@ async function handleVoiceStateUpdate(oldState, newState) {
         const [[config]] = await db.execute('SELECT * FROM temp_channel_config WHERE guild_id = ?', [guildId]);
 
         if (!config || !config.creator_channel_id) return;
-        
+
         // User joins the "Join to Create" channel
         if (newState.channelId === config.creator_channel_id) {
             const member = newState.member;
             const namingTemplate = config.naming_template || "{user}'s Channel";
             const channelName = namingTemplate.replace(/{user}/g, member.displayName);
 
+            let newChannel;
             try {
-                const newChannel = await newState.guild.channels.create({
+                newChannel = await newState.guild.channels.create({
                     name: channelName,
                     type: ChannelType.GuildVoice,
                     parent: config.category_id,
                     permissionOverwrites: [
                         {
-                            id: member.id,
-                            allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MuteMembers, PermissionsBitField.Flags.DeafenMembers, PermissionsBitField.Flags.MoveMembers],
+                            id: newState.guild.roles.everyone,
+                            deny: [PermissionsBitField.Flags.ViewChannel],
                         },
                     ],
                 });
 
-                await member.voice.setChannel(newChannel);
                 tempChannels.add(newChannel.id);
-                logger.info(`Created temp channel "${channelName}" for ${member.user.tag}.`, { guildId, category: 'temp-channels' });
+
+                // Grant permissions to the user *before* moving them
+                await newChannel.permissionOverwrites.edit(member.id, {
+                    allow: [
+                        PermissionsBitField.Flags.ViewChannel,
+                        PermissionsBitField.Flags.ManageChannels,
+                        PermissionsBitField.Flags.MuteMembers,
+                        PermissionsBitField.Flags.DeafenMembers,
+                        PermissionsBitField.Flags.MoveMembers,
+                        PermissionsBitField.Flags.Connect,
+                    ],
+                });
+
+                // Re-fetch the member to ensure they are still in the creator channel
+                const freshMember = await newState.guild.members.fetch({ user: member.id, force: true });
+
+                if (freshMember.voice.channelId === config.creator_channel_id) {
+                    await freshMember.voice.setChannel(newChannel);
+                    logger.info(`Created temp channel \"${channelName}\" for ${member.user.tag}.`, { guildId, category: 'temp-channels' });
+                } else {
+                    logger.warn(`User ${member.user.tag} left creator channel before move. Deleting temp channel ${newChannel.name}.`, { guildId, category: 'temp-channels' });
+                    await newChannel.delete('User left before being moved.');
+                    tempChannels.delete(newChannel.id);
+                }
 
             } catch (error) {
-                logger.error(`Failed to create temp channel for ${member.user.tag}.`, { guildId, category: 'temp-channels', error: error.stack });
+                if (error.code === 40032) { // Target user is not connected to voice.
+                    logger.warn(`User ${member.user.tag} left creator channel before move could complete. Cleaning up.`, { guildId, category: 'temp-channels' });
+                } else {
+                    logger.error(`Failed to create or move user to temp channel.`, { guildId, category: 'temp-channels', error: error.stack });
+                }
+
+                if (newChannel) {
+                    await newChannel.delete('Error or user left during temp channel creation.').catch(e => logger.error(`Failed to cleanup channel ${newChannel.id}`, { guildId, error: e.stack }));
+                    tempChannels.delete(newChannel.id);
+                }
             }
         }
 
@@ -44,13 +76,18 @@ async function handleVoiceStateUpdate(oldState, newState) {
         if (oldState.channelId && tempChannels.has(oldState.channelId)) {
             const oldChannel = oldState.channel;
             if (oldChannel && oldChannel.members.size === 0) {
-                try {
-                    await oldChannel.delete('Temporary channel is now empty.');
-                    tempChannels.delete(oldChannel.id);
-                    logger.info(`Deleted empty temp channel "${oldChannel.name}".`, { guildId, category: 'temp-channels' });
-                } catch (error) {
-                    logger.error(`Failed to delete temp channel ${oldChannel.id}.`, { guildId, category: 'temp-channels', error: error.stack });
-                }
+                setTimeout(async () => {
+                    const freshChannel = await oldState.guild.channels.fetch(oldState.channelId).catch(() => null);
+                    if (freshChannel && freshChannel.members.size === 0) {
+                        try {
+                            await freshChannel.delete('Temporary channel is now empty.');
+                            tempChannels.delete(freshChannel.id);
+                            logger.info(`Deleted empty temp channel \"${freshChannel.name}\".`, { guildId, category: 'temp-channels' });
+                        } catch (error) {
+                            logger.error(`Failed to delete temp channel ${freshChannel.id}.`, { guildId, category: 'temp-channels', error: error.stack });
+                        }
+                    }
+                }, 5000);
             }
         }
     } catch (error) {

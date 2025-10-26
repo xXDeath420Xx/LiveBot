@@ -33,14 +33,15 @@ async function generatePlaylistRecommendations(song, artist, genre, playedTracks
         return [];
     }
 
+    const MAX_RECOMMENDATIONS = 15; // Hard limit to prevent resource exhaustion
     let criteriaPrompt;
 
     if (prompt) {
         // If a direct prompt is provided, use it as the primary instruction.
-        criteriaPrompt = prompt;
+        criteriaPrompt = `Generate a diverse and somewhat random list of exactly 10-15 song recommendations based on: ${prompt}`;
     } else {
         // Otherwise, build the prompt from song/artist/genre.
-        criteriaPrompt = `Generate a diverse and somewhat random list of 10 song recommendations.`;
+        criteriaPrompt = `Generate a diverse and somewhat random list of exactly 10 song recommendations.`;
         const criteria = [];
         if (song && artist) {
             criteria.push(`similar to the song \"${song}\" by \"${artist}\"`);
@@ -65,7 +66,7 @@ async function generatePlaylistRecommendations(song, artist, genre, playedTracks
     }
 
     // Always add the JSON formatting instruction for reliable parsing.
-    criteriaPrompt += `\n\nProvide the response as a JSON array of objects, where each object has a "title" and an "artist" property. Do not include any additional text or formatting outside the JSON array.`;
+    criteriaPrompt += `\n\nIMPORTANT: Provide EXACTLY 10-15 songs, no more. Provide the response as a JSON array of objects, where each object has a "title" and an "artist" property. Do not include any additional text or formatting outside the JSON array.`;
 
     logger.info(`[Gemini API] Sending prompt to Gemini: ${criteriaPrompt}`);
 
@@ -80,9 +81,14 @@ async function generatePlaylistRecommendations(song, artist, genre, playedTracks
             logger.info(`[Gemini API] Cleaned response from Gemini: ${text}`);
         }
 
-        const recommendations = JSON.parse(text);
+        let recommendations = JSON.parse(text);
 
         if (Array.isArray(recommendations) && recommendations.every(item => typeof item.title === 'string' && typeof item.artist === 'string')) {
+            // Enforce hard limit to prevent resource exhaustion
+            if (recommendations.length > MAX_RECOMMENDATIONS) {
+                logger.warn(`[Gemini API] Gemini returned ${recommendations.length} recommendations, limiting to ${MAX_RECOMMENDATIONS} to prevent overload.`);
+                recommendations = recommendations.slice(0, MAX_RECOMMENDATIONS);
+            }
             logger.info(`[Gemini API] Successfully parsed ${recommendations.length} recommendations.`);
             return recommendations;
         } else {

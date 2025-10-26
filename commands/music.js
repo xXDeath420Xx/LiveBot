@@ -486,7 +486,7 @@ module.exports = {
                             if (!geminiRecommendedTracks || geminiRecommendedTracks.length === 0) return interaction.followUp({ content: `❌ | Gemini AI could not generate a playlist based on your request. Please try again with different inputs.` });
                             const trackPromises = geminiRecommendedTracks.map(async (recTrack) => {
                                 const query = `${recTrack.title} ${recTrack.artist}`;
-                                const searchResult = await client.player.search(query, { searchEngine: 'com.livebot.ytdlp', requestedBy: interaction.user, metadata: { artist: recTrack.artist } });
+                                const searchResult = await client.player.search(query, { searchEngine: 'com.certifried.playwright-youtube', requestedBy: interaction.user, metadata: { artist: recTrack.artist } });
                                 if (searchResult.hasTracks()) {
                                     const track = searchResult.tracks[0];
                                     if (!track.url.includes('youtube.com/shorts')) return track;
@@ -497,7 +497,6 @@ module.exports = {
                         }
                         if (allPlaylistTracks.length === 0) return interaction.followUp({ content: `❌ | Could not find any playable tracks for the generated playlist.` });
                         queue.metadata.playedTracks.push(...allPlaylistTracks.map(t => t.title));
-                        client.player.extractors.get('com.livebot.ytdlp').preloadTracks(allPlaylistTracks);
                         await client.djManager.playPlaylistIntro(queue, allPlaylistTracks, isQueueActive);
                         if (!isQueueActive) {
                             await queue.node.play();

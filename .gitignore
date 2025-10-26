@@ -29,3 +29,11 @@ Thumbs.db
 
 # Playwright user data
 user-data-dir/
+/.claude/settings.local.json
+/temp_audio/1ALX6hwPxoM.webm
+/fix-ytdlp.sh
+/install-playwright.sh
+/test-oxylabs-proxy.sh
+/test-proxy.js
+/test_proxy.sh
+/update-ytdlp.sh

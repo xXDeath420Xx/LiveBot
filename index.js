@@ -4,13 +4,13 @@ const util = require("util");
 
 const {Client, GatewayIntentBits, Collection, Events, Partials, EmbedBuilder} = require("discord.js");
 const {Player, BaseExtractor, Track} = require("discord-player");
-const {YtDlp} = require("ytdlp-nodejs");
 const path = require("path");
 const fs = require("fs");
 const { getCycleTLSInstance } = require("./utils/tls-manager.js");
+const { PlaywrightYouTubeExtractor } = require("./core/playwright-youtube-extractor.js");
+const { LocalFileExtractor } = require("./core/local-file-extractor.js");
 const DJManager = require("./core/dj-manager.js");
 const MusicPanel = require("./core/music-panel.js");
-const AudioCacheManager = require("./core/audio-cache-manager.js");
 const logger = require("./utils/logger.js");
 const geminiApi = require("./utils/gemini-api.js");
 
@@ -50,234 +50,7 @@ const {scheduleSocialFeedChecks} = require("./jobs/social-feed-scheduler.js");
 const {scheduleTicketChecks} = require("./jobs/ticket-scheduler.js");
 const {startupCleanup} = require("./core/startup.js");
 const streamManager = require("./core/stream-manager.js");
-
-// --- ytdlp-nodejs Setup ---
-const ytdlp = new YtDlp();
-const cookieFilePath = process.env.YOUTUBE_COOKIE_PATH || path.join(__dirname, "cookies.txt");
-if (fs.existsSync(cookieFilePath)) {
-    console.log(`[YtDlp] Using cookie file at: ${cookieFilePath}`);
-}
-
-function formatDuration(seconds) {
-    if (isNaN(seconds) || seconds < 0) return '0:00';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    return [h > 0 ? h : null, m, s]
-        .filter(x => x !== null)
-        .map(x => x.toString().padStart(2, '0'))
-        .join(':');
-}
-
-// --- Custom Extractor using ytdlp-nodejs ---
-class YtDlpExtractor extends BaseExtractor {
-    static identifier = "com.livebot.ytdlp";
-    static downloading = new Set();
-
-    async _download(url, filePath, retries = 3) {
-        if (YtDlpExtractor.downloading.has(filePath)) {
-            logger.info(`[Download] Already downloading to ${filePath}, waiting.`);
-            while (YtDlpExtractor.downloading.has(filePath)) {
-                await new Promise(res => setTimeout(res, 500));
-            }
-            return;
-        }
-
-        if (fs.existsSync(filePath)) {
-            logger.info(`[Download] File already exists at ${filePath}, skipping download.`);
-            return;
-        }
-
-        YtDlpExtractor.downloading.add(filePath);
-        logger.info(`[Download] Starting download for ${url} to ${filePath}`);
-
-        for (let attempt = 1; attempt <= retries; attempt++) {
-            let stderr = '';
-            try {
-                const ytdlpOptions = {
-                    output: filePath,
-                    format: "bestaudio[ext=opus]/bestaudio/best",
-                    "audio-quality": 0,
-                    cookies: cookieFilePath,
-                    verbose: true,
-                    "-4": true,
-                    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
-                    "add-header": [
-                        "Referer:https://www.youtube.com/",
-                        "Accept-Language:en-US,en;q=0.9"
-                    ],
-                    "no-check-certificate": true,
-                    "youtube-client": "web_music",
-                };
-
-                if (process.env.YTDLP_PROXY) {
-                    ytdlpOptions.proxy = process.env.YTDLP_PROXY;
-                }
-
-                const ytdlpProcess = ytdlp.exec(url, ytdlpOptions);
-
-                ytdlpProcess.stderr.on('data', (data) => {
-                    stderr += data.toString();
-                });
-
-                await new Promise((resolve, reject) => {
-                    ytdlpProcess.on('close', (code) => {
-                        if (code === 0) {
-                            resolve();
-                        } else {
-                            reject(new Error(`ytdlp exited with code ${code}.`));
-                        }
-                    });
-                    ytdlpProcess.on('error', (err) => {
-                        reject(new Error(`ytdlp process error: ${err}.`));
-                    });
-                });
-
-                logger.info(`[Download] Finished downloading to ${filePath}`);
-                YtDlpExtractor.downloading.delete(filePath);
-                return; // Success
-
-            } catch (error) {
-                logger.error(`[Download] Attempt ${attempt}/${retries} failed for ${filePath}: ${error.message}`);
-                logger.debug(`[ytdlp stderr] ${stderr}`);
-                if (attempt < retries) {
-                    await new Promise(res => setTimeout(res, 2000));
-                } else {
-                    logger.error(`[Download] All ${retries} attempts failed for ${filePath}.`);
-                    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-                    YtDlpExtractor.downloading.delete(filePath);
-                    throw new Error(`Failed to download ${url} after ${retries} attempts. Last error: ${error.message}`);
-                }
-            }
-        }
-    }
-
-
-    async preloadTracks(tracks) {
-        logger.info(`[Preload] Preloading ${tracks.length} tracks...`);
-        const preloadPromises = tracks.map(track => this.preloadTrack(track));
-        await Promise.all(preloadPromises);
-        logger.info("[Preload] All tracks preloaded.");
-    }
-
-    async preloadTrack(track) {
-        const tempDir = path.join(__dirname, 'temp_audio');
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-        const videoId = track.url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})(?=&|#|$)/)?.[1];
-        if (!videoId) {
-            logger.warn(`[Preload] Could not get video ID for ${track.title}, skipping preload.`);
-            return;
-        }
-        const fileName = `${videoId}.opus`;
-        const filePath = path.join(tempDir, fileName);
-        await this._download(track.url, filePath).catch(err => {
-            logger.error(`[Preload] Unhandled error during track preload for ${track.title}: ${err.message}`)
-        });
-    }
-
-    async validate(query, searchOptions) {
-        return true;
-    }
-
-    async handle(query, searchOptions) {
-        logger.info(`[YtDlpExtractor] Handle method called for query: ${query}`);
-
-        try {
-            if (fs.existsSync(query) && fs.statSync(query).isFile()) {
-                logger.info(`[YtDlpExtractor] Query is a local file: ${query}`);
-                const track = this.buildTrack({
-                    title: path.basename(query, path.extname(query)),
-                    url: query,
-                    duration: 0, // Will be calculated by the stream, but needs a placeholder
-                    thumbnail: null,
-                    author: 'Local File',
-                }, searchOptions);
-                return { playlist: null, tracks: [track] };
-            }
-        } catch (e) {
-            // Not a file path
-        }
-
-        const isUrl = query.includes("youtube.com") || query.includes("youtu.be");
-        const search = isUrl ? query : `ytsearch1:${query}`;
-
-        const ytdlpOptions = {
-            cookies: cookieFilePath,
-            verbose: true,
-            "-4": true,
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
-            "add-header": [
-                "Referer:https://www.youtube.com/",
-                "Accept-Language:en-US,en;q=0.9"
-            ],
-            "no-check-certificate": true,
-            "youtube-client": "web_music",
-        };
-
-        if (process.env.YTDLP_PROXY) {
-            ytdlpOptions.proxy = process.env.YTDLP_PROXY;
-        }
-
-        const info = await ytdlp.getInfoAsync(search, ytdlpOptions);
-
-        if (isUrl && info.entries) {
-            const tracks = info.entries.map(entry => this.buildTrack(entry, searchOptions)).filter(t => t !== null);
-            return {
-                playlist: { title: info.title, url: info.webpage_url, thumbnail: info.thumbnail || null, author: info.uploader || "N/A" },
-                tracks,
-            };
-        }
-
-        const entry = info.entries ? info.entries[0] : info;
-        const track = this.buildTrack(entry, searchOptions);
-        return {playlist: null, tracks: track ? [track] : []};
-    }
-
-    async stream(info) {
-        logger.info(`[YtDlpExtractor] Stream method called for: ${info.title}`);
-        const isLocalFile = fs.existsSync(info.url) && !info.url.startsWith('http');
-
-        if (isLocalFile) {
-            logger.info(`[Player] Creating stream for local file: ${info.url}`);
-            return fs.createReadStream(info.url);
-        }
-
-        const tempDir = path.join(__dirname, 'temp_audio');
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-        const videoId = info.url.match(/(?:v=|\/)([a-zA-Z0-9_-]{11})(?=&|#|$)/)?.[1];
-        const fileName = videoId ? `${videoId}.opus` : `${Date.now()}.opus`;
-        const filePath = path.join(tempDir, fileName);
-
-        await this._download(info.url, filePath);
-
-        if (fs.existsSync(filePath)) {
-            logger.info(`[Player] Creating stream from ${filePath}`);
-            return fs.createReadStream(filePath);
-        } else {
-            throw new Error(`Failed to download and stream track: ${info.title}`);
-        }
-    }
-
-    buildTrack(entry, searchOptions) {
-        const trackUrl = entry.url || entry.webpage_url;
-        if (!entry || !trackUrl || !entry.title) return null;
-
-        const track = new Track(this.context.player, {
-            title: entry.title,
-            url: trackUrl,
-            duration: formatDuration(entry.duration),
-            thumbnail: entry.thumbnail || null,
-            author: entry.uploader,
-            source: 'com.livebot.ytdlp',
-            requestedBy: searchOptions.requestedBy, // Pass the user object here
-            metadata: searchOptions.metadata
-        });
-
-        return track;
-    }
-}
-
+const {URL} = require("url");
 
 const client = new Client({
     intents: [
@@ -302,11 +75,27 @@ async function start() {
     console.log(" Initializing Player...");
 
     const player = new Player(client, {
-        fallbackExtractor: YtDlpExtractor
+        fallbackExtractor: PlaywrightYouTubeExtractor
     });
 
-    await player.extractors.register(YtDlpExtractor, {});
-    console.log("[Player] Registered custom YtDlp Extractor.");
+    // Register Playwright YouTube Extractor
+    await player.extractors.register(PlaywrightYouTubeExtractor, {});
+    console.log("[Player] Registered Playwright YouTube Extractor (browser automation).");
+
+    // Register Local File Extractor for DJ commentary and local audio files
+    await player.extractors.register(LocalFileExtractor, {});
+    console.log("[Player] Registered Local File Extractor for commentary playback.");
+
+    // Load default extractors for everything else (Spotify, SoundCloud, etc.)
+    try {
+        const { DefaultExtractors } = require('@discord-player/extractor');
+        // Filter out YouTube extractor since we're using Playwright instead
+        const extractorsToLoad = DefaultExtractors.filter(ext => !ext.identifier?.includes('youtube'));
+        await player.extractors.loadMulti(extractorsToLoad);
+        console.log("[Player] Loaded default extractors (excluding YouTube).");
+    } catch (err) {
+        console.log("[Player] Could not load @discord-player/extractor, skipping default extractors.");
+    }
 
     client.player = player;
     console.log(" Player Initialized.");
@@ -315,8 +104,6 @@ async function start() {
     console.log(" DJ Manager Initialized.");
 
     client.musicPanelManager = new Collection();
-
-    client.audioCacheManager = new AudioCacheManager(client);
 
     client.player.events.on("debug", (queue, message) => {
         logger.debug(`[Player Debug] Guild ${queue?.guild?.id || 'N/A'}: ${message}`);
@@ -639,7 +426,7 @@ async function start() {
                 const trackPromises = geminiRecommendedTracks.map(async (recTrack) => {
                     const query = `${recTrack.title} ${recTrack.artist}`;
                     const searchResult = await client.player.search(query, {
-                        searchEngine: 'com.livebot.ytdlp',
+                        searchEngine: 'com.certifried.playwright-youtube',
                         requestedBy: interaction.user,
                         metadata: { artist: recTrack.artist, fromPanel: true }
                     });
@@ -657,7 +444,6 @@ async function start() {
                 }
 
                 queue.metadata.playedTracks.push(...allPlaylistTracks.map(t => t.title));
-                client.player.extractors.get('com.livebot.ytdlp').preloadTracks(allPlaylistTracks);
                 await client.djManager.playPlaylistIntro(queue, allPlaylistTracks, isQueueActive);
 
                 if (!isQueueActive) {

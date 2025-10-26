@@ -7,6 +7,8 @@ class MusicPanel {
         this.client = client;
         this.guildId = guildId;
         this.message = null;
+        this.lastUpdate = 0;
+        this.updateThrottle = 1000; // Minimum 1 second between updates
     }
 
     async createPanel(channel) {
@@ -21,13 +23,38 @@ class MusicPanel {
     async updatePanel(queue) {
         if (!this.message) return;
 
+        // Throttle updates to prevent rapid successive updates
+        const now = Date.now();
+        if (now - this.lastUpdate < this.updateThrottle) {
+            return; // Skip this update, too soon after last one
+        }
+        this.lastUpdate = now;
+
         try {
+            // Fetch the message if the channel is not cached
+            if (!this.message.channel) {
+                const channel = await this.client.channels.fetch(this.message.channelId);
+                this.message = await channel.messages.fetch(this.message.id);
+            }
+
             const embed = await this.buildEmbed(queue);
             const components = this.buildComponents(queue);
             await this.message.edit({ embeds: [embed], components });
         } catch (error) {
             if (error.code === 10008) { // Unknown Message
                 logger.warn(`[Music Panel] Message ${this.message.id} not found in guild ${this.guildId}.`);
+                this.message = null; // Clear invalid message reference
+            } else if (error.code === 'ChannelNotCached') {
+                logger.error(`[Music Panel] Channel not cached, attempting to fetch...`);
+                try {
+                    const channel = await this.client.channels.fetch(this.message.channelId);
+                    this.message = await channel.messages.fetch(this.message.id);
+                    const embed = await this.buildEmbed(queue);
+                    const components = this.buildComponents(queue);
+                    await this.message.edit({ embeds: [embed], components });
+                } catch (retryError) {
+                    logger.error(`[Music Panel] Failed to update panel after fetching:`, retryError);
+                }
             } else {
                 logger.error(`[Music Panel] Failed to update panel for guild ${this.guildId}:`, error);
             }
@@ -73,9 +100,9 @@ class MusicPanel {
             embed.setFooter({ text: `Queue: ${queue.tracks.size} song(s) | Use the controls below.` });
         } else {
             embed.setTitle("The queue is empty")
-                 .setDescription("Add a song using the dropdown menu below to get started.")
-                 .setThumbnail(this.client.user.displayAvatarURL())
-                 .setFooter({ text: "Use the controls below to manage the music." });
+                .setDescription("Add a song using the dropdown menu below to get started.")
+                .setThumbnail(this.client.user.displayAvatarURL())
+                .setFooter({ text: "Use the controls below to manage the music." });
         }
 
         return embed;
