@@ -1,0 +1,505 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'My Streamer Dashboard',
+    additionalCSS: []
+}) %>
+
+<style>
+/* Streamer Dashboard Styles */
+.platform-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-sm);
+}
+
+.platform-icon.twitch {
+    background: #9146FF;
+    color: white;
+}
+
+.platform-icon.kick {
+    background: #53FC18;
+    color: black;
+    background-image: url('/images/kick-logo.svg');
+    background-size: 16px 16px;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.platform-icon.youtube {
+    background: #FF0000;
+    color: white;
+}
+
+.platform-icon.tiktok {
+    background: black;
+    color: white;
+    border: 1px solid #FE2C55;
+}
+
+.platform-icon.trovo {
+    background: #19D760;
+    color: white;
+    background-image: url('/images/trovo-logo.svg');
+    background-size: 16px 16px;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.platform-icon.facebook {
+    background: #1877F2;
+    color: white;
+}
+
+.platform-icon.instagram {
+    background: linear-gradient(45deg, #F58529, #DD2A7B, #8134AF);
+    color: white;
+}
+
+.announcement-row {
+    transition: all var(--transition-fast);
+}
+
+.announcement-row:hover {
+    background: var(--color-dark-600);
+}
+
+.linked-accounts-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.linked-account-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    padding: var(--spacing-4);
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-3);
+    transition: all var(--transition-fast);
+}
+
+.linked-account-item:hover {
+    background: var(--color-dark-500);
+    transform: translateX(4px);
+}
+
+.linked-account-item:last-child {
+    margin-bottom: 0;
+}
+
+.linked-account-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-lg);
+}
+
+.linked-account-info {
+    flex: 1;
+}
+
+.linked-account-platform {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.linked-account-username {
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.linked-account-status {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    font-size: var(--font-size-xs);
+    color: var(--color-success);
+}
+
+.linked-account-status i {
+    font-size: 6px;
+}
+
+.empty-linked-accounts {
+    text-align: center;
+    padding: var(--spacing-8) var(--spacing-4);
+    color: var(--color-text-muted);
+}
+
+.empty-linked-accounts i {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-4);
+    color: var(--color-text-disabled);
+}
+
+/* Activity Timeline */
+.activity-timeline {
+    position: relative;
+}
+
+.timeline-item {
+    display: flex;
+    gap: var(--spacing-4);
+    margin-bottom: var(--spacing-6);
+    position: relative;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 24px;
+    bottom: -24px;
+    width: 2px;
+    background: var(--color-dark-400);
+}
+
+.timeline-item:last-child::before {
+    display: none;
+}
+
+.timeline-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--gradient-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-xs);
+    flex-shrink: 0;
+    z-index: 1;
+}
+
+.timeline-content {
+    flex: 1;
+    padding-top: 2px;
+}
+
+.timeline-title {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-1);
+}
+
+.timeline-meta {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+</style>
+
+<div class="app-layout">
+    <%- include('partials/sidebar', {
+        user: user,
+        currentPage: 'streamer-dashboard'
+    }) %>
+
+    <div class="main-content">
+        <%- include('partials/topbar', {
+            breadcrumbs: [
+                { label: 'Dashboard', url: '/dashboard' },
+                { label: 'My Streamer Dashboard', url: '/streamer-dashboard' }
+            ],
+            user: user
+        }) %>
+
+        <div class="content">
+            <div class="content-container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div class="page-header-top">
+                        <div>
+                            <h1 class="page-title">
+                                <i class="fas fa-user-astronaut" style="color: var(--color-primary-400);"></i>
+                                My Streamer Dashboard
+                            </h1>
+                            <p class="page-description">
+                                Your personal streaming stats and activity overview
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-8);">
+                    <div class="card">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-bullhorn" style="font-size: var(--font-size-2xl); color: var(--color-primary-400); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value" id="total-announcements">...</div>
+                            <div class="stat-label">Total Announcements</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-clock" style="font-size: var(--font-size-2xl); color: var(--color-success); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value" id="hours-tracked">...</div>
+                            <div class="stat-label">Hours Tracked</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-trophy" style="font-size: var(--font-size-2xl); color: var(--color-warning); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value" id="most-active-guild">...</div>
+                            <div class="stat-label">Most Active Guild</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Content Grid -->
+                <div class="grid grid-cols-3" style="grid-template-columns: 2fr 1fr;">
+                    <!-- Recent Announcements -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <i class="fas fa-history"></i>
+                                <span>Recent Announcements</span>
+                            </div>
+                            <span class="badge badge-secondary" id="announcement-count">0</span>
+                        </div>
+                        <div class="card-body" style="padding: 0;">
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Platform</th>
+                                            <th>Game</th>
+                                            <th>Guild</th>
+                                            <th>Viewers</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="announcements-tbody">
+                                        <tr>
+                                            <td colspan="5" style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                                                <i class="fas fa-spinner fa-spin" style="font-size: var(--font-size-2xl); margin-bottom: var(--spacing-3); display: block;"></i>
+                                                Loading announcements...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Linked Accounts -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <i class="fas fa-link"></i>
+                                <span>Linked Accounts</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <ul class="linked-accounts-list" id="linked-accounts-list">
+                                <!-- Linked accounts will be populated here -->
+                                <li style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                                    <i class="fas fa-spinner fa-spin" style="font-size: var(--font-size-2xl); margin-bottom: var(--spacing-3);"></i>
+                                    <div>Loading accounts...</div>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    loadStreamerDashboardData();
+});
+
+async function loadStreamerDashboardData() {
+    try {
+        const response = await fetch('/api/streamer/dashboard');
+        const data = await response.json();
+
+        if (data.success) {
+            // Update stats
+            document.getElementById('total-announcements').textContent = data.stats.totalAnnouncements?.toLocaleString() || '0';
+
+            const hoursTracked = Math.round(data.stats.hoursTracked || 0);
+            document.getElementById('hours-tracked').textContent = `${hoursTracked}h`;
+
+            document.getElementById('most-active-guild').textContent = data.stats.mostActiveGuild || 'N/A';
+
+            // Populate recent announcements
+            populateAnnouncements(data.recentAnnouncements || []);
+
+            // Populate linked accounts
+            populateLinkedAccounts(data.linkedAccounts || []);
+        } else {
+            console.error('Failed to load streamer dashboard data:', data.error);
+            showEmptyState();
+        }
+    } catch (error) {
+        console.error('Error loading streamer dashboard data:', error);
+        showEmptyState();
+    }
+}
+
+function populateAnnouncements(announcements) {
+    const tbody = document.getElementById('announcements-tbody');
+    const countBadge = document.getElementById('announcement-count');
+
+    countBadge.textContent = announcements.length;
+
+    if (announcements.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                    <i class="fas fa-inbox" style="font-size: var(--font-size-2xl); margin-bottom: var(--spacing-3); display: block; color: var(--color-text-disabled);"></i>
+                    No recent announcements
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = announcements.map(announcement => {
+        const date = new Date(announcement.announced_at || announcement.created_at);
+        const formattedDate = date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
+        const platform = announcement.platform || 'unknown';
+        const platformIcons = {
+            twitch: 'fab fa-twitch',
+            kick: 'kick',
+            youtube: 'fab fa-youtube',
+            tiktok: 'fab fa-tiktok',
+            trovo: 'trovo',
+            facebook: 'fab fa-facebook',
+            instagram: 'fab fa-instagram'
+        };
+
+        let platformIconHtml = '';
+        if (platform === 'kick') {
+            platformIconHtml = '<img src="/images/kick.png" alt="Kick" style="width: 20px; height: 20px;">';
+        } else if (platform === 'trovo') {
+            platformIconHtml = '<img src="/images/trovo.png" alt="Trovo" style="width: 20px; height: 20px;">';
+        } else {
+            platformIconHtml = `<i class="${platformIcons[platform] || 'fas fa-video'}"></i>`;
+        }
+
+        return `
+            <tr class="announcement-row">
+                <td style="white-space: nowrap;">
+                    <div style="font-size: var(--font-size-sm);">${formattedDate}</div>
+                </td>
+                <td>
+                    <div class="platform-icon ${platform}">
+                        ${platformIconHtml}
+                    </div>
+                </td>
+                <td>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);">
+                        ${announcement.game_name || announcement.category || 'Just Chatting'}
+                    </div>
+                </td>
+                <td>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                        ${announcement.guild_name || 'Unknown Guild'}
+                    </div>
+                </td>
+                <td>
+                    <span class="badge badge-primary" style="font-size: var(--font-size-xs);">
+                        <i class="fas fa-eye"></i>
+                        ${(announcement.viewer_count || 0).toLocaleString()}
+                    </span>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function populateLinkedAccounts(accounts) {
+    const list = document.getElementById('linked-accounts-list');
+
+    if (accounts.length === 0) {
+        list.innerHTML = `
+            <li class="empty-linked-accounts">
+                <i class="fas fa-unlink"></i>
+                <div style="font-size: var(--font-size-sm);">No linked accounts</div>
+                <div style="font-size: var(--font-size-xs); margin-top: var(--spacing-2);">
+                    Link your streaming accounts to get started
+                </div>
+            </li>
+        `;
+        return;
+    }
+
+    list.innerHTML = accounts.map(account => {
+        const platform = account.platform || 'unknown';
+        const platformIcons = {
+            twitch: { icon: 'fab fa-twitch', class: 'twitch' },
+            kick: { icon: 'kick', class: 'kick' },
+            youtube: { icon: 'fab fa-youtube', class: 'youtube' },
+            tiktok: { icon: 'fab fa-tiktok', class: 'tiktok' },
+            trovo: { icon: 'trovo', class: 'trovo' },
+            facebook: { icon: 'fab fa-facebook', class: 'facebook' },
+            instagram: { icon: 'fab fa-instagram', class: 'instagram' }
+        };
+
+        const platformData = platformIcons[platform] || { icon: 'fas fa-video', class: 'primary' };
+
+        let iconHtml = '';
+        if (platform === 'kick') {
+            iconHtml = '<img src="/images/kick.png" alt="Kick" style="width: 24px; height: 24px;">';
+        } else if (platform === 'trovo') {
+            iconHtml = '<img src="/images/trovo.png" alt="Trovo" style="width: 24px; height: 24px;">';
+        } else {
+            iconHtml = `<i class="${platformData.icon}"></i>`;
+        }
+
+        return `
+            <li class="linked-account-item">
+                <div class="linked-account-icon platform-icon ${platformData.class}">
+                    ${iconHtml}
+                </div>
+                <div class="linked-account-info">
+                    <div class="linked-account-platform">${platform}</div>
+                    <div class="linked-account-username">${account.username || account.display_name}</div>
+                </div>
+                <div class="linked-account-status">
+                    <i class="fas fa-circle"></i>
+                    ${account.is_live ? 'Live' : 'Offline'}
+                </div>
+            </li>
+        `;
+    }).join('');
+}
+
+function showEmptyState() {
+    document.getElementById('total-announcements').textContent = '0';
+    document.getElementById('hours-tracked').textContent = '0h';
+    document.getElementById('most-active-guild').textContent = 'N/A';
+
+    populateAnnouncements([]);
+    populateLinkedAccounts([]);
+}
+</script>

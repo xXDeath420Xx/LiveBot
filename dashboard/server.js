@@ -1,10 +1,11 @@
 const express = require('express');
 const session = require('express-session');
 const passport = require('passport');
-require('./passport-setup'); 
+require('./passport-setup');
 const path = require('path');
 const fs = require('fs');
-const db = require('../utils/db');
+const os = require('os');
+const { pool: db } = require('../utils/db');
 const apiChecks = require('../utils/api_checks');
 const initCycleTLS = require('cycletls');
 const Papa = require('papaparse');
@@ -48,15 +49,477 @@ function start(botClient) {
     app.use(express.static(path.join(__dirname, 'public')));
     app.set('view engine', 'ejs');
     app.set('views', path.join(__dirname, 'views'));
-    app.get('/', (req, res) => res.render('landing', { user: req.user, client_id: process.env.DISCORD_CLIENT_ID }));
-    app.get('/help', (req, res) => res.render('commands', { user: req.user, client_id: process.env.DISCORD_CLIENT_ID }));
+    app.get('/', (req, res) => res.render('landing-modern', { user: req.user, client_id: process.env.DISCORD_CLIENT_ID, serverCount: client.guilds.cache.size || 0 }));
+    app.get('/commands', (req, res) => {
+        const commands = [];
+        const categoriesSet = new Set();
+
+        // Gather commands from client if available
+        if (client && client.commands) {
+            client.commands.forEach(cmd => {
+                const category = cmd.category || 'General';
+                categoriesSet.add(category);
+                commands.push({
+                    name: cmd.data ? cmd.data.name : cmd.name,
+                    description: cmd.data ? cmd.data.description : cmd.description,
+                    category: category,
+                    usage: cmd.usage || '',
+                    examples: cmd.examples || []
+                });
+            });
+        }
+
+        const categories = Array.from(categoriesSet).sort();
+        res.render('commands-modern', {
+            user: req.user,
+            client_id: process.env.DISCORD_CLIENT_ID,
+            commands: commands,
+            categories: categories
+        });
+    });
+    app.get('/status', async (req, res) => {
+        try {
+            // Get unique live streamers with Discord IDs
+            const [liveAnnouncementsData] = await db.execute(`
+                SELECT DISTINCT
+                    la.platform,
+                    la.username,
+                    la.discord_user_id,
+                    s.profile_image_url,
+                    s.discord_user_id as streamer_discord_id
+                FROM live_announcements la
+                LEFT JOIN streamers s ON s.username = la.username AND s.platform = la.platform
+                LIMIT 200
+            `);
+
+            // Fetch stream data from APIs for each streamer
+            const twitchApi = require('../utils/twitch-api');
+            const kickApi = require('../utils/kick-api');
+            const youtubeApi = require('../utils/youtube-api');
+            const tiktokApi = require('../utils/tiktok-api');
+            const trovoApi = require('../utils/trovo-api');
+
+            const streamPromises = liveAnnouncementsData.map(async (announcement) => {
+                try {
+                    let streamData = null;
+                    const platform = announcement.platform.toLowerCase();
+                    const username = announcement.username;
+                    const discordUserId = announcement.discord_user_id || announcement.streamer_discord_id;
+                    let streamUrl = '';
+
+                    if (platform === 'twitch') {
+                        streamData = await twitchApi.getStreamDetails(username);
+                        if (streamData) {
+                            streamUrl = `https://twitch.tv/${streamData.user_login || username}`;
+                            return {
+                                platform: 'twitch',
+                                username: streamData.user_name || username,
+                                display_name: streamData.user_name || username,
+                                title: streamData.title || 'Untitled Stream',
+                                game_name: streamData.game_name || null,
+                                viewer_count: streamData.viewer_count || 0,
+                                thumbnail_url: streamData.thumbnail_url ? streamData.thumbnail_url.replace('{width}', '440').replace('{height}', '248') : null,
+                                stream_started_at: streamData.started_at,
+                                profile_image_url: announcement.profile_image_url,
+                                stream_url: streamUrl,
+                                discord_user_id: discordUserId
+                            };
+                        }
+                    } else if (platform === 'kick') {
+                        streamData = await kickApi.getStreamDetails(username);
+                        if (streamData) {
+                            streamUrl = `https://kick.com/${username}`;
+                            return {
+                                platform: 'kick',
+                                username: username,
+                                display_name: username,
+                                title: streamData.title || 'Untitled Stream',
+                                game_name: streamData.game_name || null,
+                                viewer_count: streamData.viewer_count || 0,
+                                thumbnail_url: streamData.thumbnail_url || null,
+                                stream_started_at: streamData.stream_started_at || new Date().toISOString(),
+                                profile_image_url: streamData.profile_image_url || announcement.profile_image_url,
+                                stream_url: streamUrl,
+                                discord_user_id: discordUserId
+                            };
+                        }
+                    } else if (platform === 'youtube') {
+                        streamData = await youtubeApi.getStreamDetails(username);
+                        if (streamData) {
+                            streamUrl = `https://youtube.com/@${username}/live`;
+                            return {
+                                platform: 'youtube',
+                                username: streamData.channelTitle || username,
+                                display_name: streamData.channelTitle || username,
+                                title: streamData.title || 'Untitled Stream',
+                                game_name: streamData.categoryId || null,
+                                viewer_count: streamData.viewerCount || 0,
+                                thumbnail_url: streamData.thumbnails?.high?.url || streamData.thumbnails?.medium?.url || null,
+                                stream_started_at: streamData.publishedAt,
+                                profile_image_url: announcement.profile_image_url,
+                                stream_url: streamUrl,
+                                discord_user_id: discordUserId
+                            };
+                        }
+                    } else if (platform === 'tiktok') {
+                        streamData = await tiktokApi.isStreamerLive(username);
+                        if (streamData && streamData.isLive) {
+                            streamUrl = `https://tiktok.com/@${username}/live`;
+                            return {
+                                platform: 'tiktok',
+                                username: username,
+                                display_name: streamData.displayName || username,
+                                title: streamData.title || 'Live on TikTok',
+                                game_name: null,
+                                viewer_count: streamData.viewerCount || 0,
+                                thumbnail_url: streamData.coverUrl || null,
+                                stream_started_at: streamData.startTime || new Date().toISOString(),
+                                profile_image_url: streamData.avatarUrl || announcement.profile_image_url,
+                                stream_url: streamUrl,
+                                discord_user_id: discordUserId
+                            };
+                        }
+                    } else if (platform === 'trovo') {
+                        streamData = await trovoApi.isStreamerLive(username);
+                        if (streamData && streamData.is_live) {
+                            streamUrl = `https://trovo.live/${username}`;
+                            return {
+                                platform: 'trovo',
+                                username: username,
+                                display_name: streamData.username || username,
+                                title: streamData.live_title || 'Untitled Stream',
+                                game_name: streamData.category_name || null,
+                                viewer_count: streamData.current_viewers || 0,
+                                thumbnail_url: streamData.thumbnail || null,
+                                stream_started_at: streamData.started_at || new Date().toISOString(),
+                                profile_image_url: streamData.profile_pic || announcement.profile_image_url,
+                                stream_url: streamUrl,
+                                discord_user_id: discordUserId
+                            };
+                        }
+                    }
+
+                    return null;
+                } catch (err) {
+                    console.error(`[Status] Error fetching stream data for ${announcement.platform}/${announcement.username}:`, err.message);
+                    return null;
+                }
+            });
+
+            const streamResults = await Promise.all(streamPromises);
+            const validStreams = streamResults.filter(s => s !== null);
+
+            // Group streamers by Discord ID first, then by username (case-insensitive)
+            const streamerGroups = new Map();
+
+            validStreams.forEach(stream => {
+                // Create a unique key: prefer Discord ID, fallback to username
+                const groupKey = stream.discord_user_id || `username_${stream.username.toLowerCase()}`;
+
+                if (!streamerGroups.has(groupKey)) {
+                    // Create new group with all stream data indexed by platform
+                    streamerGroups.set(groupKey, {
+                        username: stream.username,
+                        display_name: stream.display_name,
+                        platforms: [stream.platform],
+                        platformData: {
+                            [stream.platform]: stream
+                        },
+                        title: stream.title,
+                        stream_title: stream.title,
+                        game_name: stream.game_name,
+                        category: stream.game_name,
+                        viewer_count: stream.viewer_count,
+                        current_viewers: stream.viewer_count,
+                        thumbnail_url: stream.thumbnail_url || stream.profile_image_url || 'https://cdn.discordapp.com/embed/avatars/0.png',
+                        stream_started_at: stream.stream_started_at,
+                        profile_image_url: stream.profile_image_url,
+                        platform: stream.platform,
+                        stream_url: stream.stream_url,
+                        discord_user_id: stream.discord_user_id
+                    });
+                } else {
+                    const group = streamerGroups.get(groupKey);
+
+                    // Add platform if not already there
+                    if (!group.platforms.includes(stream.platform)) {
+                        group.platforms.push(stream.platform);
+                    }
+
+                    // Store platform-specific data
+                    group.platformData[stream.platform] = stream;
+
+                    // Sum viewer counts across all platforms
+                    group.viewer_count += stream.viewer_count;
+                    group.current_viewers = group.viewer_count;
+
+                    // Use earliest stream start time across all platforms
+                    if (new Date(stream.stream_started_at) < new Date(group.stream_started_at)) {
+                        group.stream_started_at = stream.stream_started_at;
+                    }
+
+                    // Use data from platform with most viewers for primary display
+                    const currentMaxViewers = Math.max(...Object.values(group.platformData).map(d => d.viewer_count));
+                    const maxViewerStream = Object.values(group.platformData).find(d => d.viewer_count === currentMaxViewers);
+
+                    if (maxViewerStream) {
+                        group.title = maxViewerStream.title;
+                        group.stream_title = maxViewerStream.title;
+                        group.game_name = maxViewerStream.game_name;
+                        group.category = maxViewerStream.game_name;
+                        group.thumbnail_url = maxViewerStream.thumbnail_url || group.thumbnail_url;
+                        group.platform = maxViewerStream.platform; // Primary platform with most viewers
+                        group.stream_url = maxViewerStream.stream_url;
+                    }
+                }
+            });
+
+            // Convert to array, add allPlatforms property, and sort alphabetically
+            const liveStreamers = Array.from(streamerGroups.values())
+                .map(group => ({
+                    ...group,
+                    allPlatforms: group.platforms
+                }))
+                .sort((a, b) => a.username.toLowerCase().localeCompare(b.username.toLowerCase()));
+
+            const [streamerCountResult] = await db.execute('SELECT COUNT(DISTINCT username) as count FROM streamers');
+            const totalStreamers = streamerCountResult[0]?.count || 0;
+
+            const [announcementsResult] = await db.execute('SELECT COUNT(*) as count FROM announcements');
+            const totalAnnouncements = announcementsResult[0]?.count || 0;
+
+            const generalStats = {
+                totalGuilds: client.guilds.cache.size || 0,
+                totalStreamers: totalStreamers,
+                totalAnnouncements: totalAnnouncements
+            };
+
+            res.render('status-modern', {
+                user: req.user,
+                liveStreamers: liveStreamers,
+                generalStats: generalStats
+            });
+        } catch (error) {
+            console.error('[Status Page Error]', error);
+            res.render('status-modern', { user: req.user, liveStreamers: [], generalStats: {} });
+        }
+    });
+    app.get('/super-admin', checkAuth, (req, res) => {
+        // Check if user is super admin
+        if (!req.user || !req.user.isSuperAdmin) {
+            return res.status(403).render('error', { user: req.user, error: 'Access denied. Super admin privileges required.' });
+        }
+        res.render('super-admin-modern', { user: req.user });
+    });
+    app.get('/donate', (req, res) => res.render('donate-modern', { user: req.user }));
+    app.get('/docs', (req, res) => res.render('docs', { user: req.user }));
+    app.get('/terms', (req, res) => res.render('terms', { user: req.user }));
+    app.get('/privacy', (req, res) => res.render('privacy', { user: req.user }));
+    // Redirect /servers to /dashboard for consolidation
+    app.get('/servers', checkAuth, (req, res) => res.redirect('/dashboard'));
+    app.get('/manage', checkAuth, (req, res) => res.redirect('/dashboard'));
     app.get('/login', passport.authenticate('discord'));
     app.get('/auth/discord/callback', passport.authenticate('discord', { failureRedirect: '/' }), (req, res) => res.redirect('/dashboard'));
     app.get('/logout', (req, res) => { req.logout(() => { res.redirect(process.env.DASHBOARD_URL || 'https://bot.certifriedannouncer.online'); }); });
-    app.get('/dashboard', checkAuth, (req, res) => {
-        const manageableGuilds = req.user.guilds.filter(g => new PermissionsBitField(BigInt(g.permissions)).has(PermissionsBitField.Flags.ManageGuild) && client.guilds.cache.has(g.id));
-        res.render('dashboard', { manageableGuilds, user: req.user });
+    app.get('/dashboard', checkAuth, async (req, res) => {
+        try {
+            const manageableGuilds = req.user.guilds.filter(g => new PermissionsBitField(BigInt(g.permissions)).has(PermissionsBitField.Flags.ManageGuild) && client.guilds.cache.has(g.id));
+
+            // Calculate totals across all managed servers
+            let totalMembers = 0;
+            let totalLiveStreams = 0;
+
+            // Get guild IDs for database query
+            const guildIds = manageableGuilds.map(g => g.id);
+
+            if (guildIds.length > 0) {
+                // Get member counts and streamer counts from actual Discord guilds
+                for (const guildData of manageableGuilds) {
+                    const botGuild = client.guilds.cache.get(guildData.id);
+                    if (botGuild) {
+                        totalMembers += botGuild.memberCount || 0;
+                        guildData.memberCount = botGuild.memberCount || 0;
+                    }
+
+                    // Get streamer count for this guild
+                    const [streamerCount] = await db.execute(
+                        'SELECT COUNT(DISTINCT streamer_id) as count FROM subscriptions WHERE guild_id = ?',
+                        [guildData.id]
+                    );
+                    guildData.streamerCount = streamerCount[0]?.count || 0;
+                }
+
+                // Get total live streams across all guilds
+                const [liveStreams] = await db.execute(
+                    `SELECT COUNT(DISTINCT a.id) as count
+                     FROM live_announcements a
+                     WHERE a.guild_id IN (${guildIds.map(() => '?').join(',')})`,
+                    guildIds
+                );
+                totalLiveStreams = liveStreams[0]?.count || 0;
+            }
+
+            res.render('servers-modern', {
+                manageableGuilds,
+                user: req.user,
+                totalMembers,
+                totalLiveStreams
+            });
+        } catch (error) {
+            console.error('[/dashboard Error]', error);
+            res.render('servers-modern', {
+                manageableGuilds: [],
+                user: req.user,
+                totalMembers: 0,
+                totalLiveStreams: 0
+            });
+        }
     });
+
+    app.get('/profile', checkAuth, async (req, res) => {
+        try {
+            const manageableGuilds = req.user.guilds.filter(g => new PermissionsBitField(BigInt(g.permissions)).has(PermissionsBitField.Flags.ManageGuild) && client.guilds.cache.has(g.id));
+
+            let totalMembers = 0;
+            let totalStreamers = 0;
+
+            const guildIds = manageableGuilds.map(g => g.id);
+
+            if (guildIds.length > 0) {
+                // Get member counts
+                for (const guildData of manageableGuilds) {
+                    const botGuild = client.guilds.cache.get(guildData.id);
+                    if (botGuild) {
+                        totalMembers += botGuild.memberCount || 0;
+                    }
+                }
+
+                // Get total streamers
+                const [streamerCount] = await db.execute(
+                    `SELECT COUNT(DISTINCT streamer_id) as count
+                     FROM subscriptions
+                     WHERE guild_id IN (${guildIds.map(() => '?').join(',')})`,
+                    guildIds
+                );
+                totalStreamers = streamerCount[0]?.count || 0;
+            }
+
+            res.render('profile-modern', {
+                user: req.user,
+                guilds: manageableGuilds,
+                totalGuilds: manageableGuilds.length,
+                totalMembers,
+                totalStreamers
+            });
+        } catch (error) {
+            console.error('[/profile Error]', error);
+            res.render('profile-modern', {
+                user: req.user,
+                guilds: [],
+                totalGuilds: 0,
+                totalMembers: 0,
+                totalStreamers: 0
+            });
+        }
+    });
+
+    app.get('/settings', checkAuth, (req, res) => {
+        res.render('settings-modern', {
+            user: req.user
+        });
+    });
+
+    // API: Get user preferences
+    app.get('/api/user/preferences', checkAuth, async (req, res) => {
+        try {
+            const [preferences] = await db.execute(
+                'SELECT * FROM user_preferences WHERE discord_user_id = ?',
+                [req.user.id]
+            );
+
+            if (preferences.length === 0) {
+                // Return default preferences
+                return res.json({
+                    success: true,
+                    preferences: {
+                        theme: 'dark',
+                        compact_mode: false,
+                        browser_notifications: false,
+                        stream_alerts: true,
+                        update_notifications: true,
+                        show_online_status: true,
+                        analytics_enabled: true
+                    }
+                });
+            }
+
+            res.json({
+                success: true,
+                preferences: {
+                    theme: preferences[0].theme || 'dark',
+                    compact_mode: preferences[0].compact_mode || false,
+                    browser_notifications: preferences[0].browser_notifications || false,
+                    stream_alerts: preferences[0].stream_alerts || true,
+                    update_notifications: preferences[0].update_notifications || true,
+                    show_online_status: preferences[0].show_online_status || true,
+                    analytics_enabled: preferences[0].analytics_enabled || true
+                }
+            });
+        } catch (error) {
+            console.error('[Get Preferences Error]', error);
+            res.status(500).json({ success: false, error: 'Failed to load preferences' });
+        }
+    });
+
+    // API: Save user preferences
+    app.post('/api/user/preferences', checkAuth, async (req, res) => {
+        try {
+            const {
+                theme,
+                compact_mode,
+                browser_notifications,
+                stream_alerts,
+                update_notifications,
+                show_online_status,
+                analytics_enabled,
+                keep_announcement_after_stream
+            } = req.body;
+
+            // Insert or update preferences
+            await db.execute(`
+                INSERT INTO user_preferences
+                (discord_user_id, theme, compact_mode, browser_notifications, stream_alerts,
+                 update_notifications, show_online_status, analytics_enabled, keep_announcement_after_stream)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                theme = VALUES(theme),
+                compact_mode = VALUES(compact_mode),
+                browser_notifications = VALUES(browser_notifications),
+                stream_alerts = VALUES(stream_alerts),
+                update_notifications = VALUES(update_notifications),
+                show_online_status = VALUES(show_online_status),
+                analytics_enabled = VALUES(analytics_enabled),
+                keep_announcement_after_stream = VALUES(keep_announcement_after_stream),
+                updated_at = CURRENT_TIMESTAMP
+            `, [
+                req.user.id,
+                theme || 'dark',
+                compact_mode || false,
+                browser_notifications || false,
+                stream_alerts !== false, // default true
+                update_notifications !== false, // default true
+                show_online_status !== false, // default true
+                analytics_enabled !== false, // default true
+                keep_announcement_after_stream !== undefined ? keep_announcement_after_stream : null // null = use server default
+            ]);
+
+            res.json({ success: true, message: 'Preferences saved successfully' });
+        } catch (error) {
+            console.error('[Save Preferences Error]', error);
+            res.status(500).json({ success: false, error: 'Failed to save preferences' });
+        }
+    });
+
     app.get('/manage/:guildId', checkAuth, checkGuildAdmin, noCache, async (req, res) => {
         try {
             const botGuild = req.guildObject;
@@ -96,16 +559,138 @@ function start(botClient) {
                 }
                 channelsData[channelId].streamers = Array.from(streamerMap.values());
             }
-            res.render('manage', { 
+            // Consolidated streamers for various pages - group by discord_user_id (if present) or username
+            const consolidatedStreamerMap = new Map();
+            for (const sub of subscriptions) {
+                // Use discord_user_id as the consolidation key if it exists, otherwise use normalized username
+                const consolidationKey = sub.discord_user_id || `username_${sub.username.toLowerCase()}`;
+
+                if (!consolidatedStreamerMap.has(consolidationKey)) {
+                    consolidatedStreamerMap.set(consolidationKey, {
+                        id: consolidationKey, // Use consolidation key as ID for frontend
+                        name: sub.username,
+                        discord_user_id: sub.discord_user_id,
+                        kick_username: sub.kick_username,
+                        profile_image_url: sub.profile_image_url,
+                        is_blacklisted: sub.is_blacklisted || false,
+                        platforms: [],
+                        subscriptions: [],
+                        streamer_ids: [] // Track all streamer_ids for this consolidated entry
+                    });
+                }
+                const streamer = consolidatedStreamerMap.get(consolidationKey);
+
+                // Track unique streamer IDs
+                if (!streamer.streamer_ids.includes(sub.streamer_id)) {
+                    streamer.streamer_ids.push(sub.streamer_id);
+                }
+
+                // Add platform if not already present
+                if (!streamer.platforms.includes(sub.platform)) {
+                    streamer.platforms.push(sub.platform);
+                }
+
+                // Add subscription
+                streamer.subscriptions.push(sub);
+            }
+            const consolidatedStreamers = Array.from(consolidatedStreamerMap.values());
+
+            res.render('manage-modern', {
                 guild: botGuild,
                 channelsData: channelsData,
+                consolidatedStreamers: consolidatedStreamers,
                 totalSubscriptions: subscriptions.length,
                 user: req.user,
                 settings: guildSettingsResult[0] || {},
                 channelSettings: channelSettingsResult,
+                channelSettingsMap: new Map(channelSettingsResult.map(cs => [cs.channel_id, cs])),
                 roles: allRoles.filter(r => !r.managed && r.name !== '@everyone'),
                 channels: allChannels.filter(c => c.isTextBased()),
-                teamSubscriptions: teamSubscriptions 
+                voiceChannels: allChannels.filter(c => c.isVoiceBased()),
+                categories: allChannels.filter(c => c.type === 4),
+                teamSubscriptions: teamSubscriptions,
+                // Events
+                events: [],
+                // Community Features
+                welcomeSettings: {},
+                reactionRolePanels: [],
+                starboardConfig: {},
+                roleRewards: [],
+                giveaways: [],
+                polls: [],
+                suggestions: [],
+                suggestionConfig: {},
+                suggestionStats: {},
+                suggestionTags: [],
+                // Music
+                musicQueues: [],
+                musicConfig: {},
+                nowPlaying: {},
+                availableDJVoices: [],
+                // Birthday & Weather
+                birthdayUsers: [],
+                birthdayStats: {},
+                weatherStats: {},
+                weatherConfig: {},
+                // Economy & Games
+                economyConfig: {},
+                shopItems: [],
+                economyStats: {},
+                topUsers: [],
+                triviaQuestions: [],
+                hangmanWords: [],
+                countingChannels: [],
+                gameStats: {},
+                gamblingConfig: {},
+                gamblingHistory: [],
+                gamblingStats: {},
+                topGamblers: [],
+                activeTrades: [],
+                tradeHistory: [],
+                tradeStats: {},
+                rpgStats: {},
+                rpgCharacters: [],
+                // Moderation & Security
+                moderationConfig: {},
+                recentInfractions: [],
+                escalationRules: [],
+                automodRules: [],
+                heatConfig: {},
+                joinGateConfig: {},
+                antiRaidConfig: {},
+                antiNukeConfig: {},
+                quarantineConfig: {},
+                quarantinedUsers: [],
+                // Utilities & Features
+                statroleConfigs: [],
+                logConfig: {},
+                actionLogs: [],
+                auditLogs: [],
+                analyticsData: {},
+                serverStats: [],
+                // Social Feeds
+                redditFeeds: [],
+                youtubeFeeds: [],
+                twitterFeeds: [],
+                // Twitch
+                twitchScheduleSyncs: [],
+                // Utilities
+                autoPublisherConfig: {},
+                autorolesConfig: {},
+                tempChannelConfig: {},
+                // Custom Commands & Forms
+                customCommands: [],
+                commandSettings: [],
+                forms: [],
+                ticketConfig: {},
+                ticketFormsList: [],
+                // Backups & Permissions
+                backups: [],
+                permissionOverrides: [],
+                // Misc
+                reminders: [],
+                tags: [],
+                page: req.query.page || 'overview'
             });
         } catch (error) {
             console.error('[Dashboard GET Error]', error);
@@ -149,6 +734,534 @@ function start(botClient) {
             res.status(500).json([]);
         }
     });
+
+    app.get('/api/status/server-stats', async (req, res) => {
+        try {
+            const cpus = os.cpus();
+            const totalMem = os.totalmem();
+            const freeMem = os.freemem();
+            const usedMem = totalMem - freeMem;
+
+            // Calculate CPU usage (simplified)
+            let totalIdle = 0, totalTick = 0;
+            cpus.forEach(cpu => {
+                for (let type in cpu.times) {
+                    totalTick += cpu.times[type];
+                }
+                totalIdle += cpu.times.idle;
+            });
+            const cpuUsage = 100 - Math.round(100 * totalIdle / totalTick);
+
+            // Get network I/O stats
+            const networkInterfaces = os.networkInterfaces();
+            let networkStats = { rx: 0, tx: 0 };
+            try {
+                const { execSync } = require('child_process');
+                const netstat = execSync('cat /proc/net/dev 2>/dev/null || echo ""').toString();
+                const lines = netstat.split('\n');
+                for (const line of lines) {
+                    if (line.includes(':')) {
+                        const parts = line.trim().split(/\s+/);
+                        if (parts.length >= 10) {
+                            networkStats.rx += parseInt(parts[1]) || 0;
+                            networkStats.tx += parseInt(parts[9]) || 0;
+                        }
+                    }
+                }
+                // Convert to GB
+                networkStats.rx = (networkStats.rx / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+                networkStats.tx = (networkStats.tx / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+            } catch (err) {
+                networkStats = { rx: 'N/A', tx: 'N/A' };
+            }
+
+            // Get disk usage
+            let diskUsage = { used: 'N/A', total: 'N/A', percent: 0 };
+            try {
+                const { execSync } = require('child_process');
+                const df = execSync('df -BG / | tail -1').toString();
+                const parts = df.trim().split(/\s+/);
+                if (parts.length >= 5) {
+                    diskUsage.total = parts[1];
+                    diskUsage.used = parts[2];
+                    diskUsage.percent = parseInt(parts[4]);
+                }
+            } catch (err) {
+                console.error('[Disk Usage Error]', err);
+            }
+
+            // Database stats
+            let dbStats = { status: 'unknown', tables: 0, size: '0 MB', connections: 0 };
+            try {
+                const [dbStatus] = await db.execute('SELECT 1 as connected');
+                if (dbStatus && dbStatus[0]?.connected === 1) {
+                    dbStats.status = 'online';
+
+                    // Get table count
+                    const [tables] = await db.execute('SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = DATABASE()');
+                    dbStats.tables = tables[0]?.count || 0;
+
+                    // Get database size
+                    const [size] = await db.execute('SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) as size_mb FROM information_schema.tables WHERE table_schema = DATABASE()');
+                    dbStats.size = `${size[0]?.size_mb || 0} MB`;
+
+                    // Get connection count
+                    const [conns] = await db.execute('SELECT COUNT(*) as count FROM information_schema.processlist');
+                    dbStats.connections = conns[0]?.count || 0;
+                }
+            } catch (dbErr) {
+                console.error('[DB Stats Error]', dbErr);
+                dbStats.status = 'offline';
+            }
+
+            // Cache stats - Get real cache statistics
+            let cacheStats = {
+                status: 'online',
+                hitRate: '0%',
+                entries: 0,
+                responseTime: '< 1ms'
+            };
+
+            try {
+                // Check if intelligent cache manager exists
+                const intelligentCacheManager = require('../utils/intelligent-cache-manager');
+                if (intelligentCacheManager && intelligentCacheManager.getCacheStats) {
+                    const stats = intelligentCacheManager.getCacheStats();
+                    cacheStats.entries = stats.totalEntries || 0;
+                    cacheStats.hitRate = stats.hitRate ? `${stats.hitRate.toFixed(1)}%` : '0%';
+                }
+            } catch (err) {
+                // Cache manager not available, use defaults
+            }
+
+            // API Integration stats - Check actual API health
+            let apiStats = {
+                healthy: 0,
+                degraded: 0,
+                unavailable: 0,
+                details: {}
+            };
+
+            const apiModules = {
+                'Twitch': '../utils/twitch-api',
+                'YouTube': '../utils/youtube-api',
+                'Kick': '../utils/kick-api',
+                'TikTok': '../utils/tiktok-api',
+                'Trovo': '../utils/trovo-api',
+                'Facebook': '../utils/facebook-api',
+                'Instagram': '../utils/instagram-api'
+            };
+
+            for (const [name, path] of Object.entries(apiModules)) {
+                try {
+                    const apiModule = require(path);
+                    if (apiModule && apiModule.isStreamerLive) {
+                        apiStats.healthy++;
+                        apiStats.details[name] = 'healthy';
+                    } else {
+                        apiStats.degraded++;
+                        apiStats.details[name] = 'degraded';
+                    }
+                } catch (err) {
+                    apiStats.unavailable++;
+                    apiStats.details[name] = 'unavailable';
+                }
+            }
+
+            // Get PM2 processes (only CertiFriedAnnouncer/LiveBot processes)
+            let pm2Processes = [];
+            try {
+                const { execSync } = require('child_process');
+                const pm2List = execSync('pm2 jlist').toString();
+                const allProcesses = JSON.parse(pm2List);
+                pm2Processes = allProcesses.filter(p =>
+                    p.name.includes('LiveBot') ||
+                    p.name.includes('Stream-Check') ||
+                    p.name.includes('Social-Feed') ||
+                    p.name.includes('Analytics') ||
+                    p.name.includes('Ticket') ||
+                    p.name.includes('Reminder')
+                ).map(p => ({
+                    name: p.name,
+                    status: p.pm2_env.status,
+                    uptime: p.pm2_env.pm_uptime,
+                    restarts: p.pm2_env.restart_time,
+                    memory: p.monit.memory,
+                    cpu: p.monit.cpu,
+                    pid: p.pid,
+                    pm_id: p.pm_id
+                }));
+            } catch (err) {
+                console.error('[PM2 Process Error]', err);
+            }
+
+            // Get live streams statistics
+            let liveStreamStats = {
+                totalAnnouncements: 0,
+                activeStreamers: 0,
+                platforms: {}
+            };
+
+            try {
+                // Get total active announcements
+                const [announcements] = await db.execute('SELECT COUNT(DISTINCT id) as count FROM live_announcements');
+                liveStreamStats.totalAnnouncements = announcements[0]?.count || 0;
+
+                // Get unique active streamers
+                const [streamers] = await db.execute('SELECT COUNT(DISTINCT streamer_id) as count FROM live_announcements');
+                liveStreamStats.activeStreamers = streamers[0]?.count || 0;
+
+                // Get per-platform breakdown
+                const [platforms] = await db.execute('SELECT platform, COUNT(*) as count FROM live_announcements GROUP BY platform');
+                platforms.forEach(p => {
+                    liveStreamStats.platforms[p.platform] = p.count;
+                });
+            } catch (err) {
+                console.error('[Live Stream Stats Error]', err);
+            }
+
+            res.json({
+                success: true,
+                system: {
+                    cpu: {
+                        usage: cpuUsage,
+                        cores: cpus.length
+                    },
+                    memory: {
+                        total: totalMem,
+                        used: usedMem,
+                        free: freeMem,
+                        usagePercent: (usedMem / totalMem) * 100
+                    },
+                    network: networkStats,
+                    disk: diskUsage,
+                    uptime: os.uptime(),
+                    platform: os.platform()
+                },
+                bot: {
+                    guilds: client ? client.guilds.cache.size : 0,
+                    users: client ? client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0) : 0
+                },
+                database: dbStats,
+                cache: cacheStats,
+                api: apiStats,
+                processes: pm2Processes,
+                liveStreams: liveStreamStats
+            });
+        } catch (error) {
+            console.error('[Status API Error]', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch server stats' });
+        }
+    });
+
+    app.get('/api/status/logs', async (req, res) => {
+        try {
+            const { exec } = require('child_process');
+            const { promisify } = require('util');
+            const execAsync = promisify(exec);
+            const fs = require('fs').promises;
+            const path = require('path');
+
+            // Only read logs from LiveBot processes (exclude CF, Canna, Habtips, HT)
+            const allowedProcesses = [
+                'LiveBot-Main',
+                'LiveBot-Announcer',
+                'LiveBot-System',
+                'LiveBot-Reminder-Worker',
+                'LiveBot-Ticket-Worker',
+                'LiveBot-Social-Worker',
+                'Stream-Check-Scheduler',
+                'Social-Feed-Scheduler',
+                'Ticket-Scheduler',
+                'Analytics-Scheduler'
+            ];
+
+            const logs = [];
+            const logDir = '/root/.pm2/logs';
+
+            // Read log files for each allowed process
+            for (const processName of allowedProcesses) {
+                try {
+                    // Read both error and output logs
+                    const errorLogPattern = `${processName}-error.log`;
+                    const outLogPattern = `${processName}-out.log`;
+
+                    // Read error logs
+                    try {
+                        const errorLogPath = path.join(logDir, errorLogPattern);
+                        const errorContent = await fs.readFile(errorLogPath, 'utf8');
+                        const errorLines = errorContent.split('\n').filter(line => line.trim()).slice(-50); // Last 50 lines
+
+                        errorLines.forEach(line => {
+                            logs.push({
+                                process: processName,
+                                type: 'error',
+                                message: line,
+                                timestamp: new Date().toISOString()
+                            });
+                        });
+                    } catch (err) {
+                        // Log file might not exist or be empty
+                    }
+
+                    // Read output logs
+                    try {
+                        const outLogPath = path.join(logDir, outLogPattern);
+                        const outContent = await fs.readFile(outLogPath, 'utf8');
+                        const outLines = outContent.split('\n').filter(line => line.trim()).slice(-50); // Last 50 lines
+
+                        outLines.forEach(line => {
+                            // Determine log level from line content
+                            let type = 'info';
+                            if (line.toLowerCase().includes('error')) type = 'error';
+                            else if (line.toLowerCase().includes('warn')) type = 'warn';
+                            else if (line.toLowerCase().includes('debug')) type = 'debug';
+
+                            logs.push({
+                                process: processName,
+                                type: type,
+                                message: line,
+                                timestamp: new Date().toISOString()
+                            });
+                        });
+                    } catch (err) {
+                        // Log file might not exist or be empty
+                    }
+                } catch (processError) {
+                    console.error(`[Logs API] Error reading logs for ${processName}:`, processError.message);
+                }
+            }
+
+            // Sort logs by timestamp (most recent first) and limit to 200 total
+            logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            const recentLogs = logs.slice(0, 200);
+
+            res.json({ success: true, logs: recentLogs, processNames: allowedProcesses });
+        } catch (error) {
+            console.error('[Logs API Error]', error);
+            res.status(500).json({ success: false, logs: [], error: error.message });
+        }
+    });
+
+    // Super Admin Stats API
+    app.get('/api/admin/stats', checkAuth, async (req, res) => {
+        try {
+            // Check if user is super admin
+            if (!req.user || !req.user.isSuperAdmin) {
+                return res.status(403).json({ success: false, error: 'Access denied' });
+            }
+
+            // Get total guilds and users from Discord client
+            const totalGuilds = client ? client.guilds.cache.size : 0;
+            const totalUsers = client ? client.guilds.cache.reduce((acc, guild) => acc + guild.memberCount, 0) : 0;
+
+            // Get bot uptime in seconds
+            const uptime = client ? Math.floor(client.uptime / 1000) : 0;
+
+            // Get memory usage in MB
+            const memoryUsage = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+
+            // Get database statistics
+            const [streamersCount] = await db.execute('SELECT COUNT(DISTINCT streamer_id) as count FROM streamers');
+            const [subscriptionsCount] = await db.execute('SELECT COUNT(*) as count FROM subscriptions');
+            const [announcementsCount] = await db.execute('SELECT COUNT(*) as count FROM live_announcements');
+            const [liveStreamersCount] = await db.execute('SELECT COUNT(DISTINCT username) as count FROM live_announcements');
+
+            res.json({
+                success: true,
+                stats: {
+                    totalGuilds: totalGuilds,
+                    totalUsers: totalUsers,
+                    totalStreamers: streamersCount[0]?.count || 0,
+                    totalSubscriptions: subscriptionsCount[0]?.count || 0,
+                    totalAnnouncements: announcementsCount[0]?.count || 0,
+                    liveStreamers: liveStreamersCount[0]?.count || 0,
+                    uptime: uptime,
+                    memoryUsage: memoryUsage
+                }
+            });
+        } catch (error) {
+            console.error('[Admin Stats API Error]', error);
+            res.status(500).json({ success: false, error: 'Failed to fetch admin stats' });
+        }
+    });
+
+    // Audit Users API with SSE for real-time progress
+    app.get('/api/admin/audit-users', checkAuth, async (req, res) => {
+        try {
+            // Check if user is super admin
+            if (!req.user || !req.user.isSuperAdmin) {
+                return res.status(403).json({ success: false, error: 'Access denied' });
+            }
+
+            // Set up SSE headers
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.flushHeaders();
+
+            const sendProgress = (data) => {
+                res.write(`data: ${JSON.stringify(data)}\n\n`);
+            };
+
+            let totalGuilds = 0;
+            let totalMembers = 0;
+            let exactMatches = 0;
+            let fuzzyMatches = 0;
+            let newLinks = 0;
+            let existingLinks = 0;
+
+            try {
+                // Get all streamers from database for matching
+                const [streamers] = await db.execute('SELECT streamer_id, username, platform FROM streamers');
+                const streamerMap = new Map();
+                streamers.forEach(s => {
+                    const key = `${s.username.toLowerCase()}_${s.platform}`;
+                    streamerMap.set(key, s.streamer_id);
+                    // Also add without platform for broader matching
+                    if (!streamerMap.has(s.username.toLowerCase())) {
+                        streamerMap.set(s.username.toLowerCase(), s.streamer_id);
+                    }
+                });
+
+                sendProgress({ type: 'info', message: 'Starting audit...', totalGuilds: 0 });
+
+                const guilds = Array.from(client.guilds.cache.values());
+                totalGuilds = guilds.length;
+
+                sendProgress({ type: 'info', message: `Found ${totalGuilds} guilds to scan`, totalGuilds });
+
+                // Process guilds
+                for (let i = 0; i < guilds.length; i++) {
+                    const guild = guilds[i];
+
+                    try {
+                        sendProgress({
+                            type: 'progress',
+                            message: `Scanning guild ${i + 1}/${totalGuilds}: ${guild.name}`,
+                            currentGuild: i + 1,
+                            totalGuilds,
+                            guildName: guild.name
+                        });
+
+                        // Fetch all members (this might take time for large guilds)
+                        await guild.members.fetch();
+                        const members = Array.from(guild.members.cache.values());
+                        totalMembers += members.length;
+
+                        sendProgress({
+                            type: 'progress',
+                            message: `Processing ${members.length} members in ${guild.name}`,
+                            currentGuild: i + 1,
+                            totalGuilds,
+                            totalMembers
+                        });
+
+                        // Check each member
+                        for (const member of members) {
+                            if (member.user.bot) continue;
+
+                            const username = member.user.username.toLowerCase();
+                            const displayName = (member.displayName || member.user.displayName || '').toLowerCase();
+
+                            // Try exact match first
+                            let streamerId = streamerMap.get(username);
+                            let matchType = 'exact';
+
+                            // Try display name if no exact match
+                            if (!streamerId && displayName && displayName !== username) {
+                                streamerId = streamerMap.get(displayName);
+                                matchType = 'fuzzy';
+                            }
+
+                            if (streamerId) {
+                                // Check if link already exists
+                                const [existing] = await db.execute(
+                                    'SELECT discord_user_id FROM streamers WHERE streamer_id = ? AND discord_user_id = ?',
+                                    [streamerId, member.user.id]
+                                );
+
+                                if (existing.length === 0) {
+                                    // Create new link
+                                    await db.execute(
+                                        'UPDATE streamers SET discord_user_id = ? WHERE streamer_id = ? AND discord_user_id IS NULL',
+                                        [member.user.id, streamerId]
+                                    );
+                                    newLinks++;
+
+                                    if (matchType === 'exact') {
+                                        exactMatches++;
+                                    } else {
+                                        fuzzyMatches++;
+                                    }
+
+                                    sendProgress({
+                                        type: 'match',
+                                        message: `Found ${matchType} match: ${member.user.username} → Streamer ID ${streamerId}`,
+                                        exactMatches,
+                                        fuzzyMatches,
+                                        newLinks
+                                    });
+                                } else {
+                                    existingLinks++;
+                                    if (matchType === 'exact') {
+                                        exactMatches++;
+                                    } else {
+                                        fuzzyMatches++;
+                                    }
+                                }
+                            }
+                        }
+
+                        sendProgress({
+                            type: 'progress',
+                            message: `Completed guild ${i + 1}/${totalGuilds}: ${guild.name}`,
+                            currentGuild: i + 1,
+                            totalGuilds,
+                            totalMembers,
+                            exactMatches,
+                            fuzzyMatches,
+                            newLinks,
+                            existingLinks
+                        });
+
+                    } catch (guildError) {
+                        console.error(`[Audit] Error processing guild ${guild.name}:`, guildError);
+                        sendProgress({
+                            type: 'error',
+                            message: `Error processing guild ${guild.name}: ${guildError.message}`
+                        });
+                    }
+                }
+
+                // Send completion
+                sendProgress({
+                    type: 'complete',
+                    message: 'Audit completed!',
+                    results: {
+                        totalGuilds,
+                        totalMembers,
+                        exactMatches,
+                        fuzzyMatches,
+                        newLinks,
+                        existingLinks
+                    }
+                });
+
+                res.end();
+
+            } catch (error) {
+                console.error('[Audit] Error during audit:', error);
+                sendProgress({ type: 'error', message: `Error: ${error.message}` });
+                res.end();
+            }
+
+        } catch (error) {
+            console.error('[Audit API Error]', error);
+            res.status(500).json({ success: false, error: 'Failed to run audit' });
+        }
+    });
+
     app.post('/manage/:guildId/settings', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const { channelId, roleId } = req.body;
@@ -186,9 +1299,9 @@ function start(botClient) {
             if (finalAvatarUrl !== undefined) { updates.override_avatar_url = finalAvatarUrl; }
             if (Object.keys(updates).length > 0) {
                 const updateKeys = Object.keys(updates);
-                const updateClauses = updateKeys.map(key => `${db.pool.escapeId(key)} = ?`).join(', ');
+                const updateClauses = updateKeys.map(key => `${db.escapeId(key)} = ?`).join(', ');
                 const updateValues = updateKeys.map(key => updates[key]);
-                await db.execute(`INSERT INTO channel_settings (channel_id, guild_id, ${updateKeys.map(key => db.pool.escapeId(key)).join(', ')}) VALUES (?, ?, ${updateKeys.map(() => '?').join(', ')}) ON DUPLICATE KEY UPDATE ${updateClauses}`, [channelId, guildId, ...updateValues, ...updateValues]);
+                await db.execute(`INSERT INTO channel_settings (channel_id, guild_id, ${updateKeys.map(key => db.escapeId(key)).join(', ')}) VALUES (?, ?, ${updateKeys.map(() => '?').join(', ')}) ON DUPLICATE KEY UPDATE ${updateClauses}`, [channelId, guildId, ...updateValues, ...updateValues]);
             }
             res.redirect(`/manage/${req.params.guildId}?success=customization`);
         } catch (e) {
@@ -299,7 +1412,7 @@ function start(botClient) {
             }
             const updateFields = Object.keys(updates);
             if (updateFields.length > 0) {
-                const setClauses = updateFields.map(key => `${db.pool.escapeId(key)} = ?`).join(', ');
+                const setClauses = updateFields.map(key => `${db.escapeId(key)} = ?`).join(', ');
                 const values = updateFields.map(key => updates[key]);
                 values.push(subscription_id);
                 await db.execute(`UPDATE subscriptions SET ${setClauses} WHERE subscription_id = ?`, values);

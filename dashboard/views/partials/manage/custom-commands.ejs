@@ -1,0 +1,327 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-code"></i>
+                <span>Custom Commands</span>
+            </div>
+            <div class="page-section-subtitle">
+                Create custom text commands with automated responses
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Commands</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= commands?.length || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Command Prefix</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">!</div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Status</div>
+            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-success); margin-top: var(--spacing-1);">
+                <i class="fas fa-check-circle"></i> Active
+            </div>
+        </div>
+    </div>
+
+    <!-- Command Builder -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i class="fas fa-plus" style="color: white; font-size: 1.25rem;"></i>
+            </div>
+            <div>
+                <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Create New Command</h4>
+                <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Build a custom command with a trigger and response</p>
+            </div>
+        </div>
+
+        <form action="/manage/<%= guild.id %>/add-custom-command" method="POST">
+            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Command Name</label>
+                    <div class="input-group">
+                        <span class="input-group-icon" style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-right: none; padding: var(--spacing-3); border-radius: var(--radius-md) 0 0 var(--radius-md); color: var(--color-text-muted); font-weight: var(--font-weight-bold);">!</span>
+                        <input type="text" name="command_name" class="form-control" required pattern="^\S+$" placeholder="mycommand" style="border-left: none; padding-left: 0;">
+                    </div>
+                    <div class="form-help">No spaces allowed in command name</div>
+                </div>
+
+                <div style="grid-column: span 2;">
+                    <label class="form-label">Response Message</label>
+                    <textarea name="response" class="form-control" required rows="1" placeholder="Enter the response message..." style="min-height: 46px; resize: vertical;"></textarea>
+                    <div class="form-help">The message the bot will send when the command is used</div>
+                </div>
+            </div>
+
+            <div style="background: linear-gradient(135deg, rgba(88, 101, 242, 0.1), rgba(88, 101, 242, 0.05)); border: 1px solid rgba(88, 101, 242, 0.3); border-radius: var(--radius-md); padding: var(--spacing-3); margin-bottom: var(--spacing-4);">
+                <div style="display: flex; gap: var(--spacing-3);">
+                    <i class="fas fa-info-circle" style="color: var(--color-primary-400); margin-top: 2px;"></i>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                        Users will type <code style="background: var(--color-dark-700); padding: 2px 6px; border-radius: 3px; color: var(--color-primary-400);">!commandname</code> and the bot will respond with your custom message
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-plus"></i>
+                <span>Create Command</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Existing Commands -->
+    <% if (commands && commands.length > 0) { %>
+        <!-- Search Bar -->
+        <div style="margin-bottom: var(--spacing-4);">
+            <div class="input-group">
+                <span class="input-group-icon">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" id="commandSearch" class="form-control" placeholder="Search commands...">
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 200px;">Command</th>
+                        <th>Response</th>
+                        <th style="width: 120px;" class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="commandsTableBody">
+                    <% commands.forEach(command => { %>
+                        <tr class="command-row" data-command-name="<%= command.command_name.toLowerCase() %>" data-response="<%= command.response.toLowerCase() %>">
+                            <td>
+                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                    <span style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; font-weight: var(--font-weight-bold); color: var(--color-primary-400);">
+                                        !<%= command.command_name %>
+                                    </span>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="max-width: 600px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary);">
+                                    <%= command.response %>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-secondary" onclick="editCommand('<%= command.command_name %>', `<%= command.response.replace(/`/g, '\\`').replace(/\$/g, '\\$') %>`)" style="margin-right: var(--spacing-2);">
+                                    <i class="fas fa-pencil-alt"></i>
+                                    <span>Edit</span>
+                                </button>
+                                <form action="/manage/<%= guild.id %>/remove-custom-command" method="POST" style="display: inline;">
+                                    <input type="hidden" name="command_name" value="<%= command.command_name %>">
+                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this command?');">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-code"></i>
+            </div>
+            <div class="empty-state-title">No Custom Commands</div>
+            <div class="empty-state-description">
+                Create your first custom command to get started
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<!-- Edit Command Modal -->
+<div class="modal fade" id="editCommandModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400);">
+            <form action="/manage/<%= guild.id %>/edit-custom-command" method="POST">
+                <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
+                    <h5 class="modal-title" style="color: var(--color-text-primary);">
+                        <i class="fas fa-pencil-alt"></i> Edit Command
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editCommandNameHidden" name="old_command_name">
+
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Command Name</label>
+                        <div class="input-group">
+                            <span class="input-group-icon" style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-right: none; padding: var(--spacing-3); border-radius: var(--radius-md) 0 0 var(--radius-md); color: var(--color-text-muted); font-weight: var(--font-weight-bold);">!</span>
+                            <input type="text" id="editCommandName" name="command_name" class="form-control" required pattern="^\S+$" style="border-left: none; padding-left: 0;">
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Response Message</label>
+                        <textarea id="editCommandResponse" name="response" class="form-control" required rows="3" style="resize: vertical;"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        <span>Save Changes</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.input-group {
+    display: flex;
+    align-items: stretch;
+}
+
+.input-group-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--spacing-3);
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-right: none;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    color: var(--color-text-muted);
+}
+
+.modal-content {
+    border-radius: var(--radius-lg);
+}
+
+.btn-close {
+    filter: invert(1);
+    opacity: 0.5;
+}
+
+.btn-close:hover {
+    opacity: 1;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Search functionality
+    const searchInput = document.getElementById('commandSearch');
+    const tableBody = document.getElementById('commandsTableBody');
+
+    if (searchInput && tableBody) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const rows = tableBody.querySelectorAll('.command-row');
+
+            rows.forEach(row => {
+                const commandName = row.dataset.commandName;
+                const response = row.dataset.response;
+
+                if (commandName.includes(query) || response.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+});
+
+function editCommand(commandName, response) {
+    document.getElementById('editCommandNameHidden').value = commandName;
+    document.getElementById('editCommandName').value = commandName;
+    document.getElementById('editCommandResponse').value = response;
+    new bootstrap.Modal(document.getElementById('editCommandModal')).show();
+}
+</script>

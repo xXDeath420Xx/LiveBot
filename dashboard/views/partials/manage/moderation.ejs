@@ -1,0 +1,249 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-shield-alt"></i>
+                <span>Moderation</span>
+            </div>
+            <div class="page-section-subtitle">
+                Configure moderation tools, infractions, and escalation rules
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            Configuration
+        </h3>
+        <form action="/manage/<%= guild.id %>/update-moderation" method="POST">
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Moderation Log Channel</label>
+                    <select class="form-select" name="mod_log_channel_id">
+                        <option value="">Select a channel</option>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= settings && settings.mod_log_channel_id === channel.id ? 'selected' : '' %>>
+                                #<%= channel.name %>
+                            </option>
+                        <% }) %>
+                    </select>
+                    <div class="form-help">Where moderation actions will be logged</div>
+                </div>
+
+                <div>
+                    <label class="form-label">Mute Role</label>
+                    <select class="form-select" name="muted_role_id">
+                        <option value="">Select a role</option>
+                        <% roles.forEach(role => { %>
+                            <option value="<%= role.id %>" <%= settings && settings.muted_role_id === role.id ? 'selected' : '' %>>
+                                <%= role.name %>
+                            </option>
+                        <% }) %>
+                    </select>
+                    <div class="form-help">Role assigned to muted users</div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Configuration</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Recent Infractions -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            Recent Infractions
+        </h3>
+
+        <% if (infractions && infractions.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Moderator</th>
+                            <th>Type</th>
+                            <th>Reason</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% infractions.forEach(infraction => {
+                            const typeColors = {
+                                warn: 'var(--color-warning)',
+                                timeout: 'var(--color-accent-orange)',
+                                kick: 'var(--color-accent-purple)',
+                                ban: 'var(--color-danger)'
+                            };
+                            const color = typeColors[infraction.type] || 'var(--color-text-muted)';
+                        %>
+                            <tr>
+                                <td>
+                                    <div style="font-weight: var(--font-weight-medium); color: var(--color-text-primary);">
+                                        <%= infraction.user_tag || infraction.user_id %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                        <%= infraction.moderator_tag || infraction.moderator_id %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background: <%= color %>; color: white; text-transform: uppercase;">
+                                        <%= infraction.type %>
+                                    </span>
+                                </td>
+                                <td>
+                                    <div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        <%= infraction.reason || 'No reason provided' %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                        <%= new Date(infraction.created_at).toLocaleDateString() %>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-8); text-align: center;">
+                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
+                    No recent infractions found
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Escalation Rules -->
+    <div>
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            Escalation Rules
+        </h3>
+        <p style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
+            Automatically apply stricter punishments for repeat offenders
+        </p>
+
+        <!-- Add Rule Form -->
+        <form action="/manage/<%= guild.id %>/add-escalation-rule" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-4);">
+            <div class="grid grid-cols-4" style="gap: var(--spacing-4); align-items: end;">
+                <div>
+                    <label class="form-label">Infraction Count</label>
+                    <input type="number" name="infraction_count" class="form-control" required min="1" placeholder="3">
+                </div>
+                <div>
+                    <label class="form-label">Within Hours</label>
+                    <input type="number" name="time_period_hours" class="form-control" required min="1" placeholder="24">
+                </div>
+                <div>
+                    <label class="form-label">Action</label>
+                    <select name="action" class="form-select" required>
+                        <option value="timeout">Timeout</option>
+                        <option value="kick">Kick</option>
+                        <option value="ban">Ban</option>
+                    </select>
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-plus"></i>
+                        <span>Add Rule</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Existing Rules -->
+        <% if (escalationRules && escalationRules.length > 0) { %>
+            <div class="grid grid-cols-1" style="gap: var(--spacing-3);">
+                <% escalationRules.forEach(rule => { %>
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4);">
+                        <div style="flex: 1;">
+                            <span style="color: var(--color-text-primary);">
+                                After <strong style="color: var(--color-primary-400);"><%= rule.infraction_count %></strong> infractions
+                                within <strong style="color: var(--color-accent-purple);"><%= rule.time_period_hours %></strong> hours,
+                                apply <strong style="color: var(--color-danger); text-transform: uppercase;"><%= rule.action %></strong>
+                            </span>
+                        </div>
+                        <form action="/manage/<%= guild.id %>/remove-escalation-rule" method="POST" class="d-inline">
+                            <input type="hidden" name="ruleId" value="<%= rule.id %>">
+                            <button type="submit" class="btn btn-sm btn-danger">
+                                <i class="fas fa-trash"></i>
+                                <span>Remove</span>
+                            </button>
+                        </form>
+                    </div>
+                <% }) %>
+            </div>
+        <% } else { %>
+            <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-8); text-align: center;">
+                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
+                    No escalation rules configured
+                </div>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+</style>

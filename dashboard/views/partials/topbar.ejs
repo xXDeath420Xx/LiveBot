@@ -1,0 +1,295 @@
+<!-- Modern Topbar -->
+<header class="topbar">
+    <!-- Left Section -->
+    <div class="topbar-left">
+        <!-- Sidebar Toggle (Desktop) -->
+        <button class="sidebar-toggle" id="sidebarToggle" title="Toggle Sidebar">
+            <i class="fas fa-bars"></i>
+        </button>
+
+        <!-- Mobile Menu Toggle -->
+        <button class="sidebar-toggle" id="mobileSidebarToggle" style="display: none;">
+            <i class="fas fa-bars"></i>
+        </button>
+
+        <!-- Breadcrumbs -->
+        <% if (typeof breadcrumbs !== 'undefined' && breadcrumbs.length > 0) { %>
+        <nav>
+            <ul class="breadcrumb">
+                <% breadcrumbs.forEach((crumb, index) => { %>
+                    <li class="breadcrumb-item <%= index === breadcrumbs.length - 1 ? 'active' : '' %>">
+                        <% if (index < breadcrumbs.length - 1) { %>
+                            <a href="<%= crumb.url %>"><%= crumb.label %></a>
+                        <% } else { %>
+                            <%= crumb.label %>
+                        <% } %>
+                    </li>
+                    <% if (index < breadcrumbs.length - 1) { %>
+                        <span class="breadcrumb-separator"><i class="fas fa-chevron-right"></i></span>
+                    <% } %>
+                <% }); %>
+            </ul>
+        </nav>
+        <% } %>
+    </div>
+
+    <!-- Center Section (Search) -->
+    <div class="topbar-center">
+        <div class="topbar-search">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text"
+                   class="search-input"
+                   placeholder="Search commands, features..."
+                   id="globalSearch">
+        </div>
+    </div>
+
+    <!-- Right Section -->
+    <div class="topbar-right">
+        <div class="topbar-actions">
+            <!-- Notifications -->
+            <button class="topbar-action" id="notificationsBtn" title="Notifications">
+                <i class="fas fa-bell"></i>
+                <% if (typeof notificationCount !== 'undefined' && notificationCount > 0) { %>
+                    <span class="topbar-action-badge"></span>
+                <% } %>
+            </button>
+
+            <!-- Theme Toggle -->
+            <button class="topbar-action" id="themeToggle" title="Toggle Theme">
+                <i class="fas fa-moon"></i>
+            </button>
+
+            <!-- Help -->
+            <button class="topbar-action" id="helpBtn" title="Help & Documentation">
+                <i class="fas fa-question-circle"></i>
+            </button>
+
+            <!-- User Menu -->
+            <% if (user) { %>
+            <div class="topbar-user-menu">
+                <button class="topbar-action" id="userMenuBtn" title="User Menu">
+                    <img src="<%= user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : '/images/default-avatar.png' %>"
+                         alt="<%= user.username %>"
+                         style="width: 32px; height: 32px; border-radius: 50%;">
+                </button>
+
+                <!-- Dropdown Menu -->
+                <div class="dropdown-menu" id="userDropdown" style="display: none;">
+                    <div class="dropdown-header">
+                        <div class="dropdown-user-info">
+                            <div class="dropdown-user-name"><%= user.username %></div>
+                            <div class="dropdown-user-id">#<%= user.discriminator %></div>
+                        </div>
+                    </div>
+                    <div class="dropdown-divider"></div>
+                    <a href="/profile" class="dropdown-item">
+                        <i class="fas fa-user"></i>
+                        <span>Profile</span>
+                    </a>
+                    <a href="/settings" class="dropdown-item">
+                        <i class="fas fa-cog"></i>
+                        <span>Settings</span>
+                    </a>
+                    <% if (user.isSuperAdmin) { %>
+                    <div class="dropdown-divider"></div>
+                    <a href="/super-admin" class="dropdown-item">
+                        <i class="fas fa-user-shield"></i>
+                        <span>Super Admin</span>
+                    </a>
+                    <% } %>
+                    <div class="dropdown-divider"></div>
+                    <a href="/logout" class="dropdown-item text-danger">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>Log Out</span>
+                    </a>
+                </div>
+            </div>
+            <% } else { %>
+            <a href="/login" class="btn btn-primary btn-sm">
+                <i class="fab fa-discord"></i>
+                Login
+            </a>
+            <% } %>
+        </div>
+    </div>
+</header>
+
+<style>
+/* Topbar User Menu Dropdown */
+.topbar-user-menu {
+    position: relative;
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 220px;
+    background-color: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    padding: var(--spacing-2);
+    z-index: 1000;
+}
+
+.dropdown-header {
+    padding: var(--spacing-3) var(--spacing-4);
+}
+
+.dropdown-user-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.dropdown-user-name {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.dropdown-user-id {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.dropdown-divider {
+    height: 1px;
+    background-color: var(--color-dark-400);
+    margin: var(--spacing-2) 0;
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    padding: var(--spacing-2) var(--spacing-4);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+    font-size: var(--font-size-sm);
+}
+
+.dropdown-item:hover {
+    background-color: var(--color-dark-500);
+    color: var(--color-text-primary);
+}
+
+.dropdown-item i {
+    width: 16px;
+    text-align: center;
+}
+
+.dropdown-item.text-danger {
+    color: var(--color-danger);
+}
+
+.dropdown-item.text-danger:hover {
+    background-color: rgba(240, 71, 71, 0.1);
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    #sidebarToggle {
+        display: none;
+    }
+
+    #mobileSidebarToggle {
+        display: flex !important;
+    }
+
+    .topbar-search {
+        display: none;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // User menu dropdown
+    const userMenuBtn = document.getElementById('userMenuBtn');
+    const userDropdown = document.getElementById('userDropdown');
+
+    if (userMenuBtn && userDropdown) {
+        userMenuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isVisible = userDropdown.style.display === 'block';
+            userDropdown.style.display = isVisible ? 'none' : 'block';
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', () => {
+            userDropdown.style.display = 'none';
+        });
+
+        userDropdown.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+
+    // Global search functionality
+    const globalSearch = document.getElementById('globalSearch');
+    if (globalSearch) {
+        globalSearch.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            // Implement search functionality
+            console.log('Search query:', query);
+        });
+    }
+
+    // Theme toggle
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+        // Load saved theme or default to dark
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        const icon = themeToggle.querySelector('i');
+
+        // Set initial icon based on theme
+        if (savedTheme === 'light') {
+            icon.classList.remove('fa-moon');
+            icon.classList.add('fa-sun');
+        } else {
+            icon.classList.remove('fa-sun');
+            icon.classList.add('fa-moon');
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+
+            // Update theme
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+
+            // Toggle icon
+            if (newTheme === 'light') {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+            } else {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+            }
+        });
+    }
+
+    // Notifications
+    const notificationsBtn = document.getElementById('notificationsBtn');
+    if (notificationsBtn) {
+        notificationsBtn.addEventListener('click', () => {
+            // Open notifications panel
+            console.log('Open notifications');
+        });
+    }
+
+    // Help button
+    const helpBtn = document.getElementById('helpBtn');
+    if (helpBtn) {
+        helpBtn.addEventListener('click', () => {
+            window.open('/docs', '_blank');
+        });
+    }
+});
+</script>

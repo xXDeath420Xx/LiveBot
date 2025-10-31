@@ -1,59 +1,57 @@
-const { REST, Routes } = require('discord.js');
-const fs = require('fs');
-const path = require('path');
-require('dotenv').config();
+require("dotenv-flow").config();
+const { REST, Routes, Client, GatewayIntentBits } = require("discord.js");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const commands = [];
-const commandsPath = path.join(__dirname, 'commands');
+// Grab all the command files from the commands directory you created earlier
+const commandsPath = path.join(__dirname, "commands");
+const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith(".js"));
 
-let commandFiles;
-try {
-    commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-} catch (error) {
-    console.error(`[❌] Error reading commands directory at ${commandsPath}:`, error.message);
-    process.exit(1); // Exit if commands directory can't be read
-}
-
-console.log('Loading commands for deployment...');
-
+// Grab the SlashCommandBuilder#toJSON() output of each command's data for deployment
 for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-    try {
-        const command = require(filePath);
-        if ('data' in command && 'execute' in command) {
-            commands.push(command.data.toJSON());
-            console.log(`[✔] Loaded ${file}`);
-        } else {
-            console.log(`[❌] The command at ${filePath} is missing a required "data" or "execute" property.`);
-        }
-    } catch (error) {
-        console.error(`[❌] Error loading command file ${file}:`, error.message);
-    }
+  const command = require(path.join(commandsPath, file));
+  if ("data" in command && "execute" in command) {
+    commands.push(command.data.toJSON());
+  } else {
+    console.log(
+      `[WARNING] The command at ${filePath} is missing a required "data" or "execute" property.`
+    );
+  }
 }
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+// Add context menu commands
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const ContextMenuManager = require("./core/context-menu-manager");
+const contextMenuManager = new ContextMenuManager(client);
 
+const contextMenuCommands = contextMenuManager.getMenuCommands();
+commands.push(...contextMenuCommands);
+
+console.log(`Loaded ${commandFiles.length} slash commands and ${contextMenuCommands.length} context menu commands`);
+
+// Construct and prepare an instance of the REST module
+const rest = new REST().setToken(process.env.DISCORD_TOKEN);
+
+// Deploy your commands!
 (async () => {
-    try {
-        if (!process.env.DISCORD_CLIENT_ID) {
-            console.error('DISCORD_CLIENT_ID is not set in environment variables. Commands cannot be deployed.');
-            process.exit(1);
-        }
-        if (!process.env.DISCORD_TOKEN) {
-            console.error('DISCORD_TOKEN is not set in environment variables. Commands cannot be deployed.');
-            process.exit(1);
-        }
+  try {
+    console.log(
+      `Started refreshing ${commands.length} application (/) commands.`
+    );
 
-        console.log(`\nStarted refreshing ${commands.length} application (/) commands.`);
+    // The put method is used to fully refresh all commands in the guild with the current set
+    const data = await rest.put(
+      Routes.applicationCommands(process.env.DISCORD_CLIENT_ID), // Corrected to DISCORD_CLIENT_ID
+      // Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.GUILD_ID), // For guild-specific commands (faster for testing)
+      { body: commands }
+    );
 
-        const data = await rest.put(
-            Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
-            { body: commands },
-        );
-
-        console.log(`Successfully reloaded ${data.length} application (/) commands globally.`);
-    } catch (error) {
-        console.error('Failed to deploy commands:', error);
-        process.exit(1);
-    }
+    console.log(
+      `Successfully reloaded ${data.length} application (/) commands.`
+    );
+  } catch (error) {
+    // And of course, make sure you catch and log any errors!
+    console.error(error);
+  }
 })();

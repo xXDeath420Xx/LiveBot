@@ -1,0 +1,302 @@
+<div class="content-card">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3><i class="fas fa-file-alt me-2"></i>Forms Management</h3>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#create-form-modal">
+            <i class="fas fa-plus me-2"></i>Create Form
+        </button>
+    </div>
+
+    <% if (locals.success) { %>
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <%= success %>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    <% } %>
+
+    <% if (locals.error) { %>
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <%= error %>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    <% } %>
+
+    <% if (forms && forms.length > 0) { %>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Form Name</th>
+                        <th>Description</th>
+                        <th>Questions</th>
+                        <th>Submissions</th>
+                        <th>Submit Channel</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% forms.forEach(form => { %>
+                        <tr>
+                            <td><strong><%= form.form_name %></strong></td>
+                            <td><%= form.form_description || 'No description' %></td>
+                            <td><span class="badge bg-info"><%= form.question_count || 0 %> questions</span></td>
+                            <td><span class="badge bg-success"><%= form.submission_count || 0 %> responses</span></td>
+                            <td>
+                                <% if (form.submit_channel_id) { %>
+                                    <% const channel = channels.find(c => c.id === form.submit_channel_id); %>
+                                    #<%= channel ? channel.name : 'Unknown' %>
+                                <% } else { %>
+                                    <span class="text-muted">None</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button type="button" class="btn btn-outline-primary" onclick="editForm(<%= form.form_id %>, '<%= form.form_name %>', '<%= form.form_description || '' %>', '<%= form.submit_channel_id || '' %>')">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-info" onclick="viewQuestions(<%= form.form_id %>)">
+                                        <i class="fas fa-list"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-warning" onclick="createPanel(<%= form.form_id %>, '<%= form.form_name %>')" title="Create Panel">
+                                        <i class="fas fa-clipboard"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success" onclick="viewSubmissions(<%= form.form_id %>)">
+                                        <i class="fas fa-inbox"></i>
+                                    </button>
+                                    <form action="/manage/<%= guild.id %>/forms/delete/<%= form.form_id %>" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this form and all its submissions?');">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div class="text-center text-muted py-5">
+            <i class="fas fa-file-alt fa-3x mb-3 opacity-50"></i>
+            <p>No forms created yet. Click "Create Form" to get started.</p>
+        </div>
+    <% } %>
+</div>
+
+<!-- Create Form Modal -->
+<div class="modal fade" id="create-form-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="/manage/<%= guild.id %>/forms/create" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Create New Form</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Form Name <span class="text-danger">*</span></label>
+                        <input type="text" name="form_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="form_description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Submit to Channel (optional)</label>
+                        <select name="submit_channel_id" class="form-select">
+                            <option value="">None</option>
+                            <% channels.forEach(c => { %>
+                                <option value="<%= c.id %>">#<%= c.name %></option>
+                            <% }); %>
+                        </select>
+                        <small class="text-muted">When someone submits this form, send a message to this channel</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Form</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Form Modal -->
+<div class="modal fade" id="edit-form-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="edit-form-form" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-edit me-2"></i>Edit Form</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Form Name <span class="text-danger">*</span></label>
+                        <input type="text" name="form_name" id="edit-form-name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="form_description" id="edit-form-description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Submit to Channel (optional)</label>
+                        <select name="submit_channel_id" id="edit-submit-channel" class="form-select">
+                            <option value="">None</option>
+                            <% channels.forEach(c => { %>
+                                <option value="<%= c.id %>">#<%= c.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Questions Modal -->
+<div class="modal fade" id="questions-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-list me-2"></i>Form Questions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="questions-list">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2">Loading questions...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="addQuestion()">
+                    <i class="fas fa-plus me-2"></i>Add Question
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Submissions Modal -->
+<div class="modal fade" id="submissions-modal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-inbox me-2"></i>Form Submissions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="submissions-list">
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status"></div>
+                        <p class="mt-2">Loading submissions...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentFormId = null;
+
+function editForm(formId, formName, formDescription, submitChannelId) {
+    document.getElementById('edit-form-name').value = formName;
+    document.getElementById('edit-form-description').value = formDescription || '';
+    document.getElementById('edit-submit-channel').value = submitChannelId || '';
+    document.getElementById('edit-form-form').action = `/manage/<%= guild.id %>/forms/edit/${formId}`;
+    new bootstrap.Modal(document.getElementById('edit-form-modal')).show();
+}
+
+async function viewQuestions(formId) {
+    currentFormId = formId;
+    const modal = new bootstrap.Modal(document.getElementById('questions-modal'));
+    modal.show();
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/forms/${formId}/questions`);
+        const questions = await response.json();
+
+        const listEl = document.getElementById('questions-list');
+
+        if (questions.length === 0) {
+            listEl.innerHTML = '<div class="text-center text-muted">No questions yet. Add some!</div>';
+            return;
+        }
+
+        listEl.innerHTML = questions.map((q, idx) => `
+            <div class="card mb-2">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <h6>${idx + 1}. ${q.question_text}</h6>
+                            <span class="badge bg-secondary">${q.question_type}</span>
+                            ${q.is_required ? '<span class="badge bg-danger">Required</span>' : ''}
+                            ${q.question_options ? `<div class="text-muted small mt-1">Options: ${q.question_options}</div>` : ''}
+                        </div>
+                        <form action="/manage/<%= guild.id %>/forms/questions/delete/${q.question_id}" method="POST" class="d-inline" onsubmit="return confirm('Delete this question?');">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        document.getElementById('questions-list').innerHTML = '<div class="alert alert-danger">Failed to load questions.</div>';
+    }
+}
+
+async function viewSubmissions(formId) {
+    const modal = new bootstrap.Modal(document.getElementById('submissions-modal'));
+    modal.show();
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/forms/${formId}/submissions`);
+        const submissions = await response.json();
+
+        const listEl = document.getElementById('submissions-list');
+
+        if (submissions.length === 0) {
+            listEl.innerHTML = '<div class="text-center text-muted">No submissions yet.</div>';
+            return;
+        }
+
+        listEl.innerHTML = submissions.map(sub => {
+            const data = JSON.parse(sub.submission_data);
+            const dataHtml = Object.entries(data).map(([q, a]) => `
+                <div class="mb-2">
+                    <strong>${q}:</strong><br>
+                    <span class="text-muted">${a || '<em>No answer</em>'}</span>
+                </div>
+            `).join('');
+
+            return `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <strong>User ID:</strong> ${sub.user_id} &nbsp; | &nbsp;
+                        <strong>Submitted:</strong> ${new Date(sub.submitted_at).toLocaleString()}
+                    </div>
+                    <div class="card-body">
+                        ${dataHtml}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        document.getElementById('submissions-list').innerHTML = '<div class="alert alert-danger">Failed to load submissions.</div>';
+    }
+}
+
+function addQuestion() {
+    if (!currentFormId) return;
+    window.location.href = `/manage/<%= guild.id %>/forms/${currentFormId}/add-question`;
+}
+</script>

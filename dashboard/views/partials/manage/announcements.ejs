@@ -1,0 +1,174 @@
+<%
+const announcementSettings = settings || {};
+const defaultMessage = announcementSettings.announcement_message || '{streamer} is now live on {platform}! {url}';
+const channelId = announcementSettings.announcement_channel_id || '';
+const liveRoleId = announcementSettings.live_role_id || '';
+%>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-bullhorn"></i>
+                <span>Live Announcements</span>
+            </div>
+            <div class="page-section-subtitle">
+                Customize how stream-live notifications are announced
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Status</div>
+            <div style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: <%= channelId ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
+                <i class="fas fa-<%= channelId ? 'check-circle' : 'times-circle' %>"></i>
+                <%= channelId ? 'Enabled' : 'Disabled' %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Channel</div>
+            <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-primary-400);">
+                <%= channelId ? '#' + (channels.find(c => c.id === channelId)?.name || 'Unknown') : 'Not Set' %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Live Role</div>
+            <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: <%= liveRoleId ? 'var(--color-accent-purple)' : 'var(--color-text-muted)' %>;">
+                <%= liveRoleId ? (roles.find(r => r.id === liveRoleId)?.name || 'Unknown') : 'Not Set' %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Message Length</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">
+                <%= defaultMessage.length %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Announcement Configuration -->
+    <form action="/manage/<%= guild.id %>/update-announcements" method="POST">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+                <i class="fas fa-cog" style="color: var(--color-primary-400);"></i>
+                Announcement Settings
+            </h3>
+            <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
+                Configure where and how live notifications are sent
+            </p>
+
+            <div class="grid grid-cols-2" style="gap: var(--spacing-6);">
+                <div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Announcement Channel</label>
+                        <select class="form-select" name="announcement_channel_id">
+                            <option value="">Disabled</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>" <%= channelId === channel.id ? 'selected' : '' %>>
+                                    #<%= channel.name %>
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">Channel where live announcements will be posted</div>
+                    </div>
+
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Live Role</label>
+                        <select class="form-select" name="live_role_id">
+                            <option value="">No Role</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>" <%= liveRoleId === role.id ? 'selected' : '' %>>
+                                    <%= role.name %>
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">Role automatically assigned to Discord users when they go live</div>
+                    </div>
+
+                    <div>
+                        <label class="form-label">Custom Message Template</label>
+                        <textarea class="form-control" name="announcement_message" rows="6" placeholder="Enter your custom announcement message" style="font-family: var(--font-family-mono); font-size: var(--font-size-sm);"><%= defaultMessage %></textarea>
+                        <div class="form-help">Customize the message sent when streamers go live</div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-4);">
+                        <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-3) 0;">
+                            <i class="fas fa-code" style="color: var(--color-primary-400);"></i>
+                            Available Variables
+                        </h4>
+                        <div style="display: flex; flex-direction: column; gap: var(--spacing-2);">
+                            <div style="display: flex; justify-content: space-between; align-items: start; padding: var(--spacing-2); background: var(--color-dark-600); border-radius: var(--radius-sm);">
+                                <code style="color: var(--color-primary-400); font-size: var(--font-size-sm);">{streamer}</code>
+                                <span style="color: var(--color-text-secondary); font-size: var(--font-size-xs);">Streamer's name</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: start; padding: var(--spacing-2); background: var(--color-dark-600); border-radius: var(--radius-sm);">
+                                <code style="color: var(--color-primary-400); font-size: var(--font-size-sm);">{platform}</code>
+                                <span style="color: var(--color-text-secondary); font-size: var(--font-size-xs);">Platform name</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: start; padding: var(--spacing-2); background: var(--color-dark-600); border-radius: var(--radius-sm);">
+                                <code style="color: var(--color-primary-400); font-size: var(--font-size-sm);">{game}</code>
+                                <span style="color: var(--color-text-secondary); font-size: var(--font-size-xs);">Game/category</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: start; padding: var(--spacing-2); background: var(--color-dark-600); border-radius: var(--radius-sm);">
+                                <code style="color: var(--color-primary-400); font-size: var(--font-size-sm);">{url}</code>
+                                <span style="color: var(--color-text-secondary); font-size: var(--font-size-xs);">Stream URL</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: start; padding: var(--spacing-2); background: var(--color-dark-600); border-radius: var(--radius-sm);">
+                                <code style="color: var(--color-primary-400); font-size: var(--font-size-sm);">{everyone}</code>
+                                <span style="color: var(--color-text-secondary); font-size: var(--font-size-xs);">@everyone ping</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: start; padding: var(--spacing-2); background: var(--color-dark-600); border-radius: var(--radius-sm);">
+                                <code style="color: var(--color-primary-400); font-size: var(--font-size-sm);">{title}</code>
+                                <span style="color: var(--color-text-secondary); font-size: var(--font-size-xs);">Stream title</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                        <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+                            <i class="fas fa-eye" style="color: var(--color-primary-400);"></i>
+                            Preview
+                        </h4>
+                        <div style="padding: var(--spacing-3); background: var(--color-dark-600); border-radius: var(--radius-sm); border-left: 3px solid var(--color-primary-500);">
+                            <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); font-family: var(--font-family-mono);" id="message-preview">
+                                <%= defaultMessage.replace('{streamer}', 'ExampleStreamer').replace('{platform}', 'Twitch').replace('{game}', 'Minecraft').replace('{url}', 'https://twitch.tv/example').replace('{title}', 'Awesome Stream!') %>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; margin-top: var(--spacing-5); padding-top: var(--spacing-5); border-top: 1px solid var(--color-dark-400);">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i>
+                    <span>Save Announcement Settings</span>
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const messageInput = document.querySelector('textarea[name="announcement_message"]');
+    const preview = document.getElementById('message-preview');
+
+    if (messageInput && preview) {
+        messageInput.addEventListener('input', () => {
+            let message = messageInput.value;
+            message = message
+                .replace(/\{streamer\}/g, 'ExampleStreamer')
+                .replace(/\{platform\}/g, 'Twitch')
+                .replace(/\{game\}/g, 'Minecraft')
+                .replace(/\{url\}/g, 'https://twitch.tv/example')
+                .replace(/\{title\}/g, 'Awesome Stream!')
+                .replace(/\{everyone\}/g, '@everyone');
+
+            preview.textContent = message || 'Preview will appear here...';
+        });
+    }
+});
+</script>

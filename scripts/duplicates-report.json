@@ -1,0 +1,759 @@
+{
+  "duplicates": [
+    {
+      "js": "commands/admin.js",
+      "ts": "commands/admin.ts"
+    },
+    {
+      "js": "commands/aidj.js",
+      "ts": "commands/aidj.ts"
+    },
+    {
+      "js": "commands/birthday.js",
+      "ts": "commands/birthday.ts"
+    },
+    {
+      "js": "commands/config.js",
+      "ts": "commands/config.ts"
+    },
+    {
+      "js": "commands/events.js",
+      "ts": "commands/events.ts"
+    },
+    {
+      "js": "commands/feeds.js",
+      "ts": "commands/feeds.ts"
+    },
+    {
+      "js": "commands/form.js",
+      "ts": "commands/form.ts"
+    },
+    {
+      "js": "commands/fun.js",
+      "ts": "commands/fun.ts"
+    },
+    {
+      "js": "commands/manage.js",
+      "ts": "commands/manage.ts"
+    },
+    {
+      "js": "commands/modmail.js",
+      "ts": "commands/modmail.ts"
+    },
+    {
+      "js": "commands/music.js",
+      "ts": "commands/music.ts"
+    },
+    {
+      "js": "commands/musicpanel.js",
+      "ts": "commands/musicpanel.ts"
+    },
+    {
+      "js": "commands/raid.js",
+      "ts": "commands/raid.ts"
+    },
+    {
+      "js": "commands/rank.js",
+      "ts": "commands/rank.ts"
+    },
+    {
+      "js": "commands/rpg.js",
+      "ts": "commands/rpg.ts"
+    },
+    {
+      "js": "commands/streamer.js",
+      "ts": "commands/streamer.ts"
+    },
+    {
+      "js": "commands/suggest.js",
+      "ts": "commands/suggest.ts"
+    },
+    {
+      "js": "commands/superadmin.js",
+      "ts": "commands/superadmin.ts"
+    },
+    {
+      "js": "commands/team.js",
+      "ts": "commands/team.ts"
+    },
+    {
+      "js": "commands/ticket.js",
+      "ts": "commands/ticket.ts"
+    },
+    {
+      "js": "commands/timedmod.js",
+      "ts": "commands/timedmod.ts"
+    },
+    {
+      "js": "commands/utility.js",
+      "ts": "commands/utility.ts"
+    },
+    {
+      "js": "commands/weather.js",
+      "ts": "commands/weather.ts"
+    },
+    {
+      "js": "core/activity-logger.js",
+      "ts": "core/activity-logger.ts"
+    },
+    {
+      "js": "core/advanced-automod-manager.js",
+      "ts": "core/advanced-automod-manager.ts"
+    },
+    {
+      "js": "core/afk-manager.js",
+      "ts": "core/afk-manager.ts"
+    },
+    {
+      "js": "core/ai-error-monitor.js",
+      "ts": "core/ai-error-monitor.ts"
+    },
+    {
+      "js": "core/ai-scanner.js",
+      "ts": "core/ai-scanner.ts"
+    },
+    {
+      "js": "core/anti-nuke.js",
+      "ts": "core/anti-nuke.ts"
+    },
+    {
+      "js": "core/anti-raid.js",
+      "ts": "core/anti-raid.ts"
+    },
+    {
+      "js": "core/assets-manager.js",
+      "ts": "core/assets-manager.ts"
+    },
+    {
+      "js": "core/audio-cache-manager.js",
+      "ts": "core/audio-cache-manager.ts"
+    },
+    {
+      "js": "core/auto-publisher.js",
+      "ts": "core/auto-publisher.ts"
+    },
+    {
+      "js": "core/automod.js",
+      "ts": "core/automod.ts"
+    },
+    {
+      "js": "core/autorole-manager.js",
+      "ts": "core/autorole-manager.ts"
+    },
+    {
+      "js": "core/avatar-cache.js",
+      "ts": "core/avatar-cache.ts"
+    },
+    {
+      "js": "core/backup-manager.js",
+      "ts": "core/backup-manager.ts"
+    },
+    {
+      "js": "core/birthday-manager.js",
+      "ts": "core/birthday-manager.ts"
+    },
+    {
+      "js": "core/blacklist-manager.js",
+      "ts": "core/blacklist-manager.ts"
+    },
+    {
+      "js": "core/comprehensive-tester.js",
+      "ts": "core/comprehensive-tester.ts"
+    },
+    {
+      "js": "core/custom-command-handler.js",
+      "ts": "core/custom-command-handler.ts"
+    },
+    {
+      "js": "core/dj-manager.js",
+      "ts": "core/dj-manager.ts"
+    },
+    {
+      "js": "core/dnd-manager.js",
+      "ts": "core/dnd-manager.ts"
+    },
+    {
+      "js": "core/enhanced-leveling-manager.js",
+      "ts": "core/enhanced-leveling-manager.ts"
+    },
+    {
+      "js": "core/enhanced-reaction-role-manager.js",
+      "ts": "core/enhanced-reaction-role-manager.ts"
+    },
+    {
+      "js": "core/enhanced-voice-channel-manager.js",
+      "ts": "core/enhanced-voice-channel-manager.ts"
+    },
+    {
+      "js": "core/escalation-manager.js",
+      "ts": "core/escalation-manager.ts"
+    },
+    {
+      "js": "core/giveaway-manager.js",
+      "ts": "core/giveaway-manager.ts"
+    },
+    {
+      "js": "core/greeting-manager.js",
+      "ts": "core/greeting-manager.ts"
+    },
+    {
+      "js": "core/i18n-manager.js",
+      "ts": "core/i18n-manager.ts"
+    },
+    {
+      "js": "core/interaction-handler.js",
+      "ts": "core/interaction-handler.ts"
+    },
+    {
+      "js": "core/invite-manager.js",
+      "ts": "core/invite-manager.ts"
+    },
+    {
+      "js": "core/join-gate.js",
+      "ts": "core/join-gate.ts"
+    },
+    {
+      "js": "core/joinable-ranks-manager.js",
+      "ts": "core/joinable-ranks-manager.ts"
+    },
+    {
+      "js": "core/local-file-extractor.js",
+      "ts": "core/local-file-extractor.ts"
+    },
+    {
+      "js": "core/log-manager-expanded.js",
+      "ts": "core/log-manager-expanded.ts"
+    },
+    {
+      "js": "core/log-manager.js",
+      "ts": "core/log-manager.ts"
+    },
+    {
+      "js": "core/moderation-manager.js",
+      "ts": "core/moderation-manager.ts"
+    },
+    {
+      "js": "core/modmail-manager.js",
+      "ts": "core/modmail-manager.ts"
+    },
+    {
+      "js": "core/music-metrics.js",
+      "ts": "core/music-metrics.ts"
+    },
+    {
+      "js": "core/music-panel.js",
+      "ts": "core/music-panel.ts"
+    },
+    {
+      "js": "core/music-status-manager.js",
+      "ts": "core/music-status-manager.ts"
+    },
+    {
+      "js": "core/playwright-youtube-extractor.js",
+      "ts": "core/playwright-youtube-extractor.ts"
+    },
+    {
+      "js": "core/poll-manager.js",
+      "ts": "core/poll-manager.ts"
+    },
+    {
+      "js": "core/polls-manager.js",
+      "ts": "core/polls-manager.ts"
+    },
+    {
+      "js": "core/preload-manager.js",
+      "ts": "core/preload-manager.ts"
+    },
+    {
+      "js": "core/raid-protection-manager.js",
+      "ts": "core/raid-protection-manager.ts"
+    },
+    {
+      "js": "core/reaction-role-manager.js",
+      "ts": "core/reaction-role-manager.ts"
+    },
+    {
+      "js": "core/reddit-feed.js",
+      "ts": "core/reddit-feed.ts"
+    },
+    {
+      "js": "core/role-manager.js",
+      "ts": "core/role-manager.ts"
+    },
+    {
+      "js": "core/role-persistence-manager.js",
+      "ts": "core/role-persistence-manager.ts"
+    },
+    {
+      "js": "core/schedule-predictor.js",
+      "ts": "core/schedule-predictor.ts"
+    },
+    {
+      "js": "core/scheduled-announcements-manager.js",
+      "ts": "core/scheduled-announcements-manager.ts"
+    },
+    {
+      "js": "core/scheduled-events-manager.js",
+      "ts": "core/scheduled-events-manager.ts"
+    },
+    {
+      "js": "core/self-healing-manager.js",
+      "ts": "core/self-healing-manager.ts"
+    },
+    {
+      "js": "core/self-learning-manager.js",
+      "ts": "core/self-learning-manager.ts"
+    },
+    {
+      "js": "core/server-insights-manager.js",
+      "ts": "core/server-insights-manager.ts"
+    },
+    {
+      "js": "core/soundboard-manager.js",
+      "ts": "core/soundboard-manager.ts"
+    },
+    {
+      "js": "core/starboard-manager.js",
+      "ts": "core/starboard-manager.ts"
+    },
+    {
+      "js": "core/startup.js",
+      "ts": "core/startup.ts"
+    },
+    {
+      "js": "core/statdock-manager.js",
+      "ts": "core/statdock-manager.ts"
+    },
+    {
+      "js": "core/statrole-manager.js",
+      "ts": "core/statrole-manager.ts"
+    },
+    {
+      "js": "core/stats-manager.js",
+      "ts": "core/stats-manager.ts"
+    },
+    {
+      "js": "core/status-manager.js",
+      "ts": "core/status-manager.ts"
+    },
+    {
+      "js": "core/sticky-roles-manager.js",
+      "ts": "core/sticky-roles-manager.ts"
+    },
+    {
+      "js": "core/stream-checker.js",
+      "ts": "core/stream-checker.ts"
+    },
+    {
+      "js": "core/stream-intelligence.js",
+      "ts": "core/stream-intelligence.ts"
+    },
+    {
+      "js": "core/stream-manager.js",
+      "ts": "core/stream-manager.ts"
+    },
+    {
+      "js": "core/tags-manager.js",
+      "ts": "core/tags-manager.ts"
+    },
+    {
+      "js": "core/team-sync.js",
+      "ts": "core/team-sync.ts"
+    },
+    {
+      "js": "core/temp-channel-manager.js",
+      "ts": "core/temp-channel-manager.ts"
+    },
+    {
+      "js": "core/temp-roles-manager.js",
+      "ts": "core/temp-roles-manager.ts"
+    },
+    {
+      "js": "core/ticket-manager.js",
+      "ts": "core/ticket-manager.ts"
+    },
+    {
+      "js": "core/tiktok-integration-manager.js",
+      "ts": "core/tiktok-integration-manager.ts"
+    },
+    {
+      "js": "core/timed-moderation-manager.js",
+      "ts": "core/timed-moderation-manager.ts"
+    },
+    {
+      "js": "core/twitch-schedule-sync.js",
+      "ts": "core/twitch-schedule-sync.ts"
+    },
+    {
+      "js": "core/twitter-feed.js",
+      "ts": "core/twitter-feed.ts"
+    },
+    {
+      "js": "core/user-sync.js",
+      "ts": "core/user-sync.ts"
+    },
+    {
+      "js": "core/verification-manager.js",
+      "ts": "core/verification-manager.ts"
+    },
+    {
+      "js": "core/voice-activity-manager.js",
+      "ts": "core/voice-activity-manager.ts"
+    },
+    {
+      "js": "core/weather-manager.js",
+      "ts": "core/weather-manager.ts"
+    },
+    {
+      "js": "core/webhook-manager.js",
+      "ts": "core/webhook-manager.ts"
+    },
+    {
+      "js": "core/welcome-banner.js",
+      "ts": "core/welcome-banner.ts"
+    },
+    {
+      "js": "core/xp-manager.js",
+      "ts": "core/xp-manager.ts"
+    },
+    {
+      "js": "core/youtube-feed.js",
+      "ts": "core/youtube-feed.ts"
+    },
+    {
+      "js": "core/ytdlp-extractor.js",
+      "ts": "core/ytdlp-extractor.ts"
+    },
+    {
+      "js": "utils/announcer.js",
+      "ts": "utils/announcer.ts"
+    },
+    {
+      "js": "utils/api_checks.js",
+      "ts": "utils/api_checks.ts"
+    },
+    {
+      "js": "utils/audit-log.js",
+      "ts": "utils/audit-log.ts"
+    },
+    {
+      "js": "utils/browserManager.js",
+      "ts": "utils/browserManager.ts"
+    },
+    {
+      "js": "utils/cache.js",
+      "ts": "utils/cache.ts"
+    },
+    {
+      "js": "utils/channel-helpers.js",
+      "ts": "utils/channel-helpers.ts"
+    },
+    {
+      "js": "utils/competitive-analyzer.js",
+      "ts": "utils/competitive-analyzer.ts"
+    },
+    {
+      "js": "utils/dashboard-cache.js",
+      "ts": "utils/dashboard-cache.ts"
+    },
+    {
+      "js": "utils/db.js",
+      "ts": "utils/db.ts"
+    },
+    {
+      "js": "utils/elevenlabs-api.js",
+      "ts": "utils/elevenlabs-api.ts"
+    },
+    {
+      "js": "utils/facebook-api.js",
+      "ts": "utils/facebook-api.ts"
+    },
+    {
+      "js": "utils/gemini-api.js",
+      "ts": "utils/gemini-api.ts"
+    },
+    {
+      "js": "utils/instagram-api.js",
+      "ts": "utils/instagram-api.ts"
+    },
+    {
+      "js": "utils/intelligent-api-manager.js",
+      "ts": "utils/intelligent-api-manager.ts"
+    },
+    {
+      "js": "utils/intelligent-cache-manager.js",
+      "ts": "utils/intelligent-cache-manager.ts"
+    },
+    {
+      "js": "utils/kick-api.js",
+      "ts": "utils/kick-api.ts"
+    },
+    {
+      "js": "utils/logger.js",
+      "ts": "utils/logger.ts"
+    },
+    {
+      "js": "utils/music_helpers.js",
+      "ts": "utils/music_helpers.ts"
+    },
+    {
+      "js": "utils/spotify-api.js",
+      "ts": "utils/spotify-api.ts"
+    },
+    {
+      "js": "utils/super-admin.js",
+      "ts": "utils/super-admin.ts"
+    },
+    {
+      "js": "utils/tls-manager.js",
+      "ts": "utils/tls-manager.ts"
+    },
+    {
+      "js": "utils/transcript-generator.js",
+      "ts": "utils/transcript-generator.ts"
+    },
+    {
+      "js": "utils/twitch-api.js",
+      "ts": "utils/twitch-api.ts"
+    },
+    {
+      "js": "handlers/fun/counting.js",
+      "ts": "handlers/fun/counting.ts"
+    },
+    {
+      "js": "handlers/fun/economy.js",
+      "ts": "handlers/fun/economy.ts"
+    },
+    {
+      "js": "handlers/fun/gambling.js",
+      "ts": "handlers/fun/gambling.ts"
+    },
+    {
+      "js": "handlers/fun/giveaway.js",
+      "ts": "handlers/fun/giveaway.ts"
+    },
+    {
+      "js": "handlers/fun/hangman.js",
+      "ts": "handlers/fun/hangman.ts"
+    },
+    {
+      "js": "handlers/fun/inventory.js",
+      "ts": "handlers/fun/inventory.ts"
+    },
+    {
+      "js": "handlers/fun/leaderboard.js",
+      "ts": "handlers/fun/leaderboard.ts"
+    },
+    {
+      "js": "handlers/fun/rank.js",
+      "ts": "handlers/fun/rank.ts"
+    },
+    {
+      "js": "handlers/fun/reputation.js",
+      "ts": "handlers/fun/reputation.ts"
+    },
+    {
+      "js": "handlers/fun/shop.js",
+      "ts": "handlers/fun/shop.ts"
+    },
+    {
+      "js": "handlers/fun/trading.js",
+      "ts": "handlers/fun/trading.ts"
+    },
+    {
+      "js": "handlers/fun/trivia.js",
+      "ts": "handlers/fun/trivia.ts"
+    },
+    {
+      "js": "handlers/manage/backup.js",
+      "ts": "handlers/manage/backup.ts"
+    },
+    {
+      "js": "handlers/manage/core.js",
+      "ts": "handlers/manage/core.ts"
+    },
+    {
+      "js": "handlers/manage/custom-command.js",
+      "ts": "handlers/manage/custom-command.ts"
+    },
+    {
+      "js": "handlers/manage/events.js",
+      "ts": "handlers/manage/events.ts"
+    },
+    {
+      "js": "handlers/manage/fun.js",
+      "ts": "handlers/manage/fun.ts"
+    },
+    {
+      "js": "handlers/manage/moderation.js",
+      "ts": "handlers/manage/moderation.ts"
+    },
+    {
+      "js": "handlers/manage/permissions.js",
+      "ts": "handlers/manage/permissions.ts"
+    },
+    {
+      "js": "handlers/music/controls.js",
+      "ts": "handlers/music/controls.ts"
+    },
+    {
+      "js": "handlers/music/features.js",
+      "ts": "handlers/music/features.ts"
+    },
+    {
+      "js": "handlers/music/player.js",
+      "ts": "handlers/music/player.ts"
+    },
+    {
+      "js": "handlers/music/playlist.js",
+      "ts": "handlers/music/playlist.ts"
+    },
+    {
+      "js": "handlers/music/queue.js",
+      "ts": "handlers/music/queue.ts"
+    },
+    {
+      "js": "jobs/analytics-scheduler.js",
+      "ts": "jobs/analytics-scheduler.ts"
+    },
+    {
+      "js": "jobs/announcement-queue.js",
+      "ts": "jobs/announcement-queue.ts"
+    },
+    {
+      "js": "jobs/announcement-worker.js",
+      "ts": "jobs/announcement-worker.ts"
+    },
+    {
+      "js": "jobs/giveaway-scheduler.js",
+      "ts": "jobs/giveaway-scheduler.ts"
+    },
+    {
+      "js": "jobs/poll-scheduler.js",
+      "ts": "jobs/poll-scheduler.ts"
+    },
+    {
+      "js": "jobs/reminder-scheduler.js",
+      "ts": "jobs/reminder-scheduler.ts"
+    },
+    {
+      "js": "jobs/reminder-worker.js",
+      "ts": "jobs/reminder-worker.ts"
+    },
+    {
+      "js": "jobs/social-feed-scheduler.js",
+      "ts": "jobs/social-feed-scheduler.ts"
+    },
+    {
+      "js": "jobs/social-feed-worker.js",
+      "ts": "jobs/social-feed-worker.ts"
+    },
+    {
+      "js": "jobs/stats-scheduler.js",
+      "ts": "jobs/stats-scheduler.ts"
+    },
+    {
+      "js": "jobs/stream-check-scheduler.js",
+      "ts": "jobs/stream-check-scheduler.ts"
+    },
+    {
+      "js": "jobs/summary-queue.js",
+      "ts": "jobs/summary-queue.ts"
+    },
+    {
+      "js": "jobs/summary-worker.js",
+      "ts": "jobs/summary-worker.ts"
+    },
+    {
+      "js": "jobs/system-worker.js",
+      "ts": "jobs/system-worker.ts"
+    },
+    {
+      "js": "jobs/team-sync-scheduler.js",
+      "ts": "jobs/team-sync-scheduler.ts"
+    },
+    {
+      "js": "jobs/ticket-scheduler.js",
+      "ts": "jobs/ticket-scheduler.ts"
+    },
+    {
+      "js": "jobs/ticket-worker.js",
+      "ts": "jobs/ticket-worker.ts"
+    },
+    {
+      "js": "jobs/user-sync-scheduler.js",
+      "ts": "jobs/user-sync-scheduler.ts"
+    },
+    {
+      "js": "jobs/vod-scheduler.js",
+      "ts": "jobs/vod-scheduler.ts"
+    },
+    {
+      "js": "jobs/vod-worker.js",
+      "ts": "jobs/vod-worker.ts"
+    },
+    {
+      "js": "jobs/youtube-queue.js",
+      "ts": "jobs/youtube-queue.ts"
+    },
+    {
+      "js": "jobs/youtube-scheduler.js",
+      "ts": "jobs/youtube-scheduler.ts"
+    },
+    {
+      "js": "jobs/youtube-worker.js",
+      "ts": "jobs/youtube-worker.ts"
+    },
+    {
+      "js": "dashboard/passport-setup.js",
+      "ts": "dashboard/passport-setup.ts"
+    },
+    {
+      "js": "dashboard/server.js",
+      "ts": "dashboard/server.ts"
+    },
+    {
+      "js": "dashboard/status-server.js",
+      "ts": "dashboard/status-server.ts"
+    }
+  ],
+  "pureJS": [
+    "commands/autoresponder.js",
+    "commands/lockdown.js",
+    "commands/tts.js",
+    "core/context-menu-manager.js",
+    "core/core/anti-nuke.js",
+    "core/forum-manager.js",
+    "utils/command-loader.js",
+    "dashboard/cache-setup-example.js",
+    "dashboard/core/blacklist-manager.js",
+    "dashboard/core/giveaway-manager.js",
+    "dashboard/core/role-manager.js",
+    "dashboard/core/status-manager.js",
+    "dashboard/core/stream-manager.js",
+    "dashboard/dashboard/passport-setup.js",
+    "dashboard/dashboard/server.js",
+    "dashboard/public/js/dashboard-enhancements.js",
+    "dashboard/public/js/loading-manager.js",
+    "dashboard/utils/announcer.js",
+    "dashboard/utils/api_checks.js",
+    "dashboard/utils/browserManager.js",
+    "dashboard/utils/cache.js",
+    "dashboard/utils/dashboard-cache.js",
+    "dashboard/utils/db.js",
+    "dashboard/utils/facebook-api.js",
+    "dashboard/utils/instagram-api.js",
+    "dashboard/utils/kick-api.js",
+    "dashboard/utils/logger.js",
+    "dashboard/utils/tls-manager.js",
+    "dashboard/utils/twitch-api.js"
+  ],
+  "tsOnly": [
+    "core/ai-dj-manager.ts",
+    "events/guildAuditLogEntryCreate.ts",
+    "events/guildMemberAdd.ts",
+    "dashboard/cache-integration.ts",
+    "dashboard/cache-middleware.ts",
+    "dashboard/server-cached.ts"
+  ]
+}

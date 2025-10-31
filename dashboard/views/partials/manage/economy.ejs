@@ -1,0 +1,488 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-coins"></i>
+                <span>Economy System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Manage your server's economy, currency, shop items, and leaderboards
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Users</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= economyStats?.total_users || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Currency</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= economyStats?.total_currency?.toLocaleString() || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Transactions</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= economyStats?.total_transactions || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Shop Items</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);"><%= shopItems?.length || 0 %></div>
+        </div>
+    </div>
+
+    <!-- Economy Configuration -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-cog"></i> Economy Configuration
+        </h3>
+        <form action="/manage/<%= guild.id %>/economy/config" method="POST">
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-4);">
+                        <input type="checkbox" id="economyEnabled" name="enabled" class="form-check-input" style="width: 20px; height: 20px;" <%= economyConfig && economyConfig.enabled ? 'checked' : '' %>>
+                        <label for="economyEnabled" class="form-label" style="margin: 0; cursor: pointer;">Enable Economy System</label>
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label">Currency Name</label>
+                    <input type="text" class="form-control" name="currency_name" value="<%= economyConfig?.currency_name || 'coins' %>" placeholder="coins">
+                    <div class="form-help">The name of your server currency</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Daily Reward Amount</label>
+                    <input type="number" class="form-control" name="daily_amount" value="<%= economyConfig?.daily_amount || 100 %>" min="0">
+                    <div class="form-help">Currency earned from /daily</div>
+                </div>
+                <div>
+                    <label class="form-label">Work Min Amount</label>
+                    <input type="number" class="form-control" name="work_min_amount" value="<%= economyConfig?.work_min_amount || 50 %>" min="0">
+                    <div class="form-help">Minimum work reward</div>
+                </div>
+                <div>
+                    <label class="form-label">Work Max Amount</label>
+                    <input type="number" class="form-control" name="work_max_amount" value="<%= economyConfig?.work_max_amount || 150 %>" min="0">
+                    <div class="form-help">Maximum work reward</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Starting Balance</label>
+                    <input type="number" class="form-control" name="starting_balance" value="<%= economyConfig?.starting_balance || 1000 %>" min="0">
+                    <div class="form-help">Initial balance for new users</div>
+                </div>
+                <div>
+                    <label class="form-label">Default Bank Capacity</label>
+                    <input type="number" class="form-control" name="max_bank_capacity" value="<%= economyConfig?.max_bank_capacity || 10000 %>" min="0">
+                    <div class="form-help">Maximum bank storage capacity</div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Configuration</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Shop Items Management -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0;">
+                <i class="fas fa-store"></i> Shop Items
+            </h3>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addShopItemModal">
+                <i class="fas fa-plus"></i>
+                <span>Add Item</span>
+            </button>
+        </div>
+
+        <% if (shopItems && shopItems.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Type</th>
+                            <th>Price</th>
+                            <th>Stock</th>
+                            <th>Properties</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% shopItems.forEach(item => { %>
+                            <tr>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                        <span style="font-size: var(--font-size-xl);"><%= item.item_emoji || '📦' %></span>
+                                        <div>
+                                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= item.item_name %></div>
+                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= item.item_description || 'No description' %></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-secondary" style="text-transform: capitalize;"><%= item.item_type %></span>
+                                </td>
+                                <td>
+                                    <strong style="color: var(--color-warning);"><%= item.price.toLocaleString() %></strong>
+                                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= economyConfig?.currency_name || 'coins' %></span>
+                                </td>
+                                <td>
+                                    <% if (item.stock === null) { %>
+                                        <span class="badge badge-success">Unlimited</span>
+                                    <% } else { %>
+                                        <span class="badge badge-primary"><%= item.stock %></span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
+                                        <% if (item.tradeable) { %><span class="badge" style="background: var(--color-primary-500);">Tradeable</span><% } %>
+                                        <% if (item.sellable) { %><span class="badge" style="background: var(--color-warning);">Sellable</span><% } %>
+                                        <% if (item.usable) { %><span class="badge" style="background: var(--color-accent-purple);">Usable</span><% } %>
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-secondary" onclick="editShopItem(<%= item.item_id %>, '<%= item.item_name.replace(/'/g, "\\'") %>', '<%= (item.item_description || '').replace(/'/g, "\\'") %>', '<%= item.item_emoji || '' %>', '<%= item.item_type %>', <%= item.price %>, <%= item.stock %>, <%= item.tradeable %>, <%= item.sellable %>, <%= item.sell_value || 0 %>, <%= item.usable %>)">
+                                        <i class="fas fa-pencil-alt"></i>
+                                        <span>Edit</span>
+                                    </button>
+                                    <form action="/manage/<%= guild.id %>/economy/shop/delete" method="POST" style="display: inline;">
+                                        <input type="hidden" name="item_id" value="<%= item.item_id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this item?')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-store"></i>
+                </div>
+                <div class="empty-state-title">No Shop Items</div>
+                <div class="empty-state-description">
+                    Create your first shop item to start your economy
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addShopItemModal">
+                    <i class="fas fa-plus"></i>
+                    <span>Add First Item</span>
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Richest Users Leaderboard -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-crown"></i> Richest Users (Top 10)
+        </h3>
+
+        <% if (topUsers && topUsers.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Rank</th>
+                            <th>User</th>
+                            <th class="text-end">Wallet</th>
+                            <th class="text-end">Bank</th>
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% topUsers.forEach((user, index) => {
+                            const total = user.wallet + user.bank;
+                        %>
+                            <tr>
+                                <td>
+                                    <div style="font-size: var(--font-size-lg);">
+                                        <% if (index === 0) { %>🥇
+                                        <% } else if (index === 1) { %>🥈
+                                        <% } else if (index === 2) { %>🥉
+                                        <% } else { %>
+                                            <span style="font-weight: var(--font-weight-semibold); color: var(--color-text-muted);">#<%= index + 1 %></span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <code style="font-size: var(--font-size-sm); color: var(--color-text-secondary);"><%= user.user_id %></code>
+                                </td>
+                                <td class="text-end">
+                                    <span style="color: var(--color-success);"><%= user.wallet.toLocaleString() %></span>
+                                </td>
+                                <td class="text-end">
+                                    <span style="color: var(--color-primary-400);"><%= user.bank.toLocaleString() %></span>
+                                </td>
+                                <td class="text-end">
+                                    <strong style="color: var(--color-warning); font-size: var(--font-size-base);"><%= total.toLocaleString() %></strong>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
+                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
+                    No economy data yet
+                </div>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Add Shop Item Modal -->
+<div class="modal fade" id="addShopItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Shop Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/economy/shop/add" method="POST">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Item Name *</label>
+                        <input type="text" class="form-control" name="item_name" required placeholder="Legendary Sword">
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="item_description" rows="2" placeholder="A powerful weapon..."></textarea>
+                    </div>
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Emoji</label>
+                            <input type="text" class="form-control" name="item_emoji" placeholder="🗡️">
+                        </div>
+                        <div>
+                            <label class="form-label">Type *</label>
+                            <select class="form-select" name="item_type" required>
+                                <option value="consumable">Consumable</option>
+                                <option value="collectible">Collectible</option>
+                                <option value="tool">Tool</option>
+                                <option value="role">Role</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Price *</label>
+                            <input type="number" class="form-control" name="price" min="0" required placeholder="1000">
+                        </div>
+                        <div>
+                            <label class="form-label">Stock (blank = unlimited)</label>
+                            <input type="number" class="form-control" name="stock" min="0" placeholder="Leave empty">
+                        </div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
+                            <input type="checkbox" id="itemTradeable" name="tradeable" class="form-check-input" style="width: 18px; height: 18px;" checked>
+                            <label for="itemTradeable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Tradeable</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
+                            <input type="checkbox" id="itemSellable" name="sellable" class="form-check-input" style="width: 18px; height: 18px;">
+                            <label for="itemSellable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Sellable</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                            <input type="checkbox" id="itemUsable" name="usable" class="form-check-input" style="width: 18px; height: 18px;">
+                            <label for="itemUsable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Usable</label>
+                        </div>
+                    </div>
+                    <div id="sellValueDiv" style="display: none;">
+                        <label class="form-label">Sell Value</label>
+                        <input type="number" class="form-control" id="sellValue" name="sell_value" min="0" value="0">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Shop Item Modal -->
+<div class="modal fade" id="editShopItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Shop Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/economy/shop/edit" method="POST">
+                <input type="hidden" id="editItemId" name="item_id">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Item Name *</label>
+                        <input type="text" class="form-control" id="editItemName" name="item_name" required>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" id="editItemDescription" name="item_description" rows="2"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Emoji</label>
+                            <input type="text" class="form-control" id="editItemEmoji" name="item_emoji">
+                        </div>
+                        <div>
+                            <label class="form-label">Type *</label>
+                            <select class="form-select" id="editItemType" name="item_type" required>
+                                <option value="consumable">Consumable</option>
+                                <option value="collectible">Collectible</option>
+                                <option value="tool">Tool</option>
+                                <option value="role">Role</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Price *</label>
+                            <input type="number" class="form-control" id="editItemPrice" name="price" min="0" required>
+                        </div>
+                        <div>
+                            <label class="form-label">Stock (blank = unlimited)</label>
+                            <input type="number" class="form-control" id="editItemStock" name="stock" min="0">
+                        </div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
+                            <input type="checkbox" id="editItemTradeable" name="tradeable" class="form-check-input" style="width: 18px; height: 18px;">
+                            <label for="editItemTradeable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Tradeable</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
+                            <input type="checkbox" id="editItemSellable" name="sellable" class="form-check-input" style="width: 18px; height: 18px;">
+                            <label for="editItemSellable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Sellable</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                            <input type="checkbox" id="editItemUsable" name="usable" class="form-check-input" style="width: 18px; height: 18px;">
+                            <label for="editItemUsable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Usable</label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label">Sell Value</label>
+                        <input type="number" class="form-control" id="editSellValue" name="sell_value" min="0" value="0">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    color: var(--color-text-secondary);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+.text-end {
+    text-align: right;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Toggle sell value field visibility
+    const sellableCheckbox = document.getElementById('itemSellable');
+    const sellValueDiv = document.getElementById('sellValueDiv');
+
+    if (sellableCheckbox && sellValueDiv) {
+        sellableCheckbox.addEventListener('change', function() {
+            sellValueDiv.style.display = this.checked ? 'block' : 'none';
+        });
+    }
+});
+
+// Edit shop item function
+function editShopItem(id, name, desc, emoji, type, price, stock, tradeable, sellable, sellValue, usable) {
+    document.getElementById('editItemId').value = id;
+    document.getElementById('editItemName').value = name;
+    document.getElementById('editItemDescription').value = desc;
+    document.getElementById('editItemEmoji').value = emoji;
+    document.getElementById('editItemType').value = type;
+    document.getElementById('editItemPrice').value = price;
+    document.getElementById('editItemStock').value = stock || '';
+    document.getElementById('editItemTradeable').checked = tradeable;
+    document.getElementById('editItemSellable').checked = sellable;
+    document.getElementById('editItemUsable').checked = usable;
+    document.getElementById('editSellValue').value = sellValue || 0;
+    new bootstrap.Modal(document.getElementById('editShopItemModal')).show();
+}
+</script>

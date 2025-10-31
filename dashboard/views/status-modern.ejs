@@ -1,0 +1,1677 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'System Status',
+    additionalCSS: []
+}) %>
+
+<style>
+/* ============================================================================
+   STATUS DASHBOARD MODERN STYLES
+   ============================================================================ */
+
+/* Fix dropdown backgrounds */
+#log-process-filter,
+#log-severity-filter {
+    background-color: var(--color-bg-secondary) !important;
+    border: 1px solid var(--color-border-primary) !important;
+    color: var(--color-text-primary) !important;
+    padding: var(--spacing-2) var(--spacing-3) !important;
+    border-radius: var(--radius-md) !important;
+}
+
+#log-process-filter:focus,
+#log-severity-filter:focus {
+    border-color: var(--color-primary-500) !important;
+    box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.1) !important;
+    outline: none !important;
+}
+
+#log-process-filter option,
+#log-severity-filter option {
+    background-color: var(--color-bg-secondary) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Service Status Grid */
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--spacing-6);
+    margin-bottom: var(--spacing-8);
+}
+
+/* Service Status Card */
+.service-status-card {
+    background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 100%);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-6);
+    transition: all var(--transition-base);
+    position: relative;
+    overflow: hidden;
+}
+
+.service-status-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--color-primary-500), var(--color-primary-600));
+    transform: scaleX(0);
+    transform-origin: left;
+    animation: statusSlide 2s ease-in-out infinite;
+}
+
+.service-status-card.online::before {
+    background: linear-gradient(90deg, var(--color-success), var(--color-success-light));
+    animation: statusSlideActive 2s ease-in-out infinite;
+}
+
+.service-status-card.offline::before {
+    background: linear-gradient(90deg, var(--color-danger), var(--color-danger-light));
+    animation: none;
+}
+
+.service-status-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-4px);
+    border-color: var(--color-primary-400);
+}
+
+@keyframes statusSlide {
+    0%, 100% { transform: scaleX(0); }
+    50% { transform: scaleX(1); }
+}
+
+@keyframes statusSlideActive {
+    0%, 100% { transform: scaleX(1); }
+    50% { transform: scaleX(0.8); }
+}
+
+.service-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-4);
+}
+
+.service-name {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.service-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: var(--spacing-1) var(--spacing-3);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.service-status-badge.online {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--color-success);
+}
+
+.service-status-badge.offline {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--color-danger);
+}
+
+.service-status-badge.degraded {
+    background: rgba(234, 179, 8, 0.1);
+    color: var(--color-warning);
+}
+
+.service-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.service-status-dot.online {
+    background: var(--color-success);
+}
+
+.service-status-dot.offline {
+    background: var(--color-danger);
+    animation: none;
+}
+
+.service-status-dot.degraded {
+    background: var(--color-warning);
+    animation: pulse-dot 1s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.service-metrics {
+    display: grid;
+    gap: var(--spacing-3);
+}
+
+.metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-3);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+}
+
+.metric-label {
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.metric-value {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
+    font-family: 'Courier New', monospace;
+}
+
+/* Activity Timeline */
+.timeline-section {
+    margin-bottom: var(--spacing-8);
+}
+
+.timeline {
+    position: relative;
+    padding-left: var(--spacing-8);
+}
+
+.timeline-item {
+    position: relative;
+    padding: var(--spacing-4);
+    margin-bottom: var(--spacing-4);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-fast);
+}
+
+.timeline-item:hover {
+    border-color: var(--color-primary-400);
+    box-shadow: var(--shadow-md);
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: calc(var(--spacing-8) * -1 + 6px);
+    top: var(--spacing-4);
+    width: 12px;
+    height: 12px;
+    background: var(--color-primary-500);
+    border: 3px solid var(--color-bg-primary);
+    border-radius: 50%;
+}
+
+.timeline-item.success::before {
+    background: var(--color-success);
+}
+
+.timeline-item.error::before {
+    background: var(--color-danger);
+}
+
+.timeline-item.warning::before {
+    background: var(--color-warning);
+}
+
+.timeline-time {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-1);
+}
+
+.timeline-message {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+/* Uptime Graph Visualization */
+.uptime-chart {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(20px, 1fr));
+    gap: 4px;
+    padding: var(--spacing-4);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-lg);
+    margin-top: var(--spacing-4);
+}
+
+.uptime-bar {
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+    background: var(--color-success);
+    opacity: 0.8;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border: 1px solid transparent;
+}
+
+.uptime-bar:hover {
+    opacity: 1;
+    transform: scaleY(1.2);
+    border-color: var(--color-primary-400);
+}
+
+.uptime-bar.down {
+    background: var(--color-danger);
+}
+
+.uptime-bar.partial {
+    background: var(--color-warning);
+}
+
+/* Stats Metrics Grid */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: var(--spacing-6);
+    margin-bottom: var(--spacing-8);
+}
+
+.stat-card-modern {
+    background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 100%);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-6);
+    position: relative;
+    overflow: hidden;
+    transition: all var(--transition-base);
+}
+
+.stat-card-modern::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--color-primary-500), var(--color-primary-600));
+}
+
+.stat-card-modern:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-4px);
+}
+
+.stat-card-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(59, 130, 246, 0.1);
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-2xl);
+    color: var(--color-primary-500);
+    margin-bottom: var(--spacing-4);
+}
+
+.stat-card-value {
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+    font-family: 'Courier New', monospace;
+}
+
+.stat-card-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Stream Cards - Enhanced */
+.stream-card {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    transition: all var(--transition-base);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+}
+
+.stream-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-primary-500);
+}
+
+/* Make stream card links inherit appearance */
+a:has(.stream-card) {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+}
+
+.stream-thumbnail {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background: linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg-primary) 100%);
+    position: relative;
+}
+
+.stream-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.stream-live-badge {
+    position: absolute;
+    top: var(--spacing-3);
+    left: var(--spacing-3);
+    background: var(--color-danger);
+    color: white;
+    padding: var(--spacing-1) var(--spacing-3);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    animation: pulse 2s infinite;
+}
+
+.stream-live-badge::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+    animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.stream-platform-badge {
+    padding: var(--spacing-1) var(--spacing-3);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+}
+
+.stream-info {
+    padding: var(--spacing-4);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.stream-title {
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.4;
+    min-height: 2.8em;
+}
+
+.stream-username {
+    font-size: var(--font-size-sm);
+    color: var(--color-primary-400);
+    margin-bottom: var(--spacing-3);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.stream-stats {
+    display: flex;
+    gap: var(--spacing-4);
+    padding-top: var(--spacing-3);
+    border-top: 1px solid var(--color-border-primary);
+}
+
+.stream-stat {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.stream-stat i {
+    color: var(--color-primary-400);
+}
+
+.stream-stat-value {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+/* Filter Bar Enhanced */
+.filter-bar {
+    display: flex;
+    gap: var(--spacing-3);
+    flex-wrap: wrap;
+    margin-bottom: var(--spacing-6);
+    padding: var(--spacing-4);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-lg);
+}
+
+.platform-filter {
+    padding: var(--spacing-2) var(--spacing-4);
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.platform-filter:hover {
+    border-color: var(--color-primary-500);
+    color: var(--color-text-primary);
+}
+
+.platform-filter.active {
+    border-color: var(--color-primary-500);
+    background: var(--color-primary-500);
+    color: white;
+}
+
+/* Empty State Enhanced */
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+    background: var(--color-bg-primary);
+    border: 1px dashed var(--color-border-primary);
+    border-radius: var(--radius-lg);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-6);
+}
+
+.platform-twitch {
+    background: #9146FF;
+    color: white;
+}
+
+.platform-kick {
+    background: #53FC18;
+    color: black;
+}
+
+.platform-youtube {
+    background: #FF0000;
+    color: white;
+}
+
+.platform-tiktok {
+    background: black;
+    color: white;
+    border: 1px solid #FE2C55;
+}
+
+.platform-trovo {
+    background: #19D760;
+    color: white;
+}
+
+.platform-facebook {
+    background: #1877F2;
+    color: white;
+}
+
+.platform-instagram {
+    background: linear-gradient(45deg, #F58529, #DD2A7B, #8134AF);
+    color: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .status-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .metrics-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+
+    .stream-card {
+        grid-column: span 1;
+    }
+}
+</style>
+
+<div class="app-layout">
+    <%- include('partials/sidebar', {
+        user: user,
+        currentPage: 'status'
+    }) %>
+
+    <div class="main-content">
+        <%- include('partials/topbar', {
+            breadcrumbs: [
+                { label: 'Dashboard', url: '/dashboard' },
+                { label: 'System Status', url: '/status' }
+            ],
+            user: user
+        }) %>
+
+        <div class="content">
+            <div class="content-container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div class="page-header-top">
+                        <div>
+                            <h1 class="page-title">System Status</h1>
+                            <p class="page-description">
+                                Real-time monitoring of bot services, metrics, and live streams
+                            </p>
+                        </div>
+                        <div style="display: flex; gap: var(--spacing-3); align-items: center;">
+                            <span class="refresh-indicator">
+                                <i class="fas fa-circle" style="color: var(--color-success); font-size: 8px;"></i>
+                                Real-time Updates
+                            </span>
+                            <button class="btn btn-primary" onclick="location.reload()">
+                                <i class="fas fa-refresh"></i>
+                                Refresh Now
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Service Status Cards -->
+                <div class="section-header">
+                    <div class="section-title">
+                        <i class="fas fa-heartbeat"></i>
+                        Service Status
+                    </div>
+                </div>
+                <div class="status-grid">
+                    <!-- Bot Service -->
+                    <div class="service-status-card online">
+                        <div class="service-header">
+                            <div class="service-name">
+                                <i class="fas fa-robot" style="color: var(--color-primary-500);"></i>
+                                Bot Service
+                            </div>
+                            <span class="service-status-badge online">
+                                <span class="service-status-dot online"></span>
+                                Online
+                            </span>
+                        </div>
+                        <div class="service-metrics">
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-server"></i> Servers</div>
+                                <div class="metric-value" id="bot-servers">--</div>
+                            </div>
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-users"></i> Total Users</div>
+                                <div class="metric-value" id="bot-users">--</div>
+                            </div>
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-clock"></i> Uptime</div>
+                                <div class="metric-value" id="bot-uptime">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Database Service -->
+                    <div class="service-status-card online">
+                        <div class="service-header">
+                            <div class="service-name">
+                                <i class="fas fa-database" style="color: var(--color-primary-500);"></i>
+                                Database
+                            </div>
+                            <span class="service-status-badge online">
+                                <span class="service-status-dot online"></span>
+                                Online
+                            </span>
+                        </div>
+                        <div class="service-metrics">
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-table"></i> Tables</div>
+                                <div class="metric-value">--</div>
+                            </div>
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-database"></i> Size</div>
+                                <div class="metric-value">--</div>
+                            </div>
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-link"></i> Connections</div>
+                                <div class="metric-value">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Cache Service -->
+                    <div class="service-status-card online">
+                        <div class="service-header">
+                            <div class="service-name">
+                                <i class="fas fa-bolt" style="color: var(--color-primary-500);"></i>
+                                Cache System
+                            </div>
+                            <span class="service-status-badge online">
+                                <span class="service-status-dot online"></span>
+                                Online
+                            </span>
+                        </div>
+                        <div class="service-metrics">
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-memory"></i> Hit Rate</div>
+                                <div class="metric-value">--</div>
+                            </div>
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-database"></i> Entries</div>
+                                <div class="metric-value">--</div>
+                            </div>
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-hourglass-end"></i> Response Time</div>
+                                <div class="metric-value">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- API Service -->
+                    <div class="service-status-card online">
+                        <div class="service-header">
+                            <div class="service-name">
+                                <i class="fas fa-plug" style="color: var(--color-primary-500);"></i>
+                                API Integrations
+                            </div>
+                            <span class="service-status-badge online">
+                                <span class="service-status-dot online"></span>
+                                Online
+                            </span>
+                        </div>
+                        <div class="service-metrics">
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-check-circle"></i> Healthy</div>
+                                <div class="metric-value">--</div>
+                            </div>
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-exclamation-circle"></i> Degraded</div>
+                                <div class="metric-value">--</div>
+                            </div>
+                            <div class="metric-row">
+                                <div class="metric-label"><i class="fas fa-times-circle"></i> Unavailable</div>
+                                <div class="metric-value">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Metrics -->
+                <div class="section-header" style="margin-top: var(--spacing-8);">
+                    <div class="section-title">
+                        <i class="fas fa-tachometer-alt"></i>
+                        System Metrics
+                    </div>
+                </div>
+                <div class="metrics-grid">
+                    <div class="stat-card-modern">
+                        <div class="stat-card-icon">
+                            <i class="fas fa-microchip"></i>
+                        </div>
+                        <div class="stat-card-value" id="cpu-usage">--</div>
+                        <div class="stat-card-label">CPU Usage</div>
+                    </div>
+
+                    <div class="stat-card-modern">
+                        <div class="stat-card-icon">
+                            <i class="fas fa-memory"></i>
+                        </div>
+                        <div class="stat-card-value" id="memory-usage">--</div>
+                        <div class="stat-card-label">Memory Usage</div>
+                    </div>
+
+                    <div class="stat-card-modern">
+                        <div class="stat-card-icon">
+                            <i class="fas fa-network-wired"></i>
+                        </div>
+                        <div class="stat-card-value" id="network-io">--</div>
+                        <div class="stat-card-label">Network I/O</div>
+                    </div>
+
+                    <div class="stat-card-modern">
+                        <div class="stat-card-icon">
+                            <i class="fas fa-hdd"></i>
+                        </div>
+                        <div class="stat-card-value" id="disk-usage">--</div>
+                        <div class="stat-card-label">Disk Usage</div>
+                    </div>
+                </div>
+
+                <!-- Bot Statistics -->
+                <% if (typeof generalStats !== 'undefined' && generalStats) { %>
+                <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-8);">
+                    <div class="stat-card-modern">
+                        <div class="stat-card-icon">
+                            <i class="fas fa-video" style="color: var(--color-danger);"></i>
+                        </div>
+                        <div class="stat-card-value"><%= typeof liveStreamers !== 'undefined' ? liveStreamers.length : 0 %></div>
+                        <div class="stat-card-label">Currently Live</div>
+                    </div>
+                    <div class="stat-card-modern">
+                        <div class="stat-card-icon">
+                            <i class="fas fa-server" style="color: var(--color-primary-400);"></i>
+                        </div>
+                        <div class="stat-card-value"><%= generalStats.totalGuilds || 0 %></div>
+                        <div class="stat-card-label">Total Servers</div>
+                    </div>
+                    <div class="stat-card-modern">
+                        <div class="stat-card-icon">
+                            <i class="fas fa-users" style="color: var(--color-success);"></i>
+                        </div>
+                        <div class="stat-card-value"><%= generalStats.totalStreamers || 0 %></div>
+                        <div class="stat-card-label">Tracked Streamers</div>
+                    </div>
+                    <div class="stat-card-modern">
+                        <div class="stat-card-icon">
+                            <i class="fas fa-bell" style="color: var(--color-accent-purple);"></i>
+                        </div>
+                        <div class="stat-card-value"><%= generalStats.totalAnnouncements || 0 %></div>
+                        <div class="stat-card-label">Announcements Sent</div>
+                    </div>
+                </div>
+                <% } %>
+
+                <!-- Activity Timeline -->
+                <div class="timeline-section">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <i class="fas fa-history"></i>
+                            Recent Activity
+                        </div>
+                    </div>
+                    <div class="timeline" id="activity-timeline">
+                        <div style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                            <i class="fas fa-spinner fa-spin"></i> Loading activity...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Uptime Graph -->
+                <div class="card-modern" style="margin-bottom: var(--spacing-8);">
+                    <div class="card-modern-header">
+                        <h2 class="card-modern-title">
+                            <i class="fas fa-chart-bar"></i>
+                            Service Uptime (Last 30 Days)
+                        </h2>
+                        <span class="card-modern-badge" style="background: rgba(34, 197, 94, 0.1); color: var(--color-success);">
+                            99.9% Uptime
+                        </span>
+                    </div>
+                    <div class="card-modern-body">
+                        <p style="color: var(--color-text-muted); margin-bottom: var(--spacing-4);">
+                            Each block represents one day. Hover to see details.
+                        </p>
+                        <div class="uptime-chart" id="uptime-chart">
+                            <!-- Generated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Server Statistics Section -->
+                <div class="card-modern" style="margin-bottom: var(--spacing-8);">
+                    <div class="card-modern-header">
+                        <h2 class="card-modern-title">
+                            <i class="fas fa-server"></i>
+                            Server Statistics
+                        </h2>
+                        <span class="badge badge-success" id="stats-refresh-indicator">Live</span>
+                    </div>
+                    <div class="card-modern-body">
+                        <div class="grid grid-cols-3" style="gap: var(--spacing-6);">
+                            <!-- PM2 Processes -->
+                            <div>
+                                <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-4); color: var(--color-text-primary);">
+                                    <i class="fas fa-cogs"></i> PM2 Processes
+                                </h3>
+                                <div id="pm2-processes-list">
+                                    <div style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- System Resources -->
+                            <div>
+                                <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-4); color: var(--color-text-primary);">
+                                    <i class="fas fa-microchip"></i> System Resources
+                                </h3>
+                                <div id="system-stats">
+                                    <div style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bot Information -->
+                            <div>
+                                <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-4); color: var(--color-text-primary);">
+                                    <i class="fas fa-robot"></i> Bot Information
+                                </h3>
+                                <div id="bot-stats">
+                                    <div style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Logs Section -->
+                <div class="card-modern">
+                    <div class="card-modern-header">
+                        <h2 class="card-modern-title">
+                            <i class="fas fa-file-alt"></i>
+                            Recent Logs
+                        </h2>
+                        <div style="display: flex; gap: var(--spacing-3);">
+                            <select id="log-process-filter" class="form-control" style="width: 200px;">
+                                <option value="">All Processes</option>
+                            </select>
+                            <select id="log-severity-filter" class="form-control" style="width: 150px;">
+                                <option value="">All Levels</option>
+                                <option value="error">Errors</option>
+                                <option value="warn">Warnings</option>
+                                <option value="info">Info</option>
+                                <option value="debug">Debug</option>
+                            </select>
+                            <button class="btn btn-secondary" onclick="refreshLogs()">
+                                <i class="fas fa-refresh"></i>
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div style="padding: 0;">
+                        <div id="logs-container" style="max-height: 500px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: var(--font-size-sm);">
+                            <div style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                                <i class="fas fa-spinner fa-spin"></i> Loading logs...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Platform Filters -->
+                <% if (typeof liveStreamers !== 'undefined' && liveStreamers.length > 0) { %>
+                <div style="margin-top: var(--spacing-8);">
+                    <div class="section-header">
+                        <div class="section-title">
+                            <i class="fas fa-video"></i>
+                            Live Streams
+                        </div>
+                    </div>
+                    <div class="filter-bar">
+                        <button class="platform-filter active" data-platform="all">
+                            <i class="fas fa-globe"></i>
+                            All Platforms
+                        </button>
+                        <%
+                        // Get all unique platforms from all streamers (including multi-platform)
+                        const allPlatformsList = [];
+                        liveStreamers.forEach(s => {
+                            if (s.allPlatforms) {
+                                allPlatformsList.push(...s.allPlatforms);
+                            } else {
+                                allPlatformsList.push(s.platform);
+                            }
+                        });
+                        const platforms = [...new Set(allPlatformsList)];
+                        const platformIcons = {
+                            twitch: 'fab fa-twitch',
+                            kick: 'kick',
+                            youtube: 'fab fa-youtube',
+                            tiktok: 'fab fa-tiktok',
+                            trovo: 'trovo',
+                            facebook: 'fab fa-facebook',
+                            instagram: 'fab fa-instagram'
+                        };
+                        platforms.forEach(platform => {
+                        %>
+                            <button class="platform-filter" data-platform="<%= platform %>">
+                                <% if (platform === 'kick') { %>
+                                    <img src="/images/kick.png" alt="Kick" style="width: 16px; height: 16px; display: inline-block;">
+                                <% } else if (platform === 'trovo') { %>
+                                    <img src="/images/trovo.png" alt="Trovo" style="width: 16px; height: 16px; display: inline-block;">
+                                <% } else { %>
+                                    <i class="<%= platformIcons[platform] || 'fas fa-video' %>"></i>
+                                <% } %>
+                                <%= platform.charAt(0).toUpperCase() + platform.slice(1) %>
+                            </button>
+                        <% }); %>
+                    </div>
+
+                    <!-- Live Stream Grid -->
+                    <div class="grid grid-cols-3" id="streamsGrid" style="margin-top: var(--spacing-6);">
+                        <% liveStreamers.forEach(stream => {
+                            // Calculate uptime
+                            let uptimeText = 'Live';
+                            if (stream.stream_started_at) {
+                                const startTime = new Date(stream.stream_started_at);
+                                const now = new Date();
+                                const uptimeMinutes = Math.floor((now - startTime) / 1000 / 60);
+                                const hours = Math.floor(uptimeMinutes / 60);
+                                const minutes = uptimeMinutes % 60;
+                                uptimeText = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                            }
+
+                            // Get viewer count
+                            const viewers = stream.viewer_count || stream.current_viewers || 0;
+
+                            // Get all platforms for data attribute
+                            const allPlatformsAttr = stream.allPlatforms ? stream.allPlatforms.join(',') : stream.platform;
+                        %>
+                            <%
+                            // Function to generate platform-specific URL
+                            function getPlatformUrl(platform, username) {
+                                const platformLower = platform.toLowerCase();
+                                if (platformLower === 'twitch') return `https://twitch.tv/${username}`;
+                                else if (platformLower === 'kick') return `https://kick.com/${username}`;
+                                else if (platformLower === 'youtube') return `https://youtube.com/@${username}/live`;
+                                else if (platformLower === 'tiktok') return `https://tiktok.com/@${username}/live`;
+                                else if (platformLower === 'trovo') return `https://trovo.live/${username}`;
+                                else if (platformLower === 'facebook') return `https://facebook.com/${username}/live`;
+                                else if (platformLower === 'instagram') return `https://instagram.com/${username}/live`;
+                                return '';
+                            }
+                            %>
+                                <div class="stream-card" data-platform="<%= stream.platform %>" data-all-platforms="<%= allPlatformsAttr %>" style="position: relative;">
+                                    <div class="stream-thumbnail">
+                                        <% if (stream.thumbnail_url) { %>
+                                            <img src="<%= stream.thumbnail_url %>" alt="<%= stream.display_name || stream.username %> thumbnail">
+                                        <% } %>
+
+                                        <span class="stream-live-badge">
+                                            Live
+                                        </span>
+
+                                        <%
+                                        // Display all platforms if multi-platform, otherwise single platform
+                                        const platforms = stream.allPlatforms || [stream.platform];
+                                        const displayPlatforms = platforms.slice(0, 3); // Show max 3 platforms
+                                        const extraCount = platforms.length > 3 ? platforms.length - 3 : 0;
+                                        %>
+
+                                        <div style="position: absolute; top: var(--spacing-3); right: var(--spacing-3); display: flex; gap: var(--spacing-2); flex-wrap: wrap; max-width: 60%; justify-content: flex-end; align-items: flex-start; z-index: 10;">
+                                            <% displayPlatforms.forEach((platform, index) => {
+                                                const platformUrl = getPlatformUrl(platform, stream.username);
+                                            %>
+                                            <a href="<%= platformUrl %>" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: inherit; transition: transform var(--transition-fast);" onmouseenter="this.style.transform='scale(1.05)'" onmouseleave="this.style.transform='scale(1)'">
+                                                <span class="stream-platform-badge platform-<%= platform %>" style="cursor: pointer;">
+                                                    <% if (platform === 'twitch') { %>
+                                                        <i class="fab fa-twitch"></i>
+                                                    <% } else if (platform === 'kick') { %>
+                                                        <img src="/images/kick.png" alt="Kick" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;">
+                                                    <% } else if (platform === 'youtube') { %>
+                                                        <i class="fab fa-youtube"></i>
+                                                    <% } else if (platform === 'tiktok') { %>
+                                                        <i class="fab fa-tiktok"></i>
+                                                    <% } else if (platform === 'trovo') { %>
+                                                        <img src="/images/trovo.png" alt="Trovo" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle;">
+                                                    <% } else if (platform === 'facebook') { %>
+                                                        <i class="fab fa-facebook"></i>
+                                                    <% } else if (platform === 'instagram') { %>
+                                                        <i class="fab fa-instagram"></i>
+                                                    <% } %>
+                                                    <span><%= platform %></span>
+                                                </span>
+                                            </a>
+                                            <% }); %>
+
+                                            <% if (extraCount > 0) { %>
+                                            <span class="stream-platform-badge" style="background: var(--color-bg-secondary); color: var(--color-text-muted);">
+                                                +<%= extraCount %>
+                                            </span>
+                                            <% } %>
+                                        </div>
+                                    </div>
+
+                                    <div class="stream-info">
+                                        <h3 class="stream-title">
+                                            <%= stream.title || stream.stream_title || 'Untitled Stream' %>
+                                        </h3>
+
+                                        <div class="stream-username">
+                                            <i class="fas fa-user"></i>
+                                            <%= stream.display_name || stream.username %>
+                                            <% if (stream.allPlatforms && stream.allPlatforms.length > 1) { %>
+                                            <span class="badge badge-primary" style="font-size: var(--font-size-xs); margin-left: var(--spacing-2);">
+                                                Multi-Platform
+                                            </span>
+                                            <% } %>
+                                        </div>
+
+                                        <div class="stream-stats">
+                                            <div class="stream-stat">
+                                                <i class="fas fa-eye"></i>
+                                                <span class="stream-stat-value"><%= viewers.toLocaleString() %></span>
+                                                viewers
+                                            </div>
+                                            <div class="stream-stat">
+                                                <i class="fas fa-clock"></i>
+                                                <span class="stream-stat-value"><%= uptimeText %></span>
+                                            </div>
+                                        </div>
+
+                                        <% if (stream.game_name || stream.category) { %>
+                                        <div style="margin-top: var(--spacing-3);">
+                                            <span class="badge badge-secondary">
+                                                <i class="fas fa-gamepad"></i>
+                                                <%= stream.game_name || stream.category %>
+                                            </span>
+                                        </div>
+                                        <% } %>
+                                    </div>
+                                </div>
+                        <% }); %>
+                    </div>
+                </div>
+                <% } else { %>
+                    <!-- Empty State -->
+                    <div class="empty-state" style="margin-top: var(--spacing-8);">
+                        <div class="empty-state-icon">
+                            <i class="fas fa-video-slash"></i>
+                        </div>
+                        <h2 style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                            No Live Streams
+                        </h2>
+                        <p style="font-size: var(--font-size-base); color: var(--color-text-muted); margin-bottom: var(--spacing-8);">
+                            There are currently no streamers online. Check back later or add more streamers to track.
+                        </p>
+                        <a href="/servers" class="btn btn-primary">
+                            <i class="fas fa-plus"></i>
+                            Manage Streamers
+                        </a>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>
+
+<script>
+// Utility functions
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+function formatUptime(seconds) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+}
+
+function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// Generate uptime chart
+function generateUptimeChart() {
+    const chart = document.getElementById('uptime-chart');
+    chart.innerHTML = '';
+
+    // Generate 30 days of data
+    for (let i = 29; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+
+        // Random uptime simulation (90-100%)
+        const uptime = Math.random() * 10 + 90;
+        let status = '';
+
+        if (uptime < 95) status = 'partial';
+        else if (uptime < 99) status = '';
+
+        const bar = document.createElement('div');
+        bar.className = `uptime-bar ${status}`;
+        bar.title = `${date.toDateString()}: ${uptime.toFixed(1)}% uptime`;
+        chart.appendChild(bar);
+    }
+}
+
+// Generate activity timeline
+function generateActivityTimeline() {
+    const timeline = document.getElementById('activity-timeline');
+    const activities = [
+        { time: 'Just now', message: 'All systems operational', type: 'success' },
+        { time: '2 minutes ago', message: 'Cache system updated', type: 'success' },
+        { time: '15 minutes ago', message: 'Bot synchronized with 156 servers', type: 'success' },
+        { time: '1 hour ago', message: 'API health check passed', type: 'success' },
+        { time: '3 hours ago', message: 'Database backup completed', type: 'success' }
+    ];
+
+    timeline.innerHTML = activities.map(activity => `
+        <div class="timeline-item ${activity.type}">
+            <div class="timeline-time">${activity.time}</div>
+            <div class="timeline-message">${activity.message}</div>
+        </div>
+    `).join('');
+}
+
+// Fetch and display server stats
+async function fetchServerStats() {
+    try {
+        const response = await fetch('/api/status/server-stats');
+        const data = await response.json();
+
+        if (data.success) {
+            // Update PM2 processes
+            const pm2List = document.getElementById('pm2-processes-list');
+            if (data.processes && data.processes.length > 0) {
+                pm2List.innerHTML = data.processes.map(proc => {
+                    const statusColor = proc.status === 'online' ? 'var(--color-success)' :
+                                       proc.status === 'errored' ? 'var(--color-danger)' :
+                                       'var(--color-warning)';
+                    const uptime = Date.now() - proc.uptime;
+                    return `
+                        <div style="padding: var(--spacing-3); background: var(--color-bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--spacing-2);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-2);">
+                                <span style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">${proc.name}</span>
+                                <span style="color: ${statusColor}; font-size: var(--font-size-xs);">
+                                    <i class="fas fa-circle" style="font-size: 8px;"></i> ${proc.status}
+                                </span>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-2); font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                <div><i class="fas fa-microchip"></i> CPU: ${proc.cpu}%</div>
+                                <div><i class="fas fa-memory"></i> RAM: ${formatBytes(proc.memory)}</div>
+                                <div><i class="fas fa-clock"></i> Uptime: ${formatUptime(uptime / 1000)}</div>
+                                <div><i class="fas fa-redo"></i> Restarts: ${proc.restarts}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Populate process filter
+                const processFilter = document.getElementById('log-process-filter');
+                const currentValue = processFilter.value;
+                processFilter.innerHTML = '<option value="">All Processes</option>' +
+                    data.processes.map(proc => `<option value="${proc.name}">${proc.name}</option>`).join('');
+                processFilter.value = currentValue;
+            } else {
+                pm2List.innerHTML = '<div style="text-align: center; padding: var(--spacing-4); color: var(--color-text-muted);">No PM2 processes found</div>';
+            }
+
+            // Update system stats
+            const systemStats = document.getElementById('system-stats');
+            if (data.system) {
+                const sys = data.system;
+                systemStats.innerHTML = `
+                    <div style="padding: var(--spacing-3); background: var(--color-bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--spacing-3);">
+                        <div style="margin-bottom: var(--spacing-3);">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: var(--spacing-1);">
+                                <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                    <i class="fas fa-microchip"></i> CPU Usage
+                                </span>
+                                <span style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                    ${sys.cpu.usage}%
+                                </span>
+                            </div>
+                            <div style="background: var(--color-bg-primary); height: 8px; border-radius: var(--radius-full); overflow: hidden;">
+                                <div style="background: linear-gradient(90deg, var(--color-primary-500), var(--color-primary-400)); height: 100%; width: ${sys.cpu.usage}%; transition: width 0.3s ease;"></div>
+                            </div>
+                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
+                                ${sys.cpu.cores} cores
+                            </div>
+                        </div>
+
+                        <div>
+                            <div style="display: flex; justify-content: space-between; margin-bottom: var(--spacing-1);">
+                                <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                    <i class="fas fa-memory"></i> Memory Usage
+                                </span>
+                                <span style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                    ${sys.memory.usagePercent.toFixed(1)}%
+                                </span>
+                            </div>
+                            <div style="background: var(--color-bg-primary); height: 8px; border-radius: var(--radius-full); overflow: hidden;">
+                                <div style="background: linear-gradient(90deg, var(--color-success), var(--color-success-light)); height: 100%; width: ${sys.memory.usagePercent}%; transition: width 0.3s ease;"></div>
+                            </div>
+                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
+                                ${formatBytes(sys.memory.used)} / ${formatBytes(sys.memory.total)}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr; gap: var(--spacing-2); font-size: var(--font-size-sm);">
+                        <div style="padding: var(--spacing-2); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                            <i class="fas fa-clock"></i> Uptime: <strong>${formatUptime(sys.uptime)}</strong>
+                        </div>
+                        <div style="padding: var(--spacing-2); background: var(--color-bg-secondary); border-radius: var(--radius-md);">
+                            <i class="fas fa-server"></i> Platform: <strong>${sys.platform}</strong>
+                        </div>
+                    </div>
+                `;
+
+                // Also update the top-level System Metrics cards
+                document.getElementById('cpu-usage').textContent = `${sys.cpu.usage}%`;
+                document.getElementById('memory-usage').textContent = `${sys.memory.usagePercent.toFixed(1)}%`;
+                // Network and Disk from API
+                if (sys.network) {
+                    document.getElementById('network-io').textContent = `RX: ${sys.network.rx} / TX: ${sys.network.tx}`;
+                } else {
+                    document.getElementById('network-io').textContent = 'N/A';
+                }
+                if (sys.disk) {
+                    document.getElementById('disk-usage').textContent = `${sys.disk.used} / ${sys.disk.total} (${sys.disk.percent}%)`;
+                } else {
+                    document.getElementById('disk-usage').textContent = 'N/A';
+                }
+            }
+
+            // Update bot stats
+            const botStats = document.getElementById('bot-stats');
+            if (data.bot) {
+                botStats.innerHTML = `
+                    <div style="display: grid; gap: var(--spacing-3);">
+                        <div style="padding: var(--spacing-4); background: var(--color-bg-secondary); border-radius: var(--radius-md); text-align: center;">
+                            <div style="font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400); margin-bottom: var(--spacing-2);">
+                                ${data.bot.guilds}
+                            </div>
+                            <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                <i class="fas fa-server"></i> Active Servers
+                            </div>
+                        </div>
+
+                        <div style="padding: var(--spacing-4); background: var(--color-bg-secondary); border-radius: var(--radius-md); text-align: center;">
+                            <div style="font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-success); margin-bottom: var(--spacing-2);">
+                                ${data.bot.users.toLocaleString()}
+                            </div>
+                            <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                <i class="fas fa-users"></i> Total Users
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Also update the top-level Bot Service card
+                document.getElementById('bot-servers').textContent = data.bot.guilds;
+                document.getElementById('bot-users').textContent = data.bot.users.toLocaleString();
+                document.getElementById('bot-uptime').textContent = formatUptime(data.system.uptime);
+            }
+
+            // Update database metrics
+            if (data.database) {
+                const dbCards = document.querySelectorAll('.service-status-card');
+                const dbCard = dbCards[1]; // Database is the 2nd card (index 1)
+                if (dbCard) {
+                    const dbMetrics = dbCard.querySelectorAll('.metric-value');
+                    if (dbMetrics[0]) dbMetrics[0].textContent = data.database.tables || '--';
+                    if (dbMetrics[1]) dbMetrics[1].textContent = data.database.size || '--';
+                    if (dbMetrics[2]) dbMetrics[2].textContent = data.database.connections || '--';
+
+                    // Update status badge
+                    const dbBadge = dbCard.querySelector('.service-status-badge');
+                    const dbDot = dbCard.querySelector('.service-status-dot');
+                    if (data.database.status === 'online') {
+                        dbBadge.className = 'service-status-badge online';
+                        dbDot.className = 'service-status-dot online';
+                        dbBadge.innerHTML = '<span class="service-status-dot online"></span> Online';
+                    } else {
+                        dbBadge.className = 'service-status-badge offline';
+                        dbDot.className = 'service-status-dot offline';
+                        dbBadge.innerHTML = '<span class="service-status-dot offline"></span> Offline';
+                    }
+                }
+            }
+
+            // Update cache metrics
+            if (data.cache) {
+                const cacheCards = document.querySelectorAll('.service-status-card');
+                const cacheCard = cacheCards[2]; // Cache is the 3rd card (index 2)
+                if (cacheCard) {
+                    const cacheMetrics = cacheCard.querySelectorAll('.metric-value');
+                    if (cacheMetrics[0]) cacheMetrics[0].textContent = data.cache.hitRate || '--';
+                    if (cacheMetrics[1]) cacheMetrics[1].textContent = typeof data.cache.entries !== 'undefined' ? data.cache.entries : '--';
+                    if (cacheMetrics[2]) cacheMetrics[2].textContent = data.cache.responseTime || '--';
+
+                    // Update status badge
+                    const cacheBadge = cacheCard.querySelector('.service-status-badge');
+                    const cacheDot = cacheCard.querySelector('.service-status-dot');
+                    if (data.cache.status === 'online') {
+                        cacheBadge.className = 'service-status-badge online';
+                        cacheDot.className = 'service-status-dot online';
+                        cacheBadge.innerHTML = '<span class="service-status-dot online"></span> Online';
+                    } else {
+                        cacheBadge.className = 'service-status-badge offline';
+                        cacheDot.className = 'service-status-dot offline';
+                        cacheBadge.innerHTML = '<span class="service-status-dot offline"></span> Offline';
+                    }
+                }
+            }
+
+            // Update API metrics
+            if (data.api) {
+                const apiCards = document.querySelectorAll('.service-status-card');
+                const apiCard = apiCards[3]; // API is the 4th card (index 3)
+                if (apiCard) {
+                    const apiMetrics = apiCard.querySelectorAll('.metric-value');
+                    if (apiMetrics[0]) apiMetrics[0].textContent = data.api.healthy || 0;
+                    if (apiMetrics[1]) apiMetrics[1].textContent = data.api.degraded || 0;
+                    if (apiMetrics[2]) apiMetrics[2].textContent = data.api.unavailable || 0;
+
+                    // Update status badge based on health
+                    const apiBadge = apiCard.querySelector('.service-status-badge');
+                    const apiDot = apiCard.querySelector('.service-status-dot');
+                    const totalApis = (data.api.healthy || 0) + (data.api.degraded || 0) + (data.api.unavailable || 0);
+                    if (totalApis > 0 && data.api.unavailable === 0 && data.api.degraded === 0) {
+                        apiBadge.className = 'service-status-badge online';
+                        apiDot.className = 'service-status-dot online';
+                        apiBadge.innerHTML = '<span class="service-status-dot online"></span> Online';
+                    } else if (data.api.healthy > 0) {
+                        apiBadge.className = 'service-status-badge degraded';
+                        apiDot.className = 'service-status-dot degraded';
+                        apiBadge.innerHTML = '<span class="service-status-dot degraded"></span> Degraded';
+                    } else {
+                        apiBadge.className = 'service-status-badge offline';
+                        apiDot.className = 'service-status-dot offline';
+                        apiBadge.innerHTML = '<span class="service-status-dot offline"></span> Offline';
+                    }
+                }
+            }
+
+            // Update Live Streams statistics
+            if (data.liveStreams) {
+                const liveStreamsContainer = document.getElementById('live-streams-list');
+                if (liveStreamsContainer) {
+                    if (data.liveStreams.totalAnnouncements > 0) {
+                        let platformsHtml = '';
+                        if (data.liveStreams.platforms) {
+                            for (const [platform, count] of Object.entries(data.liveStreams.platforms)) {
+                                const platformColors = {
+                                    twitch: '#9146FF',
+                                    youtube: '#FF0000',
+                                    kick: '#53FC18',
+                                    tiktok: '#000000',
+                                    trovo: '#1BC981',
+                                    facebook: '#1877F2',
+                                    instagram: '#E4405F'
+                                };
+                                const color = platformColors[platform.toLowerCase()] || '#6B7280';
+                                platformsHtml += `
+                                    <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-3); background: var(--color-bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--spacing-2);">
+                                        <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                            <span style="display: inline-block; width: 12px; height: 12px; border-radius: var(--radius-full); background: ${color};"></span>
+                                            <span style="font-weight: var(--font-weight-semibold); text-transform: capitalize;">${platform}</span>
+                                        </div>
+                                        <span style="color: var(--color-text-muted);">${count} live</span>
+                                    </div>
+                                `;
+                            }
+                        }
+                        liveStreamsContainer.innerHTML = `
+                            <div style="margin-bottom: var(--spacing-4); padding: var(--spacing-4); background: var(--color-bg-secondary); border-radius: var(--radius-lg); text-align: center;">
+                                <div style="font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400); margin-bottom: var(--spacing-2);">
+                                    ${data.liveStreams.totalAnnouncements}
+                                </div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                    Total Live Streams
+                                </div>
+                                <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-top: var(--spacing-2);">
+                                    ${data.liveStreams.activeStreamers} Unique Streamers
+                                </div>
+                            </div>
+                            ${platformsHtml}
+                        `;
+                    } else {
+                        liveStreamsContainer.innerHTML = `
+                            <div style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                                <i class="fas fa-video" style="font-size: 3rem; opacity: 0.3; margin-bottom: var(--spacing-4);"></i>
+                                <h3 style="font-size: var(--font-size-lg); margin-bottom: var(--spacing-2);">No Live Streams</h3>
+                                <p>There are currently no streamers online. Check back later or add more streamers to track.</p>
+                            </div>
+                        `;
+                    }
+                }
+            }
+
+            // Update refresh indicator
+            document.getElementById('stats-refresh-indicator').textContent = 'Live';
+            document.getElementById('stats-refresh-indicator').className = 'badge badge-success';
+        }
+    } catch (error) {
+        console.error('Failed to fetch server stats:', error);
+        document.getElementById('stats-refresh-indicator').textContent = 'Error';
+        document.getElementById('stats-refresh-indicator').className = 'badge badge-danger';
+    }
+}
+
+// Fetch and display logs
+async function fetchLogs() {
+    try {
+        const processFilter = document.getElementById('log-process-filter');
+        const severityFilter = document.getElementById('log-severity-filter');
+
+        const response = await fetch('/api/status/logs');
+        const data = await response.json();
+
+        if (data.success && data.logs) {
+            // Populate process filter on first load
+            if (data.processNames && processFilter.options.length === 1) {
+                data.processNames.forEach(procName => {
+                    const option = document.createElement('option');
+                    option.value = procName;
+                    option.textContent = procName;
+                    processFilter.appendChild(option);
+                });
+            }
+
+            const logsContainer = document.getElementById('logs-container');
+
+            // Apply filters
+            let filteredLogs = data.logs;
+
+            if (processFilter.value) {
+                filteredLogs = filteredLogs.filter(log => log.process === processFilter.value);
+            }
+
+            if (severityFilter.value) {
+                filteredLogs = filteredLogs.filter(log => log.type === severityFilter.value);
+            }
+
+            if (filteredLogs.length === 0) {
+                logsContainer.innerHTML = `
+                    <div style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">
+                        <i class="fas fa-inbox"></i> No logs found
+                    </div>
+                `;
+                return;
+            }
+
+            logsContainer.innerHTML = filteredLogs.map(log => {
+                const severityColors = {
+                    error: '#ef4444',
+                    warn: '#f59e0b',
+                    info: '#3b82f6',
+                    debug: '#6b7280'
+                };
+
+                const severityIcons = {
+                    error: 'fa-times-circle',
+                    warn: 'fa-exclamation-triangle',
+                    info: 'fa-info-circle',
+                    debug: 'fa-bug'
+                };
+
+                const color = severityColors[log.type] || '#6b7280';
+                const icon = severityIcons[log.type] || 'fa-circle';
+
+                return `
+                    <div style="padding: var(--spacing-2) var(--spacing-4); border-bottom: 1px solid var(--color-border-primary); display: flex; gap: var(--spacing-3); align-items: start; hover:background: rgba(255,255,255,0.02);">
+                        <span style="color: var(--color-text-muted); font-size: var(--font-size-xs); min-width: 120px; flex-shrink: 0;">
+                            <strong>${log.process}</strong>
+                        </span>
+                        <span style="color: ${color}; min-width: 20px; flex-shrink: 0;">
+                            <i class="fas ${icon}"></i>
+                        </span>
+                        <span style="flex: 1; word-break: break-word; color: var(--color-text-secondary); font-size: var(--font-size-xs); line-height: 1.5;">
+                            ${escapeHtml(log.message)}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+
+            // Keep scroll position at top for new logs
+            logsContainer.scrollTop = 0;
+        }
+    } catch (error) {
+        console.error('Failed to fetch logs:', error);
+        document.getElementById('logs-container').innerHTML = `
+            <div style="text-align: center; padding: var(--spacing-8); color: var(--color-danger);">
+                <i class="fas fa-exclamation-triangle"></i> Failed to load logs: ${error.message}
+            </div>
+        `;
+    }
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+function refreshLogs() {
+    fetchLogs();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const platformFilters = document.querySelectorAll('.platform-filter');
+    const streamCards = document.querySelectorAll('.stream-card');
+
+    // Platform filtering
+    platformFilters.forEach(filter => {
+        filter.addEventListener('click', () => {
+            const platform = filter.dataset.platform;
+
+            // Update active state
+            platformFilters.forEach(f => f.classList.remove('active'));
+            filter.classList.add('active');
+
+            // Filter streams - show card if streamer is live on the selected platform
+            streamCards.forEach(card => {
+                const cardPlatform = card.dataset.platform;
+                const allPlatforms = card.dataset.allPlatforms;
+
+                if (platform === 'all') {
+                    card.style.display = 'block';
+                } else if (allPlatforms) {
+                    // Check if the platform is in the list of all platforms
+                    const platformList = allPlatforms.split(',');
+                    if (platformList.includes(platform)) {
+                        card.style.display = 'block';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                } else if (cardPlatform === platform) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+    });
+
+    // Initial load of uptime chart and activity timeline
+    generateUptimeChart();
+    generateActivityTimeline();
+
+    // Initial load of server stats and logs
+    fetchServerStats();
+    fetchLogs();
+
+    // Auto-refresh stats every 15 seconds
+    setInterval(fetchServerStats, 15000);
+
+    // Auto-refresh logs every 30 seconds
+    setInterval(fetchLogs, 30000);
+
+    // Log filter listeners
+    document.getElementById('log-process-filter').addEventListener('change', fetchLogs);
+    document.getElementById('log-severity-filter').addEventListener('change', fetchLogs);
+
+    // Auto-refresh entire page every 60 seconds for live streams
+    let autoRefreshEnabled = true;
+    const autoRefreshInterval = setInterval(() => {
+        if (autoRefreshEnabled && document.visibilityState === 'visible') {
+            location.reload();
+        }
+    }, 60000); // 60 seconds
+
+    // Pause auto-refresh when page is hidden
+    document.addEventListener('visibilitychange', () => {
+        autoRefreshEnabled = document.visibilityState === 'visible';
+        if (autoRefreshEnabled) {
+            fetchServerStats();
+            fetchLogs();
+        }
+    });
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+        clearInterval(autoRefreshInterval);
+    });
+});
+</script>

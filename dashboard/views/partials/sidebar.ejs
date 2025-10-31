@@ -1,0 +1,178 @@
+<!-- Modern Sidebar Navigation -->
+<aside class="sidebar" id="sidebar">
+    <!-- Sidebar Brand -->
+    <a href="/" class="sidebar-brand" style="text-decoration: none; color: inherit; display: flex; align-items: center; justify-content: center; gap: var(--spacing-3); padding: var(--spacing-6) var(--spacing-5); cursor: pointer; transition: opacity var(--transition-fast);">
+        <img src="/images/CertiFried.png" alt="CertiFried Logo" class="sidebar-brand-img">
+    </a>
+
+    <style>
+    .sidebar-brand:hover {
+        opacity: 0.8;
+    }
+    </style>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar-nav">
+        <!-- Dashboard Section -->
+        <div class="nav-section">
+            <div class="nav-section-title">Dashboard</div>
+            <a href="/dashboard" class="nav-link <%= currentPage === 'dashboard' ? 'active' : '' %>">
+                <span class="nav-link-icon"><i class="fas fa-server"></i></span>
+                <span class="nav-link-text">My Servers</span>
+            </a>
+            <a href="/settings" class="nav-link <%= currentPage === 'settings' ? 'active' : '' %>">
+                <span class="nav-link-icon"><i class="fas fa-cog"></i></span>
+                <span class="nav-link-text">Settings</span>
+            </a>
+        </div>
+
+        <!-- Features Section -->
+        <div class="nav-section">
+            <div class="nav-section-title">Features</div>
+            <a href="/manage/<%= typeof guildId !== 'undefined' ? guildId : '' %>" class="nav-link <%= currentPage === 'manage' ? 'active' : '' %>">
+                <span class="nav-link-icon"><i class="fas fa-cog"></i></span>
+                <span class="nav-link-text">Server Settings</span>
+            </a>
+            <a href="/commands" class="nav-link <%= currentPage === 'commands' ? 'active' : '' %>">
+                <span class="nav-link-icon"><i class="fas fa-terminal"></i></span>
+                <span class="nav-link-text">Commands</span>
+            </a>
+            <a href="/status" class="nav-link <%= currentPage === 'status' ? 'active' : '' %>">
+                <span class="nav-link-icon"><i class="fas fa-chart-line"></i></span>
+                <span class="nav-link-text">Status</span>
+            </a>
+        </div>
+
+        <!-- Bot Management -->
+        <% if (typeof guildId !== 'undefined') { %>
+        <div class="nav-section">
+            <div class="nav-section-title">Configuration</div>
+            <a href="#" class="nav-link" data-section="streamers">
+                <span class="nav-link-icon"><i class="fas fa-video"></i></span>
+                <span class="nav-link-text">Streamers</span>
+            </a>
+            <a href="#" class="nav-link" data-section="teams">
+                <span class="nav-link-icon"><i class="fas fa-users"></i></span>
+                <span class="nav-link-text">Teams</span>
+            </a>
+            <a href="#" class="nav-link" data-section="moderation">
+                <span class="nav-link-icon"><i class="fas fa-shield-alt"></i></span>
+                <span class="nav-link-text">Moderation</span>
+            </a>
+            <a href="#" class="nav-link" data-section="levels">
+                <span class="nav-link-icon"><i class="fas fa-star"></i></span>
+                <span class="nav-link-text">Levels & XP</span>
+            </a>
+            <a href="#" class="nav-link" data-section="welcome">
+                <span class="nav-link-icon"><i class="fas fa-door-open"></i></span>
+                <span class="nav-link-text">Welcome</span>
+            </a>
+            <a href="#" class="nav-link" data-section="tickets">
+                <span class="nav-link-icon"><i class="fas fa-ticket-alt"></i></span>
+                <span class="nav-link-text">Tickets</span>
+            </a>
+            <a href="#" class="nav-link" data-section="music">
+                <span class="nav-link-icon"><i class="fas fa-music"></i></span>
+                <span class="nav-link-text">Music</span>
+            </a>
+            <a href="#" class="nav-link" data-section="logging">
+                <span class="nav-link-icon"><i class="fas fa-clipboard-list"></i></span>
+                <span class="nav-link-text">Logging</span>
+            </a>
+        </div>
+        <% } %>
+
+        <!-- Support Section -->
+        <div class="nav-section">
+            <div class="nav-section-title">Support</div>
+            <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" class="nav-link">
+                <span class="nav-link-icon"><i class="fab fa-discord"></i></span>
+                <span class="nav-link-text">Discord Server</span>
+            </a>
+            <a href="/donate" class="nav-link <%= currentPage === 'donate' ? 'active' : '' %>">
+                <span class="nav-link-icon"><i class="fas fa-heart"></i></span>
+                <span class="nav-link-text">Donate</span>
+            </a>
+        </div>
+
+        <!-- Admin Section -->
+        <% if (user && user.isSuperAdmin) { %>
+        <div class="nav-section">
+            <div class="nav-section-title">Administration</div>
+            <a href="/super-admin" class="nav-link <%= currentPage === 'super-admin' ? 'active' : '' %>">
+                <span class="nav-link-icon"><i class="fas fa-user-shield"></i></span>
+                <span class="nav-link-text">Super Admin</span>
+            </a>
+        </div>
+        <% } %>
+    </nav>
+
+    <!-- Sidebar Footer -->
+    <div class="sidebar-footer">
+        <% if (user) { %>
+        <div class="sidebar-user">
+            <img src="<%= user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : '/images/default-avatar.png' %>"
+                 alt="<%= user.username %>"
+                 class="sidebar-user-avatar">
+            <div class="sidebar-user-info">
+                <div class="sidebar-user-name"><%= user.username %></div>
+                <div class="sidebar-user-status">Online</div>
+            </div>
+        </div>
+        <% } %>
+    </div>
+</aside>
+
+<script>
+// Sidebar toggle functionality
+document.addEventListener('DOMContentLoaded', () => {
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebarToggle');
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+            localStorage.setItem('sidebarCollapsed', sidebar.classList.contains('collapsed'));
+        });
+    }
+
+    // Restore sidebar state
+    if (localStorage.getItem('sidebarCollapsed') === 'true') {
+        sidebar.classList.add('collapsed');
+    }
+
+    // Mobile sidebar toggle
+    const mobileToggle = document.getElementById('mobileSidebarToggle');
+    if (mobileToggle) {
+        mobileToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('mobile-open');
+        });
+    }
+
+    // Close sidebar on mobile when clicking outside
+    document.addEventListener('click', (e) => {
+        if (window.innerWidth <= 992) {
+            if (!sidebar.contains(e.target) && !mobileToggle?.contains(e.target)) {
+                sidebar.classList.remove('mobile-open');
+            }
+        }
+    });
+
+    // Section navigation for manage page
+    const sectionLinks = document.querySelectorAll('.nav-link[data-section]');
+    sectionLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const section = link.dataset.section;
+
+            // Remove active from all links
+            sectionLinks.forEach(l => l.classList.remove('active'));
+            link.classList.add('active');
+
+            // Show corresponding section
+            const event = new CustomEvent('sectionChange', { detail: { section } });
+            document.dispatchEvent(event);
+        });
+    });
+});
+</script>

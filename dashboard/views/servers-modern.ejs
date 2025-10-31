@@ -1,0 +1,363 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'My Servers',
+    additionalCSS: []
+}) %>
+
+<div class="app-layout">
+    <%- include('partials/sidebar', {
+        user: user,
+        currentPage: 'dashboard'
+    }) %>
+
+    <div class="main-content">
+        <%- include('partials/topbar', {
+            breadcrumbs: [
+                { label: 'Dashboard', url: '/dashboard' }
+            ],
+            user: user
+        }) %>
+
+        <div class="content">
+            <div class="content-container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div class="page-header-top">
+                        <div>
+                            <h1 class="page-title">Dashboard</h1>
+                            <p class="page-description">
+                                Select a server to manage its settings, streamers, and configuration
+                            </p>
+                        </div>
+                        <div>
+                            <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.clientId || '#' %>&permissions=8&scope=bot+applications.commands"
+                               class="btn btn-primary" target="_blank">
+                                <i class="fas fa-plus"></i>
+                                Invite Bot
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Overview -->
+                <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-8);">
+                    <div class="card card-hover">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-server" style="font-size: var(--font-size-2xl); color: var(--color-primary-400); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value"><%= typeof guilds !== 'undefined' ? guilds.length : (typeof manageableGuilds !== 'undefined' ? manageableGuilds.length : 0) %></div>
+                            <div class="stat-label">Total Servers</div>
+                        </div>
+                    </div>
+                    <div class="card card-hover">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-check-circle" style="font-size: var(--font-size-2xl); color: var(--color-success); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value"><%= typeof guilds !== 'undefined' ? guilds.length : (typeof manageableGuilds !== 'undefined' ? manageableGuilds.length : 0) %></div>
+                            <div class="stat-label">Active Servers</div>
+                        </div>
+                    </div>
+                    <div class="card card-hover">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-video" style="font-size: var(--font-size-2xl); color: var(--color-accent-purple); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value"><%= typeof totalLiveStreams !== 'undefined' ? totalLiveStreams : 0 %></div>
+                            <div class="stat-label">Live Streams</div>
+                        </div>
+                    </div>
+                    <div class="card card-hover">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-users" style="font-size: var(--font-size-2xl); color: var(--color-accent-blue); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value"><%= typeof totalMembers !== 'undefined' ? totalMembers.toLocaleString() : 0 %></div>
+                            <div class="stat-label">Total Members</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search and Filter Section -->
+                <%
+                const serverList = typeof guilds !== 'undefined' ? guilds : (typeof manageableGuilds !== 'undefined' ? manageableGuilds : []);
+                %>
+
+                <% if (serverList.length > 0) { %>
+                    <div style="display: flex; gap: var(--spacing-4); margin-bottom: var(--spacing-8); flex-wrap: wrap; align-items: center;">
+                        <!-- Search Bar -->
+                        <div style="flex: 1; min-width: 250px; position: relative;">
+                            <input type="text"
+                                   id="serverSearch"
+                                   class="form-input"
+                                   placeholder="Search servers by name..."
+                                   style="padding-left: var(--spacing-10);">
+                            <i class="fas fa-search" style="position: absolute; left: var(--spacing-3); top: 50%; transform: translateY(-50%); color: var(--color-text-muted); pointer-events: none;"></i>
+                        </div>
+
+                        <!-- Filter Button -->
+                        <button id="filterToggle" class="btn btn-secondary" style="display: flex; align-items: center; gap: var(--spacing-2);">
+                            <i class="fas fa-filter"></i>
+                            <span>Filter</span>
+                        </button>
+
+                        <!-- Server Count -->
+                        <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); padding: 0 var(--spacing-4);">
+                            <span id="serverCount"><%= serverList.length %></span> servers
+                        </div>
+                    </div>
+
+                    <!-- Server Grid with Modern Cards -->
+                    <div class="grid grid-cols-3" id="serverGrid" style="animation: fadeIn 0.5s ease;">
+                        <% serverList.forEach(guild => { %>
+                            <a href="/manage/<%= guild.id %>" style="text-decoration: none;" class="server-card-link" data-server-name="<%= guild.name.toLowerCase() %>">
+                                <div class="card card-modern icon-card server-card" style="height: 100%; transition: all var(--transition-base); position: relative; overflow: hidden;">
+                                    <!-- Gradient Background Effect -->
+                                    <div style="position: absolute; top: -50%; right: -50%; width: 200%; height: 200%; background: radial-gradient(circle, rgba(88, 101, 242, 0.1) 0%, transparent 70%); pointer-events: none;"></div>
+
+                                    <div class="card-body" style="position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%;">
+                                        <!-- Server Icon with Shadow -->
+                                        <div style="display: flex; justify-content: center; margin-bottom: var(--spacing-6);">
+                                            <div style="position: relative;">
+                                                <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
+                                                     alt="<%= guild.name %>"
+                                                     class="server-avatar"
+                                                     style="width: 80px; height: 80px; border-radius: var(--radius-2xl); object-fit: cover; flex-shrink: 0; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); border: 3px solid var(--color-dark-600); transition: transform var(--transition-base), box-shadow var(--transition-base);">
+
+                                                <!-- Online Status Indicator -->
+                                                <div style="position: absolute; bottom: 0; right: 0; width: 24px; height: 24px; background: var(--color-success); border-radius: var(--radius-full); border: 3px solid var(--color-dark-700); display: flex; align-items: center; justify-content: center;">
+                                                    <i class="fas fa-check" style="color: var(--color-dark-700); font-size: 10px;"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Server Name -->
+                                        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-2); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                            <%= guild.name %>
+                                        </h3>
+
+                                        <!-- Status Badge - Enhanced Visibility -->
+                                        <div style="display: flex; justify-content: center; margin-bottom: var(--spacing-4);">
+                                            <span class="badge badge-success" style="display: inline-flex; align-items: center; gap: var(--spacing-2); padding: 8px 16px; font-size: 0.9rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);">
+                                                <span style="width: 8px; height: 8px; background: currentColor; border-radius: var(--radius-full); box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);"></span>
+                                                Active
+                                            </span>
+                                        </div>
+
+                                        <!-- Stats Section -->
+                                        <div style="flex: 1; display: flex; flex-direction: column; gap: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);">
+                                            <% if (guild.memberCount) { %>
+                                                <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                                    <div style="width: 36px; height: 36px; background: rgba(88, 101, 242, 0.2); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center;">
+                                                        <i class="fas fa-users" style="color: var(--color-primary-400); font-size: var(--font-size-base);"></i>
+                                                    </div>
+                                                    <div>
+                                                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Members</div>
+                                                        <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= guild.memberCount %></div>
+                                                    </div>
+                                                </div>
+                                            <% } %>
+
+                                            <% if (guild.streamerCount) { %>
+                                                <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                                    <div style="width: 36px; height: 36px; background: rgba(155, 89, 182, 0.2); border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center;">
+                                                        <i class="fas fa-video" style="color: var(--color-accent-purple); font-size: var(--font-size-base);"></i>
+                                                    </div>
+                                                    <div>
+                                                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Streamers</div>
+                                                        <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= guild.streamerCount %></div>
+                                                    </div>
+                                                </div>
+                                            <% } %>
+                                        </div>
+
+                                        <!-- Footer with Action Arrow -->
+                                        <div style="display: flex; align-items: center; justify-content: space-between; padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);">
+                                            <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">ID: <%= guild.id %></span>
+                                            <i class="fas fa-arrow-right" style="color: var(--color-primary-400); font-size: var(--font-size-base); transition: transform var(--transition-base);"></i>
+                                        </div>
+                                    </div>
+
+                                    <!-- Hover Border Glow -->
+                                    <style scoped>
+                                        .server-card:hover {
+                                            transform: translateY(-8px);
+                                            border-color: var(--color-primary-500);
+                                            box-shadow: 0 12px 40px rgba(88, 101, 242, 0.2);
+                                        }
+
+                                        .server-card:hover .server-avatar {
+                                            transform: scale(1.05);
+                                            box-shadow: 0 6px 24px rgba(88, 101, 242, 0.3);
+                                        }
+
+                                        .server-card:hover i.fa-arrow-right {
+                                            transform: translateX(4px);
+                                        }
+                                    </style>
+                                </div>
+                            </a>
+                        <% }); %>
+                    </div>
+
+                    <!-- No Results State -->
+                    <div id="noResults" style="display: none; text-align: center; padding: var(--spacing-16) var(--spacing-8);">
+                        <i class="fas fa-search" style="font-size: 3rem; color: var(--color-text-disabled); margin-bottom: var(--spacing-6);"></i>
+                        <h3 style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">No servers found</h3>
+                        <p style="color: var(--color-text-muted);">Try adjusting your search or filters</p>
+                    </div>
+
+                <% } else { %>
+                    <!-- Empty State - No Servers at All -->
+                    <div class="card" style="text-align: center; padding: var(--spacing-16) var(--spacing-8);">
+                        <div style="max-width: 500px; margin: 0 auto;">
+                            <div style="width: 80px; height: 80px; background: rgba(88, 101, 242, 0.2); border-radius: var(--radius-2xl); margin: 0 auto var(--spacing-6); display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-server" style="font-size: 2.5rem; color: var(--color-primary-400);"></i>
+                            </div>
+                            <h2 style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                                No Servers Found
+                            </h2>
+                            <p style="font-size: var(--font-size-base); color: var(--color-text-muted); margin-bottom: var(--spacing-8); line-height: var(--line-height-relaxed);">
+                                You don't have any servers where you can manage CertiFried MultiTool. Make sure you have the "Manage Server" permission to see your servers.
+                            </p>
+                            <div style="display: flex; gap: var(--spacing-4); justify-content: center; flex-wrap: wrap;">
+                                <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.clientId || '#' %>&permissions=8&scope=bot+applications.commands"
+                                   class="btn btn-primary" target="_blank">
+                                    <i class="fas fa-plus"></i>
+                                    Invite Bot to Server
+                                </a>
+                                <a href="/" class="btn btn-secondary">
+                                    <i class="fas fa-home"></i>
+                                    Back to Home
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Global Styles for Server Cards -->
+<style>
+    /* Smooth fade-in animation */
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    #serverGrid {
+        animation: fadeIn 0.4s ease-out;
+    }
+
+    /* Individual card stagger animation */
+    .server-card-link {
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    .server-card-link:nth-child(1) { animation-delay: 0.05s; }
+    .server-card-link:nth-child(2) { animation-delay: 0.1s; }
+    .server-card-link:nth-child(3) { animation-delay: 0.15s; }
+    .server-card-link:nth-child(4) { animation-delay: 0.2s; }
+    .server-card-link:nth-child(5) { animation-delay: 0.25s; }
+    .server-card-link:nth-child(6) { animation-delay: 0.3s; }
+    .server-card-link:nth-child(n+7) { animation-delay: 0.35s; }
+
+    /* Enhanced card styles */
+    .card-modern {
+        position: relative;
+        background-color: var(--color-dark-700);
+        border: 1px solid var(--color-dark-400);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-sm);
+        transition: all var(--transition-base);
+    }
+
+    .icon-card {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .icon-card .card-body {
+        padding: var(--spacing-6);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 1200px) {
+        #serverGrid { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+
+    @media (max-width: 768px) {
+        #serverGrid { grid-template-columns: 1fr !important; }
+
+        .page-header-top {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+        }
+    }
+</style>
+
+<!-- Search and Filter Script -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('serverSearch');
+        const serverGrid = document.getElementById('serverGrid');
+        const serverCards = document.querySelectorAll('.server-card-link');
+        const serverCount = document.getElementById('serverCount');
+        const noResults = document.getElementById('noResults');
+        const filterToggle = document.getElementById('filterToggle');
+
+        // Real-time search functionality
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                let visibleCount = 0;
+
+                serverCards.forEach(card => {
+                    const serverName = card.getAttribute('data-server-name');
+                    const isVisible = serverName.includes(searchTerm);
+
+                    card.style.display = isVisible ? '' : 'none';
+                    if (isVisible) visibleCount++;
+                });
+
+                // Update counter and no results message
+                if (serverCount) {
+                    serverCount.textContent = visibleCount;
+                }
+
+                if (noResults) {
+                    noResults.style.display = visibleCount === 0 ? 'block' : 'none';
+                }
+
+                // Reset grid to ensure proper layout
+                if (serverGrid) {
+                    serverGrid.style.animation = 'none';
+                    setTimeout(() => {
+                        serverGrid.style.animation = 'fadeIn 0.3s ease-out';
+                    }, 10);
+                }
+            });
+
+            // Focus style
+            searchInput.addEventListener('focus', function() {
+                this.style.borderColor = 'var(--color-primary-500)';
+            });
+
+            searchInput.addEventListener('blur', function() {
+                this.style.borderColor = 'var(--color-dark-400)';
+            });
+        }
+
+        // Filter button handler (placeholder for future filter functionality)
+        if (filterToggle) {
+            filterToggle.addEventListener('click', function() {
+                // Future: Open filter modal or dropdown
+                console.log('Filter clicked');
+            });
+        }
+    });
+</script>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>

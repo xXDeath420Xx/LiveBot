@@ -1,0 +1,439 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Terms of Service',
+    additionalCSS: []
+}) %>
+
+<style>
+.legal-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: var(--spacing-8);
+}
+
+.legal-header {
+    text-align: center;
+    margin-bottom: var(--spacing-12);
+    padding-bottom: var(--spacing-6);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.legal-title {
+    font-size: var(--font-size-4xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-4);
+    background: linear-gradient(135deg, var(--color-primary-400), var(--color-primary-600));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.legal-updated {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.legal-section {
+    margin-bottom: var(--spacing-8);
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-6);
+    box-shadow: var(--shadow-base);
+    transition: all var(--transition-base);
+}
+
+.legal-section:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-primary-400);
+}
+
+.legal-section h2 {
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-4);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.legal-section h3 {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-top: var(--spacing-6);
+    margin-bottom: var(--spacing-3);
+}
+
+.legal-section p {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+    margin-bottom: var(--spacing-4);
+}
+
+.legal-section ul, .legal-section ol {
+    margin-left: var(--spacing-6);
+    margin-bottom: var(--spacing-4);
+    color: var(--color-text-secondary);
+}
+
+.legal-section li {
+    margin-bottom: var(--spacing-2);
+    line-height: var(--line-height-relaxed);
+}
+
+.legal-highlight {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-left: 4px solid var(--color-primary-500);
+    color: var(--color-text-primary);
+    padding: var(--spacing-5) var(--spacing-6);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--spacing-8);
+    font-weight: var(--font-weight-medium);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+}
+
+.legal-contact {
+    background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 100%);
+    border: 1px solid var(--color-border-primary);
+    padding: var(--spacing-8);
+    border-radius: var(--radius-xl);
+    margin-top: var(--spacing-12);
+    text-align: center;
+    box-shadow: var(--shadow-md);
+}
+
+.legal-contact h3 {
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-3);
+}
+
+.legal-contact a {
+    color: var(--color-primary-400);
+    text-decoration: none;
+    font-weight: var(--font-weight-semibold);
+}
+
+.legal-contact a:hover {
+    color: var(--color-primary-300);
+    text-decoration: underline;
+}
+
+.section-icon {
+    color: var(--color-primary-400);
+}
+</style>
+
+<div class="legal-container">
+    <!-- Breadcrumb Navigation -->
+    <div class="breadcrumb-modern" style="margin-bottom: var(--spacing-6);">
+        <a href="/"><i class="fas fa-home"></i> Home</a>
+        <span class="breadcrumb-modern-separator"><i class="fas fa-chevron-right"></i></span>
+        <span style="color: var(--color-text-primary);">Terms of Service</span>
+    </div>
+
+    <!-- Page Header -->
+    <div class="page-header-hero" style="text-align: center; margin-bottom: var(--spacing-12);">
+        <h1 class="page-title" style="color: white; margin-bottom: var(--spacing-2);">
+            <i class="fas fa-file-contract"></i> Terms of Service
+        </h1>
+        <p class="page-subtitle" style="color: rgba(255, 255, 255, 0.9);">
+            Last Updated: <%= new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %>
+        </p>
+    </div>
+
+    <div class="legal-highlight">
+        <i class="fas fa-info-circle"></i> By using CertiFried MultiTool, you agree to these Terms of Service. Please read them carefully before using our bot or dashboard.
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-file-contract section-icon"></i> 1. Acceptance of Terms</h2>
+        <p>
+            By inviting CertiFried MultiTool to your Discord server, accessing our dashboard, or using any of our services,
+            you agree to be bound by these Terms of Service and our Privacy Policy. If you do not agree to these terms,
+            please do not use our services.
+        </p>
+        <p>
+            These terms apply to all users of the bot, including but not limited to server administrators, moderators,
+            and regular users who interact with the bot's features.
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-shield-alt section-icon"></i> 2. Description of Service</h2>
+        <p>
+            CertiFried MultiTool is a comprehensive Discord bot that provides the following features:
+        </p>
+        <ul>
+            <li>Multi-platform streaming notifications (Twitch, YouTube, Kick, TikTok, Trovo, Facebook, Instagram)</li>
+            <li>Music playback with AI DJ functionality</li>
+            <li>Server moderation and security tools</li>
+            <li>Economy and gaming systems</li>
+            <li>Leveling and XP tracking</li>
+            <li>Custom forms and ticket systems</li>
+            <li>And 40+ additional features</li>
+        </ul>
+        <p>
+            We reserve the right to modify, suspend, or discontinue any aspect of our services at any time
+            without prior notice.
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-user-check section-icon"></i> 3. User Responsibilities</h2>
+
+        <h3>3.1 Appropriate Use</h3>
+        <p>You agree to use CertiFried MultiTool only for lawful purposes and in compliance with:</p>
+        <ul>
+            <li>Discord's Terms of Service and Community Guidelines</li>
+            <li>All applicable local, national, and international laws</li>
+            <li>These Terms of Service</li>
+        </ul>
+
+        <h3>3.2 Prohibited Activities</h3>
+        <p>You agree NOT to:</p>
+        <ul>
+            <li>Use the bot to spam, harass, or abuse other users</li>
+            <li>Attempt to exploit, hack, or reverse engineer the bot</li>
+            <li>Use the bot for any illegal activities</li>
+            <li>Circumvent rate limits or abuse API endpoints</li>
+            <li>Share, sell, or distribute bot features without permission</li>
+            <li>Use the bot to violate Discord's Terms of Service</li>
+            <li>Impersonate other users or services</li>
+            <li>Collect user data without consent</li>
+        </ul>
+
+        <h3>3.3 Account Security</h3>
+        <p>
+            You are responsible for maintaining the security of your Discord account and any actions taken through
+            your account when using our services. Notify us immediately of any unauthorized use.
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-database section-icon"></i> 4. Data Collection and Privacy</h2>
+        <p>
+            CertiFried MultiTool collects and processes certain data to provide its services, including:
+        </p>
+        <ul>
+            <li>Discord user IDs, usernames, and server IDs</li>
+            <li>Server configuration settings</li>
+            <li>Command usage statistics</li>
+            <li>Stream notification preferences</li>
+            <li>Economy and leveling data</li>
+        </ul>
+        <p>
+            For detailed information about data collection, usage, and your rights, please review our
+            <a href="/privacy" style="color: var(--color-primary-400);">Privacy Policy</a>.
+        </p>
+        <p>
+            We do NOT sell your data to third parties. Data is used solely to provide and improve our services.
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-exclamation-triangle section-icon"></i> 5. Service Limitations and Disclaimers</h2>
+
+        <h3>5.1 Service Availability</h3>
+        <p>
+            We strive to maintain 24/7 uptime, but we do not guarantee uninterrupted service. The bot may experience
+            downtime for maintenance, updates, or due to factors beyond our control.
+        </p>
+
+        <h3>5.2 No Warranty</h3>
+        <p>
+            CertiFried MultiTool is provided "AS IS" and "AS AVAILABLE" without warranties of any kind, either express
+            or implied. We do not warrant that:
+        </p>
+        <ul>
+            <li>The service will be error-free or uninterrupted</li>
+            <li>Defects will be corrected</li>
+            <li>The service is free of viruses or harmful components</li>
+            <li>Results from using the service will be accurate or reliable</li>
+        </ul>
+
+        <h3>5.3 Third-Party Services</h3>
+        <p>
+            Our bot integrates with third-party services (Twitch, YouTube, Kick, etc.). We are not responsible for
+            the availability, accuracy, or functionality of these external services.
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-ban section-icon"></i> 6. Limitation of Liability</h2>
+        <p>
+            To the maximum extent permitted by law, CertiFried MultiTool and its developers shall not be liable for:
+        </p>
+        <ul>
+            <li>Any indirect, incidental, special, consequential, or punitive damages</li>
+            <li>Loss of profits, data, use, or goodwill</li>
+            <li>Service interruptions or errors</li>
+            <li>Unauthorized access to or alteration of your data</li>
+            <li>Actions of third parties</li>
+        </ul>
+        <p>
+            Our total liability shall not exceed $100 USD or the amount you paid to use our services
+            (whichever is greater).
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-gavel section-icon"></i> 7. Enforcement and Termination</h2>
+
+        <h3>7.1 Violations</h3>
+        <p>
+            We reserve the right to investigate violations of these terms and take appropriate action, including:
+        </p>
+        <ul>
+            <li>Warning the user</li>
+            <li>Temporarily suspending bot access</li>
+            <li>Permanently banning users or servers</li>
+            <li>Reporting violations to Discord or law enforcement</li>
+        </ul>
+
+        <h3>7.2 Termination</h3>
+        <p>
+            You may stop using our services at any time by removing the bot from your server. We may terminate or
+            suspend your access immediately, without prior notice, for any violation of these terms.
+        </p>
+
+        <h3>7.3 Effect of Termination</h3>
+        <p>
+            Upon termination, your right to use the service will immediately cease. We may delete your data in
+            accordance with our data retention policies.
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-copyright section-icon"></i> 8. Intellectual Property</h2>
+        <p>
+            All content, features, and functionality of CertiFried MultiTool, including but not limited to text,
+            graphics, logos, code, and software, are the property of CertiFried and are protected by copyright,
+            trademark, and other intellectual property laws.
+        </p>
+        <p>
+            You may not copy, modify, distribute, sell, or lease any part of our services without explicit permission.
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-sync-alt section-icon"></i> 9. Changes to Terms</h2>
+        <p>
+            We reserve the right to modify these Terms of Service at any time. Changes will be effective immediately
+            upon posting to this page. Your continued use of the service after changes constitute acceptance of the
+            new terms.
+        </p>
+        <p>
+            We will make reasonable efforts to notify users of significant changes through:
+        </p>
+        <ul>
+            <li>Dashboard announcements</li>
+            <li>Discord support server notifications</li>
+            <li>Bot system messages</li>
+        </ul>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-balance-scale section-icon"></i> 10. Governing Law and Disputes</h2>
+
+        <h3>10.1 Governing Law</h3>
+        <p>
+            These terms shall be governed by and construed in accordance with the laws of the jurisdiction in which
+            the service is operated, without regard to its conflict of law provisions.
+        </p>
+
+        <h3>10.2 Dispute Resolution</h3>
+        <p>
+            In the event of a dispute, you agree to first attempt to resolve the issue informally by contacting us
+            through our support server.
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-users section-icon"></i> 11. User-Generated Content</h2>
+        <p>
+            Some features allow users to submit content (custom commands, form responses, suggestions, etc.). By
+            submitting content, you grant us a non-exclusive, worldwide, royalty-free license to use, store, and
+            process this content to provide our services.
+        </p>
+        <p>
+            You are solely responsible for any content you submit. Do not submit content that:
+        </p>
+        <ul>
+            <li>Violates laws or regulations</li>
+            <li>Infringes on intellectual property rights</li>
+            <li>Contains malicious code or harmful materials</li>
+            <li>Is offensive, harassing, or inappropriate</li>
+        </ul>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-dollar-sign section-icon"></i> 12. Pricing and Donations</h2>
+        <p>
+            CertiFried MultiTool is currently free to use. We accept voluntary donations to support development and
+            server costs. Donations are non-refundable and do not guarantee any specific features or service levels.
+        </p>
+        <p>
+            If we introduce paid features in the future, we will update these terms and provide clear pricing information.
+        </p>
+    </div>
+
+    <div class="legal-section">
+        <h2><i class="fas fa-clipboard-list section-icon"></i> 13. Miscellaneous</h2>
+
+        <h3>13.1 Entire Agreement</h3>
+        <p>
+            These Terms of Service, together with our Privacy Policy, constitute the entire agreement between you
+            and CertiFried MultiTool regarding use of the service.
+        </p>
+
+        <h3>13.2 Severability</h3>
+        <p>
+            If any provision of these terms is found to be unenforceable or invalid, the remaining provisions will
+            continue in full force and effect.
+        </p>
+
+        <h3>13.3 Waiver</h3>
+        <p>
+            Our failure to enforce any right or provision of these terms will not be considered a waiver of those rights.
+        </p>
+
+        <h3>13.4 Assignment</h3>
+        <p>
+            You may not assign or transfer these terms. We may assign our rights and obligations without restriction.
+        </p>
+    </div>
+
+    <div class="legal-contact">
+        <h3><i class="fas fa-envelope"></i> Questions or Concerns?</h3>
+        <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
+            If you have any questions about these Terms of Service, please contact us:
+        </p>
+        <div style="display: flex; flex-direction: column; gap: var(--spacing-2); align-items: center;">
+            <div>
+                <i class="fab fa-discord" style="margin-right: var(--spacing-2);"></i>
+                <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank">Discord Support Server</a>
+            </div>
+            <div>
+                <i class="fas fa-home" style="margin-right: var(--spacing-2);"></i>
+                <a href="/">Return to Home</a>
+            </div>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: var(--spacing-12); padding-top: var(--spacing-8); border-top: 2px solid var(--color-border-primary);">
+        <p style="font-size: var(--font-size-base); color: var(--color-text-secondary); margin-bottom: var(--spacing-2);">
+            <i class="fas fa-check-circle" style="color: var(--color-success-500);"></i>
+            By using CertiFried MultiTool, you acknowledge that you have read and understood these Terms of Service.
+        </p>
+    </div>
+</div>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>

@@ -1,387 +1,205 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manage <%= guild.name %> - CertiFried Announcer</title>
+    <title>Manage <%= guild.name %> - CertiFried MultiTool</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/style.css?v=1.4.3"> <!-- Incremented version to help bust cache -->
+    <link rel="stylesheet" href="/css/unified-dark-theme.css">
+    <link rel="stylesheet" href="/css/loading-states.css">
+    <style>
+        .sidebar {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 5px;
+            transition: all 0.3s ease;
+        }
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background: rgba(233, 69, 96, 0.2);
+            color: #fff;
+        }
+        .sidebar-heading {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            padding-left: 15px;
+        }
+    </style>
 </head>
-<body class="bg-dark text-white">
-    <%- include('partials/header') %>
-    <div class="container-fluid mt-4 manage-container">
-        <div class="manage-header">
-            <a href="/dashboard" class="btn btn-secondary mb-3"><i class="fas fa-arrow-left"></i> Back to Servers</a>
-            <div class="text-center mb-4">
-                <% if (guild.icon) { %><img src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.png" alt="<%= guild.name %> Icon" class="server-icon-large"><% } else { %><img src="/images/default-icon.png" class="server-icon-large" alt="<%= guild.name %> Icon"><% } %>
-                <h1 class="mt-2">Managing: <%= guild.name %></h1>
-            </div>
+<body>
+
+<%- include('partials/header', { user: user }) %>
+<%- include('partials/loading') %>
+
+<main class="page-container">
+    <div class="page-header d-flex align-items-center gap-3 mb-4">
+        <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" class="rounded-circle" width="64" height="64" alt="">
+        <div>
+            <h1 class="mb-0"><%= guild.name %></h1>
+            <a href="/servers" class="text-muted small text-decoration-none"><i class="fas fa-arrow-left me-1"></i>Back to Servers</a>
         </div>
-        <div class="row g-4 manage-content">
-            <div class="col-lg-8 d-flex flex-column">
-                <div class="card bg-dark-2 text-white shadow-sm mb-4">
-                    <div class="card-body p-4">
-                        <h5 class="card-title">Add Streamer to Channels</h5>
-                        <form action="/manage/<%= guild.id %>/add" method="POST" enctype="multipart/form-data">
-                            <div class="row g-3">
-                                <div class="col-md-3"><label class="form-label">Platform</label><select name="platform" class="form-select bg-dark-3 text-white"><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="youtube">YouTube</option><option value="trovo">Trovo</option><option value="tiktok">TikTok</option></select></div>
-                                <div class="col-md-4"><label class="form-label">Username</label><input type="text" name="username" class="form-control bg-dark-3 text-white" required></div>
-                                <div class="col-md-5"><label class="form-label">Link Discord User ID</label><input type="text" name="discord_user_id" class="form-control bg-dark-3 text-white" placeholder="Optional - For Live Role"></div>
-                                <div class="col-12">
-                                    <label class="form-label">Announce In Channels</label>
-                                    <select name="announcement_channel_id" class="form-select bg-dark-3 text-white" multiple size="4">
-                                        <option value="">-- Use Server Default --</option>
-                                        <% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %>
-                                    </select>
-                                    <div class="form-text">Hold Ctrl/Cmd to select multiple. Select only "Use Server Default" for the main channel.</div>
-                                </div>
-                                <div class="col-md-6"><label class="form-label">Shared Nickname</label><input type="text" name="override_nickname" class="form-control bg-dark-3 text-white" placeholder="Optional, for all selected channels"></div>
-                                <div class="col-md-6"><label class="form-label">Shared Avatar</label><input type="file" name="avatar" class="form-control bg-dark-3 text-white" accept="image/*"></div>
-                                <div class="col-12 text-end"><button type="submit" class="btn btn-primary px-4"><i class="fas fa-plus"></i> Add Streamer</button></div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-                <div class="card bg-dark-2 text-white shadow-sm flex-grow-1">
-                    <div class="card-body p-0">
-                        <h5 class="card-title p-3 mb-0">Tracked Streamers (<%= totalSubscriptions %> Total Subscriptions)</h5>
-                        <div class="streamer-list-scroll accordion" id="channelsAccordion">
-                            <% Object.entries(channelsData).sort(([aKey, aVal], [bKey, bVal]) => aKey === 'default' ? -1 : bKey === 'default' ? 1 : aVal.name.localeCompare(bVal.name)).forEach(([channelId, data], index) => { %>
-                                <div class="accordion-item bg-dark-2">
-                                    <h2 class="accordion-header" id="heading-<%= channelId %>"><button class="accordion-button bg-dark-3 text-white" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-<%= channelId %>" aria-expanded="<%= index === 0 ? 'true' : 'false' %>" aria-controls="collapse-<%= channelId %>">#<%= data.name %><span class="channel-stats ms-auto"><%= data.streamers.length %> streamer(s)<% if (data.teams.length > 0) { %> | <%= data.teams.length %> team(s) synced <% } %></span></button></h2>
-                                    <div id="collapse-<%= channelId %>" class="accordion-collapse collapse <%= index === 0 ? 'show' : '' %>" aria-labelledby="heading-<%= channelId %>" data-bs-parent="#channelsAccordion">
-                                        <div class="accordion-body">
-                                            <% if (data.teams.length > 0) { %>
-                                                <div class="synced-teams-section">
-                                                    <strong><i class="fas fa-sync-alt me-2"></i>Synced Teams</strong>
-                                                    <ul class="list-group list-group-flush mt-2">
-                                                        <% data.teams.forEach(team => { %>
-                                                        <li class="list-group-item bg-dark-2 text-muted"><i class="fab fa-twitch me-2"></i><%= team.team_name %></li>
-                                                        <% }); %>
-                                                    </ul>
-                                                </div>
-                                            <% } %>
-                                            <% if (data.streamers.length > 0) { %>
-                                                <div class="list-group list-group-flush mt-3">
-                                                <% data.streamers.forEach(streamer => { %>
-                                                    <div class="list-group-item bg-dark-2 p-0 streamer-entry">
-                                                        <div class="streamer-info-header">
-                                                            <div>
-                                                                <% if (['twitch', 'youtube', 'tiktok'].includes(streamer.platform)) { %> <i class="fab fa-<%= streamer.platform %> platform-icon platform-icon-fa platform-icon-<%= streamer.platform %>"></i>
-                                                                <% } else if (streamer.platform === 'kick') { %> <i class="fas fa-k platform-icon platform-icon-fa platform-icon-kick"></i>
-                                                                <% } else if (streamer.platform === 'trovo') { %> <i class="fas fa-t platform-icon platform-icon-fa platform-icon-trovo"></i> <% } %>
-                                                                <span class="streamer-name"><%= streamer.username %></span>
-                                                                <!-- ** THIS BADGE DISPLAYS THE LINKED KICK NAME ** -->
-                                                                <% if(streamer.kick_username) { %><span class="badge bg-success ms-2 align-middle"><i class="fas fa-k"></i> Linked: <%= streamer.kick_username %></span><% } %>
-                                                                <% if(streamer.discord_user_id) { %><span class="badge bg-secondary ms-2 align-middle"><i class="fab fa-discord"></i> Linked</span><% } %>
-                                                            </div>
-                                                            <div>
-                                                                <!-- ** THIS BUTTON IS UPDATED WITH THE NEW DATA ATTRIBUTE ** -->
-                                                                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#streamerSettingsModal" 
-                                                                    data-subscription-id="<%= streamer.subscription_id %>" data-streamer-name="<%= streamer.username %>"
-                                                                    data-discord-user-id="<%= streamer.discord_user_id || '' %>" data-kick-username="<%= streamer.kick_username || '' %>"
-                                                                    data-channel-override="<%= streamer.announcement_channel_id || '' %>"
-                                                                    data-override-nickname="<%= streamer.override_nickname || '' %>" data-custom-message="<%= streamer.custom_message || '' %>"
-                                                                    data-override-avatar-url="<%= streamer.override_avatar_url || '' %>">
-                                                                    <i class="fas fa-cog"></i> Edit
-                                                                </button>
-                                                                <form action="/manage/<%= guild.id %>/remove-subscription" method="POST" class="d-inline" onsubmit="return confirm('Remove this subscription for <%= streamer.username %>?')">
-                                                                    <input type="hidden" name="subscription_id" value="<%= streamer.subscription_id %>">
-                                                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-times"></i></button>
-                                                                </form>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                <% }) %>
-                                                </div>
-                                            <% } %>
-                                            <% if (data.teams.length === 0 && data.streamers.length === 0) { %>
-                                                <p class="text-muted text-center p-3 mb-0">No individual streamers or teams are configured for this channel.</p>
-                                            <% } %>
-                                        </div>
-                                    </div>
-                                </div>
-                            <% }); %>
-                             <% if (Object.keys(channelsData).length === 0) { %>
-                                <p class="text-muted p-4 text-center">No streamers have been added to this server yet.</p>
-                            <% } %>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="sidebar-sticky">
-                    <div class="card bg-dark-2 text-white shadow-sm mb-4">
-                        <div class="card-body"><h5 class="card-title">Live Status</h5><div id="live-status-container" class="live-status-scroll"><p class="text-muted p-3 text-center">Loading live status...</p></div></div>
-                    </div>
-                    <div class="card bg-dark-2 text-white shadow-sm admin-toolbox">
-                       <!-- Your unchanged Admin Toolbox content goes here -->
-                       <div class="card-body">
-                             <h5 class="card-title">Admin Toolbox</h5>
-                            <ul class="nav nav-tabs nav-fill mb-2" role="tablist">
-                                <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#core-tab">Core</button></li>
-                                <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#mass-tab">Mass Actions</button></li>
-                                <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#teams-tab">Twitch Teams</button></li>
-                                <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#csv-tab">CSV</button></li>
-                                <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#appearance-tab">Appearance</button></li>
-                            </ul>
-                            <div class="tab-content">
-                                <div class="tab-pane fade show active" id="core-tab" role="tabpanel">
-                                    <form action="/manage/<%= guild.id %>/settings" method="POST">
-                                        <div class="mb-3"><label class="form-label">Default Announcement Channel</label><select name="channelId" class="form-select bg-dark-3 text-white" required><option value="">-- Select a Channel --</option><% channels.forEach(channel => { %><option value="<%= channel.id %>" <%= settings.announcement_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option><% }) %></select></div>
-                                        <div class="mb-3"><label class="form-label">Live Role</label><select name="roleId" class="form-select bg-dark-3 text-white"><option value="">-- Disabled --</option><% roles.forEach(role => { %><option value="<%= role.id %>" <%= settings.live_role_id === role.id ? 'selected' : '' %>>@<%= role.name %></option><% }) %></select></div>
-                                        <button type="submit" class="btn btn-success w-100">Save Core Settings</button>
-                                    </form>
-                                </div>
-                                <div class="tab-pane fade" id="mass-tab" role="tabpanel">
-                                     <form action="/manage/<%= guild.id %>/massadd" method="POST" class="mb-4">
-                                        <h6><i class="fas fa-plus-circle me-1"></i> Mass Add</h6>
-                                        <select name="platform" class="form-select bg-dark-3 text-white mb-2"><option value="twitch">Twitch</option><option value="kick">Kick</option><option value="youtube">YouTube</option><option value="trovo">Trovo</option><option value="tiktok">TikTok</option></select>
-                                        <textarea name="usernames" class="form-control bg-dark-3 text-white mb-2" rows="3" placeholder="Enter usernames, separated by commas or new lines." required></textarea>
-                                        <button type="submit" class="btn btn-info w-100 mt-2">Mass Add Streamers</button>
-                                    </form>
-                                    <hr>
-                                    <form action="/manage/<%= guild.id %>/clear" method="POST" onsubmit="return confirm('Are you sure you want to remove ALL streamers from this server? This cannot be undone.');">
-                                        <h6 class="text-danger mt-4"><i class="fas fa-exclamation-triangle me-1"></i> Clear Server</h6>
-                                        <button type="submit" class="btn btn-danger w-100">Clear All Subscriptions</button>
-                                    </form>
-                                </div>
-                                <div class="tab-pane fade" id="teams-tab" role="tabpanel">
-                                    <h6><i class="fab fa-twitch me-1"></i> One-Time Add Team</h6>
-                                    <p class="small text-muted">Adds all members of a Twitch Team to a channel one time.</p>
-                                    <form id="addteam-form" action="/manage/<%= guild.id %>/addteam" method="POST" class="mb-4">
-                                        <div class="mb-3"><input type="text" name="teamName" class="form-control bg-dark-3 text-white" placeholder="Twitch Team Name (e.g., 'reeferrealm')" required></div>
-                                        <div class="mb-3"><select name="channelId" class="form-select bg-dark-3 text-white" required><option value="" disabled selected>-- Select Channel to Add to --</option><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %></select></div>
-                                        <button type="submit" class="btn btn-primary w-100">Add Team Members</button>
-                                    </form>
-                                    <hr>
-                                    <h6><i class="fas fa-sync-alt me-1"></i>Automated Team Sync</h6>
-                                     <p class="small text-muted">Subscribe a channel to automatically sync with a Twitch Team.</p>
-                                     <form id="subscribe-team-form" action="/manage/<%= guild.id %>/subscribe-team" method="POST" class="mb-4">
-                                         <div class="mb-3"><input type="text" name="teamName" class="form-control bg-dark-3 text-white" placeholder="Twitch Team Name" required></div>
-                                         <div class="mb-3"><select name="channelId" class="form-select bg-dark-3 text-white" required><option value="" disabled selected>-- Select Channel to Sync to --</option><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %></select></div>
-                                         <div class="mb-3">
-                                            <label class="form-label">Team Live Role (Optional)</label>
-                                            <select name="live_role_id" class="form-select bg-dark-3 text-white">
-                                                <option value="">-- Use Server Default --</option>
-                                                <% roles.forEach(role => { %>
-                                                    <option value="<%= role.id %>">@<%= role.name %></option>
-                                                <% }) %>
-                                            </select>
-                                         </div>
-                                         <button type="submit" class="btn btn-success w-100">Subscribe & Sync Team</button>
-                                     </form>
-                                     <% if (teamSubscriptions.length > 0) { %>
-                                         <hr><h6 class="text-center mt-4">Active Sync Subscriptions</h6>
-                                         <ul class="list-group list-group-flush">
-                                         <% teamSubscriptions.forEach((sub, index) => { %>
-                                             <% const channel = channels.find(c => c.id === sub.announcement_channel_id); %>
-                                             <% const role = sub.live_role_id ? roles.find(r => r.id === sub.live_role_id) : null; %>
-                                             <li class="list-group-item bg-dark-3 text-white d-flex justify-content-between align-items-center synced-team-entry">
-                                                 <form id="removeteam-form-<%= sub.id %>" action="/manage/<%= guild.id %>/removeteam" method="POST" class="w-100 d-flex justify-content-between align-items-center" onsubmit="return confirm('Are you sure you want to REMOVE ALL members of the team \'<%= sub.team_name %>\' and UNSUBSCRIBE from future syncs?')">
-                                                    <div>
-                                                        <% if (channel) { %>
-                                                            <span><%= sub.team_name %> → #<%= channel.name %></span>
-                                                        <% } else { %>
-                                                            <span><%= sub.team_name %> → <strong class="text-danger">#Deleted Channel</strong></span>
-                                                        <% } %>
-                                                        <% if (role) { %>
-                                                            <br><small class="text-muted ps-1">Live Role: @<%= role.name %></small>
-                                                        <% } %>
-                                                    </div>
-                                                     <input type="hidden" name="teamSubscriptionId" value="<%= sub.id %>">
-                                                     <button type="submit" form="removeteam-form-<%= sub.id %>" class="btn btn-sm btn-danger">Unsubscribe & Purge</button>
-                                                 </form>
-                                             </li>
-                                         <% }); %>
-                                         </ul>
-                                     <% } %>
-                                </div>
-                                <div class="tab-pane fade" id="csv-tab" role="tabpanel">
-                                    <h6><i class="fas fa-file-csv me-1"></i> Global CSV Management</h6>
-                                    <p class="small text-muted">Import a CSV to add/update streamers across all channels.</p>
-                                    <form action="/manage/<%= guild.id %>/import" method="POST" enctype="multipart/form-data" class="d-grid gap-2">
-                                        <input class="form-control bg-dark-3 text-white" type="file" name="csvfile" accept=".csv" required>
-                                        <button type="submit" class="btn btn-info"><i class="fas fa-upload"></i> Import CSV</button>
-                                    </form>
-                                    <a href="/manage/<%= guild.id %>/export" class="btn btn-secondary w-100 mt-2"><i class="fas fa-download"></i> Export to CSV</a>
-                                    <hr>
-                                    <h6 class="mt-4"><i class="fas fa-sync-alt me-1"></i> Sync Team via CSV</h6>
-                                    <p class="small text-muted">Sync a channel with a CSV file. Adds/updates members from the file and **removes** any members not in the file from the selected channel.</p>
-                                    <form action="/manage/<%= guild.id %>/import-team" method="POST" enctype="multipart/form-data">
-                                        <div class="mb-3">
-                                            <label class="form-label">Channel to Sync</label>
-                                            <select name="channelId" class="form-select bg-dark-3 text-white" required>
-                                                <option value="" selected disabled>-- Select a Channel --</option>
-                                                <% channels.forEach(channel => { %>
-                                                    <option value="<%= channel.id %>">#<%= channel.name %></option>
-                                                <% }) %>
-                                            </select>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Team CSV File</label>
-                                            <input class="form-control bg-dark-3 text-white" type="file" name="csvfile" accept=".csv" required>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-sync-alt"></i> Sync Channel</button>
-                                    </form>
-                                </div>
-                                <div class="tab-pane fade" id="appearance-tab" role="tabpanel">
-                                     <form action="/manage/<%= guild.id %>/channel-appearance/save" method="POST" enctype="multipart/form-data">
-                                        <h6><i class="fas fa-paint-brush me-1"></i> Set Channel Appearance</h6>
-                                        <p class="small text-muted">Set a default webhook nickname/avatar for all announcements in a specific channel.</p>
-                                        <div class="mb-3"><select name="channelId" class="form-select bg-dark-3 text-white" required><option value="">-- Select a channel --</option><% channels.forEach(channel => { %><option value="<%= channel.id %>">#<%= channel.name %></option><% }) %></select></div>
-                                        <div class="mb-3"><input type="text" class="form-control bg-dark-3 text-white" name="nickname" placeholder="Custom Nickname (Optional)" maxlength="80"></div>
-                                        <div class="mb-3"><input class="form-control bg-dark-3 text-white" type="file" name="avatar" accept="image/*"></div>
-                                        <button type="submit" class="btn btn-primary w-100">Save Channel Appearance</button>
-                                    </form>
-                                     <% if (channelSettings && channelSettings.length > 0) { %>
-                                        <hr>
-                                        <h6 class="text-center mt-4">Reset Channel Customizations</h6>
-                                        <ul class="list-group list-group-flush">
-                                        <% channelSettings.forEach(setting => { %>
-                                            <% const channel = channels.find(c => c.id === setting.channel_id); %>
-                                            <li class="list-group-item bg-dark-3 text-white d-flex justify-content-between align-items-center">
-                                                <% if (channel) { %>
-                                                    <span>#<%= channel.name %></span>
-                                                <% } else { %>
-                                                    <span><strong class="text-danger">#Deleted/Inaccessible Channel</strong> <small class="text-muted">(ID: <%= setting.channel_id %>)</small></span>
-                                                <% } %>
-                                                <form action="/manage/<%= guild.id %>/channel-appearance/delete" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to reset customizations for this channel?')">
-                                                    <input type="hidden" name="channelId" value="<%= setting.channel_id %>">
-                                                    <button type="submit" class="btn btn-sm btn-danger" title="Reset Customizations">
-                                                        <i class="fas fa-trash-alt"></i>
-                                                    </button>
-                                                </form>
-                                            </li>
-                                        <% }); %>
-                                        </ul>
-                                     <% } %>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+    </div>
+
+    <div class="d-flex gap-4">
+        <aside class="sidebar" style="width: 240px; flex-shrink: 0;">
+            <nav class="nav flex-column">
+                <h6 class="sidebar-heading">Core</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/streamers"><i class="fas fa-users fa-fw"></i> Streamers</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/teams"><i class="fas fa-user-friends fa-fw"></i> Teams</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/appearance"><i class="fas fa-paint-brush fa-fw"></i> Appearance</a>
+
+                <h6 class="sidebar-heading">Community</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/welcome"><i class="fas fa-hand-sparkles fa-fw"></i> Welcome</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/reaction-roles"><i class="fas fa-smile-beam fa-fw"></i> Reaction Roles</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/starboard"><i class="fas fa-star fa-fw"></i> Starboard</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/leveling"><i class="fas fa-trophy fa-fw"></i> Leveling</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/giveaways"><i class="fas fa-gift fa-fw"></i> Giveaways</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/polls"><i class="fas fa-poll fa-fw"></i> Polls</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/suggestions"><i class="fas fa-lightbulb fa-fw"></i> Suggestions</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/music"><i class="fas fa-music fa-fw"></i> Music</a>
+
+                <h6 class="sidebar-heading">Economy & Games</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/economy"><i class="fas fa-coins fa-fw"></i> Economy</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/games"><i class="fas fa-gamepad fa-fw"></i> Games</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/gambling"><i class="fas fa-dice fa-fw"></i> Gambling</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/trading"><i class="fas fa-exchange-alt fa-fw"></i> Trading</a>
+
+                <h6 class="sidebar-heading">Moderation</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/moderation"><i class="fas fa-shield-alt fa-fw"></i> Moderation</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/automod"><i class="fas fa-robot fa-fw"></i> AutoMod</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/security"><i class="fas fa-lock fa-fw"></i> Security</a>
+
+                <h6 class="sidebar-heading">Analytics</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/stat-roles"><i class="fas fa-chart-line fa-fw"></i> Stat Roles</a>
+
+                <h6 class="sidebar-heading">Logging & Feeds</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/logging"><i class="fas fa-file-alt fa-fw"></i> Logging</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/feeds"><i class="fas fa-rss fa-fw"></i> Feeds</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/twitch-schedules"><i class="fab fa-twitch fa-fw"></i> Twitch Schedules</a>
+
+                <h6 class="sidebar-heading">Utility</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/utilities"><i class="fas fa-wrench fa-fw"></i> General Utilities</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/custom-commands"><i class="fas fa-terminal fa-fw"></i> Custom Commands</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/forms"><i class="fas fa-file-alt fa-fw"></i> Forms</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/tickets"><i class="fas fa-ticket-alt fa-fw"></i> Tickets</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/backups"><i class="fas fa-save fa-fw"></i> Backups</a>
+            </nav>
+        </aside>
+
+        <div class="main-content flex-grow-1">
+            <div class="content-card">
+                <%
+                const pageMap = {
+                    'streamers': { partial: 'streamers', data: { guild, streamers: consolidatedStreamers, roles, channels } },
+                    'teams': { partial: 'teams', data: { guild, teamSubscriptions, roles, channels } },
+                    'appearance': { partial: 'appearance', data: { guild, settings } },
+                    'welcome': { partial: 'welcome', data: { guild, settings: welcomeSettings, channels } },
+                    'reaction-roles': { partial: 'reaction-roles', data: { guild, panels: reactionRolePanels, roles, channels } },
+                    'starboard': { partial: 'starboard', data: { guild, settings: starboardConfig, channels } },
+                    'leveling': { partial: 'leveling', data: { guild, settings, rewards: roleRewards, roles, channels } },
+                    'giveaways': { partial: 'giveaways', data: { guild, giveaways, channels } },
+                    'polls': { partial: 'polls', data: { guild, polls, channels } },
+                    'suggestions': { partial: 'suggestions', data: { guild, suggestions, suggestionConfig, suggestionStats, suggestionTags, channels, roles } },
+                    'music': { partial: 'music', data: { guild, settings: musicConfig, roles, channels, voiceChannels } },
+                    'economy': { partial: 'economy', data: { guild, economyConfig, shopItems, economyStats, topUsers } },
+                    'games': { partial: 'games', data: { guild, triviaQuestions, hangmanWords, countingChannels, gameStats } },
+                    'gambling': { partial: 'gambling', data: { guild, gamblingConfig, gamblingHistory, gamblingStats, topGamblers } },
+                    'trading': { partial: 'trading', data: { guild, activeTrades, tradeHistory, tradeStats } },
+                    'moderation': { partial: 'moderation', data: { guild, settings: moderationConfig, infractions: recentInfractions, escalationRules: escalationRules, roles } },
+                    'automod': { partial: 'automod', data: { guild, rules: automodRules, heatConfig } },
+                    'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles } },
+                    'stat-roles': { partial: 'stat-roles', data: { guild, statroles: statroleConfigs, roles } },
+                    'logging': { partial: 'logging', data: { guild, settings: logConfig, actionLogs, channels, channelSettingsMap: channelSettingsMap } },
+                    'feeds': { partial: 'feeds', data: { guild, redditFeeds, youtubeFeeds, twitterFeeds, channels } },
+                    'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
+                    'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
+                    'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
+                    'forms': { partial: 'forms', data: { guild, forms, channels } },
+                    'tickets': { partial: 'tickets', data: { guild, settings: ticketConfig, forms: ticketFormsList, categories, roles } },
+                    'backups': { partial: 'backups', data: { guild, backups } }
+                };
+                const activePage = pageMap[page] || pageMap['streamers'];
+                %>
+                <%- include(`partials/manage/${activePage.partial}`, activePage.data) %>
             </div>
         </div>
     </div>
-    <%- include('partials/manage-modal', { guild, channels }) %>
-    <%- include('partials/footer') %>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const streamerSettingsModal = document.getElementById('streamerSettingsModal');
-            if (streamerSettingsModal) {
-                streamerSettingsModal.addEventListener('show.bs.modal', function (event) {
-                    const button = event.relatedTarget;
-                    
-                    const streamerName = button.getAttribute('data-streamer-name');
-                    const subscriptionId = button.getAttribute('data-subscription-id');
-                    const discordUserId = button.getAttribute('data-discord-user-id');
-                    const kickUsername = button.getAttribute('data-kick-username'); // New data
-                    const channelOverride = button.getAttribute('data-channel-override');
-                    const overrideNickname = button.getAttribute('data-override-nickname');
-                    const customMessage = button.getAttribute('data-custom-message');
-                    const avatarUrl = button.getAttribute('data-override-avatar-url');
+</main>
 
-                    streamerSettingsModal.querySelector('#modal-streamer-name').textContent = streamerName;
-                    streamerSettingsModal.querySelector('#edit-subscription-id').value = subscriptionId;
-                    streamerSettingsModal.querySelector('#edit-discord-user-id').value = discordUserId;
-                    streamerSettingsModal.querySelector('#edit-kick-username').value = kickUsername; // Set the value
-                    streamerSettingsModal.querySelector('#edit-channel-override').value = channelOverride || '';
-                    streamerSettingsModal.querySelector('#edit-override-nickname').value = overrideNickname;
-                    streamerSettingsModal.querySelector('#edit-custom-message').value = customMessage;
-                    streamerSettingsModal.querySelector('#edit-avatar-url').value = avatarUrl || '';
+<%- include('partials/manage/add-team-modal', { guild, channels, roles }) %>
+<%- include('partials/footer') %>
 
-                    streamerSettingsModal.querySelector('#edit-avatar-file').value = '';
-                    streamerSettingsModal.querySelector('#reset-avatar-check').checked = false;
-                });
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/loading-manager.js"></script>
+<script>
+    /**
+     * Manage Page - Loading State Management
+     */
+    document.addEventListener('DOMContentLoaded', () => {
+        // Update active link in sidebar
+        const currentPage = '<%= page %>';
+        const navLinks = document.querySelectorAll('.sidebar .nav-link');
+        navLinks.forEach(link => {
+            if (link.getAttribute('href').endsWith(currentPage)) {
+                link.classList.add('active');
             }
-
-            // ... (rest of the script for alerts and live status is identical and does not need changes)
-            const params = new URLSearchParams(window.location.search);
-            const error = params.get('error');
-            const success = params.get('success');
-            const report = params.get('report');
-            const container = document.querySelector('.manage-header');
-            function displayAlert(type, message, reportText) {
-                if (!message) return;
-                const alertDiv = document.createElement('div');
-                alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-                alertDiv.setAttribute('role', 'alert');
-                const strongTag = document.createElement('strong');
-                strongTag.textContent = type === 'danger' ? 'Error!' : 'Success!';
-                alertDiv.appendChild(strongTag);
-                alertDiv.appendChild(document.createTextNode(' ' + message));
-                if (reportText) {
-                    alertDiv.appendChild(document.createElement('br'));
-                    alertDiv.appendChild(document.createTextNode(reportText));
-                }
-                const closeBtn = document.createElement('button');
-                closeBtn.type = 'button';
-                closeBtn.className = 'btn-close';
-                closeBtn.setAttribute('data-bs-dismiss', 'alert');
-                alertDiv.appendChild(closeBtn);
-                container.insertAdjacentElement('afterend', alertDiv);
-            }
-            if (error) displayAlert('danger', decodeURIComponent(error));
-            if (success) {
-                const messages = { 'settings': 'Core settings saved successfully!', 'import': 'CSV import process completed!', 'add': 'Streamer added successfully!', 'remove': 'Streamer subscription removed!', 'edit': 'Streamer settings saved successfully!', 'clear': 'All streamer subscriptions have been cleared!', 'massaction': 'Mass action completed!', 'customization': 'Channel appearance updated!', 'customization_reset': 'Channel appearance was reset.', 'teamsync': 'Team sync completed successfully!', 'addteam': 'Twitch Team members have been processed!', 'removeteam': 'Twitch Team and members removed successfully!', 'teamsubscribed': 'Successfully subscribed channel to the Twitch Team!', 'teamunsubscribed': 'Successfully unsubscribed from the Twitch Team.' };
-                let msg = messages[success] || 'Action completed successfully!';
-                let reportMsg = report ? decodeURIComponent(report) : '';
-                displayAlert('success', msg, reportMsg);
-            }
-            if (error || success) window.history.replaceState({}, document.title, window.location.pathname);
-            const liveStatusContainer = document.getElementById('live-status-container');
-            const guildId = '<%= guild.id %>';
-            async function fetchLiveStatus() {
-                try {
-                    const response = await fetch(`/api/guilds/${guildId}/livestatus`);
-                    if (!response.ok) throw new Error('Network response failed');
-                    const liveStreamers = await response.json();
-                    liveStatusContainer.innerHTML = ''; 
-                    if (liveStreamers.length === 0) { 
-                        liveStatusContainer.innerHTML = '<p class="text-muted p-3 text-center">No one is currently live.</p>'; 
-                        return; 
-                    }
-                    const grouped = liveStreamers.reduce((acc, s) => ({...acc, [s.platform]: [...(acc[s.platform] || []), s]}), {});
-                    for (const platform in grouped) {
-                        const platformHeader = document.createElement('p');
-                        platformHeader.className = 'live-status-header text-uppercase small ps-2';
-                        platformHeader.textContent = platform;
-                        liveStatusContainer.appendChild(platformHeader);
-                        grouped[platform].forEach(streamer => {
-                            const cardDiv = document.createElement('div');
-                            cardDiv.className = `live-streamer-card platform-${platform}`;
-                            const img = document.createElement('img');
-                            if (streamer.avatar_url && (streamer.avatar_url.startsWith('http://') || streamer.avatar_url.startsWith('https://'))) {
-                                img.src = streamer.avatar_url;
-                            } else {
-                                img.src = '/images/default-icon.png';
-                            }
-                            img.className = 'live-avatar';
-                            img.alt = `Avatar of ${streamer.username}`;
-                            const infoDiv = document.createElement('div');
-                            infoDiv.className = 'live-info';
-                            const strong = document.createElement('strong');
-                            strong.textContent = streamer.username;
-                            const span = document.createElement('span');
-                            span.className = 'text-muted';
-                            span.textContent = streamer.stream_game || 'N/A';
-                            infoDiv.appendChild(strong);
-                            infoDiv.appendChild(span);
-                            cardDiv.appendChild(img);
-                            cardDiv.appendChild(infoDiv);
-                            liveStatusContainer.appendChild(cardDiv);
-                        });
-                    }
-                } catch (err) { 
-                    console.error('Error fetching live status:', err); 
-                    liveStatusContainer.innerHTML = '<p class="text-danger p-3 text-center">Failed to load live status.</p>'; 
-                }
-            }
-            fetchLiveStatus();
-            setInterval(fetchLiveStatus, 60000);
         });
-    </script>
+
+        // Setup form loading states
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                // Only show loading if form is not marked as no-loading
+                if (!this.dataset.noLoading) {
+                    loadingManager.showFormLoading(this);
+                }
+            });
+        });
+
+        // Setup navigation loading states
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                // Only show loading if not an anchor link
+                if (!link.href.includes('#')) {
+                    loadingManager.showPageLoading('Loading page...');
+                }
+            });
+        });
+
+        // Handle back to servers link
+        const backLink = document.querySelector('a[href="/servers"]');
+        if (backLink) {
+            backLink.addEventListener('click', (e) => {
+                loadingManager.showPageLoading('Loading servers...');
+            });
+        }
+
+        // Setup form submission with error handling
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                // Optional: add form validation with loading state
+                if (typeof validateForm === 'function' && !validateForm(this)) {
+                    e.preventDefault();
+                    loadingManager.showToast('Please fix the errors in the form', 'warning');
+                }
+            });
+        });
+
+        console.log('✅ Manage page initialized with loading states');
+    });
+</script>
+
 </body>
 </html>

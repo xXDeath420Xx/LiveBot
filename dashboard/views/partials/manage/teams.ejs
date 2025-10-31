@@ -1,0 +1,145 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-friends"></i>
+                <span>Team Subscriptions</span>
+            </div>
+            <div class="page-section-subtitle">
+                Subscribe to streaming teams for automatic member tracking
+            </div>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTeamModal">
+            <i class="fas fa-plus"></i>
+            <span>Add Team</span>
+        </button>
+    </div>
+
+    <% if (teamSubscriptions && teamSubscriptions.length > 0) { %>
+        <div class="grid grid-cols-1" style="gap: var(--spacing-4);">
+            <% teamSubscriptions.forEach(team => { %>
+                <div class="card card-hover">
+                    <div class="card-body">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--spacing-4);">
+                            <div>
+                                <h3 style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+                                    <%= team.team_name %>
+                                </h3>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                    Team subscription
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: var(--spacing-2);">
+                                <button class="btn btn-sm btn-secondary edit-team-btn"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#teamSettingsModal"
+                                        data-team='<%= JSON.stringify(team) %>'>
+                                    <i class="fas fa-cog"></i>
+                                    <span>Settings</span>
+                                </button>
+                                <form action="/manage/<%= guild.id %>/delete-team" method="POST" class="d-inline" onsubmit="return confirm('Are you sure? This will remove all associated streamers.');">
+                                    <input type="hidden" name="teamId" value="<%= team.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="fas fa-trash"></i>
+                                        <span>Remove</span>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+                            <div style="background: var(--color-dark-600); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                                <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-1);">
+                                    <i class="fas fa-hashtag" style="color: var(--color-primary-400);"></i>
+                                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Announcement Channel</span>
+                                </div>
+                                <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                    <%= channels.find(c => c.id === team.announcement_channel_id)?.name || 'Default' %>
+                                </div>
+                            </div>
+
+                            <div style="background: var(--color-dark-600); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                                <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-1);">
+                                    <i class="fas fa-at" style="color: var(--color-accent-purple);"></i>
+                                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Live Role</span>
+                                </div>
+                                <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                    <%= roles.find(r => r.id === team.live_role_id)?.name || 'None' %>
+                                </div>
+                            </div>
+                        </div>
+
+                        <% if (team.custom_message) { %>
+                            <div style="margin-top: var(--spacing-4); padding: var(--spacing-3); background: var(--color-dark-600); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary-500);">
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Custom Message</div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); font-family: var(--font-family-mono);">
+                                    <%= team.custom_message %>
+                                </div>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+    <% } else { %>
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-user-friends"></i>
+            </div>
+            <div class="empty-state-title">No Team Subscriptions</div>
+            <div class="empty-state-description">
+                Subscribe to streaming teams to automatically track all team members
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<%- include('./add-team-modal.ejs', { guild, channels, roles }) %>
+<%- include('./edit-team-modal.ejs', { guild, channels, roles }) %>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const teamSettingsModal = document.getElementById('teamSettingsModal');
+    if (teamSettingsModal) {
+        teamSettingsModal.addEventListener('show.bs.modal', event => {
+            const button = event.relatedTarget;
+            const team = JSON.parse(button.getAttribute('data-team'));
+
+            document.getElementById('modal-team-name').textContent = team.team_name;
+            document.getElementById('edit-team-subscription-id').value = team.id;
+            document.getElementById('edit-team-channel-id').value = team.announcement_channel_id || '';
+            document.getElementById('edit-team-live-role-id').value = team.live_role_id || '';
+            document.getElementById('edit-team-custom-message').value = team.custom_message || '';
+            document.getElementById('edit-team-keep-summary').checked = team.delete_on_end === 0;
+            document.getElementById('edit-team-webhook-name').value = team.webhook_name || '';
+            document.getElementById('edit-team-webhook-avatar-url').value = team.webhook_avatar_url || '';
+        });
+    }
+});
+</script>
+
+<style>
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+</style>

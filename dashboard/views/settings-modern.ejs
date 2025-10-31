@@ -1,0 +1,632 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Settings',
+    additionalCSS: []
+}) %>
+
+<div class="app-layout">
+    <%- include('partials/sidebar', {
+        user: user,
+        currentPage: 'settings'
+    }) %>
+
+    <div class="main-content">
+        <%- include('partials/topbar', {
+            breadcrumbs: [
+                { label: 'Dashboard', url: '/dashboard' },
+                { label: 'Settings', url: '/settings' }
+            ],
+            user: user
+        }) %>
+
+        <div class="content">
+            <div class="content-container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div class="page-header-top">
+                        <div>
+                            <h1 class="page-title">Dashboard Settings</h1>
+                            <p class="page-description">
+                                Manage your preferences and dashboard configuration
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Appearance Settings -->
+                <div style="margin-bottom: var(--spacing-8);">
+                    <h2 style="font-size: var(--font-size-xl); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                        <i class="fas fa-palette"></i> Appearance
+                    </h2>
+                    <div class="card">
+                        <div class="card-body">
+                            <div style="display: flex; flex-direction: column; gap: var(--spacing-6);">
+                                <!-- Theme Selection -->
+                                <div>
+                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--spacing-3);">
+                                        <div>
+                                            <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                                Theme
+                                            </div>
+                                            <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                                Choose your preferred color scheme
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-4);">
+                                        <div class="theme-option" id="darkThemeOption" data-theme="dark" style="padding: var(--spacing-4); border-radius: var(--radius-lg); border: 2px solid var(--color-primary-400); background: var(--color-bg-secondary); cursor: pointer; transition: all var(--transition-base);">
+                                            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                                <i class="fas fa-moon" style="font-size: var(--font-size-xl); color: var(--color-primary-400);"></i>
+                                                <div>
+                                                    <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary);">Dark Mode</div>
+                                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);" class="theme-status">Currently active</div>
+                                                </div>
+                                                <div style="margin-left: auto;">
+                                                    <i class="fas fa-check-circle theme-check" style="color: var(--color-primary-400); font-size: var(--font-size-lg);"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="theme-option" id="lightThemeOption" data-theme="light" style="padding: var(--spacing-4); border-radius: var(--radius-lg); border: 2px solid var(--color-border-primary); background: var(--color-bg-secondary); cursor: pointer; transition: all var(--transition-base);">
+                                            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                                <i class="fas fa-sun" style="font-size: var(--font-size-xl); color: #f59e0b;"></i>
+                                                <div>
+                                                    <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary);">Light Mode</div>
+                                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);" class="theme-status">Click to activate</div>
+                                                </div>
+                                                <div style="margin-left: auto;">
+                                                    <i class="fas fa-check-circle theme-check" style="color: var(--color-primary-400); font-size: var(--font-size-lg); display: none;"></i>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Compact Mode -->
+                                <div style="padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-primary);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                                Compact Mode
+                                            </div>
+                                            <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                                Reduce spacing and padding for a denser layout
+                                            </div>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" id="compactMode">
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notification Settings -->
+                <div style="margin-bottom: var(--spacing-8);">
+                    <h2 style="font-size: var(--font-size-xl); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                        <i class="fas fa-bell"></i> Notifications
+                    </h2>
+                    <div class="card">
+                        <div class="card-body">
+                            <div style="display: flex; flex-direction: column; gap: var(--spacing-6);">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                            Dashboard Notifications
+                                        </div>
+                                        <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                            Receive browser notifications for important events
+                                        </div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="browserNotifications">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                <div style="padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-primary); display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                            Stream Alerts
+                                        </div>
+                                        <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                            Get notified when streamers go live
+                                        </div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="streamAlerts" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                <div style="padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-primary); display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                            Update Notifications
+                                        </div>
+                                        <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                            Stay informed about new features and updates
+                                        </div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="updateNotifications" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Privacy Settings -->
+                <div style="margin-bottom: var(--spacing-8);">
+                    <h2 style="font-size: var(--font-size-xl); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                        <i class="fas fa-shield-alt"></i> Privacy & Security
+                    </h2>
+                    <div class="card">
+                        <div class="card-body">
+                            <div style="display: flex; flex-direction: column; gap: var(--spacing-6);">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                            Show Online Status
+                                        </div>
+                                        <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                            Display your online status to other users
+                                        </div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="showOnlineStatus" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                <div style="padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-primary); display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                            Analytics
+                                        </div>
+                                        <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                            Help us improve by sharing anonymous usage data
+                                        </div>
+                                    </div>
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="analytics" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                <!-- Stream Announcement Privacy Override -->
+                                <div style="padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-primary);">
+                                    <div style="margin-bottom: var(--spacing-4);">
+                                        <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                            <i class="fas fa-video" style="margin-right: var(--spacing-2); color: var(--color-accent-purple);"></i>
+                                            Stream Announcement Persistence
+                                        </div>
+                                        <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                            Override server-wide settings for keeping your stream announcements after you go offline
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: var(--spacing-3);">
+                                        <label class="privacy-option" style="flex: 1; padding: var(--spacing-4); border: 2px solid var(--color-border-primary); border-radius: var(--radius-lg); cursor: pointer; transition: all var(--transition-base); display: flex; flex-direction: column; align-items: center; text-align: center;">
+                                            <input type="radio" name="keepAnnouncement" value="default" style="margin-bottom: var(--spacing-2);" checked>
+                                            <i class="fas fa-server" style="font-size: var(--font-size-2xl); color: var(--color-primary-400); margin-bottom: var(--spacing-2);"></i>
+                                            <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Use Server Default</div>
+                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Follow server settings</div>
+                                        </label>
+                                        <label class="privacy-option" style="flex: 1; padding: var(--spacing-4); border: 2px solid var(--color-border-primary); border-radius: var(--radius-lg); cursor: pointer; transition: all var(--transition-base); display: flex; flex-direction: column; align-items: center; text-align: center;">
+                                            <input type="radio" name="keepAnnouncement" value="keep" style="margin-bottom: var(--spacing-2);">
+                                            <i class="fas fa-save" style="font-size: var(--font-size-2xl); color: var(--color-success); margin-bottom: var(--spacing-2);"></i>
+                                            <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Always Keep</div>
+                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Keep all announcements</div>
+                                        </label>
+                                        <label class="privacy-option" style="flex: 1; padding: var(--spacing-4); border: 2px solid var(--color-border-primary); border-radius: var(--radius-lg); cursor: pointer; transition: all var(--transition-base); display: flex; flex-direction: column; align-items: center; text-align: center;">
+                                            <input type="radio" name="keepAnnouncement" value="delete" style="margin-bottom: var(--spacing-2);">
+                                            <i class="fas fa-trash-alt" style="font-size: var(--font-size-2xl); color: var(--color-danger); margin-bottom: var(--spacing-2);"></i>
+                                            <div style="font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Always Delete</div>
+                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Remove when offline</div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <style>
+                .privacy-option:has(input:checked) {
+                    border-color: var(--color-primary-400);
+                    background: rgba(88, 101, 242, 0.1);
+                }
+                .privacy-option:hover {
+                    border-color: var(--color-primary-500);
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 12px rgba(88, 101, 242, 0.2);
+                }
+                .privacy-option input[type="radio"] {
+                    accent-color: var(--color-primary-400);
+                }
+                </style>
+
+                <!-- Account Settings -->
+                <div style="margin-bottom: var(--spacing-8);">
+                    <h2 style="font-size: var(--font-size-xl); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                        <i class="fas fa-user-cog"></i> Account
+                    </h2>
+                    <div class="card">
+                        <div class="card-body">
+                            <div style="display: flex; flex-direction: column; gap: var(--spacing-6);">
+                                <div>
+                                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                                        <div>
+                                            <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                                Discord Account
+                                            </div>
+                                            <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-3);">
+                                                Connected as <%= user.username %><% if (user.discriminator && user.discriminator !== '0') { %>#<%= user.discriminator %><% } %>
+                                            </div>
+                                        </div>
+                                        <span style="display: inline-flex; align-items: center; gap: var(--spacing-2); padding: var(--spacing-2) var(--spacing-3); background: var(--color-success-dark); color: var(--color-success); border-radius: var(--radius-full); font-size: var(--font-size-xs); font-weight: 600;">
+                                            <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: var(--color-success);"></span>
+                                            Connected
+                                        </span>
+                                    </div>
+                                    <a href="/profile" class="btn btn-sm btn-outline">
+                                        <i class="fas fa-user"></i> View Profile
+                                    </a>
+                                </div>
+
+                                <div style="padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-primary);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                                Session Management
+                                            </div>
+                                            <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                                Sign out from all devices
+                                            </div>
+                                        </div>
+                                        <a href="/logout" class="btn btn-sm btn-outline">
+                                            <i class="fas fa-sign-out-alt"></i> Logout
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- About -->
+                <div style="margin-bottom: var(--spacing-8);">
+                    <h2 style="font-size: var(--font-size-xl); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                        <i class="fas fa-info-circle"></i> About
+                    </h2>
+                    <div class="card">
+                        <div class="card-body">
+                            <div style="display: flex; flex-direction: column; gap: var(--spacing-4);">
+                                <div style="display: flex; justify-content: space-between; padding: var(--spacing-3); border-radius: var(--radius-lg); background: var(--color-bg-secondary);">
+                                    <div>
+                                        <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-1);">Dashboard Version</div>
+                                        <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary);">v2.0.0</div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; padding: var(--spacing-3); border-radius: var(--radius-lg); background: var(--color-bg-secondary);">
+                                    <div>
+                                        <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-1);">Bot Version</div>
+                                        <div style="font-size: var(--font-size-base); font-weight: 600; color: var(--color-text-primary);">v3.1.0</div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: var(--spacing-3); padding-top: var(--spacing-4); border-top: 1px solid var(--color-border-primary);">
+                                    <a href="/commands" class="btn btn-sm btn-outline" style="flex: 1;">
+                                        <i class="fas fa-terminal"></i> View Commands
+                                    </a>
+                                    <a href="/status" class="btn btn-sm btn-outline" style="flex: 1;">
+                                        <i class="fas fa-chart-line"></i> System Status
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Toggle Switch Styles */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--color-border-primary);
+    transition: var(--transition-base);
+    border-radius: 24px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: var(--transition-base);
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--color-primary-400);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(24px);
+}
+
+.toggle-slider:hover {
+    background-color: var(--color-border-secondary);
+}
+
+.toggle-switch input:checked + .toggle-slider:hover {
+    background-color: var(--color-primary-500);
+}
+</style>
+
+<script>
+// Settings functionality with server-side persistence
+document.addEventListener('DOMContentLoaded', async function() {
+    let currentPreferences = {};
+
+    // Load preferences from server
+    async function loadPreferences() {
+        try {
+            const response = await fetch('/api/user/preferences');
+            const data = await response.json();
+
+            if (data.success) {
+                currentPreferences = data.preferences;
+
+                // Set toggle states
+                document.getElementById('compactMode').checked = currentPreferences.compact_mode;
+                document.getElementById('browserNotifications').checked = currentPreferences.browser_notifications;
+                document.getElementById('streamAlerts').checked = currentPreferences.stream_alerts;
+                document.getElementById('updateNotifications').checked = currentPreferences.update_notifications;
+                document.getElementById('showOnlineStatus').checked = currentPreferences.show_online_status;
+                document.getElementById('analytics').checked = currentPreferences.analytics_enabled;
+
+                // Set stream announcement persistence radio
+                const keepValue = currentPreferences.keep_announcement_after_stream === null ? 'default' :
+                                 currentPreferences.keep_announcement_after_stream === true ? 'keep' : 'delete';
+                const radioToCheck = document.querySelector(`input[name="keepAnnouncement"][value="${keepValue}"]`);
+                if (radioToCheck) radioToCheck.checked = true;
+
+                // Apply compact mode if enabled
+                if (currentPreferences.compact_mode) {
+                    document.body.classList.add('compact-mode');
+                }
+
+                // Update theme selection based on actual current theme
+                const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+                updateThemeUI(currentTheme);
+            }
+        } catch (error) {
+            console.error('Error loading preferences:', error);
+        }
+    }
+
+    // Update theme UI
+    function updateThemeUI(theme) {
+        const darkOption = document.getElementById('darkThemeOption');
+        const lightOption = document.getElementById('lightThemeOption');
+
+        if (theme === 'dark') {
+            darkOption.style.borderColor = 'var(--color-primary-400)';
+            darkOption.style.opacity = '1';
+            darkOption.querySelector('.theme-check').style.display = 'block';
+            darkOption.querySelector('.theme-status').textContent = 'Currently active';
+
+            lightOption.style.borderColor = 'var(--color-border-primary)';
+            lightOption.style.opacity = '0.7';
+            lightOption.querySelector('.theme-check').style.display = 'none';
+            lightOption.querySelector('.theme-status').textContent = 'Click to activate';
+        } else {
+            lightOption.style.borderColor = 'var(--color-primary-400)';
+            lightOption.style.opacity = '1';
+            lightOption.querySelector('.theme-check').style.display = 'block';
+            lightOption.querySelector('.theme-status').textContent = 'Currently active';
+
+            darkOption.style.borderColor = 'var(--color-border-primary)';
+            darkOption.style.opacity = '0.7';
+            darkOption.querySelector('.theme-check').style.display = 'none';
+            darkOption.querySelector('.theme-status').textContent = 'Click to activate';
+        }
+    }
+
+    // Save preferences to server
+    async function savePreferences(updates = {}) {
+        currentPreferences = { ...currentPreferences, ...updates };
+
+        try {
+            const response = await fetch('/api/user/preferences', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(currentPreferences)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Show success feedback
+                showToast('Settings saved successfully!', 'success');
+            } else {
+                showToast('Failed to save settings', 'error');
+            }
+        } catch (error) {
+            console.error('Error saving preferences:', error);
+            showToast('Error saving settings', 'error');
+        }
+    }
+
+    // Toast notification helper
+    function showToast(message, type = 'info') {
+        // Create toast element
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: ${type === 'success' ? 'var(--color-success)' : type === 'error' ? 'var(--color-danger)' : 'var(--color-primary-400)'};
+            color: white;
+            padding: var(--spacing-4) var(--spacing-5);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            z-index: 10000;
+            animation: slideIn 0.3s ease-out;
+        `;
+        toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i> ${message}`;
+
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Load initial preferences
+    await loadPreferences();
+
+    // Compact Mode toggle
+    document.getElementById('compactMode').addEventListener('change', async function(e) {
+        if (e.target.checked) {
+            document.body.classList.add('compact-mode');
+        } else {
+            document.body.classList.remove('compact-mode');
+        }
+        await savePreferences({ compact_mode: e.target.checked });
+    });
+
+    // Browser Notifications toggle
+    document.getElementById('browserNotifications').addEventListener('change', async function(e) {
+        if (e.target.checked && 'Notification' in window) {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                e.target.checked = false;
+                showToast('Notification permission denied', 'error');
+                return;
+            }
+        }
+        await savePreferences({ browser_notifications: e.target.checked });
+    });
+
+    // Stream Alerts toggle
+    document.getElementById('streamAlerts').addEventListener('change', async function(e) {
+        await savePreferences({ stream_alerts: e.target.checked });
+    });
+
+    // Update Notifications toggle
+    document.getElementById('updateNotifications').addEventListener('change', async function(e) {
+        await savePreferences({ update_notifications: e.target.checked });
+    });
+
+    // Show Online Status toggle
+    document.getElementById('showOnlineStatus').addEventListener('change', async function(e) {
+        await savePreferences({ show_online_status: e.target.checked });
+    });
+
+    // Analytics toggle
+    document.getElementById('analytics').addEventListener('change', async function(e) {
+        await savePreferences({ analytics_enabled: e.target.checked });
+    });
+
+    // Stream announcement persistence radio buttons
+    document.querySelectorAll('input[name="keepAnnouncement"]').forEach(radio => {
+        radio.addEventListener('change', async function() {
+            const value = this.value;
+            const keepValue = value === 'default' ? null : value === 'keep' ? true : false;
+            await savePreferences({ keep_announcement_after_stream: keepValue });
+        });
+    });
+
+    // Theme selection - sync with topbar theme toggle
+    document.querySelectorAll('.theme-option').forEach(option => {
+        option.addEventListener('click', async function() {
+            const theme = this.dataset.theme;
+
+            // Update document theme
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+
+            // Update UI
+            updateThemeUI(theme);
+
+            // Update topbar theme toggle icon if it exists
+            const themeToggle = document.getElementById('themeToggle');
+            if (themeToggle) {
+                const icon = themeToggle.querySelector('i');
+                if (theme === 'light') {
+                    icon.classList.remove('fa-moon');
+                    icon.classList.add('fa-sun');
+                } else {
+                    icon.classList.remove('fa-sun');
+                    icon.classList.add('fa-moon');
+                }
+            }
+
+            // Save preference to server
+            await savePreferences({ theme });
+            showToast(`Switched to ${theme === 'light' ? 'light' : 'dark'} mode!`, 'success');
+        });
+    });
+});
+
+// Add animation keyframes
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(style);
+</script>
+
+<%- include('partials/modern-footer') %>

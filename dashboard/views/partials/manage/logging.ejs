@@ -1,0 +1,323 @@
+<%
+const currentSettings = settings || {};
+const enabledLogs = JSON.parse(currentSettings.enabled_logs || '[]');
+const categoryChannels = JSON.parse(currentSettings.log_categories || '{}');
+const auditLogsData = auditLogs || [];
+const logCategories = [
+    // Core Message Events
+    { key: 'messageDelete', label: '💬 Message Deletions', category: 'Messages' },
+    { key: 'messageUpdate', label: '✏️ Message Edits', category: 'Messages' },
+
+    // Member Events
+    { key: 'memberUpdate', label: '👤 Member Updates (Roles, Nicknames)', category: 'Members' },
+    { key: 'memberLeave', label: '👋 Member Leave', category: 'Members' },
+    { key: 'memberKick', label: '🚪 Member Kicks', category: 'Members' },
+
+    // Voice Events
+    { key: 'voiceUpdate', label: '🔊 Voice Channel Join/Leave/Move', category: 'Voice' },
+
+    // Channel Events (NEW)
+    { key: 'channelCreate', label: '➕ Channel Created', category: 'Channels' },
+    { key: 'channelDelete', label: '➖ Channel Deleted', category: 'Channels' },
+    { key: 'channelUpdate', label: '🔧 Channel Updated', category: 'Channels' },
+
+    // Thread Events (NEW)
+    { key: 'threadCreate', label: '🧵 Thread Created', category: 'Threads' },
+    { key: 'threadDelete', label: '🗑️ Thread Deleted', category: 'Threads' },
+    { key: 'threadUpdate', label: '📝 Thread Updated', category: 'Threads' },
+
+    // Guild/Server Events (NEW)
+    { key: 'guildUpdate', label: '🏛️ Server Settings Updated', category: 'Server' },
+    { key: 'ban', label: '🔨 Member Bans', category: 'Moderation' },
+    { key: 'unban', label: '🔓 Member Unbans', category: 'Moderation' },
+
+    // Role Events (NEW)
+    { key: 'roleCreate', label: '🎭 Role Created', category: 'Roles' },
+    { key: 'roleDelete', label: '❌ Role Deleted', category: 'Roles' },
+    { key: 'roleUpdate', label: '🎨 Role Updated', category: 'Roles' },
+
+    // Emoji/Sticker Events (NEW)
+    { key: 'emojiCreate', label: '😀 Emoji Added', category: 'Emojis & Stickers' },
+    { key: 'emojiDelete', label: '😢 Emoji Removed', category: 'Emojis & Stickers' },
+    { key: 'emojiUpdate', label: '😎 Emoji Updated', category: 'Emojis & Stickers' },
+    { key: 'stickerCreate', label: '🏷️ Sticker Added', category: 'Emojis & Stickers' },
+    { key: 'stickerDelete', label: '🗑️ Sticker Removed', category: 'Emojis & Stickers' },
+    { key: 'stickerUpdate', label: '✨ Sticker Updated', category: 'Emojis & Stickers' },
+
+    // Webhook/Integration Events (NEW)
+    { key: 'webhookUpdate', label: '🔗 Webhook Modified', category: 'Integrations' },
+    { key: 'integrationUpdate', label: '🤖 Integration/Bot Added/Removed', category: 'Integrations' },
+
+    // Bot Feature Events
+    { key: 'moderation', label: '⚖️ Moderation Actions', category: 'Bot Features' },
+    { key: 'join-gate', label: '🚧 Join Gate Actions', category: 'Bot Features' },
+    { key: 'system', label: '🤖 Bot System Messages', category: 'Bot Features' },
+    { key: 'xp', label: '⭐ Level Up/XP Events', category: 'Bot Features' },
+    { key: 'giveaway', label: '🎉 Giveaway Events', category: 'Bot Features' },
+    { key: 'poll', label: '📊 Poll Events', category: 'Bot Features' },
+    { key: 'starboard', label: '⭐ Starboard Posts', category: 'Bot Features' },
+    { key: 'sticky-roles', label: '📌 Sticky Role Updates', category: 'Bot Features' },
+    { key: 'temp-channels', label: '🔄 Temp Channel Events', category: 'Bot Features' },
+    { key: 'twitch-schedule', label: '📅 Twitch Schedule Sync', category: 'Bot Features' },
+    { key: 'auto-publisher', label: '📢 Auto-Publisher', category: 'Bot Features' },
+    { key: 'autorole', label: '🎭 Autorole Assignments', category: 'Bot Features' },
+    { key: 'tickets', label: '🎫 Ticket Events', category: 'Bot Features' },
+    { key: 'backup', label: '💾 Backup & Restore', category: 'Bot Features' },
+    { key: 'team-sync', label: '👥 Team Sync Events', category: 'Bot Features' },
+    { key: 'http', label: '🌐 Dashboard Actions', category: 'Bot Features' }
+];
+
+// Group categories for better organization
+const categoryGroups = {};
+logCategories.forEach(cat => {
+    if (!categoryGroups[cat.category]) categoryGroups[cat.category] = [];
+    categoryGroups[cat.category].push(cat);
+});
+%>
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-clipboard-list"></i>
+                <span>Event Logging</span>
+            </div>
+            <div class="page-section-subtitle">
+                Track server events, moderation actions, and bot activities
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Enabled Categories</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= enabledLogs.length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Recent Logs</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= auditLogsData.length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Channel Overrides</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= Object.keys(categoryChannels).filter(k => categoryChannels[k]).length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Default Channel</div>
+            <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-success);">
+                <%= currentSettings.log_channel_id ? channels.find(c => c.id === currentSettings.log_channel_id)?.name || 'Unknown' : 'Not Set' %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Configuration Section -->
+    <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+            <i class="fas fa-cog" style="color: var(--color-primary-400);"></i>
+            Log Configuration
+        </h3>
+        <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
+            Set a default log channel and enable specific event categories
+        </p>
+        <form action="/manage/<%= guild.id %>/update-logging" method="POST">
+            <div style="margin-bottom: var(--spacing-5);">
+                <label class="form-label">Default Log Channel</label>
+                <select class="form-select" id="log-channel-id" name="log_channel_id">
+                    <option value="">Disabled</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= currentSettings.log_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                    <% }) %>
+                </select>
+                <div class="form-help">Logs for categories set to "Default" will be sent here</div>
+            </div>
+
+            <div style="border-top: 1px solid var(--color-dark-400); padding-top: var(--spacing-5); margin-bottom: var(--spacing-5);"></div>
+
+            <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                Event Categories
+            </h4>
+            <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
+                Enable specific event types and optionally route them to different channels
+            </p>
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                    <tr>
+                        <th style="width: 40%;">Log Category</th>
+                        <th style="width: 15%; text-align: center;">Enable</th>
+                        <th style="width: 45%;">Channel Override</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <% logCategories.forEach(cat => { %>
+                        <tr>
+                            <td>
+                                <label for="log-<%= cat.key %>" style="display: flex; align-items: center; gap: var(--spacing-2); cursor: pointer;">
+                                    <span style="font-size: var(--font-size-base);"><%= cat.label %></span>
+                                    <span class="badge badge-secondary" style="font-size: var(--font-size-xs);"><%= cat.category %></span>
+                                </label>
+                            </td>
+                            <td style="text-align: center;">
+                                <label class="toggle-switch">
+                                    <input type="checkbox" name="enabled_logs" value="<%= cat.key %>" id="log-<%= cat.key %>" <%= enabledLogs.includes(cat.key) ? 'checked' : '' %>>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </td>
+                            <td>
+                                <select class="form-select" name="log_categories[<%= cat.key %>]" style="font-size: var(--font-size-sm);">
+                                    <option value="">Default Channel</option>
+                                    <% channels.forEach(channel => { %>
+                                        <option value="<%= channel.id %>" <%= categoryChannels[cat.key] === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                                    <% }) %>
+                                </select>
+                            </td>
+                        </tr>
+                    <% }); %>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; margin-top: var(--spacing-4);">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i>
+                    <span>Save Log Configuration</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Webhook Overrides Section -->
+    <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+            <i class="fas fa-link" style="color: var(--color-primary-400);"></i>
+            Channel Webhook Overrides
+        </h3>
+        <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
+            Use custom webhooks for specific channels instead of bot-created ones
+        </p>
+        <form action="/manage/<%= guild.id %>/update-channel-webhooks" method="POST">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                    <tr>
+                        <th style="width: 30%;">Channel</th>
+                        <th style="width: 70%;">Custom Webhook URL</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <% channels.slice(0, 10).forEach(channel => { %>
+                        <% const cs = channelSettingsMap.get(channel.id) || {}; %>
+                        <tr>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                    <i class="fas fa-hashtag" style="color: var(--color-text-muted); font-size: var(--font-size-sm);"></i>
+                                    <span style="font-weight: var(--font-weight-medium);"><%= channel.name %></span>
+                                </div>
+                            </td>
+                            <td>
+                                <input type="url" class="form-control" name="channel_webhooks[<%= channel.id %>]" value="<%= cs.webhook_url || '' %>" placeholder="https://discord.com/api/webhooks/...">
+                            </td>
+                        </tr>
+                    <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <div style="display: flex; justify-content: flex-end; margin-top: var(--spacing-4);">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i>
+                    <span>Save Webhook Overrides</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--color-dark-400);
+    transition: var(--transition-base);
+    border-radius: 24px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: var(--transition-base);
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: var(--color-primary-500);
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(20px);
+}
+
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-700);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+</style>

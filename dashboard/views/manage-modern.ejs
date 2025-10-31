@@ -1,0 +1,518 @@
+<%- include('partials/modern-header', {
+    pageTitle: `Manage ${guild.name}`,
+    additionalCSS: []
+}) %>
+
+<%
+// Define default values for all variables to prevent ReferenceErrors
+// Using locals object to safely check if variables exist
+const consolidatedStreamers = locals.consolidatedStreamers || [];
+const teamSubscriptions = locals.teamSubscriptions || [];
+const settings = locals.settings || {};
+const welcomeSettings = locals.welcomeSettings || {};
+const reactionRolePanels = locals.reactionRolePanels || [];
+const starboardConfig = locals.starboardConfig || {};
+const roleRewards = locals.roleRewards || [];
+const giveaways = locals.giveaways || [];
+const polls = locals.polls || [];
+const suggestions = locals.suggestions || [];
+const suggestionConfig = locals.suggestionConfig || {};
+const suggestionStats = locals.suggestionStats || {};
+const suggestionTags = locals.suggestionTags || [];
+const musicConfig = locals.musicConfig || {};
+const voiceChannels = locals.voiceChannels || [];
+const birthdayUsers = locals.birthdayUsers || [];
+const birthdayStats = locals.birthdayStats || {};
+const weatherStats = locals.weatherStats || {};
+const economyConfig = locals.economyConfig || {};
+const shopItems = locals.shopItems || [];
+const economyStats = locals.economyStats || {};
+const topUsers = locals.topUsers || [];
+const triviaQuestions = locals.triviaQuestions || [];
+const hangmanWords = locals.hangmanWords || [];
+const countingChannels = locals.countingChannels || [];
+const gameStats = locals.gameStats || {};
+const gamblingConfig = locals.gamblingConfig || {};
+const gamblingHistory = locals.gamblingHistory || [];
+const gamblingStats = locals.gamblingStats || {};
+const topGamblers = locals.topGamblers || [];
+const activeTrades = locals.activeTrades || [];
+const tradeHistory = locals.tradeHistory || [];
+const tradeStats = locals.tradeStats || {};
+const rpgStats = locals.rpgStats || {};
+const rpgCharacters = locals.rpgCharacters || [];
+const moderationConfig = locals.moderationConfig || {};
+const recentInfractions = locals.recentInfractions || [];
+const escalationRules = locals.escalationRules || [];
+const automodRules = locals.automodRules || [];
+const heatConfig = locals.heatConfig || {};
+const joinGateConfig = locals.joinGateConfig || {};
+const antiRaidConfig = locals.antiRaidConfig || {};
+const antiNukeConfig = locals.antiNukeConfig || {};
+const quarantineConfig = locals.quarantineConfig || {};
+const statroleConfigs = locals.statroleConfigs || [];
+const logConfig = locals.logConfig || {};
+const actionLogs = locals.actionLogs || [];
+const channelSettingsMap = locals.channelSettingsMap || new Map();
+const analyticsData = locals.analyticsData || {};
+const redditFeeds = locals.redditFeeds || [];
+const youtubeFeeds = locals.youtubeFeeds || [];
+const twitterFeeds = locals.twitterFeeds || [];
+const twitchScheduleSyncs = locals.twitchScheduleSyncs || [];
+const autoPublisherConfig = locals.autoPublisherConfig || {};
+const autorolesConfig = locals.autorolesConfig || {};
+const tempChannelConfig = locals.tempChannelConfig || {};
+const customCommands = locals.customCommands || [];
+const commandSettings = locals.commandSettings || [];
+const forms = locals.forms || [];
+const ticketConfig = locals.ticketConfig || {};
+const ticketFormsList = locals.ticketFormsList || [];
+const backups = locals.backups || [];
+const permissionOverrides = locals.permissionOverrides || [];
+const reminders = locals.reminders || [];
+const tags = locals.tags || [];
+const roles = locals.roles || [];
+const channels = locals.channels || [];
+const categories = locals.categories || [];
+%>
+
+<style>
+.manage-layout {
+    display: flex;
+    min-height: calc(100vh - var(--topbar-height));
+    background: var(--color-dark-800);
+}
+
+.manage-sidebar {
+    width: 280px;
+    background: var(--color-dark-700);
+    border-right: 1px solid var(--color-dark-400);
+    padding: var(--spacing-6);
+    overflow-y: auto;
+    position: sticky;
+    top: var(--topbar-height);
+    height: calc(100vh - var(--topbar-height));
+}
+
+.guild-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    padding: var(--spacing-4);
+    background: var(--color-dark-600);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--spacing-6);
+    border: 1px solid var(--color-dark-400);
+}
+
+.guild-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid var(--color-primary-500);
+}
+
+.guild-info h2 {
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.guild-back {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    margin-top: var(--spacing-1);
+    transition: color var(--transition-base);
+}
+
+.guild-back:hover {
+    color: var(--color-primary-400);
+}
+
+.manage-nav-section {
+    margin-bottom: var(--spacing-6);
+}
+
+.manage-nav-heading {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-2);
+    padding-left: var(--spacing-2);
+}
+
+.manage-nav-link {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-base);
+    margin-bottom: var(--spacing-1);
+}
+
+.manage-nav-link:hover {
+    background: var(--color-dark-600);
+    color: var(--color-text-primary);
+}
+
+.manage-nav-link.active {
+    background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600));
+    color: white;
+}
+
+.manage-nav-link i {
+    width: 16px;
+    text-align: center;
+    opacity: 0.8;
+}
+
+.manage-content {
+    flex: 1;
+    padding: var(--spacing-8);
+    overflow-y: auto;
+}
+
+.page-section {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-6);
+    margin-bottom: var(--spacing-6);
+}
+
+.page-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-4);
+    padding-bottom: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.page-section-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.page-section-subtitle {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-1);
+}
+
+@media (max-width: 768px) {
+    .manage-layout {
+        flex-direction: column;
+    }
+
+    .manage-sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+        border-right: none;
+        border-bottom: 1px solid var(--color-dark-400);
+    }
+}
+</style>
+
+<div class="manage-layout">
+    <aside class="manage-sidebar">
+        <div class="guild-header">
+            <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
+                 class="guild-icon"
+                 alt="<%= guild.name %>">
+            <div class="guild-info">
+                <h2><%= guild.name %></h2>
+                <a href="/servers" class="guild-back">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>All Servers</span>
+                </a>
+            </div>
+        </div>
+
+        <nav>
+            <div class="manage-nav-section">
+                <a href="/manage/<%= guild.id %>" class="manage-nav-link">
+                    <i class="fas fa-home"></i>
+                    <span>Overview</span>
+                </a>
+            </div>
+
+            <div class="manage-nav-section">
+                <div class="manage-nav-heading">Core</div>
+                <a href="/manage/<%= guild.id %>?page=streamers" class="manage-nav-link">
+                    <i class="fas fa-users"></i>
+                    <span>Streamers</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=teams" class="manage-nav-link">
+                    <i class="fas fa-user-friends"></i>
+                    <span>Teams</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=appearance" class="manage-nav-link">
+                    <i class="fas fa-paint-brush"></i>
+                    <span>Appearance</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=core" class="manage-nav-link">
+                    <i class="fas fa-cog"></i>
+                    <span>Core Settings</span>
+                </a>
+            </div>
+
+            <div class="manage-nav-section">
+                <div class="manage-nav-heading">Community</div>
+                <a href="/manage/<%= guild.id %>?page=welcome" class="manage-nav-link">
+                    <i class="fas fa-hand-sparkles"></i>
+                    <span>Welcome</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=reaction-roles" class="manage-nav-link">
+                    <i class="fas fa-smile-beam"></i>
+                    <span>Reaction Roles</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=starboard" class="manage-nav-link">
+                    <i class="fas fa-star"></i>
+                    <span>Starboard</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=leveling" class="manage-nav-link">
+                    <i class="fas fa-trophy"></i>
+                    <span>Leveling</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=giveaways" class="manage-nav-link">
+                    <i class="fas fa-gift"></i>
+                    <span>Giveaways</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=polls" class="manage-nav-link">
+                    <i class="fas fa-poll"></i>
+                    <span>Polls</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=suggestions" class="manage-nav-link">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>Suggestions</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=music" class="manage-nav-link">
+                    <i class="fas fa-music"></i>
+                    <span>Music</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=birthday" class="manage-nav-link">
+                    <i class="fas fa-birthday-cake"></i>
+                    <span>Birthdays</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=weather" class="manage-nav-link">
+                    <i class="fas fa-cloud-sun"></i>
+                    <span>Weather</span>
+                </a>
+            </div>
+
+            <div class="manage-nav-section">
+                <div class="manage-nav-heading">Economy & Games</div>
+                <a href="/manage/<%= guild.id %>?page=economy" class="manage-nav-link">
+                    <i class="fas fa-coins"></i>
+                    <span>Economy</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=games" class="manage-nav-link">
+                    <i class="fas fa-gamepad"></i>
+                    <span>Games</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=gambling" class="manage-nav-link">
+                    <i class="fas fa-dice"></i>
+                    <span>Gambling</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=trading" class="manage-nav-link">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Trading</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=rpg" class="manage-nav-link">
+                    <i class="fas fa-dragon"></i>
+                    <span>RPG</span>
+                </a>
+            </div>
+
+            <div class="manage-nav-section">
+                <div class="manage-nav-heading">Moderation</div>
+                <a href="/manage/<%= guild.id %>?page=moderation" class="manage-nav-link">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>Moderation</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=automod" class="manage-nav-link">
+                    <i class="fas fa-robot"></i>
+                    <span>AutoMod</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=security" class="manage-nav-link">
+                    <i class="fas fa-lock"></i>
+                    <span>Security</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=quarantine" class="manage-nav-link">
+                    <i class="fas fa-user-shield"></i>
+                    <span>Quarantine</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=mass" class="manage-nav-link">
+                    <i class="fas fa-users-cog"></i>
+                    <span>Mass Actions</span>
+                </a>
+            </div>
+
+            <div class="manage-nav-section">
+                <div class="manage-nav-heading">Analytics</div>
+                <a href="/manage/<%= guild.id %>?page=stat-roles" class="manage-nav-link">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Stat Roles</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=logging" class="manage-nav-link">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Logging</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=action-log" class="manage-nav-link">
+                    <i class="fas fa-history"></i>
+                    <span>Action Log</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=analytics" class="manage-nav-link">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Analytics</span>
+                </a>
+            </div>
+
+            <div class="manage-nav-section">
+                <div class="manage-nav-heading">Feeds</div>
+                <a href="/manage/<%= guild.id %>?page=feeds" class="manage-nav-link">
+                    <i class="fas fa-rss"></i>
+                    <span>Social Feeds</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=twitch-schedules" class="manage-nav-link">
+                    <i class="fab fa-twitch"></i>
+                    <span>Twitch Schedules</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=announcements" class="manage-nav-link">
+                    <i class="fas fa-bullhorn"></i>
+                    <span>Announcements</span>
+                </a>
+            </div>
+
+            <div class="manage-nav-section">
+                <div class="manage-nav-heading">Utility</div>
+                <a href="/manage/<%= guild.id %>?page=utilities" class="manage-nav-link">
+                    <i class="fas fa-wrench"></i>
+                    <span>Utilities</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=custom-commands" class="manage-nav-link">
+                    <i class="fas fa-terminal"></i>
+                    <span>Custom Commands</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=commands" class="manage-nav-link">
+                    <i class="fas fa-code"></i>
+                    <span>Commands</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=forms" class="manage-nav-link">
+                    <i class="fas fa-file-alt"></i>
+                    <span>Forms</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=tickets" class="manage-nav-link">
+                    <i class="fas fa-ticket-alt"></i>
+                    <span>Tickets</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=backups" class="manage-nav-link">
+                    <i class="fas fa-save"></i>
+                    <span>Backups</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=permissions" class="manage-nav-link">
+                    <i class="fas fa-user-lock"></i>
+                    <span>Permissions</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=reminders" class="manage-nav-link">
+                    <i class="fas fa-clock"></i>
+                    <span>Reminders</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=tags" class="manage-nav-link">
+                    <i class="fas fa-tag"></i>
+                    <span>Tags</span>
+                </a>
+                <a href="/manage/<%= guild.id %>?page=csv" class="manage-nav-link">
+                    <i class="fas fa-file-csv"></i>
+                    <span>CSV Import/Export</span>
+                </a>
+            </div>
+        </nav>
+    </aside>
+
+    <main class="manage-content">
+        <%
+        const pageMap = {
+            'overview': { partial: 'overview', data: { guild, consolidatedStreamers, roles, channels } },
+            'streamers': { partial: 'streamers', data: { guild, streamers: consolidatedStreamers, roles, channels } },
+            'teams': { partial: 'teams', data: { guild, teamSubscriptions, roles, channels } },
+            'appearance': { partial: 'appearance', data: { guild, settings } },
+            'core': { partial: 'core', data: { guild, settings, roles } },
+            'welcome': { partial: 'welcome', data: { guild, settings: welcomeSettings, channels } },
+            'reaction-roles': { partial: 'reaction-roles', data: { guild, panels: reactionRolePanels, roles, channels } },
+            'starboard': { partial: 'starboard', data: { guild, settings: starboardConfig, channels } },
+            'leveling': { partial: 'leveling', data: { guild, settings, rewards: roleRewards, roles, channels } },
+            'giveaways': { partial: 'giveaways', data: { guild, giveaways, channels } },
+            'polls': { partial: 'polls', data: { guild, polls, channels } },
+            'suggestions': { partial: 'suggestions', data: { guild, suggestions, suggestionConfig, suggestionStats, suggestionTags, channels, roles } },
+            'music': { partial: 'music', data: { guild, musicConfig: typeof musicConfig !== 'undefined' ? musicConfig : {}, availableDJVoices: typeof availableDJVoices !== 'undefined' ? availableDJVoices : [], roles, channels, voiceChannels } },
+            'birthday': { partial: 'birthday', data: { guild, birthdays: birthdayUsers, birthdayStats, channels } },
+            'weather': { partial: 'weather', data: { guild, weatherStats, weatherConfig: typeof weatherConfig !== 'undefined' ? weatherConfig : {}, channels } },
+            'economy': { partial: 'economy', data: { guild, economyConfig, shopItems, economyStats, topUsers } },
+            'games': { partial: 'games', data: { guild, triviaQuestions, hangmanWords, countingChannels, gameStats } },
+            'gambling': { partial: 'gambling', data: { guild, gamblingConfig, gamblingHistory, gamblingStats, topGamblers } },
+            'trading': { partial: 'trading', data: { guild, activeTrades, tradeHistory, tradeStats } },
+            'rpg': { partial: 'rpg', data: { guild, rpgStats, characters: rpgCharacters || [], quests: [] } },
+            'moderation': { partial: 'moderation', data: { guild, settings: moderationConfig, infractions: recentInfractions, escalationRules: escalationRules, roles } },
+            'automod': { partial: 'automod', data: { guild, rules: automodRules, heatConfig } },
+            'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles } },
+            'quarantine': { partial: 'quarantine', data: { guild, quarantineConfig, roles } },
+            'mass': { partial: 'mass', data: { guild, roles, channels } },
+            'stat-roles': { partial: 'stat-roles', data: { guild, statroles: statroleConfigs, roles } },
+            'logging': { partial: 'logging', data: { guild, settings: logConfig, auditLogs: typeof auditLogs !== 'undefined' ? auditLogs : [], channels, channelSettingsMap: typeof channelSettingsMap !== 'undefined' ? channelSettingsMap : new Map() } },
+            'action-log': { partial: 'action-log', data: { guild, actionLogs: typeof actionLogs !== 'undefined' ? actionLogs : [] } },
+            'analytics': { partial: 'analytics', data: { guild, serverStats: typeof serverStats !== 'undefined' ? serverStats : [] } },
+            'feeds': { partial: 'feeds', data: { guild, redditFeeds, youtubeFeeds, twitterFeeds, channels } },
+            'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
+            'announcements': { partial: 'announcements', data: { guild, settings, channels, roles } },
+            'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
+            'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
+            'commands': { partial: 'commands', data: { guild, commands: typeof commandSettings !== 'undefined' ? commandSettings : [] } },
+            'forms': { partial: 'forms', data: { guild, forms: typeof forms !== 'undefined' ? forms : [], channels } },
+            'tickets': { partial: 'tickets', data: { guild, ticketConfig, forms: typeof ticketFormsList !== 'undefined' ? ticketFormsList : [], categories, roles } },
+            'backups': { partial: 'backups', data: { guild, backups: typeof backups !== 'undefined' ? backups : [] } },
+            'permissions': { partial: 'permissions', data: { guild, permissionOverrides: typeof permissionOverrides !== 'undefined' ? permissionOverrides : [], roles, channels } },
+            'reminders': { partial: 'reminders', data: { guild, reminders: typeof reminders !== 'undefined' ? reminders : [], channels } },
+            'tags': { partial: 'tags', data: { guild, tags: typeof tags !== 'undefined' ? tags : [] } },
+            'csv': { partial: 'csv', data: { guild } },
+            'search': { partial: 'search', data: { guild } }
+        };
+        const activePage = pageMap[page] || pageMap['overview'];
+        %>
+        <%- include(`partials/manage/${activePage.partial}`, activePage.data) %>
+    </main>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Highlight active nav link
+    const currentPage = '<%= page %>';
+    const navLinks = document.querySelectorAll('.manage-nav-link');
+    navLinks.forEach(link => {
+        if (link.getAttribute('href').includes(`?page=${currentPage}`)) {
+            link.classList.add('active');
+        }
+    });
+});
+</script>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>

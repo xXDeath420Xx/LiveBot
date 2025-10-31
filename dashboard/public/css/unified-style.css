@@ -1,0 +1,49 @@
+/* CertiFried MultiTool - Unified Dark Theme */
+body {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: #ffffff;
+    min-height: 100vh;
+}
+
+.navbar {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+.card {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    color: #ffffff;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #e94560 0%, #533483 100%);
+    border: none;
+    color: #ffffff;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #ff5277 0%, #6a4d9a 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(233, 69, 96, 0.6);
+}
+
+.container {
+    padding-top: 50px;
+}
+
+/* Ensure all text has good contrast */
+.text-muted {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+a {
+    color: #e94560;
+}
+
+a:hover {
+    color: #ff5277;
+}

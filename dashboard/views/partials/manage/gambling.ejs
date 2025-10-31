@@ -1,0 +1,266 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-dice"></i>
+                <span>Gambling System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Monitor gambling activity, configure settings, and view leaderboards
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Games</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= gamblingStats?.total_games || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Wagered</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);"><%= gamblingStats?.total_wagered?.toLocaleString() || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Won</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= gamblingStats?.total_won?.toLocaleString() || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">House Edge</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= (gamblingStats?.house_edge || 0) > 0 ? 'var(--color-success)' : 'var(--color-danger)' %>;">
+                <%= ((gamblingStats?.house_edge || 0) > 0 ? '+' : '') + (gamblingStats?.house_edge?.toLocaleString() || 0) %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gambling Configuration -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-cog"></i> Gambling Configuration
+        </h3>
+        <form action="/manage/<%= guild.id %>/gambling/config" method="POST">
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                        <input type="checkbox" id="gamblingEnabled" name="enabled" class="form-check-input" style="width: 20px; height: 20px;" <%= gamblingConfig?.enabled ? 'checked' : '' %>>
+                        <label for="gamblingEnabled" class="form-label" style="margin: 0; cursor: pointer;">Enable Gambling System</label>
+                    </div>
+                    <div class="form-help" style="margin-left: 28px;">Allow users to gamble with currency</div>
+                </div>
+                <div>
+                    <label class="form-label">Minimum Bet Amount</label>
+                    <input type="number" class="form-control" name="min_bet" value="<%= gamblingConfig?.min_bet || 10 %>" min="1">
+                    <div class="form-help">Smallest amount users can bet</div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Maximum Bet Amount</label>
+                    <input type="number" class="form-control" name="max_bet" value="<%= gamblingConfig?.max_bet || 10000 %>" min="1">
+                    <div class="form-help">Largest amount users can bet</div>
+                </div>
+                <div>
+                    <label class="form-label">Cooldown (seconds)</label>
+                    <input type="number" class="form-control" name="cooldown" value="<%= gamblingConfig?.cooldown || 5 %>" min="0">
+                    <div class="form-help">Time between gambling commands</div>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Configuration</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Recent Gambling Activity -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-history"></i> Recent Gambling Activity (Last 50)
+        </h3>
+
+        <% if (gamblingHistory && gamblingHistory.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>User</th>
+                            <th>Game</th>
+                            <th class="text-end">Bet</th>
+                            <th>Result</th>
+                            <th class="text-end">Payout</th>
+                            <th class="text-end">Profit/Loss</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% gamblingHistory.forEach(g => {
+                            const profitLoss = (g.payout || 0) - g.bet_amount;
+                        %>
+                            <tr>
+                                <td>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                        <%= new Date(g.timestamp).toLocaleString() %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= g.user_id %></code>
+                                </td>
+                                <td>
+                                    <span class="badge badge-secondary" style="text-transform: capitalize;"><%= g.game_type %></span>
+                                </td>
+                                <td class="text-end">
+                                    <span style="color: var(--color-warning);"><%= g.bet_amount.toLocaleString() %></span>
+                                </td>
+                                <td>
+                                    <% if (g.result === 'win') { %>
+                                        <span class="badge badge-success">Win</span>
+                                    <% } else if (g.result === 'loss') { %>
+                                        <span class="badge badge-danger">Loss</span>
+                                    <% } else { %>
+                                        <span class="badge" style="background: var(--color-accent-purple);">Draw</span>
+                                    <% } %>
+                                </td>
+                                <td class="text-end">
+                                    <span style="color: var(--color-success);"><%= (g.payout || 0).toLocaleString() %></span>
+                                </td>
+                                <td class="text-end">
+                                    <strong style="color: <%= profitLoss > 0 ? 'var(--color-success)' : profitLoss < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' %>;">
+                                        <%= profitLoss > 0 ? '+' : '' %><%= profitLoss.toLocaleString() %>
+                                    </strong>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
+                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
+                    No gambling activity yet
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Top Gamblers Leaderboard -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-trophy"></i> Top Gamblers (By Total Wagered)
+        </h3>
+
+        <% if (topGamblers && topGamblers.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Rank</th>
+                            <th>User</th>
+                            <th class="text-end">Games Played</th>
+                            <th class="text-end">Total Wagered</th>
+                            <th class="text-end">Total Won</th>
+                            <th class="text-end">Net Profit</th>
+                            <th class="text-end">Win Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% topGamblers.forEach((user, index) => {
+                            const netProfit = (user.total_won || 0) - (user.total_wagered || 0);
+                            const winRate = user.games_played > 0 ? ((user.wins / user.games_played) * 100).toFixed(1) : 0;
+                        %>
+                            <tr>
+                                <td>
+                                    <div style="font-size: var(--font-size-lg);">
+                                        <% if (index === 0) { %>🥇
+                                        <% } else if (index === 1) { %>🥈
+                                        <% } else if (index === 2) { %>🥉
+                                        <% } else { %>
+                                            <span style="font-weight: var(--font-weight-semibold); color: var(--color-text-muted);">#<%= index + 1 %></span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <code style="font-size: var(--font-size-sm); color: var(--color-text-secondary);"><%= user.user_id %></code>
+                                </td>
+                                <td class="text-end">
+                                    <span style="color: var(--color-text-primary);"><%= user.games_played %></span>
+                                </td>
+                                <td class="text-end">
+                                    <span style="color: var(--color-warning);"><%= user.total_wagered.toLocaleString() %></span>
+                                </td>
+                                <td class="text-end">
+                                    <span style="color: var(--color-success);"><%= user.total_won.toLocaleString() %></span>
+                                </td>
+                                <td class="text-end">
+                                    <strong style="color: <%= netProfit > 0 ? 'var(--color-success)' : netProfit < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' %>;">
+                                        <%= netProfit > 0 ? '+' : '' %><%= netProfit.toLocaleString() %>
+                                    </strong>
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge" style="background: <%= winRate >= 50 ? 'var(--color-success)' : 'var(--color-danger)' %>;">
+                                        <%= winRate %>%
+                                    </span>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
+                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
+                    No gambling data yet
+                </div>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    color: var(--color-text-secondary);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.text-end {
+    text-align: right;
+}
+</style>

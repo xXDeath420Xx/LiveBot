@@ -1,62 +1,44 @@
-const { chromium } = require('playwright');
-
-let browser = null;
-let launchPromise = null;
-
-// Determine browser launch arguments based on environment variables
-const getLaunchArgs = () => {
-    const args = ['--disable-dev-shm-usage']; // Generally safe and recommended
-
-    // --no-sandbox is a security risk if the browser navigates to untrusted content.
-    // Only enable if explicitly allowed and understood, e.g., in controlled container environments.
-    if (process.env.PLAYWRIGHT_NO_SANDBOX === 'true') {
-        args.push('--no-sandbox', '--disable-setuid-sandbox');
-    }
-    return args;
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-
-const getBrowser = async () => {
-    if (browser && browser.isConnected()) return browser;
-    if (launchPromise) return await launchPromise;
-
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getBrowser = getBrowser;
+exports.closeBrowser = closeBrowser;
+const playwright_core_1 = __importDefault(require("playwright-core"));
+const logger_1 = require("./logger");
+/**
+ * Launches a new, isolated browser instance.
+ * This is more stable in a multi-process environment than a single persistent context.
+ */
+async function getBrowser() {
     try {
-        console.log('[BrowserManager] Initiating local browser for TikTok...');
-        
-        // Make headless mode configurable via environment variable
-        const isHeadless = process.env.PLAYWRIGHT_HEADLESS !== 'false'; // Default to true
-
-        launchPromise = chromium.launch({
-            headless: isHeadless,
-            args: getLaunchArgs()
-        });
-
-        browser = await launchPromise;
-        console.log('[BrowserManager] Local browser launched successfully.');
-        launchPromise = null;
-
-        browser.on('disconnected', () => {
-            console.error('[BrowserManager] Browser disconnected unexpectedly.');
-            browser = null;
+        const browser = await playwright_core_1.default.chromium.launch({
+            headless: true,
+            executablePath: process.env.CHROME_EXECUTABLE_PATH,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu'
+            ],
         });
         return browser;
-    } catch (error) {
-        console.error('[BrowserManager] FATAL: Could not launch browser:', error);
-        browser = null;
-        launchPromise = null;
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger_1.logger.error('[BrowserManager] FATAL: Could not launch browser:', { message: errorMessage });
         return null;
     }
-};
-
-const closeBrowser = async () => {
-    // If a launch is in progress, wait for it to complete before attempting to close.
-    if (launchPromise) await launchPromise;
-    if (browser) {
-        await browser.close().catch(e => {
-            console.warn('[BrowserManager] Error closing browser gracefully:', e);
-        });
-        browser = null;
-        console.log('[BrowserManager] Browser closed successfully.');
+}
+/**
+ * Gracefully closes a browser instance.
+ */
+async function closeBrowser(browser) {
+    if (browser && browser.isConnected()) {
+        await browser.close();
     }
-};
-
-module.exports = { getBrowser, closeBrowser };
+}

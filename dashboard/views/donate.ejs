@@ -1,0 +1,173 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Donate',
+    additionalCSS: []
+}) %>
+
+<div class="app-layout">
+    <%- include('partials/sidebar', {
+        user: user,
+        currentPage: 'donate'
+    }) %>
+
+    <div class="main-content">
+        <%- include('partials/topbar', {
+            breadcrumbs: [
+                { label: 'Dashboard', url: '/dashboard' },
+                { label: 'Donate', url: '/donate' }
+            ],
+            user: user
+        }) %>
+
+        <div class="content">
+            <div class="content-container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div class="page-header-top">
+                        <div style="text-align: center;">
+                            <h1 class="page-title">
+                                <i class="fas fa-heart" style="color: var(--color-danger);"></i>
+                                Support the Bot
+                            </h1>
+                            <p class="page-description">
+                                Help keep CertiFried MultiTool running and fund future development
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hero Section -->
+                <div class="card" style="margin-bottom: var(--spacing-8); text-align: center; padding: var(--spacing-10);">
+                    <div class="card-body">
+                        <i class="fas fa-heart" style="font-size: 4rem; color: var(--color-danger); margin-bottom: var(--spacing-4);"></i>
+                        <h2 style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                            Thank You for Your Support
+                        </h2>
+                        <p style="font-size: var(--font-size-lg); color: var(--color-text-secondary); max-width: 600px; margin: 0 auto var(--spacing-6);">
+                            Your donations help cover server costs, API fees, and development time. Every contribution, no matter how small, makes a difference and keeps this project alive.
+                        </p>
+                        <div style="display: flex; gap: var(--spacing-4); justify-content: center; flex-wrap: wrap;">
+                            <div class="badge badge-success" style="padding: var(--spacing-2) var(--spacing-4); font-size: var(--font-size-base);">
+                                <i class="fas fa-check-circle"></i>
+                                100% Free Bot
+                            </div>
+                            <div class="badge badge-primary" style="padding: var(--spacing-2) var(--spacing-4); font-size: var(--font-size-base);">
+                                <i class="fas fa-code"></i>
+                                Open Source
+                            </div>
+                            <div class="badge badge-secondary" style="padding: var(--spacing-2) var(--spacing-4); font-size: var(--font-size-base);">
+                                <i class="fas fa-user-shield"></i>
+                                No Paywalls
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Donation Methods -->
+                <div class="grid grid-cols-2">
+                    <!-- Cash App -->
+                    <div class="card card-hover">
+                        <div class="card-body" style="text-align: center;">
+                            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #00D632 0%, #00A827 100%); border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; margin: 0 auto var(--spacing-4); box-shadow: 0 10px 30px rgba(0, 214, 50, 0.3);">
+                                <i class="fas fa-dollar-sign" style="font-size: var(--font-size-3xl); color: white;"></i>
+                            </div>
+
+                            <h3 style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                                Cash App
+                            </h3>
+
+                            <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
+                                Send a donation directly via Cash App
+                            </p>
+
+                            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-lg); margin-bottom: var(--spacing-6); border: 1px solid var(--color-dark-400);">
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">Cash Tag</div>
+                                <div style="font-family: var(--font-family-mono); font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">
+                                    $DeathC
+                                </div>
+                            </div>
+
+                            <a href="https://cash.app/$DeathC" class="btn btn-success btn-lg" target="_blank" rel="noopener noreferrer" style="width: 100%;">
+                                <i class="fas fa-external-link-alt"></i>
+                                Open Cash App
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- PayPal -->
+                    <div class="card card-hover">
+                        <div class="card-body" style="text-align: center;">
+                            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #0070BA 0%, #003087 100%); border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; margin: 0 auto var(--spacing-4); box-shadow: 0 10px 30px rgba(0, 112, 186, 0.3);">
+                                <i class="fab fa-paypal" style="font-size: var(--font-size-3xl); color: white;"></i>
+                            </div>
+
+                            <h3 style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                                PayPal
+                            </h3>
+
+                            <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
+                                Send a donation securely via PayPal
+                            </p>
+
+                            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-lg); margin-bottom: var(--spacing-6); border: 1px solid var(--color-dark-400);">
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">PayPal Handle</div>
+                                <div style="font-family: var(--font-family-mono); font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">
+                                    @xXDeath420Xx
+                                </div>
+                            </div>
+
+                            <a href="https://paypal.me/xXDeath420Xx" class="btn btn-primary btn-lg" target="_blank" rel="noopener noreferrer" style="width: 100%;">
+                                <i class="fas fa-external-link-alt"></i>
+                                Open PayPal
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- What Your Donation Supports -->
+                <div class="card" style="margin-top: var(--spacing-8);">
+                    <div class="card-body">
+                        <h2 style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-6); text-align: center;">
+                            What Your Donation Supports
+                        </h2>
+
+                        <div class="grid grid-cols-3" style="gap: var(--spacing-6);">
+                            <div style="text-align: center;">
+                                <i class="fas fa-server" style="font-size: var(--font-size-3xl); color: var(--color-primary-400); margin-bottom: var(--spacing-3);"></i>
+                                <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                                    Server Costs
+                                </h3>
+                                <p style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                                    Hosting, bandwidth, and database expenses
+                                </p>
+                            </div>
+
+                            <div style="text-align: center;">
+                                <i class="fas fa-code" style="font-size: var(--font-size-3xl); color: var(--color-success); margin-bottom: var(--spacing-3);"></i>
+                                <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                                    Development
+                                </h3>
+                                <p style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                                    New features, bug fixes, and improvements
+                                </p>
+                            </div>
+
+                            <div style="text-align: center;">
+                                <i class="fas fa-plug" style="font-size: var(--font-size-3xl); color: var(--color-accent-purple); margin-bottom: var(--spacing-3);"></i>
+                                <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                                    API Costs
+                                </h3>
+                                <p style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                                    Twitch, Kick, YouTube, and other API usage
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>

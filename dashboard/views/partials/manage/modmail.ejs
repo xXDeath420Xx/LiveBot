@@ -1,0 +1,1008 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-envelope"></i>
+                <span>Modmail System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Manage support tickets through direct messages with advanced modmail system
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Card -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i class="fas fa-cog" style="color: white; font-size: 1.25rem;"></i>
+            </div>
+            <div>
+                <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Modmail Configuration</h4>
+                <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Configure modmail settings, category, and staff team</p>
+            </div>
+        </div>
+
+        <form id="modmail-config-form">
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label" style="display: flex; align-items: center; gap: var(--spacing-2); cursor: pointer;">
+                    <input type="checkbox" id="modmailEnabled" name="enabled" <%= (data.modmailConfig && data.modmailConfig.enabled) ? 'checked' : '' %> style="width: 18px; height: 18px; cursor: pointer;">
+                    <span>Enable Modmail System</span>
+                </label>
+                <div class="form-help">When enabled, users can DM the bot to create modmail threads</div>
+            </div>
+
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Modmail Category</label>
+                    <select class="form-select" id="modmailCategory" name="category_id">
+                        <option value="">Select a category</option>
+                        <% categories.forEach(category => { %>
+                            <option value="<%= category.id %>" <%= (data.modmailConfig && data.modmailConfig.category_id === category.id) ? 'selected' : '' %>><%= category.name %></option>
+                        <% }); %>
+                    </select>
+                    <div class="form-help">Thread channels will be created in this category</div>
+                </div>
+
+                <div>
+                    <label class="form-label">Staff Role</label>
+                    <select class="form-select" id="modmailStaffRole" name="staff_role_id">
+                        <option value="">Select a role</option>
+                        <% roles.forEach(role => { %>
+                            <option value="<%= role.id %>" <%= (data.modmailConfig && data.modmailConfig.staff_role_id === role.id) ? 'selected' : '' %>><%= role.name %></option>
+                        <% }); %>
+                    </select>
+                    <div class="form-help">Staff with this role can view and respond to threads</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">Auto-Response Message</label>
+                <textarea class="form-control" id="modmailAutoResponse" name="greeting_message" rows="3" placeholder="Thank you for contacting our staff team. Your message has been received and we'll respond shortly!"><%= (data.modmailConfig && data.modmailConfig.greeting_message) ? data.modmailConfig.greeting_message : '' %></textarea>
+                <div class="form-help">Automatic message sent to users when they open a new thread</div>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">Thread Close Message</label>
+                <textarea class="form-control" id="modmailCloseMessage" name="close_message" rows="2" placeholder="This modmail thread has been closed. Thank you for contacting us!"><%= (data.modmailConfig && data.modmailConfig.close_message) ? data.modmailConfig.close_message : '' %></textarea>
+                <div class="form-help">Message sent to users when their thread is closed</div>
+            </div>
+
+            <% if (data.modmailConfig && data.modmailConfig.enabled && data.modmailConfig.category_id && data.modmailConfig.staff_role_id) { %>
+                <div style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05)); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                    <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                        <i class="fas fa-check-circle" style="color: var(--color-success);"></i>
+                        <span style="font-size: var(--font-size-sm); color: var(--color-text-primary);">Modmail system is fully configured and active</span>
+                    </div>
+                </div>
+            <% } %>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Configuration</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Analytics Card -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6); gap: var(--spacing-4);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Threads</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= (data.modmailStats && data.modmailStats.total_threads) || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Threads</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= (data.modmailStats && data.modmailStats.active_threads) || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Avg Response Time</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-blue);"><%= (data.modmailStats && data.modmailStats.avg_response_time) || '0m' %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Avg Resolution Time</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= (data.modmailStats && data.modmailStats.avg_resolution_time) || '0h' %></div>
+        </div>
+    </div>
+
+    <!-- Active Threads Card -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
+            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-accent-blue), var(--color-primary-500)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fas fa-inbox" style="color: white; font-size: 1.25rem;"></i>
+                </div>
+                <div>
+                    <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Active Threads</h4>
+                    <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Currently open modmail conversations</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div style="margin-bottom: var(--spacing-4);">
+            <div class="input-group">
+                <span class="input-group-icon">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" id="threadSearch" class="form-control" placeholder="Search threads by user or ID...">
+            </div>
+        </div>
+
+        <% if (data.modmailThreads && data.modmailThreads.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Thread ID</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Last Activity</th>
+                            <th>Messages</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="threadsTableBody">
+                        <% data.modmailThreads.forEach(thread => { %>
+                            <tr class="thread-row" data-user-tag="<%= thread.user_tag ? thread.user_tag.toLowerCase() : '' %>" data-thread-id="<%= thread.id %>">
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                        <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center; border: 2px solid var(--color-primary-500);">
+                                            <i class="fas fa-user" style="color: var(--color-primary-400); font-size: 0.875rem;"></i>
+                                        </div>
+                                        <div>
+                                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= thread.user_tag || 'Unknown User' %></div>
+                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= thread.user_id %></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <code style="background: var(--color-dark-500); padding: 4px 8px; border-radius: 4px; font-size: var(--font-size-xs); color: var(--color-accent-blue);">#<%= thread.id %></code>
+                                </td>
+                                <td>
+                                    <% if (thread.status === 'open') { %>
+                                        <span class="badge badge-success">
+                                            <i class="fas fa-circle" style="font-size: 6px; margin-right: 4px;"></i>
+                                            Open
+                                        </span>
+                                    <% } else { %>
+                                        <span class="badge badge-secondary">
+                                            <i class="fas fa-circle" style="font-size: 6px; margin-right: 4px;"></i>
+                                            <%= thread.status %>
+                                        </span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);">
+                                        <%= new Date(thread.created_at).toLocaleDateString() %>
+                                    </div>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                        <%= new Date(thread.created_at).toLocaleTimeString() %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);">
+                                        <%= thread.last_activity ? new Date(thread.last_activity).toLocaleDateString() : 'N/A' %>
+                                    </div>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                        <%= thread.last_activity ? new Date(thread.last_activity).toLocaleTimeString() : '' %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-primary"><%= thread.message_count || 0 %></span>
+                                </td>
+                                <td class="text-end">
+                                    <div style="display: flex; gap: var(--spacing-2); justify-content: flex-end;">
+                                        <button class="btn btn-sm btn-secondary view-thread-btn"
+                                                data-thread-id="<%= thread.id %>"
+                                                title="View Thread">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger close-thread-btn"
+                                                data-thread-id="<%= thread.id %>"
+                                                title="Close Thread">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-inbox"></i>
+                </div>
+                <div class="empty-state-title">No Active Threads</div>
+                <div class="empty-state-description">
+                    There are no open modmail threads at the moment
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Blocked Users Card -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
+            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-danger), #be123c); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fas fa-ban" style="color: white; font-size: 1.25rem;"></i>
+                </div>
+                <div>
+                    <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Blocked Users</h4>
+                    <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Users blocked from using modmail</p>
+                </div>
+            </div>
+            <button class="btn btn-danger" id="blockUserBtn">
+                <i class="fas fa-user-slash"></i>
+                <span>Block User</span>
+            </button>
+        </div>
+
+        <% if (data.modmailBlockedUsers && data.modmailBlockedUsers.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Blocked By</th>
+                            <th>Reason</th>
+                            <th>Blocked At</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% data.modmailBlockedUsers.forEach(blocked => { %>
+                            <tr>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                        <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center; border: 2px solid var(--color-danger);">
+                                            <i class="fas fa-user" style="color: var(--color-danger); font-size: 0.875rem;"></i>
+                                        </div>
+                                        <div>
+                                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= blocked.user_tag || 'Unknown User' %></div>
+                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= blocked.user_id %></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);"><%= blocked.blocked_by_tag || 'Unknown' %></div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        <%= blocked.reason || 'No reason provided' %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);">
+                                        <%= new Date(blocked.blocked_at).toLocaleDateString() %>
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-success unblock-user-btn"
+                                            data-user-id="<%= blocked.user_id %>"
+                                            data-block-id="<%= blocked.id %>">
+                                        <i class="fas fa-unlock"></i>
+                                        <span>Unblock</span>
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-user-check"></i>
+                </div>
+                <div class="empty-state-title">No Blocked Users</div>
+                <div class="empty-state-description">
+                    No users are currently blocked from using modmail
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Thread History Card -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-accent-purple), #7c3aed); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i class="fas fa-history" style="color: white; font-size: 1.25rem;"></i>
+            </div>
+            <div>
+                <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Thread History</h4>
+                <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Recently closed modmail threads</p>
+            </div>
+        </div>
+
+        <% if (data.modmailHistory && data.modmailHistory.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Thread ID</th>
+                            <th>Closed At</th>
+                            <th>Closed By</th>
+                            <th>Duration</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% data.modmailHistory.forEach(thread => { %>
+                            <tr>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                        <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center; border: 2px solid var(--color-dark-400);">
+                                            <i class="fas fa-user" style="color: var(--color-text-muted); font-size: 0.875rem;"></i>
+                                        </div>
+                                        <div>
+                                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= thread.user_tag || 'Unknown User' %></div>
+                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= thread.user_id %></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <code style="background: var(--color-dark-500); padding: 4px 8px; border-radius: 4px; font-size: var(--font-size-xs); color: var(--color-accent-purple);">#<%= thread.id %></code>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);">
+                                        <%= new Date(thread.closed_at).toLocaleDateString() %>
+                                    </div>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                        <%= new Date(thread.closed_at).toLocaleTimeString() %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);"><%= thread.closed_by_tag || 'Unknown' %></div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-secondary"><%= thread.duration || 'Unknown' %></span>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-secondary view-transcript-btn"
+                                            data-thread-id="<%= thread.id %>"
+                                            title="View Transcript">
+                                        <i class="fas fa-file-alt"></i>
+                                        <span>Transcript</span>
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-history"></i>
+                </div>
+                <div class="empty-state-title">No Thread History</div>
+                <div class="empty-state-description">
+                    No closed threads to display
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- How It Works Info -->
+    <div style="background: linear-gradient(135deg, rgba(88, 101, 242, 0.1), rgba(88, 101, 242, 0.05)); border: 1px solid rgba(88, 101, 242, 0.3); border-radius: var(--radius-lg); padding: var(--spacing-4);">
+        <div style="display: flex; gap: var(--spacing-3);">
+            <i class="fas fa-lightbulb" style="color: var(--color-primary-400); font-size: 1.25rem; margin-top: 2px;"></i>
+            <div>
+                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                    How the modmail system works
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.6;">
+                    <strong style="color: var(--color-text-primary);">1.</strong> Users send a direct message to the bot<br>
+                    <strong style="color: var(--color-text-primary);">2.</strong> Bot creates a private thread channel in the configured category<br>
+                    <strong style="color: var(--color-text-primary);">3.</strong> Staff members can view and respond through the thread channel<br>
+                    <strong style="color: var(--color-text-primary);">4.</strong> All messages are relayed between the user's DM and the thread channel<br>
+                    <strong style="color: var(--color-text-primary);">5.</strong> Staff can close threads when the issue is resolved
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Block User Modal -->
+<div class="modal fade" id="blockUserModal" tabindex="-1" aria-labelledby="blockUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="blockUserModalLabel">
+                    <i class="fas fa-user-slash"></i>
+                    Block User from Modmail
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="blockUserForm">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">User ID</label>
+                        <input type="text" class="form-control" id="blockUserId" name="user_id" placeholder="Enter user ID (e.g., 123456789012345678)" required>
+                        <div class="form-help">The Discord user ID of the user to block</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Reason</label>
+                        <textarea class="form-control" id="blockReason" name="reason" rows="3" placeholder="Reason for blocking this user..." required></textarea>
+                        <div class="form-help">This will be logged for moderation records</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-ban"></i>
+                        Block User
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Close Thread Modal -->
+<div class="modal fade" id="closeThreadModal" tabindex="-1" aria-labelledby="closeThreadModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="closeThreadModalLabel">
+                    <i class="fas fa-times-circle"></i>
+                    Close Modmail Thread
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="closeThreadForm">
+                <input type="hidden" id="closeThreadId" name="thread_id">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Reason for Closing</label>
+                        <textarea class="form-control" id="closeReason" name="reason" rows="3" placeholder="Reason for closing this thread..." required></textarea>
+                        <div class="form-help">This will be sent to the user</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-times"></i>
+                        Close Thread
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Thread Modal -->
+<div class="modal fade" id="viewThreadModal" tabindex="-1" aria-labelledby="viewThreadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="viewThreadModalLabel">
+                    <i class="fas fa-eye"></i>
+                    Thread Messages
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="threadMessagesContainer" style="max-height: 500px; overflow-y: auto;">
+                <div style="display: flex; align-items: center; justify-content: center; padding: var(--spacing-6);">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Transcript Modal -->
+<div class="modal fade" id="viewTranscriptModal" tabindex="-1" aria-labelledby="viewTranscriptModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="viewTranscriptModalLabel">
+                    <i class="fas fa-file-alt"></i>
+                    Thread Transcript
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="transcriptContainer" style="max-height: 500px; overflow-y: auto;">
+                <div style="display: flex; align-items: center; justify-content: center; padding: var(--spacing-6);">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" id="downloadTranscriptBtn">
+                    <i class="fas fa-download"></i>
+                    Download Transcript
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const guildId = '<%= guild.id %>';
+
+    // Toast notification function
+    function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = `toast-notification toast-${type}`;
+        toast.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 16px 24px; background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 9999; display: flex; align-items: center; gap: 12px; min-width: 300px;';
+
+        const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle';
+        const iconColor = type === 'success' ? 'var(--color-success)' : type === 'error' ? 'var(--color-danger)' : 'var(--color-primary-400)';
+
+        toast.innerHTML = `
+            <i class="fas fa-${icon}" style="color: ${iconColor}; font-size: 1.25rem;"></i>
+            <span style="color: var(--color-text-primary); flex: 1;">${message}</span>
+        `;
+
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.transition = 'opacity 0.3s, transform 0.3s';
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateX(100%)';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Configuration form submission
+    const configForm = document.getElementById('modmail-config-form');
+    if (configForm) {
+        configForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(configForm);
+            const data = {
+                enabled: document.getElementById('modmailEnabled').checked,
+                category_id: formData.get('category_id'),
+                staff_role_id: formData.get('staff_role_id'),
+                greeting_message: formData.get('greeting_message'),
+                close_message: formData.get('close_message')
+            };
+
+            try {
+                const response = await fetch(`/api/manage/${guildId}/modmail/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showToast('Modmail configuration saved successfully!', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(result.error || 'Failed to save configuration', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving config:', error);
+                showToast('An error occurred while saving configuration', 'error');
+            }
+        });
+    }
+
+    // Thread search functionality
+    const threadSearch = document.getElementById('threadSearch');
+    const threadsTableBody = document.getElementById('threadsTableBody');
+
+    if (threadSearch && threadsTableBody) {
+        threadSearch.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const rows = threadsTableBody.querySelectorAll('.thread-row');
+
+            rows.forEach(row => {
+                const userTag = row.dataset.userTag || '';
+                const threadId = row.dataset.threadId || '';
+
+                if (userTag.includes(query) || threadId.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+
+    // Close thread buttons
+    const closeThreadBtns = document.querySelectorAll('.close-thread-btn');
+    const closeThreadModal = new bootstrap.Modal(document.getElementById('closeThreadModal'));
+    const closeThreadForm = document.getElementById('closeThreadForm');
+
+    closeThreadBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const threadId = btn.dataset.threadId;
+            document.getElementById('closeThreadId').value = threadId;
+            closeThreadModal.show();
+        });
+    });
+
+    if (closeThreadForm) {
+        closeThreadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const threadId = document.getElementById('closeThreadId').value;
+            const reason = document.getElementById('closeReason').value;
+
+            try {
+                const response = await fetch(`/api/manage/${guildId}/modmail/close-thread`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: threadId, reason })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showToast('Thread closed successfully!', 'success');
+                    closeThreadModal.hide();
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(result.error || 'Failed to close thread', 'error');
+                }
+            } catch (error) {
+                console.error('Error closing thread:', error);
+                showToast('An error occurred while closing thread', 'error');
+            }
+        });
+    }
+
+    // View thread buttons
+    const viewThreadBtns = document.querySelectorAll('.view-thread-btn');
+    const viewThreadModal = new bootstrap.Modal(document.getElementById('viewThreadModal'));
+
+    viewThreadBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const threadId = btn.dataset.threadId;
+            const container = document.getElementById('threadMessagesContainer');
+
+            viewThreadModal.show();
+            container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; padding: var(--spacing-6);"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
+            try {
+                const response = await fetch(`/api/manage/${guildId}/modmail/thread/${threadId}/messages`);
+                const result = await response.json();
+
+                if (response.ok && result.messages) {
+                    if (result.messages.length === 0) {
+                        container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">No messages in this thread</div>';
+                    } else {
+                        container.innerHTML = result.messages.map(msg => `
+                            <div style="margin-bottom: var(--spacing-4); padding: var(--spacing-3); background: var(--color-dark-500); border-radius: var(--radius-md); border-left: 3px solid ${msg.author_type === 'user' ? 'var(--color-primary-500)' : 'var(--color-success)'};">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: var(--spacing-2);">
+                                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                        <i class="fas fa-${msg.author_type === 'user' ? 'user' : 'shield-alt'}" style="margin-right: 6px;"></i>
+                                        ${msg.author_type === 'user' ? 'User' : 'Staff'}
+                                    </div>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                        ${new Date(msg.timestamp).toLocaleString()}
+                                    </div>
+                                </div>
+                                <div style="color: var(--color-text-secondary);">${msg.message_content || '<em>No content</em>'}</div>
+                                ${msg.attachments ? `<div style="margin-top: var(--spacing-2); font-size: var(--font-size-xs); color: var(--color-accent-blue);">📎 ${JSON.parse(msg.attachments).length} attachment(s)</div>` : ''}
+                            </div>
+                        `).join('');
+                    }
+                } else {
+                    container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-danger);">Failed to load messages</div>';
+                }
+            } catch (error) {
+                console.error('Error loading messages:', error);
+                container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-danger);">An error occurred</div>';
+            }
+        });
+    });
+
+    // View transcript buttons
+    const viewTranscriptBtns = document.querySelectorAll('.view-transcript-btn');
+    const viewTranscriptModal = new bootstrap.Modal(document.getElementById('viewTranscriptModal'));
+    let currentTranscriptThreadId = null;
+
+    viewTranscriptBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const threadId = btn.dataset.threadId;
+            currentTranscriptThreadId = threadId;
+            const container = document.getElementById('transcriptContainer');
+
+            viewTranscriptModal.show();
+            container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; padding: var(--spacing-6);"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+
+            try {
+                const response = await fetch(`/api/manage/${guildId}/modmail/thread/${threadId}/transcript`);
+                const result = await response.json();
+
+                if (response.ok && result.messages) {
+                    if (result.messages.length === 0) {
+                        container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">No messages in this thread</div>';
+                    } else {
+                        container.innerHTML = `
+                            <div style="background: var(--color-dark-500); padding: var(--spacing-4); border-radius: var(--radius-md); margin-bottom: var(--spacing-4);">
+                                <div style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">Thread #${threadId}</div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                    Created: ${new Date(result.thread_info.created_at).toLocaleString()}<br>
+                                    Closed: ${new Date(result.thread_info.closed_at).toLocaleString()}
+                                </div>
+                            </div>
+                            ${result.messages.map(msg => `
+                                <div style="margin-bottom: var(--spacing-4); padding: var(--spacing-3); background: var(--color-dark-500); border-radius: var(--radius-md); border-left: 3px solid ${msg.author_type === 'user' ? 'var(--color-primary-500)' : 'var(--color-success)'};">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: var(--spacing-2);">
+                                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                            <i class="fas fa-${msg.author_type === 'user' ? 'user' : 'shield-alt'}" style="margin-right: 6px;"></i>
+                                            ${msg.author_type === 'user' ? 'User' : 'Staff'}
+                                        </div>
+                                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                            ${new Date(msg.timestamp).toLocaleString()}
+                                        </div>
+                                    </div>
+                                    <div style="color: var(--color-text-secondary);">${msg.message_content || '<em>No content</em>'}</div>
+                                    ${msg.attachments ? `<div style="margin-top: var(--spacing-2); font-size: var(--font-size-xs); color: var(--color-accent-blue);">📎 ${JSON.parse(msg.attachments).length} attachment(s)</div>` : ''}
+                                </div>
+                            `).join('')}
+                        `;
+                    }
+                } else {
+                    container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-danger);">Failed to load transcript</div>';
+                }
+            } catch (error) {
+                console.error('Error loading transcript:', error);
+                container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-danger);">An error occurred</div>';
+            }
+        });
+    });
+
+    // Download transcript
+    const downloadTranscriptBtn = document.getElementById('downloadTranscriptBtn');
+    if (downloadTranscriptBtn) {
+        downloadTranscriptBtn.addEventListener('click', async () => {
+            if (!currentTranscriptThreadId) return;
+
+            try {
+                const response = await fetch(`/api/manage/${guildId}/modmail/thread/${currentTranscriptThreadId}/transcript?format=txt`);
+                const blob = await response.blob();
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `modmail-thread-${currentTranscriptThreadId}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showToast('Transcript downloaded successfully!', 'success');
+            } catch (error) {
+                console.error('Error downloading transcript:', error);
+                showToast('Failed to download transcript', 'error');
+            }
+        });
+    }
+
+    // Block user modal
+    const blockUserBtn = document.getElementById('blockUserBtn');
+    const blockUserModal = new bootstrap.Modal(document.getElementById('blockUserModal'));
+    const blockUserForm = document.getElementById('blockUserForm');
+
+    if (blockUserBtn) {
+        blockUserBtn.addEventListener('click', () => {
+            blockUserModal.show();
+        });
+    }
+
+    if (blockUserForm) {
+        blockUserForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const userId = document.getElementById('blockUserId').value;
+            const reason = document.getElementById('blockReason').value;
+
+            try {
+                const response = await fetch(`/api/manage/${guildId}/modmail/block-user`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, reason })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showToast('User blocked successfully!', 'success');
+                    blockUserModal.hide();
+                    blockUserForm.reset();
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(result.error || 'Failed to block user', 'error');
+                }
+            } catch (error) {
+                console.error('Error blocking user:', error);
+                showToast('An error occurred while blocking user', 'error');
+            }
+        });
+    }
+
+    // Unblock user buttons
+    const unblockUserBtns = document.querySelectorAll('.unblock-user-btn');
+
+    unblockUserBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const userId = btn.dataset.userId;
+            const blockId = btn.dataset.blockId;
+
+            if (!confirm('Are you sure you want to unblock this user?')) return;
+
+            try {
+                const response = await fetch(`/api/manage/${guildId}/modmail/unblock-user`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, block_id: blockId })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showToast('User unblocked successfully!', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(result.error || 'Failed to unblock user', 'error');
+                }
+            } catch (error) {
+                console.error('Error unblocking user:', error);
+                showToast('An error occurred while unblocking user', 'error');
+            }
+        });
+    });
+});
+</script>
+
+<style>
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table th.text-end {
+    text-align: right;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.data-table td.text-end {
+    text-align: right;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-6);
+}
+
+.empty-state-icon {
+    font-size: 3rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-6);
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    white-space: nowrap;
+}
+
+.badge-primary {
+    background: rgba(88, 101, 242, 0.15);
+    color: var(--color-primary-400);
+    border: 1px solid rgba(88, 101, 242, 0.3);
+}
+
+.badge-success {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--color-success);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.badge-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--color-danger);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-secondary {
+    background: rgba(107, 114, 128, 0.15);
+    color: var(--color-text-muted);
+    border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+.input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-group-icon {
+    position: absolute;
+    left: 16px;
+    color: var(--color-text-muted);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.input-group .form-control {
+    padding-left: 44px;
+}
+</style>

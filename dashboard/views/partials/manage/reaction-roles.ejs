@@ -1,0 +1,247 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-hand-pointer"></i>
+                <span>Reaction Roles</span>
+            </div>
+            <div class="page-section-subtitle">
+                Allow users to assign themselves roles by reacting to a message
+            </div>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPanelModal">
+            <i class="fas fa-plus"></i>
+            <span>Create Panel</span>
+        </button>
+    </div>
+
+    <!-- Stats Overview -->
+    <% if (reactionRolePanels && reactionRolePanels.length > 0) { %>
+        <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
+            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Panels</div>
+                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= reactionRolePanels.length %></div>
+            </div>
+            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Roles</div>
+                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= reactionRolePanels.reduce((sum, p) => sum + (p.mappings?.length || 0), 0) %></div>
+            </div>
+            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Avg per Panel</div>
+                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= Math.round(reactionRolePanels.reduce((sum, p) => sum + (p.mappings?.length || 0), 0) / reactionRolePanels.length) %></div>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Panels List -->
+    <% if (reactionRolePanels && reactionRolePanels.length > 0) { %>
+        <div class="grid grid-cols-1" style="gap: var(--spacing-4);">
+            <% reactionRolePanels.forEach(panel => { %>
+                <div class="card">
+                    <div class="card-body" style="padding: var(--spacing-5);">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: var(--spacing-4);">
+                            <div>
+                                <h3 style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+                                    <%= panel.panel_name %>
+                                </h3>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                    <i class="fas fa-hashtag" style="color: var(--color-primary-400);"></i>
+                                    <%= channels.find(c => c.id === panel.channel_id)?.name || 'Unknown Channel' %>
+                                </div>
+                            </div>
+                            <form action="/manage/<%= guild.id %>/delete-rr-panel" method="POST" onsubmit="return confirm('Delete this panel and all its role mappings?');">
+                                <input type="hidden" name="panelId" value="<%= panel.id %>">
+                                <button type="submit" class="btn btn-sm btn-danger">
+                                    <i class="fas fa-trash"></i>
+                                    <span>Delete Panel</span>
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Role Mappings -->
+                        <% if (panel.mappings && panel.mappings.length > 0) { %>
+                            <div style="margin-bottom: var(--spacing-4);">
+                                <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--spacing-3);">
+                                    Role Mappings (<%= panel.mappings.length %>)
+                                </h4>
+                                <div class="grid grid-cols-2" style="gap: var(--spacing-3);">
+                                    <% panel.mappings.forEach(mapping => {
+                                        const role = roles.find(r => r.id === mapping.role_id);
+                                    %>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-3);">
+                                            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                                <div style="font-size: var(--font-size-xl);"><%= mapping.emoji_id %></div>
+                                                <div>
+                                                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                                        <%= role ? role.name : 'Unknown Role' %>
+                                                    </div>
+                                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                                        React to assign
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <form action="/manage/<%= guild.id %>/remove-rr-mapping" method="POST" class="d-inline">
+                                                <input type="hidden" name="mappingId" value="<%= mapping.id %>">
+                                                <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Remove this role mapping?');">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    <% }); %>
+                                </div>
+                            </div>
+                        <% } else { %>
+                            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-6); text-align: center; margin-bottom: var(--spacing-4);">
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                    <i class="fas fa-info-circle"></i>
+                                    No role mappings added yet
+                                </div>
+                            </div>
+                        <% } %>
+
+                        <!-- Add New Role Mapping -->
+                        <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4);">
+                            <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                                <i class="fas fa-plus"></i>
+                                Add New Role Mapping
+                            </h4>
+                            <form action="/manage/<%= guild.id %>/add-rr-mapping" method="POST">
+                                <input type="hidden" name="panelId" value="<%= panel.id %>">
+                                <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+                                    <div>
+                                        <label class="form-label">Emoji</label>
+                                        <input type="text" name="emoji_id" class="form-control" required placeholder="👍 or emoji ID">
+                                        <div class="form-help">Unicode emoji or custom emoji ID</div>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Role</label>
+                                        <select name="role_id" class="form-select" required>
+                                            <option value="">Select role...</option>
+                                            <% roles.forEach(role => { %>
+                                                <option value="<%= role.id %>"><%= role.name %></option>
+                                            <% }); %>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <button type="submit" class="btn btn-primary" style="width: 100%;">
+                                            <i class="fas fa-plus"></i>
+                                            <span>Add Mapping</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            <% }); %>
+        </div>
+    <% } else { %>
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-hand-pointer"></i>
+            </div>
+            <div class="empty-state-title">No Reaction Role Panels</div>
+            <div class="empty-state-description">
+                Create a panel to allow users to self-assign roles via reactions
+            </div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPanelModal">
+                <i class="fas fa-plus"></i>
+                <span>Create First Panel</span>
+            </button>
+        </div>
+    <% } %>
+</div>
+
+<!-- Create Panel Modal -->
+<div class="modal fade" id="createPanelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Reaction Role Panel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/create-rr-panel" method="POST">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Panel Name</label>
+                        <input type="text" name="panel_name" class="form-control" required placeholder="e.g., Color Roles">
+                        <div class="form-help">Internal name for this panel</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Channel</label>
+                        <select name="channel_id" class="form-select" required>
+                            <option value="">Select channel...</option>
+                            <% channels.forEach(c => { %>
+                                <option value="<%= c.id %>">#<%= c.name %></option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">Where the reaction role message will be posted</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Message Content</label>
+                        <textarea name="message_content" class="form-control" rows="3" required placeholder="React to this message to get your roles!"></textarea>
+                        <div class="form-help">The message users will react to</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>
+                        <span>Create Panel</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+.card {
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    transition: all var(--transition-base);
+}
+
+.card:hover {
+    border-color: var(--color-dark-300);
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+</style>

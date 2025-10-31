@@ -1,0 +1,69 @@
+<!-- Edit Team Modal -->
+<div class="modal fade" id="teamSettingsModal" tabindex="-1" aria-labelledby="teamSettingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="teamSettingsModalLabel">Edit Settings for <span id="modal-team-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/edit-team" method="POST">
+                <input type="hidden" name="teamSubscriptionId" id="edit-team-subscription-id">
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="edit-team-channel-id" class="form-label">Announcement Channel</label>
+                            <select class="form-select" id="edit-team-channel-id" name="announcementChannelId">
+                                <option value="">-- Use Server Default --</option>
+                                <% channels.forEach(channel => { %>
+                                    <option value="<%= channel.id %>">#<%= channel.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="edit-team-live-role-id" class="form-label">Live Role</label>
+                            <select class="form-select" id="edit-team-live-role-id" name="liveRoleId">
+                                <option value="">-- None --</option>
+                                <% roles.forEach(role => { %>
+                                    <option value="<%= role.id %>">@<%= role.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label for="edit-team-custom-message" class="form-label">Custom Message</label>
+                            <textarea class="form-control" id="edit-team-custom-message" name="customMessage" rows="2"></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="edit-team-keep-summary" name="keepSummary">
+                                <label class="form-check-label" for="edit-team-keep-summary">
+                                    Keep announcement message after stream ends (do not delete or edit)
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr class="my-3">
+                        <h6><i class="fas fa-magic me-2"></i>Webhook Overrides</h6>
+                        <p class="text-muted">Customize the webhook's appearance for this team's announcements.</p>
+
+                        <div class="col-md-6">
+                            <label for="edit-team-webhook-name" class="form-label">Webhook Name</label>
+                            <input type="text" class="form-control" id="edit-team-webhook-name" name="webhookName" placeholder="Leave blank for default">
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="edit-team-webhook-avatar-url" class="form-label">Webhook Avatar URL</label>
+                            <input type="url" class="form-control" id="edit-team-webhook-avatar-url" name="webhookAvatarUrl" placeholder="Leave blank for default">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

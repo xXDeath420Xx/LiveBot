@@ -1,0 +1,350 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-dragon"></i>
+                <span>D&D RPG System</span>
+            </div>
+            <div class="page-section-subtitle">
+                View RPG statistics, characters, classes, and game features
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Characters</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= rpgStats?.totalCharacters || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Players</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= rpgStats?.activePlayers || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Quests Completed</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= rpgStats?.questsCompleted || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Battles Fought</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-danger);"><%= rpgStats?.battlesFought || 0 %></div>
+        </div>
+    </div>
+
+    <!-- Available Classes -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-users-cog"></i> Available Classes
+        </h3>
+
+        <div class="grid grid-cols-3" style="gap: var(--spacing-4);">
+            <!-- Warrior -->
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); transition: all var(--transition-base);" onmouseover="this.style.borderColor='var(--color-danger)'" onmouseout="this.style.borderColor='var(--color-dark-400)'">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+                    <div style="font-size: 2rem;">⚔️</div>
+                    <div>
+                        <div style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); font-size: var(--font-size-base);">Warrior</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-danger);">Strength & Defense</div>
+                    </div>
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    High HP, strong physical attacks. Masters of melee combat and frontline defense.
+                </div>
+            </div>
+
+            <!-- Mage -->
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); transition: all var(--transition-base);" onmouseover="this.style.borderColor='var(--color-primary-400)'" onmouseout="this.style.borderColor='var(--color-dark-400)'">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+                    <div style="font-size: 2rem;">🔮</div>
+                    <div>
+                        <div style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); font-size: var(--font-size-base);">Mage</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-primary-400);">Magic & Intelligence</div>
+                    </div>
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    High magic power, lower HP. Devastating spells and arcane mastery.
+                </div>
+            </div>
+
+            <!-- Rogue -->
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); transition: all var(--transition-base);" onmouseover="this.style.borderColor='var(--color-accent-purple)'" onmouseout="this.style.borderColor='var(--color-dark-400)'">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+                    <div style="font-size: 2rem;">🗡️</div>
+                    <div>
+                        <div style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); font-size: var(--font-size-base);">Rogue</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-accent-purple);">Speed & Criticals</div>
+                    </div>
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    High speed and critical hits. Masters of stealth and precision strikes.
+                </div>
+            </div>
+
+            <!-- Cleric -->
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); transition: all var(--transition-base);" onmouseover="this.style.borderColor='var(--color-warning)'" onmouseout="this.style.borderColor='var(--color-dark-400)'">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+                    <div style="font-size: 2rem;">✨</div>
+                    <div>
+                        <div style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); font-size: var(--font-size-base);">Cleric</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-warning);">Healing & Support</div>
+                    </div>
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    Balanced stats with healing abilities. Divine magic and party support.
+                </div>
+            </div>
+
+            <!-- Ranger -->
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); transition: all var(--transition-base);" onmouseover="this.style.borderColor='var(--color-success)'" onmouseout="this.style.borderColor='var(--color-dark-400)'">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+                    <div style="font-size: 2rem;">🏹</div>
+                    <div>
+                        <div style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); font-size: var(--font-size-base);">Ranger</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-success);">Ranged & Agility</div>
+                    </div>
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    Ranged combat specialist. Expert marksman with nature affinity.
+                </div>
+            </div>
+
+            <!-- Paladin -->
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); transition: all var(--transition-base);" onmouseover="this.style.borderColor='var(--color-accent-orange)'" onmouseout="this.style.borderColor='var(--color-dark-400)'">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+                    <div style="font-size: 2rem;">🛡️</div>
+                    <div>
+                        <div style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); font-size: var(--font-size-base);">Paladin</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-accent-orange);">Holy Warrior</div>
+                    </div>
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    Holy warrior with high defense. Divine protection and righteous fury.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Features -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-gamepad"></i> Game Features
+        </h3>
+
+        <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+            <div style="display: flex; gap: var(--spacing-3);">
+                <div style="color: var(--color-primary-400); font-size: var(--font-size-xl);">
+                    <i class="fas fa-user-circle"></i>
+                </div>
+                <div>
+                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Character System</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Create characters with 6 unique classes, each with special abilities</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: var(--spacing-3);">
+                <div style="color: var(--color-success); font-size: var(--font-size-xl);">
+                    <i class="fas fa-level-up-alt"></i>
+                </div>
+                <div>
+                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Leveling System</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Gain experience from battles and quests to level up and grow stronger</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: var(--spacing-3);">
+                <div style="color: var(--color-warning); font-size: var(--font-size-xl);">
+                    <i class="fas fa-scroll"></i>
+                </div>
+                <div>
+                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Quest System</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Complete quests for rewards, experience, and rare items</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: var(--spacing-3);">
+                <div style="color: var(--color-accent-purple); font-size: var(--font-size-xl);">
+                    <i class="fas fa-box-open"></i>
+                </div>
+                <div>
+                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Inventory System</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Collect items, equip gear, and manage your resources</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: var(--spacing-3);">
+                <div style="color: var(--color-danger); font-size: var(--font-size-xl);">
+                    <i class="fas fa-fist-raised"></i>
+                </div>
+                <div>
+                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Battle System</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Fight enemies in turn-based combat with strategic choices</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: var(--spacing-3);">
+                <div style="color: var(--color-accent-orange); font-size: var(--font-size-xl);">
+                    <i class="fas fa-map-marked-alt"></i>
+                </div>
+                <div>
+                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Exploration</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Travel to different zones with level requirements and challenges</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: var(--spacing-3);">
+                <div style="color: var(--color-primary-500); font-size: var(--font-size-xl);">
+                    <i class="fas fa-magic"></i>
+                </div>
+                <div>
+                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Skills & Abilities</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Unlock class-specific abilities as you level up</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player Commands -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-terminal"></i> Player Commands
+        </h3>
+
+        <div class="grid grid-cols-2" style="gap: var(--spacing-6);">
+            <div>
+                <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-primary-400); margin-bottom: var(--spacing-3);">
+                    Character Management
+                </h4>
+                <div style="display: flex; flex-direction: column; gap: var(--spacing-2);">
+                    <code style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-size: var(--font-size-sm); color: var(--color-text-secondary);">/rpg character create</code>
+                    <code style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-size: var(--font-size-sm); color: var(--color-text-secondary);">/rpg character view</code>
+                    <code style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-size: var(--font-size-sm); color: var(--color-text-secondary);">/rpg character delete</code>
+                    <code style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-size: var(--font-size-sm); color: var(--color-text-secondary);">/rpg character classes</code>
+                </div>
+            </div>
+
+            <div>
+                <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-success); margin-bottom: var(--spacing-3);">
+                    Gameplay
+                </h4>
+                <div style="display: flex; flex-direction: column; gap: var(--spacing-2);">
+                    <code style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-size: var(--font-size-sm); color: var(--color-text-secondary);">/rpg quest list</code>
+                    <code style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-size: var(--font-size-sm); color: var(--color-text-secondary);">/rpg quest start</code>
+                    <code style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-size: var(--font-size-sm); color: var(--color-text-secondary);">/rpg battle start</code>
+                    <code style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-size: var(--font-size-sm); color: var(--color-text-secondary);">/rpg travel</code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Players Leaderboard -->
+    <% if (rpgStats && rpgStats.topPlayers && rpgStats.topPlayers.length > 0) { %>
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                <i class="fas fa-trophy"></i> Top Players
+            </h3>
+
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">Rank</th>
+                            <th>Character</th>
+                            <th>Class</th>
+                            <th class="text-end">Level</th>
+                            <th class="text-end">Experience</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% rpgStats.topPlayers.forEach((player, index) => { %>
+                            <tr>
+                                <td>
+                                    <div style="font-size: var(--font-size-lg);">
+                                        <% if (index === 0) { %>🥇
+                                        <% } else if (index === 1) { %>🥈
+                                        <% } else if (index === 2) { %>🥉
+                                        <% } else { %>
+                                            <span style="font-weight: var(--font-weight-semibold); color: var(--color-text-muted);">#<%= index + 1 %></span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= player.character_name %></div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-primary" style="text-transform: capitalize;"><%= player.class %></span>
+                                </td>
+                                <td class="text-end">
+                                    <strong style="color: var(--color-success); font-size: var(--font-size-base);"><%= player.level %></strong>
+                                </td>
+                                <td class="text-end">
+                                    <span style="color: var(--color-primary-400);"><%= player.experience.toLocaleString() %></span>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <% } else { %>
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                <i class="fas fa-trophy"></i> Top Players
+            </h3>
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
+                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
+                    No players yet. Start your adventure with <code style="background: var(--color-dark-600); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">/rpg character create</code>
+                </div>
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    color: var(--color-text-secondary);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.text-end {
+    text-align: right;
+}
+</style>
