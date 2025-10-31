@@ -1,16 +1,14 @@
-<nav class="navbar navbar-expand-lg navbar-dark">
+<nav class="navbar navbar-expand-lg">
     <div class="container-fluid">
-        <a class="nav-brand" href="/">
-            <img src="/images/CertiFried.png" alt="Bot Logo">
-            <span>CertiFried Announcer</span>
+        <a class="navbar-brand" href="/">
+            <img src="/images/CertiFried.png" alt="Logo" style="height: 280px; width: 280px; border-radius: var(--radius-lg); object-fit: contain; background: var(--color-bg-secondary); padding: 10px; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);">
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="mainNav">
-            <div class="nav-login ms-auto">
+            <div class="ms-auto d-flex gap-2 align-items-center">
                 <a href="/dashboard" class="btn btn-secondary">Dashboard</a>
-                <a href="/help" class="btn btn-secondary">Help/Docs</a>
                 <% if (user) { %>
                     <a href="/logout" class="btn btn-danger">Log Out</a>
                 <% } else { %>

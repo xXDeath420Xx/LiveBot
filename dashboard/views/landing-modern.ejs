@@ -1,0 +1,782 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Home',
+    additionalCSS: []
+}) %>
+
+<!-- Landing Page Styles -->
+<style>
+/* Hero Section */
+.landing-hero {
+    position: relative;
+    min-height: 90vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #0a0e27 0%, #1e2028 50%, #16181d 100%);
+    overflow: hidden;
+}
+
+.landing-hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 20% 50%, rgba(88, 101, 242, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 50%, rgba(155, 89, 182, 0.15) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+.hero-shape {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0.05;
+}
+
+.shape-1 {
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(88, 101, 242, 0.3) 0%, transparent 70%);
+    top: -200px;
+    right: -150px;
+    animation: float 15s ease-in-out infinite;
+}
+
+.shape-2 {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(155, 89, 182, 0.3) 0%, transparent 70%);
+    bottom: -100px;
+    left: -50px;
+    animation: float 12s ease-in-out infinite reverse;
+}
+
+.shape-3 {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(233, 69, 96, 0.2) 0%, transparent 70%);
+    top: 50%;
+    right: 10%;
+    animation: float 18s ease-in-out infinite;
+}
+
+.landing-hero-content {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    max-width: 900px;
+    padding: var(--spacing-8);
+}
+
+.hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, rgba(88, 101, 242, 0.2) 0%, rgba(155, 89, 182, 0.2) 100%);
+    border: 1px solid rgba(88, 101, 242, 0.3);
+    border-radius: 50px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-6);
+    backdrop-filter: blur(10px);
+}
+
+.hero-badge i {
+    color: #fbbf24;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+@keyframes slideInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.hero-logo {
+    width: 360px;
+    height: 360px;
+    border-radius: var(--radius-2xl);
+    margin-bottom: var(--spacing-6);
+    box-shadow: 0 0 60px rgba(88, 101, 242, 0.4);
+    animation: float 4s ease-in-out infinite;
+    border: 2px solid rgba(88, 101, 242, 0.3);
+}
+
+.gradient-text {
+    background: linear-gradient(135deg, #5865F2 0%, #b959f6 50%, #ff5c8f 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+}
+
+.hero-title {
+    font-size: 4rem;
+    font-weight: var(--font-weight-extrabold);
+    background: linear-gradient(135deg, #ffffff 0%, #b9bbbe 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: var(--spacing-6);
+    line-height: 1.1;
+}
+
+.hero-subtitle {
+    font-size: var(--font-size-xl);
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+    margin-bottom: var(--spacing-8);
+}
+
+.hero-buttons {
+    display: flex;
+    gap: var(--spacing-4);
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: var(--spacing-6);
+}
+
+.btn-animated {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-animated::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.6s ease;
+}
+
+.btn-animated:hover::before {
+    left: 100%;
+}
+
+.btn-animated span {
+    position: relative;
+    z-index: 1;
+}
+
+.btn-primary.btn-animated {
+    background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+    box-shadow: 0 4px 20px rgba(88, 101, 242, 0.3);
+    transition: all 0.3s ease;
+}
+
+.btn-primary.btn-animated:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 30px rgba(88, 101, 242, 0.5);
+}
+
+.btn-secondary.btn-animated {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(88, 101, 242, 0.5);
+    transition: all 0.3s ease;
+}
+
+.btn-secondary.btn-animated:hover {
+    background: rgba(88, 101, 242, 0.2);
+    transform: translateY(-4px);
+    border-color: rgba(88, 101, 242, 0.8);
+}
+
+.hero-stats {
+    display: flex;
+    gap: var(--spacing-8);
+    justify-content: center;
+    margin-top: var(--spacing-12);
+    flex-wrap: wrap;
+}
+
+.hero-stat {
+    text-align: center;
+    padding: var(--spacing-4);
+    background: rgba(88, 101, 242, 0.08);
+    border: 1px solid rgba(88, 101, 242, 0.2);
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+    min-width: 120px;
+}
+
+.hero-stat:hover {
+    background: rgba(88, 101, 242, 0.15);
+    border-color: rgba(88, 101, 242, 0.4);
+    transform: translateY(-8px);
+}
+
+.hero-stat-value {
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-bold);
+    background: linear-gradient(135deg, #5865F2 0%, #b959f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: block;
+}
+
+.hero-stat-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+    text-transform: capitalize;
+    font-weight: 500;
+}
+
+/* Features Section */
+.features-section {
+    padding: var(--spacing-20) var(--spacing-6);
+    background-color: var(--color-dark-800);
+}
+
+.section-header {
+    text-align: center;
+    max-width: 700px;
+    margin: 0 auto var(--spacing-12);
+}
+
+.section-badge {
+    display: inline-block;
+    padding: var(--spacing-2) var(--spacing-4);
+    background: var(--gradient-primary);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: var(--spacing-4);
+}
+
+.section-title {
+    font-size: var(--font-size-4xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-4);
+}
+
+.section-description {
+    font-size: var(--font-size-lg);
+    color: var(--color-text-muted);
+}
+
+/* Feature Cards */
+.feature-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(88, 101, 242, 0.2);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-8);
+    transition: all 0.4s ease;
+    height: 100%;
+    backdrop-filter: blur(10px);
+    position: relative;
+    overflow: hidden;
+}
+
+.feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(88, 101, 242, 0.1), transparent);
+    transition: left 0.6s ease;
+}
+
+.feature-card:hover::before {
+    left: 100%;
+}
+
+.feature-card:hover {
+    transform: translateY(-12px);
+    border-color: rgba(88, 101, 242, 0.5);
+    box-shadow: 0 12px 40px rgba(88, 101, 242, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.feature-icon {
+    width: 70px;
+    height: 70px;
+    background: linear-gradient(135deg, rgba(88, 101, 242, 0.3) 0%, rgba(155, 89, 182, 0.3) 100%);
+    border: 2px solid rgba(88, 101, 242, 0.3);
+    border-radius: var(--radius-xl);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: var(--spacing-4);
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 1;
+}
+
+.feature-card:hover .feature-icon {
+    background: linear-gradient(135deg, rgba(88, 101, 242, 0.5) 0%, rgba(155, 89, 182, 0.5) 100%);
+    border-color: rgba(88, 101, 242, 0.6);
+    transform: scale(1.1) rotate(5deg);
+    box-shadow: 0 8px 24px rgba(88, 101, 242, 0.3);
+}
+
+.feature-icon i {
+    font-size: var(--font-size-2xl);
+    color: #ffffff;
+    position: relative;
+    z-index: 2;
+}
+
+.feature-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-3);
+    position: relative;
+    z-index: 1;
+}
+
+.feature-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+    position: relative;
+    z-index: 1;
+}
+
+/* Platform Badges */
+.platforms-section {
+    padding: var(--spacing-16) var(--spacing-6);
+    background: linear-gradient(135deg, rgba(15, 20, 41, 0.5) 0%, rgba(26, 31, 46, 0.5) 100%);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(88, 101, 242, 0.1);
+}
+
+.platform-badges {
+    display: flex;
+    gap: var(--spacing-4);
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: var(--spacing-8);
+}
+
+.platform-badge {
+    padding: var(--spacing-3) var(--spacing-6);
+    border-radius: var(--radius-full);
+    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.platform-badge::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.platform-badge:hover {
+    transform: translateY(-6px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.platform-badge:hover::before {
+    left: 100%;
+}
+
+.badge-twitch { background: linear-gradient(135deg, #9146FF, #7c3aed); color: white; }
+.badge-kick { background: linear-gradient(135deg, #53FC18, #4ade80); color: #000; }
+.badge-youtube { background: linear-gradient(135deg, #FF0000, #dc2626); color: white; }
+.badge-tiktok { background: linear-gradient(135deg, #000000, #1f2937); color: white; border: 1px solid #FE2C55; }
+.badge-trovo { background: linear-gradient(135deg, #19D760, #10b981); color: white; }
+.badge-facebook { background: linear-gradient(135deg, #1877F2, #1d4ed8); color: white; }
+.badge-instagram { background: linear-gradient(45deg, #F58529, #DD2A7B, #8134AF); color: white; }
+
+/* CTA Section */
+.cta-section {
+    padding: var(--spacing-20) var(--spacing-6);
+    background: linear-gradient(135deg, #5865F2 0%, #4752C4 50%, #3a42a3 100%);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.cta-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+        radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 50%, rgba(0, 0, 0, 0.1) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+.cta-content {
+    max-width: 700px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+}
+
+.cta-title {
+    font-size: var(--font-size-4xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-4);
+    animation: slideInDown 0.8s ease-out;
+}
+
+.cta-description {
+    font-size: var(--font-size-lg);
+    color: rgba(255, 255, 255, 0.95);
+    margin-bottom: var(--spacing-8);
+    animation: slideInDown 0.8s ease-out 0.1s backwards;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .hero-title {
+        font-size: 2.5rem;
+    }
+
+    .hero-subtitle {
+        font-size: var(--font-size-base);
+    }
+
+    .section-title {
+        font-size: var(--font-size-2xl);
+    }
+
+    .hero-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+}
+</style>
+
+<!-- Hero Section -->
+<section class="landing-hero">
+    <div class="landing-hero-content">
+        <div class="hero-badge" style="animation: slideInDown 0.8s ease-out;">
+            <i class="fas fa-star"></i>
+            <span>Currently used by <%= serverCount.toLocaleString() %> Discord Server<%= serverCount !== 1 ? 's' : '' %> and growing</span>
+        </div>
+
+        <img src="/images/CertiFried.png" alt="CertiFried Logo" class="hero-logo">
+
+        <h1 class="hero-title">
+            The Ultimate<br><span class="gradient-text">Discord MultiTool</span>
+        </h1>
+
+        <p class="hero-subtitle">
+            Replace 10+ bots with one comprehensive solution. Streaming notifications, AI music, advanced moderation, economy, games, and 40+ powerful features—all in one bot.
+        </p>
+
+        <div class="hero-buttons">
+            <% if (user) { %>
+                <a href="/servers" class="btn btn-primary btn-xl btn-animated">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Go to Dashboard</span>
+                </a>
+            <% } else { %>
+                <a href="/login" class="btn btn-primary btn-xl btn-animated">
+                    <i class="fab fa-discord"></i>
+                    <span>Login with Discord</span>
+                </a>
+            <% } %>
+            <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.clientId || '#' %>&permissions=8&scope=bot+applications.commands"
+               class="btn btn-secondary btn-xl btn-animated" target="_blank">
+                <i class="fas fa-rocket"></i>
+                <span>Invite to Server</span>
+            </a>
+        </div>
+
+        <div class="hero-stats">
+            <div class="hero-stat" style="animation: scaleIn 0.6s ease-out 0.1s backwards;">
+                <span class="hero-stat-value">7</span>
+                <span class="hero-stat-label">Platforms</span>
+            </div>
+            <div class="hero-stat" style="animation: scaleIn 0.6s ease-out 0.2s backwards;">
+                <span class="hero-stat-value">40+</span>
+                <span class="hero-stat-label">Features</span>
+            </div>
+            <div class="hero-stat" style="animation: scaleIn 0.6s ease-out 0.3s backwards;">
+                <span class="hero-stat-value">100%</span>
+                <span class="hero-stat-label">Free</span>
+            </div>
+            <div class="hero-stat" style="animation: scaleIn 0.6s ease-out 0.4s backwards;">
+                <span class="hero-stat-value">24/7</span>
+                <span class="hero-stat-label">Online</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating shapes for visual interest -->
+    <div class="hero-shape shape-1"></div>
+    <div class="hero-shape shape-2"></div>
+    <div class="hero-shape shape-3"></div>
+</section>
+
+<!-- Features Section -->
+<section class="features-section">
+    <div class="section-header">
+        <span class="section-badge">Core Features</span>
+        <h2 class="section-title">Everything You Need in One Bot</h2>
+        <p class="section-description">
+            Powerful features designed for modern Discord communities
+        </p>
+    </div>
+
+    <div style="max-width: 1200px; margin: 0 auto;">
+        <div class="grid grid-cols-3" style="gap: var(--spacing-6);">
+            <!-- Stream Notifications -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-satellite-dish"></i>
+                </div>
+                <h3 class="feature-title">Multi-Platform Streaming</h3>
+                <p class="feature-description">
+                    Automatically announce when streamers go live on Twitch, YouTube, Kick, TikTok, Trovo, Facebook, or Instagram with customizable notifications.
+                </p>
+            </div>
+
+            <!-- AI Music -->
+            <div class="feature-card">
+                <div class="feature-icon" style="background: var(--gradient-purple);">
+                    <i class="fas fa-brain"></i>
+                </div>
+                <h3 class="feature-title">AI DJ Music System</h3>
+                <p class="feature-description">
+                    Gemini AI generates custom playlists with voice commentary and banter using PiperTTS voice synthesis for an immersive experience.
+                </p>
+            </div>
+
+            <!-- Security -->
+            <div class="feature-card">
+                <div class="feature-icon" style="background: var(--gradient-success);">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <h3 class="feature-title">Advanced Security</h3>
+                <p class="feature-description">
+                    Anti-raid, anti-nuke, automod, comprehensive logging, and powerful moderation tools to keep your server safe.
+                </p>
+            </div>
+
+            <!-- Economy -->
+            <div class="feature-card">
+                <div class="feature-icon" style="background: var(--gradient-warning);">
+                    <i class="fas fa-coins"></i>
+                </div>
+                <h3 class="feature-title">Full Economy System</h3>
+                <p class="feature-description">
+                    Currency, shops, gambling, trading, daily rewards, and leaderboards to keep your community engaged.
+                </p>
+            </div>
+
+            <!-- RPG & Games -->
+            <div class="feature-card">
+                <div class="feature-icon" style="background: var(--gradient-info);">
+                    <i class="fas fa-gamepad"></i>
+                </div>
+                <h3 class="feature-title">RPG & Games</h3>
+                <p class="feature-description">
+                    Leveling system, XP rewards, mini-games, battles, and interactive commands for community fun.
+                </p>
+            </div>
+
+            <!-- Custom Forms -->
+            <div class="feature-card">
+                <div class="feature-icon" style="background: var(--gradient-danger);">
+                    <i class="fas fa-clipboard-list"></i>
+                </div>
+                <h3 class="feature-title">Custom Forms</h3>
+                <p class="feature-description">
+                    Create applications, surveys, and registration forms with Discord's modal system for streamlined data collection.
+                </p>
+            </div>
+
+            <!-- Tickets -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-ticket-alt"></i>
+                </div>
+                <h3 class="feature-title">Support Tickets</h3>
+                <p class="feature-description">
+                    Professional ticket system with categories, transcripts, and staff management for organized support.
+                </p>
+            </div>
+
+            <!-- Modmail -->
+            <div class="feature-card">
+                <div class="feature-icon" style="background: var(--gradient-purple);">
+                    <i class="fas fa-envelope"></i>
+                </div>
+                <h3 class="feature-title">Modmail System</h3>
+                <p class="feature-description">
+                    Direct messaging system for users to contact server staff privately with threaded conversations.
+                </p>
+            </div>
+
+            <!-- Suggestions -->
+            <div class="feature-card">
+                <div class="feature-icon" style="background: var(--gradient-success);">
+                    <i class="fas fa-lightbulb"></i>
+                </div>
+                <h3 class="feature-title">Suggestions & Feedback</h3>
+                <p class="feature-description">
+                    Community-driven improvement system with voting, status tracking, and implementation notifications.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Supported Platforms -->
+<section class="platforms-section">
+    <div class="section-header">
+        <span class="section-badge">Platforms</span>
+        <h2 class="section-title">Track Streams Everywhere</h2>
+        <p class="section-description">
+            Support for all major streaming platforms
+        </p>
+    </div>
+
+    <div class="platform-badges">
+        <div class="platform-badge badge-twitch">
+            <i class="fab fa-twitch"></i>
+            Twitch
+        </div>
+        <div class="platform-badge badge-kick">
+            <img src="/images/kick.png" alt="Kick" style="width: 20px; height: 20px; display: inline-block;">
+            Kick
+        </div>
+        <div class="platform-badge badge-youtube">
+            <i class="fab fa-youtube"></i>
+            YouTube
+        </div>
+        <div class="platform-badge badge-tiktok">
+            <i class="fab fa-tiktok"></i>
+            TikTok
+        </div>
+        <div class="platform-badge badge-trovo">
+            <img src="/images/trovo.png" alt="Trovo" style="width: 20px; height: 20px; display: inline-block;">
+            Trovo
+        </div>
+        <div class="platform-badge badge-facebook">
+            <i class="fab fa-facebook"></i>
+            Facebook Gaming
+        </div>
+        <div class="platform-badge badge-instagram">
+            <i class="fab fa-instagram"></i>
+            Instagram Live
+        </div>
+    </div>
+</section>
+
+<!-- Call to Action -->
+<section class="cta-section">
+    <div class="cta-content">
+        <h2 class="cta-title">Ready to Get Started?</h2>
+        <p class="cta-description">
+            Join thousands of Discord communities using CertiFried MultiTool to enhance their server experience.
+        </p>
+        <div class="hero-buttons">
+            <% if (user) { %>
+                <a href="/servers" class="btn btn-secondary btn-xl">
+                    <i class="fas fa-server"></i>
+                    Manage Servers
+                </a>
+            <% } else { %>
+                <a href="/login" class="btn btn-secondary btn-xl">
+                    <i class="fab fa-discord"></i>
+                    Get Started Now
+                </a>
+            <% } %>
+            <a href="/commands" class="btn btn-outline-primary btn-xl" style="background: transparent; border: 2px solid white; color: white;">
+                <i class="fas fa-book"></i>
+                View Commands
+            </a>
+        </div>
+    </div>
+</section>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>
+
+<script>
+// Add smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+});
+
+// Animate elements on scroll
+const observerOptions = {
+    threshold: 0.1,
+    rootMargin: '0px 0px -100px 0px'
+};
+
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+            entry.target.style.transform = 'translateY(0)';
+        }
+    });
+}, observerOptions);
+
+document.querySelectorAll('.feature-card').forEach(card => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(30px)';
+    card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+    observer.observe(card);
+});
+</script>

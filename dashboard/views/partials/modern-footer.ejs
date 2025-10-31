@@ -1,0 +1,114 @@
+<!-- Modern Footer -->
+<footer style="background-color: var(--color-dark-700); border-top: 1px solid var(--color-dark-400); padding: var(--spacing-8) var(--spacing-6); margin-top: auto;">
+    <div style="max-width: var(--content-max-width); margin: 0 auto;">
+        <div class="grid grid-cols-4" style="gap: var(--spacing-8);">
+            <!-- Brand Column -->
+            <div>
+                <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+                    <img src="/images/CertiFried.png" alt="CertiFried Logo" style="width: 240px; height: 240px; border-radius: var(--radius-lg); object-fit: contain; background: var(--color-bg-tertiary); padding: var(--spacing-3); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);">
+                </div>
+                <p style="font-size: var(--font-size-base); color: var(--color-text-secondary); line-height: var(--line-height-relaxed);">
+                    Professional Discord bot with live streaming notifications, moderation, levels, music, and more.
+                </p>
+                <div style="display: flex; gap: var(--spacing-3); margin-top: var(--spacing-4);">
+                    <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" rel="noopener noreferrer" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background-color: var(--color-dark-600); border-radius: var(--radius-lg); color: var(--color-text-secondary); transition: all var(--transition-fast); text-decoration: none;" title="Join our Support Server">
+                        <i class="fab fa-discord"></i>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Features Column -->
+            <div>
+                <h6 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4); text-transform: uppercase; letter-spacing: 0.05em;">Features</h6>
+                <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--spacing-2);">
+                    <li><a href="/commands" style="font-size: var(--font-size-base); color: var(--color-text-secondary); text-decoration: none; transition: color var(--transition-fast);">Commands</a></li>
+                    <li><a href="/status" style="font-size: var(--font-size-base); color: var(--color-text-secondary); text-decoration: none; transition: color var(--transition-fast);">Live Streams</a></li>
+                    <li><a href="/servers" style="font-size: var(--font-size-base); color: var(--color-text-secondary); text-decoration: none; transition: color var(--transition-fast);">My Servers</a></li>
+                </ul>
+            </div>
+
+            <!-- Bot Info Column -->
+            <div>
+                <h6 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4); text-transform: uppercase; letter-spacing: 0.05em;">Bot Info</h6>
+                <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--spacing-2);">
+                    <li><span style="font-size: var(--font-size-base); color: var(--color-text-secondary);">Multi-Platform Streaming</span></li>
+                    <li><span style="font-size: var(--font-size-base); color: var(--color-text-secondary);">Advanced Moderation</span></li>
+                    <li><span style="font-size: var(--font-size-base); color: var(--color-text-secondary);">Leveling & Economy</span></li>
+                    <li><span style="font-size: var(--font-size-base); color: var(--color-text-secondary);">Music & Entertainment</span></li>
+                </ul>
+            </div>
+
+            <!-- Support Column -->
+            <div>
+                <h6 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4); text-transform: uppercase; letter-spacing: 0.05em;">Support</h6>
+                <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--spacing-2);">
+                    <li><a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" style="font-size: var(--font-size-base); color: var(--color-text-secondary); text-decoration: none; transition: color var(--transition-fast);">Support Server</a></li>
+                    <li><a href="/docs" style="font-size: var(--font-size-base); color: var(--color-text-secondary); text-decoration: none; transition: color var(--transition-fast);">Documentation</a></li>
+                    <li><a href="/donate" style="font-size: var(--font-size-base); color: var(--color-text-secondary); text-decoration: none; transition: color var(--transition-fast);">Donate</a></li>
+                    <li><span style="font-size: var(--font-size-base); color: var(--color-primary-400); font-weight: var(--font-weight-semibold);">100% Free</span></li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Copyright -->
+        <div style="margin-top: var(--spacing-8); padding-top: var(--spacing-6); border-top: 1px solid var(--color-dark-400); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-4);">
+            <p style="font-size: var(--font-size-base); color: var(--color-text-secondary); margin: 0;">
+                &copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.
+                <span style="margin: 0 var(--spacing-2);">•</span>
+                <a href="/terms" style="color: var(--color-text-secondary); text-decoration: none;">Terms</a>
+                <span style="margin: 0 var(--spacing-2);">•</span>
+                <a href="/privacy" style="color: var(--color-text-secondary); text-decoration: none;">Privacy</a>
+            </p>
+            <div style="display: flex; gap: var(--spacing-4); align-items: center;">
+                <span class="badge badge-success badge-status online" style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); padding: var(--spacing-2) var(--spacing-4);">
+                    <i class="fas fa-circle"></i> Bot Online
+                </span>
+                <span style="font-size: var(--font-size-base); color: var(--color-text-secondary); font-weight: var(--font-weight-medium);">
+                    v2.0.0
+                </span>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<style>
+/* Footer link hover effects */
+footer a:hover {
+    color: var(--color-text-primary) !important;
+}
+
+footer a[style*="background-color"]:hover {
+    background-color: var(--color-primary-500) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Responsive footer */
+@media (max-width: 992px) {
+    footer .grid-cols-4 {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    footer .grid-cols-4 {
+        grid-template-columns: 1fr !important;
+    }
+}
+</style>
+
+<!-- Scripts -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Modal Fix Script - Must load before page-specific scripts -->
+<script src="/js/modal-fix.js"></script>
+
+<!-- Page-specific scripts -->
+<% if (typeof additionalScripts !== 'undefined') { %>
+    <% additionalScripts.forEach(script => { %>
+        <script src="<%= script %>"></script>
+    <% }); %>
+<% } %>
+
+</body>
+</html>

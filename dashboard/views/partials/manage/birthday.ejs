@@ -1,0 +1,133 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-birthday-cake"></i>
+                <span>Birthday System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Configure birthday tracking and announcements for your server
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <% if (birthdayStats) { %>
+        <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
+            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Birthdays</div>
+                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= birthdayStats.total || 0 %></div>
+            </div>
+            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">This Month</div>
+                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= birthdayStats.thisMonth || 0 %></div>
+            </div>
+            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Next 7 Days</div>
+                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= birthdayStats.upcoming || 0 %></div>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Configuration -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-cog" style="color: var(--color-primary-400);"></i>
+            Birthday Announcements
+        </h3>
+        <form action="/manage/<%= guild.id %>/birthday/config" method="POST">
+            <div class="form-check" style="margin-bottom: var(--spacing-4);">
+                <input class="form-check-input" type="checkbox" id="birthdayEnabled" name="enabled" <%= (birthdayConfig && birthdayConfig.enabled) ? 'checked' : '' %>>
+                <label class="form-check-label" for="birthdayEnabled">
+                    Enable Birthday Announcements
+                </label>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">Announcement Channel</label>
+                <select class="form-select" name="channelId" required>
+                    <option value="">Select channel...</option>
+                    <% (channels || []).filter(c => c.type === 0).forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= (birthdayConfig && birthdayConfig.announcement_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                    <% }) %>
+                </select>
+                <div class="form-help">Channel where birthday announcements will be posted daily</div>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">Custom Birthday Message (Optional)</label>
+                <textarea class="form-control" name="messageTemplate" rows="3" placeholder="Happy Birthday {user}! 🎉🎂"><%= (birthdayConfig && birthdayConfig.message_template) ? birthdayConfig.message_template : '' %></textarea>
+                <div class="form-help">Use {user} as placeholder for the user mention. Leave empty for default message</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Birthday Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- User Commands Info -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-5);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-terminal" style="color: var(--color-accent-purple);"></i>
+            User Commands
+        </h3>
+        <p style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
+            Users can manage their birthdays with these commands:
+        </p>
+        <div class="grid grid-cols-2" style="gap: var(--spacing-3);">
+            <div style="background: var(--color-dark-700); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <code style="color: var(--color-primary-400);">/birthday set</code>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--spacing-1);">Set their birthday</div>
+            </div>
+            <div style="background: var(--color-dark-700); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <code style="color: var(--color-primary-400);">/birthday view</code>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--spacing-1);">View saved birthday</div>
+            </div>
+            <div style="background: var(--color-dark-700); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <code style="color: var(--color-primary-400);">/birthday remove</code>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--spacing-1);">Remove their birthday</div>
+            </div>
+            <div style="background: var(--color-dark-700); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <code style="color: var(--color-primary-400);">/birthday upcoming</code>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--spacing-1);">View upcoming birthdays</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.form-check-input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.form-check-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+</style>

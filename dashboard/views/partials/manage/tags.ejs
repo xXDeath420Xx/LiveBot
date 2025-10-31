@@ -1,0 +1,251 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-tags"></i>
+                <span>Tag Management</span>
+            </div>
+            <div class="page-section-subtitle">
+                View and manage all custom tags created in your server. Users can create tags with <code>/tag create</code>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Tags</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= (tags || []).length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Unique Creators</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= new Set((tags || []).map(t => t.creator_id)).size %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Avg Tag Length</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);">
+                <%= (tags || []).length > 0 ? Math.round((tags || []).reduce((sum, t) => sum + (t.tag_content?.length || 0), 0) / tags.length) : 0 %> chars
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Most Used</div>
+            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-success); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <%= (tags || []).length > 0 ? (tags.reduce((max, t) => (t.use_count || 0) > (max.use_count || 0) ? t : max, tags[0]).tag_name || 'N/A') : 'N/A' %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div style="margin-bottom: var(--spacing-4);">
+        <div class="input-group">
+            <span class="input-group-icon">
+                <i class="fas fa-search"></i>
+            </span>
+            <input type="text" id="tagSearch" class="form-control" placeholder="Search tags by name, content, or creator...">
+        </div>
+    </div>
+
+    <!-- Tags Table -->
+    <% if (tags && tags.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Tag Name</th>
+                        <th>Content</th>
+                        <th>Creator</th>
+                        <th>Uses</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tagsTableBody">
+                    <% tags.forEach(tag => { %>
+                        <tr class="tag-row"
+                            data-tag-name="<%= tag.tag_name.toLowerCase() %>"
+                            data-content="<%= (tag.tag_content || '').toLowerCase() %>"
+                            data-creator="<%= (tag.creator_tag || tag.creator_id || '').toLowerCase() %>">
+                            <td>
+                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                    <i class="fas fa-tag" style="color: var(--color-primary-400);"></i>
+                                    <code style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); background: var(--color-dark-600); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
+                                        <%= tag.tag_name %>
+                                    </code>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: pre-wrap; color: var(--color-text-secondary); font-size: var(--font-size-sm); max-height: 60px; overflow-y: auto;">
+                                    <%= tag.tag_content %>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                    <i class="fas fa-user" style="color: var(--color-text-muted); font-size: var(--font-size-sm);"></i>
+                                    <span style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                                        <%= tag.creator_tag || (tag.creator_id ? tag.creator_id.substring(0, 8) + '...' : 'Unknown') %>
+                                    </span>
+                                </div>
+                            </td>
+                            <td>
+                                <% if (tag.use_count) { %>
+                                    <span class="badge badge-primary"><%= tag.use_count %> uses</span>
+                                <% } else { %>
+                                    <span class="badge" style="background: var(--color-dark-500); color: var(--color-text-muted);">0 uses</span>
+                                <% } %>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-secondary" onclick="viewTagContent('<%= tag.tag_name %>', `<%= tag.tag_content.replace(/`/g, '\\`').replace(/\n/g, '\\n') %>`)">
+                                    <i class="fas fa-eye"></i>
+                                    <span>View</span>
+                                </button>
+                                <form action="/manage/<%= guild.id %>/delete-tag" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete the tag \'<%= tag.tag_name %>\'?')">
+                                    <input type="hidden" name="tagId" value="<%= tag.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="fas fa-trash"></i>
+                                        <span>Delete</span>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-tags"></i>
+            </div>
+            <div class="empty-state-title">No Tags Created Yet</div>
+            <div class="empty-state-description">
+                Users can create custom tags using the <code>/tag create</code> command. Tags are reusable text snippets that can be quickly recalled.
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<!-- View Tag Modal -->
+<div class="modal fade" id="view-tag-modal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400);">
+            <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
+                <h5 class="modal-title">
+                    <i class="fas fa-tag" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
+                    <span id="modal-tag-name">Tag Content</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); white-space: pre-wrap; font-family: monospace; max-height: 400px; overflow-y: auto;" id="modal-tag-content">
+                    <!-- Content will be inserted here -->
+                </div>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Search functionality
+    const searchInput = document.getElementById('tagSearch');
+    const tableBody = document.getElementById('tagsTableBody');
+
+    if (searchInput && tableBody) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const rows = tableBody.querySelectorAll('.tag-row');
+
+            rows.forEach(row => {
+                const name = row.dataset.tagName;
+                const content = row.dataset.content;
+                const creator = row.dataset.creator;
+
+                if (name.includes(query) || content.includes(query) || creator.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+});
+
+// View tag content in modal
+function viewTagContent(tagName, content) {
+    const modal = new bootstrap.Modal(document.getElementById('view-tag-modal'));
+    document.getElementById('modal-tag-name').textContent = tagName;
+    document.getElementById('modal-tag-content').textContent = content;
+    modal.show();
+}
+</script>

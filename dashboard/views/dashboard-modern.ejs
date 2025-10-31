@@ -1,0 +1,156 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Dashboard',
+    additionalCSS: []
+}) %>
+
+<div class="app-layout">
+    <%- include('partials/sidebar', {
+        user: user,
+        currentPage: 'dashboard'
+    }) %>
+
+    <div class="main-content">
+        <%- include('partials/topbar', {
+            breadcrumbs: [
+                { label: 'Dashboard', url: '/dashboard' }
+            ],
+            user: user
+        }) %>
+
+        <div class="content">
+            <div class="content-container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div class="page-header-top">
+                        <div>
+                            <h1 class="page-title">Welcome back, <%= user.username %>!</h1>
+                            <p class="page-description">
+                                Here's an overview of your activity and quick access to common actions
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-8);">
+                    <div class="card card-hover">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-server" style="font-size: var(--font-size-2xl); color: var(--color-primary-400); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value"><%= totalGuilds %></div>
+                            <div class="stat-label">Your Servers</div>
+                        </div>
+                    </div>
+                    <div class="card card-hover">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-users" style="font-size: var(--font-size-2xl); color: var(--color-accent-blue); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value"><%= totalMembers.toLocaleString() %></div>
+                            <div class="stat-label">Total Members</div>
+                        </div>
+                    </div>
+                    <div class="card card-hover">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-video" style="font-size: var(--font-size-2xl); color: var(--color-accent-purple); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value"><%= totalStreamers %></div>
+                            <div class="stat-label">Streamers</div>
+                        </div>
+                    </div>
+                    <div class="card card-hover">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-broadcast-tower" style="font-size: var(--font-size-2xl); color: var(--color-success); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value"><%= totalLiveStreams %></div>
+                            <div class="stat-label">Currently Live</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div style="margin-bottom: var(--spacing-8);">
+                    <h2 style="font-size: var(--font-size-xl); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-4);">Quick Actions</h2>
+                    <div class="grid grid-cols-3">
+                        <a href="/servers" class="card card-hover" style="text-decoration: none; color: inherit; cursor: pointer;">
+                            <div class="card-body" style="text-align: center; padding: var(--spacing-6);">
+                                <i class="fas fa-server" style="font-size: var(--font-size-3xl); color: var(--color-primary-400); margin-bottom: var(--spacing-3);"></i>
+                                <div style="font-size: var(--font-size-lg); font-weight: 600; margin-bottom: var(--spacing-2);">Manage Servers</div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Configure your Discord servers</div>
+                            </div>
+                        </a>
+                        <a href="/status" class="card card-hover" style="text-decoration: none; color: inherit; cursor: pointer;">
+                            <div class="card-body" style="text-align: center; padding: var(--spacing-6);">
+                                <i class="fas fa-chart-line" style="font-size: var(--font-size-3xl); color: var(--color-success); margin-bottom: var(--spacing-3);"></i>
+                                <div style="font-size: var(--font-size-lg); font-weight: 600; margin-bottom: var(--spacing-2);">View Status</div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Check live streamers and system status</div>
+                            </div>
+                        </a>
+                        <a href="/profile" class="card card-hover" style="text-decoration: none; color: inherit; cursor: pointer;">
+                            <div class="card-body" style="text-align: center; padding: var(--spacing-6);">
+                                <i class="fas fa-user-circle" style="font-size: var(--font-size-3xl); color: var(--color-accent-blue); margin-bottom: var(--spacing-3);"></i>
+                                <div style="font-size: var(--font-size-lg); font-weight: 600; margin-bottom: var(--spacing-2);">Edit Profile</div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Manage your account settings</div>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div style="margin-bottom: var(--spacing-8);">
+                    <h2 style="font-size: var(--font-size-xl); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-4);">Your Servers</h2>
+                    <div class="card">
+                        <div class="card-body">
+                            <% if (recentGuilds && recentGuilds.length > 0) { %>
+                                <div style="display: flex; flex-direction: column; gap: var(--spacing-4);">
+                                    <% recentGuilds.forEach((guild, index) => { %>
+                                        <div style="display: flex; align-items: center; padding: var(--spacing-4); border-radius: var(--radius-lg); background: var(--color-bg-secondary); border: 1px solid var(--color-border-primary); transition: all var(--transition-base); cursor: pointer;"
+                                             onclick="window.location.href='/manage/<%= guild.id %>'">
+                                            <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
+                                                 alt="<%= guild.name %>"
+                                                 style="width: 48px; height: 48px; border-radius: var(--radius-lg); margin-right: var(--spacing-4);">
+                                            <div style="flex: 1;">
+                                                <div style="font-size: var(--font-size-lg); font-weight: 600; color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                                    <%= guild.name %>
+                                                </div>
+                                                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                                    <% if (guild.memberCount) { %>
+                                                        <i class="fas fa-users"></i> <%= guild.memberCount.toLocaleString() %> members
+                                                    <% } %>
+                                                    <% if (guild.streamerCount) { %>
+                                                        <span style="margin-left: var(--spacing-3);"><i class="fas fa-video"></i> <%= guild.streamerCount %> streamers</span>
+                                                    <% } %>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <a href="/manage/<%= guild.id %>" class="btn btn-sm btn-primary">
+                                                    Manage
+                                                </a>
+                                            </div>
+                                        </div>
+                                    <% }); %>
+                                </div>
+                                <% if (totalGuilds > recentGuilds.length) { %>
+                                    <div style="margin-top: var(--spacing-4); text-align: center;">
+                                        <a href="/servers" class="btn btn-outline">
+                                            View All Servers (<%= totalGuilds %>)
+                                        </a>
+                                    </div>
+                                <% } %>
+                            <% } else { %>
+                                <div style="text-align: center; padding: var(--spacing-8); color: var(--color-text-secondary);">
+                                    <i class="fas fa-server" style="font-size: var(--font-size-4xl); margin-bottom: var(--spacing-4); opacity: 0.5;"></i>
+                                    <p style="font-size: var(--font-size-lg); margin-bottom: var(--spacing-4);">No servers found</p>
+                                    <p style="font-size: var(--font-size-sm); margin-bottom: var(--spacing-6);">You don't have any servers with manage permissions yet.</p>
+                                    <a href="https://discord.com/api/oauth2/authorize?client_id=<%= process.env.DISCORD_CLIENT_ID %>&permissions=8&scope=bot+applications.commands"
+                                       class="btn btn-primary" target="_blank">
+                                        <i class="fas fa-plus"></i>
+                                        Invite Bot to Server
+                                    </a>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/modern-footer') %>

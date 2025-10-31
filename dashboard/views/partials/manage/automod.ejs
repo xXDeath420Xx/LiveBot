@@ -1,0 +1,403 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-robot"></i>
+                <span>AutoMod</span>
+            </div>
+            <div class="page-section-subtitle">
+                Automatically moderate content with customizable rules and filters
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Active Rules</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">
+                <%= automodRules ? automodRules.length : 0 %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Filter Types</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);">
+                <%= automodRules ? new Set(automodRules.map(r => r.filter_type)).size : 0 %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Protection Level</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);">
+                <%= automodRules && automodRules.length >= 3 ? 'High' : automodRules && automodRules.length >= 1 ? 'Medium' : 'Low' %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Actions Set</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-orange);">
+                <%= automodRules ? new Set(automodRules.map(r => r.action)).size : 0 %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add New Rule -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-plus-circle" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
+            Add New AutoMod Rule
+        </h3>
+        <form action="/manage/<%= guild.id %>/add-automod-rule" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">
+                        <i class="fas fa-filter" style="margin-right: var(--spacing-1); color: var(--color-primary-400);"></i>
+                        Filter Type
+                    </label>
+                    <select name="filter_type" id="filter-type-select" class="form-select" required>
+                        <option value="bannedWords">Banned Words</option>
+                        <option value="massMention">Mass Mention</option>
+                        <option value="allCaps">All Caps</option>
+                        <option value="antiSpam">Anti-Spam</option>
+                    </select>
+                    <div class="form-help">Type of content to filter</div>
+                </div>
+                <div>
+                    <label class="form-label">
+                        <i class="fas fa-gavel" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
+                        Action
+                    </label>
+                    <select name="action" id="action-select" class="form-select" required>
+                        <option value="delete">Delete Message</option>
+                        <option value="warn">Warn Member</option>
+                        <option value="mute">Mute Member</option>
+                    </select>
+                    <div class="form-help">What to do when triggered</div>
+                </div>
+                <div id="mute-duration-container" style="display: none;">
+                    <label class="form-label">
+                        <i class="fas fa-clock" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
+                        Mute Duration (minutes)
+                    </label>
+                    <input type="number" name="action_duration_minutes" class="form-control" min="1" placeholder="10">
+                    <div class="form-help">How long to mute the user</div>
+                </div>
+            </div>
+
+            <!-- Filter-specific configurations -->
+            <div id="config-container" style="margin-bottom: var(--spacing-4);">
+                <!-- Banned Words Config -->
+                <div id="bannedWords-config" style="display: block;">
+                    <label class="form-label">
+                        <i class="fas fa-ban" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
+                        Banned Words (comma-separated)
+                    </label>
+                    <textarea name="config_banned_words" class="form-control" rows="3" placeholder="word1, word2, phrase3"></textarea>
+                    <div class="form-help">Enter words or phrases to block, separated by commas</div>
+                </div>
+
+                <!-- Mass Mention Config -->
+                <div id="massMention-config" style="display: none;">
+                    <label class="form-label">
+                        <i class="fas fa-at" style="margin-right: var(--spacing-1); color: var(--color-accent-purple);"></i>
+                        Mention Limit
+                    </label>
+                    <input type="number" name="config_massMention_limit" class="form-control" value="5" min="1" placeholder="5">
+                    <div class="form-help">Maximum number of mentions allowed in a single message</div>
+                </div>
+
+                <!-- All Caps Config -->
+                <div id="allCaps-config" style="display: none;">
+                    <label class="form-label">
+                        <i class="fas fa-text-height" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
+                        Capitalization Percentage Limit (%)
+                    </label>
+                    <input type="number" name="config_allCaps_limit" class="form-control" value="70" min="1" max="100" placeholder="70">
+                    <div class="form-help">Maximum percentage of capital letters allowed in a message</div>
+                </div>
+
+                <!-- Anti-Spam Config -->
+                <div id="antiSpam-config" style="display: none;">
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">
+                                <i class="fas fa-comment-slash" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
+                                Message Limit
+                            </label>
+                            <input type="number" name="config_antiSpam_message_limit" class="form-control" value="5" min="2" placeholder="5">
+                            <div class="form-help">Number of messages before triggering</div>
+                        </div>
+                        <div>
+                            <label class="form-label">
+                                <i class="fas fa-hourglass-half" style="margin-right: var(--spacing-1); color: var(--color-accent-orange);"></i>
+                                Time Period (seconds)
+                            </label>
+                            <input type="number" name="config_antiSpam_time_period" class="form-control" value="10" min="1" placeholder="10">
+                            <div class="form-help">Time window to count messages</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-plus"></i>
+                <span>Add AutoMod Rule</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Existing Rules -->
+    <div>
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-list-check" style="color: var(--color-success); margin-right: var(--spacing-2);"></i>
+            Active AutoMod Rules
+        </h3>
+
+        <% if (automodRules && automodRules.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Filter Type</th>
+                            <th>Configuration</th>
+                            <th>Action</th>
+                            <th style="width: 120px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% automodRules.forEach(rule => {
+                            const typeIcons = {
+                                bannedWords: 'fa-ban',
+                                massMention: 'fa-at',
+                                allCaps: 'fa-text-height',
+                                antiSpam: 'fa-comment-slash'
+                            };
+                            const typeColors = {
+                                bannedWords: 'var(--color-danger)',
+                                massMention: 'var(--color-accent-purple)',
+                                allCaps: 'var(--color-warning)',
+                                antiSpam: 'var(--color-accent-orange)'
+                            };
+                            const actionColors = {
+                                delete: 'var(--color-danger)',
+                                warn: 'var(--color-warning)',
+                                mute: 'var(--color-accent-orange)'
+                            };
+                            const config = JSON.parse(rule.config);
+                        %>
+                            <tr>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                        <i class="fas <%= typeIcons[rule.filter_type] %>" style="color: <%= typeColors[rule.filter_type] %>;"></i>
+                                        <span class="badge" style="background: <%= typeColors[rule.filter_type] %>; color: white; text-transform: capitalize;">
+                                            <%= rule.filter_type.replace(/([A-Z])/g, ' $1').trim() %>
+                                        </span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-family: var(--font-mono); font-size: var(--font-size-sm); background: var(--color-dark-700); padding: var(--spacing-2); border-radius: var(--radius-sm); max-width: 400px; overflow-x: auto;">
+                                        <% if (rule.filter_type === 'bannedWords' && config.words) { %>
+                                            <div style="color: var(--color-text-secondary);">
+                                                Words: <span style="color: var(--color-text-primary);"><%= config.words.slice(0, 5).join(', ') %><%= config.words.length > 5 ? '...' : '' %></span>
+                                            </div>
+                                        <% } else if (rule.filter_type === 'massMention' && config.limit) { %>
+                                            <div style="color: var(--color-text-secondary);">
+                                                Limit: <span style="color: var(--color-primary-400);"><%= config.limit %></span> mentions
+                                            </div>
+                                        <% } else if (rule.filter_type === 'allCaps' && config.limit) { %>
+                                            <div style="color: var(--color-text-secondary);">
+                                                Max: <span style="color: var(--color-warning);"><%= config.limit %>%</span> caps
+                                            </div>
+                                        <% } else if (rule.filter_type === 'antiSpam') { %>
+                                            <div style="color: var(--color-text-secondary);">
+                                                <span style="color: var(--color-primary-400);"><%= config.messageLimit || 5 %></span> msgs /
+                                                <span style="color: var(--color-accent-orange);"><%= config.timePeriod || 10 %>s</span>
+                                            </div>
+                                        <% } else { %>
+                                            <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word;"><%= JSON.stringify(config, null, 2) %></pre>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background: <%= actionColors[rule.action] %>; color: white; text-transform: uppercase;">
+                                        <i class="fas <%= rule.action === 'delete' ? 'fa-trash' : rule.action === 'warn' ? 'fa-exclamation-triangle' : 'fa-volume-mute' %>" style="margin-right: var(--spacing-1);"></i>
+                                        <%= rule.action %>
+                                    </span>
+                                </td>
+                                <td>
+                                    <form action="/manage/<%= guild.id %>/delete-automod-rule" method="POST" class="d-inline">
+                                        <input type="hidden" name="ruleId" value="<%= rule.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Delete rule">
+                                            <i class="fas fa-trash"></i>
+                                            <span>Delete</span>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="empty-state-title">No AutoMod Rules</div>
+                <div class="empty-state-description">
+                    Create your first AutoMod rule to start automatically moderating content
+                </div>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--color-dark-700);
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    color: var(--color-text-primary);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-control, .form-select {
+    width: 100%;
+    padding: var(--spacing-3);
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-base);
+}
+
+.form-control:focus, .form-select:focus {
+    outline: none;
+    border-color: var(--color-primary-500);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--spacing-1) var(--spacing-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+}
+
+.empty-state {
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-12) var(--spacing-8);
+    text-align: center;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+    opacity: 0.5;
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    max-width: 400px;
+    margin: 0 auto;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const filterTypeSelect = document.getElementById('filter-type-select');
+    const actionSelect = document.getElementById('action-select');
+    const muteDurationContainer = document.getElementById('mute-duration-container');
+
+    const configContainers = {
+        bannedWords: document.getElementById('bannedWords-config'),
+        massMention: document.getElementById('massMention-config'),
+        allCaps: document.getElementById('allCaps-config'),
+        antiSpam: document.getElementById('antiSpam-config')
+    };
+
+    function toggleConfig() {
+        const selectedType = filterTypeSelect.value;
+        Object.keys(configContainers).forEach(key => {
+            configContainers[key].style.display = 'none';
+        });
+        if (configContainers[selectedType]) {
+            configContainers[selectedType].style.display = 'block';
+        }
+    }
+
+    function toggleMuteDuration() {
+        muteDurationContainer.style.display = actionSelect.value === 'mute' ? 'block' : 'none';
+    }
+
+    filterTypeSelect.addEventListener('change', toggleConfig);
+    actionSelect.addEventListener('change', toggleMuteDuration);
+
+    // Initial setup
+    toggleConfig();
+    toggleMuteDuration();
+});
+</script>

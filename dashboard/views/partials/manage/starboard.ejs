@@ -1,0 +1,109 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-star"></i>
+                <span>Starboard</span>
+            </div>
+            <div class="page-section-subtitle">
+                Highlight the best messages in your server by adding them to a special channel
+            </div>
+        </div>
+    </div>
+
+    <form action="/manage/<%= guild.id %>/starboard/config" method="POST">
+        <div style="margin-bottom: var(--spacing-6);">
+            <div class="form-check" style="margin-bottom: var(--spacing-4);">
+                <input class="form-check-input" type="checkbox" id="starboardEnabled" name="enabled" <%= starboardConfig && starboardConfig.enabled ? 'checked' : '' %>>
+                <label class="form-check-label" for="starboardEnabled">
+                    Enable Starboard System
+                </label>
+            </div>
+
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Starboard Channel</label>
+                    <select class="form-select" name="channelId">
+                        <option value="">Select a channel...</option>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= starboardConfig && starboardConfig.channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                    <div class="form-help">Channel where starred messages will be posted</div>
+                </div>
+
+                <div>
+                    <label class="form-label">Star Threshold</label>
+                    <input type="number" class="form-control" name="threshold" value="<%= starboardConfig ? starboardConfig.threshold : '5' %>" min="1" max="50">
+                    <div class="form-help">Number of ⭐ reactions needed to post</div>
+                </div>
+            </div>
+
+            <!-- Info Box -->
+            <div style="background: var(--color-dark-600); border-left: 3px solid var(--color-warning); border-radius: var(--radius-md); padding: var(--spacing-4);">
+                <div style="display: flex; gap: var(--spacing-3);">
+                    <div style="color: var(--color-warning); font-size: var(--font-size-xl);">
+                        <i class="fas fa-info-circle"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                            How Starboard Works
+                        </div>
+                        <ul style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin: 0; padding-left: var(--spacing-5);">
+                            <li>Users react with ⭐ to messages they like</li>
+                            <li>When threshold is reached, message is posted to starboard channel</li>
+                            <li>Original message link and author are preserved</li>
+                            <li>Star count updates automatically in starboard</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: var(--spacing-3);">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Starboard Settings</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="location.reload()">
+                <i class="fas fa-undo"></i>
+                <span>Reset</span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.form-check-input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.form-check-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+</style>

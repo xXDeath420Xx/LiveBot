@@ -1,0 +1,1070 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-cog"></i>
+                <span>User Management</span>
+            </div>
+            <div class="page-section-subtitle">
+                View and manage individual user data for XP, reputation, and economy
+            </div>
+        </div>
+        <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#bulkActionsModal">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>Bulk Actions</span>
+        </button>
+    </div>
+
+    <!-- User Search Card -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-search"></i> Search User
+        </h3>
+
+        <div class="grid grid-cols-1" style="gap: var(--spacing-4);">
+            <div>
+                <label class="form-label">Select User</label>
+                <select id="userSelect" class="form-select" style="background: var(--color-dark-700); color: var(--color-text-primary); border: 1px solid var(--color-dark-400);">
+                    <option value="">Choose a user...</option>
+                    <% if (typeof guildMembers !== 'undefined' && guildMembers) { %>
+                        <% guildMembers.forEach(member => { %>
+                            <option value="<%= member.id %>" data-avatar="<%= member.avatar || '' %>" data-discriminator="<%= member.discriminator || '0' %>">
+                                <%= member.username %><%= member.discriminator && member.discriminator !== '0' ? '#' + member.discriminator : '' %>
+                            </option>
+                        <% }); %>
+                    <% } %>
+                </select>
+                <div class="form-help">Select a server member to view and manage their data</div>
+            </div>
+
+            <div style="display: flex; gap: var(--spacing-3);">
+                <button id="loadUserBtn" class="btn btn-primary" style="flex: 1;" disabled>
+                    <i class="fas fa-user-check"></i>
+                    <span>Load User Data</span>
+                </button>
+                <button id="clearSelectionBtn" class="btn btn-secondary" style="flex: 1;" disabled>
+                    <i class="fas fa-times"></i>
+                    <span>Clear Selection</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Selected User Preview -->
+        <div id="userPreview" style="display: none; margin-top: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);">
+            <div style="display: flex; align-items: center; gap: var(--spacing-4);">
+                <div id="userAvatar" style="width: 64px; height: 64px; border-radius: 50%; background: var(--color-dark-700); display: flex; align-items: center; justify-content: center; border: 3px solid var(--color-primary-500); overflow: hidden;">
+                    <i class="fas fa-user" style="font-size: 2rem; color: var(--color-primary-400);"></i>
+                </div>
+                <div style="flex: 1;">
+                    <div id="userName" style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"></div>
+                    <div id="userId" style="font-size: var(--font-size-sm); color: var(--color-text-muted); font-family: monospace;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Overview Card -->
+    <div id="userOverviewCard" style="display: none;">
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                <i class="fas fa-user-circle"></i> User Overview
+            </h3>
+
+            <!-- Quick Stats Grid -->
+            <div class="grid grid-cols-4" style="gap: var(--spacing-4); margin-bottom: var(--spacing-6);">
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Level</div>
+                    <div id="overviewLevel" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">0</div>
+                </div>
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">XP</div>
+                    <div id="overviewXP" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);">0</div>
+                </div>
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Reputation</div>
+                    <div id="overviewReputation" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);">0</div>
+                </div>
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Net Worth</div>
+                    <div id="overviewNetWorth" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);">0</div>
+                </div>
+            </div>
+
+            <!-- User Details -->
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+                <div>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">
+                        <i class="fas fa-calendar-plus"></i> Account Created
+                    </div>
+                    <div id="overviewAccountCreated" style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Loading...</div>
+                </div>
+                <div>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">
+                        <i class="fas fa-sign-in-alt"></i> Joined Server
+                    </div>
+                    <div id="overviewJoinedServer" style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Loading...</div>
+                </div>
+                <div>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">
+                        <i class="fas fa-clock"></i> Last Active
+                    </div>
+                    <div id="overviewLastActive" style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">Loading...</div>
+                </div>
+                <div>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">
+                        <i class="fas fa-comments"></i> Messages Sent
+                    </div>
+                    <div id="overviewMessages" style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">0</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- XP & Leveling Management -->
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                <i class="fas fa-chart-line" style="color: var(--color-primary-400);"></i> XP & Leveling
+            </h3>
+
+            <!-- Current Stats -->
+            <div style="margin-bottom: var(--spacing-6);">
+                <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                    <div>
+                        <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">Current Level</div>
+                        <div id="currentLevel" style="font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">0</div>
+                    </div>
+                    <div>
+                        <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">Total XP</div>
+                        <div id="currentXP" style="font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);">0</div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div style="margin-bottom: var(--spacing-2);">
+                    <div style="display: flex; justify-content: space-between; font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                        <span>Progress to Level <span id="nextLevel">1</span></span>
+                        <span><span id="progressXP">0</span> / <span id="requiredXP">100</span> XP</span>
+                    </div>
+                    <div style="height: 24px; background: var(--color-dark-700); border-radius: var(--radius-full); overflow: hidden; border: 1px solid var(--color-dark-400);">
+                        <div id="xpProgressBar" style="height: 100%; background: linear-gradient(90deg, var(--color-primary-500), var(--color-accent-purple)); width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: white;">
+                            0%
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
+                    <span class="badge badge-primary">
+                        <i class="fas fa-comment"></i> <span id="totalMessages">0</span> messages
+                    </span>
+                    <span class="badge badge-secondary">
+                        <i class="fas fa-microphone"></i> <span id="voiceMinutes">0</span> voice minutes
+                    </span>
+                </div>
+            </div>
+
+            <!-- Management Controls -->
+            <form id="xpManagementForm" onsubmit="return handleXPUpdate(event);">
+                <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                    <div>
+                        <label class="form-label">Set XP</label>
+                        <input type="number" id="setXPInput" class="form-control" min="0" placeholder="Enter XP amount">
+                        <div class="form-help">Directly set user's total XP</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Set Level</label>
+                        <input type="number" id="setLevelInput" class="form-control" min="0" placeholder="Enter level">
+                        <div class="form-help">Directly set user's level</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: var(--spacing-3); flex-wrap: wrap;">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        <span>Update XP/Level</span>
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="resetUserXP()">
+                        <i class="fas fa-redo"></i>
+                        <span>Reset XP</span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- XP History Timeline -->
+            <div style="margin-top: var(--spacing-6); padding-top: var(--spacing-6); border-top: 1px solid var(--color-dark-400);">
+                <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                    <i class="fas fa-history"></i> XP History
+                </h4>
+                <div id="xpHistoryTimeline" style="max-height: 300px; overflow-y: auto;">
+                    <div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">
+                        <i class="fas fa-clock"></i> No history data available
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reputation Management -->
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                <i class="fas fa-star" style="color: var(--color-warning);"></i> Reputation
+            </h3>
+
+            <!-- Current Reputation -->
+            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-6);">
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); text-align: center;">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">Total Reputation</div>
+                    <div id="totalReputation" style="font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-warning);">0</div>
+                </div>
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); text-align: center;">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">Given</div>
+                    <div id="reputationGiven" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-semibold); color: var(--color-primary-400);">0</div>
+                </div>
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); text-align: center;">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">Received</div>
+                    <div id="reputationReceived" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-semibold); color: var(--color-success);">0</div>
+                </div>
+            </div>
+
+            <!-- Management Controls -->
+            <form id="reputationManagementForm" onsubmit="return handleReputationUpdate(event);">
+                <div style="margin-bottom: var(--spacing-4);">
+                    <label class="form-label">Set Reputation</label>
+                    <input type="number" id="setReputationInput" class="form-control" placeholder="Enter reputation amount">
+                    <div class="form-help">Directly set user's total reputation (can be negative)</div>
+                </div>
+
+                <div style="display: flex; gap: var(--spacing-3);">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        <span>Update Reputation</span>
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="resetUserReputation()">
+                        <i class="fas fa-redo"></i>
+                        <span>Reset Reputation</span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- Reputation History -->
+            <div style="margin-top: var(--spacing-6); padding-top: var(--spacing-6); border-top: 1px solid var(--color-dark-400);">
+                <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                    <i class="fas fa-history"></i> Reputation History
+                </h4>
+                <div id="reputationHistory" style="max-height: 300px; overflow-y: auto;">
+                    <div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">
+                        <i class="fas fa-clock"></i> No history data available
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Economy Management -->
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                <i class="fas fa-coins" style="color: var(--color-success);"></i> Economy
+            </h3>
+
+            <!-- Current Balance -->
+            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-6);">
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); text-align: center;">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                        <i class="fas fa-wallet"></i> Wallet
+                    </div>
+                    <div id="walletBalance" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);">0</div>
+                </div>
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); text-align: center;">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                        <i class="fas fa-university"></i> Bank
+                    </div>
+                    <div id="bankBalance" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">0</div>
+                </div>
+                <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); text-align: center;">
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                        <i class="fas fa-chart-line"></i> Net Worth
+                    </div>
+                    <div id="netWorth" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);">0</div>
+                </div>
+            </div>
+
+            <!-- Management Controls -->
+            <form id="economyManagementForm" onsubmit="return handleEconomyUpdate(event);">
+                <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                    <div>
+                        <label class="form-label">Add/Remove Currency</label>
+                        <input type="number" id="currencyAmount" class="form-control" placeholder="Enter amount (negative to remove)">
+                        <div class="form-help">Use negative values to remove currency</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Target</label>
+                        <select id="currencyTarget" class="form-select">
+                            <option value="wallet">Wallet</option>
+                            <option value="bank">Bank</option>
+                        </select>
+                        <div class="form-help">Where to add/remove currency</div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: var(--spacing-3);">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus-circle"></i>
+                        <span>Update Balance</span>
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="resetUserEconomy()">
+                        <i class="fas fa-redo"></i>
+                        <span>Reset Economy</span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- Recent Transactions -->
+            <div style="margin-top: var(--spacing-6); padding-top: var(--spacing-6); border-top: 1px solid var(--color-dark-400);">
+                <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                    <i class="fas fa-receipt"></i> Recent Transactions
+                </h4>
+                <div id="transactionsTable">
+                    <div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">
+                        <i class="fas fa-receipt"></i> No transactions found
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Inventory -->
+            <div style="margin-top: var(--spacing-6); padding-top: var(--spacing-6); border-top: 1px solid var(--color-dark-400);">
+                <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                    <i class="fas fa-box"></i> Inventory
+                </h4>
+                <div id="inventoryList">
+                    <div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">
+                        <i class="fas fa-box-open"></i> No items in inventory
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Actions Modal -->
+<div class="modal fade" id="bulkActionsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle" style="color: var(--color-danger);"></i>
+                    Bulk Actions - Use with Caution
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div style="background: var(--color-danger); background-opacity: 0.1; border: 1px solid var(--color-danger); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                    <div style="font-weight: var(--font-weight-bold); color: var(--color-danger); margin-bottom: var(--spacing-2);">
+                        <i class="fas fa-exclamation-triangle"></i> Warning
+                    </div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                        These actions will affect ALL users in your server and cannot be undone. Please proceed with extreme caution.
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: var(--spacing-3);">
+                    <button class="btn btn-danger" onclick="bulkResetXP()" style="justify-content: flex-start;">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Reset All Users XP</span>
+                    </button>
+                    <button class="btn btn-danger" onclick="bulkResetReputation()" style="justify-content: flex-start;">
+                        <i class="fas fa-star"></i>
+                        <span>Reset All Users Reputation</span>
+                    </button>
+                    <button class="btn btn-danger" onclick="bulkResetEconomy()" style="justify-content: flex-start;">
+                        <i class="fas fa-coins"></i>
+                        <span>Reset All Users Economy</span>
+                    </button>
+                    <button class="btn btn-primary" onclick="exportUserData()" style="justify-content: flex-start;">
+                        <i class="fas fa-file-csv"></i>
+                        <span>Export All User Data to CSV</span>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    color: var(--color-text-secondary);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.timeline-item {
+    position: relative;
+    padding-left: var(--spacing-6);
+    padding-bottom: var(--spacing-4);
+    border-left: 2px solid var(--color-dark-400);
+}
+
+.timeline-item:last-child {
+    border-left-color: transparent;
+    padding-bottom: 0;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--color-primary-500);
+    border: 2px solid var(--color-dark-600);
+}
+
+.timeline-item-time {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-1);
+}
+
+.timeline-item-content {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.inventory-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    padding: var(--spacing-3);
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-2);
+}
+
+.inventory-item:last-child {
+    margin-bottom: 0;
+}
+
+.transaction-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-3);
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-2);
+}
+
+.transaction-row:last-child {
+    margin-bottom: 0;
+}
+</style>
+
+<script>
+let selectedUserId = null;
+let selectedUserData = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    const userSelect = document.getElementById('userSelect');
+    const loadUserBtn = document.getElementById('loadUserBtn');
+    const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+    const userPreview = document.getElementById('userPreview');
+
+    // User selection handling with debouncing
+    let selectionTimeout;
+    userSelect.addEventListener('change', function() {
+        clearTimeout(selectionTimeout);
+        selectionTimeout = setTimeout(() => {
+            const selectedOption = this.options[this.selectedIndex];
+            if (this.value) {
+                selectedUserId = this.value;
+                loadUserBtn.disabled = false;
+                clearSelectionBtn.disabled = false;
+
+                // Show preview
+                updateUserPreview(selectedOption);
+            } else {
+                selectedUserId = null;
+                loadUserBtn.disabled = true;
+                clearSelectionBtn.disabled = true;
+                userPreview.style.display = 'none';
+            }
+        }, 100);
+    });
+
+    // Load user data
+    loadUserBtn.addEventListener('click', async () => {
+        if (!selectedUserId) return;
+
+        loadUserBtn.disabled = true;
+        loadUserBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Loading...</span>';
+
+        try {
+            await loadUserData(selectedUserId);
+        } catch (error) {
+            showNotification('Failed to load user data', 'error');
+            console.error('Error loading user data:', error);
+        } finally {
+            loadUserBtn.disabled = false;
+            loadUserBtn.innerHTML = '<i class="fas fa-user-check"></i> <span>Load User Data</span>';
+        }
+    });
+
+    // Clear selection
+    clearSelectionBtn.addEventListener('click', () => {
+        userSelect.value = '';
+        selectedUserId = null;
+        selectedUserData = null;
+        loadUserBtn.disabled = true;
+        clearSelectionBtn.disabled = true;
+        userPreview.style.display = 'none';
+        document.getElementById('userOverviewCard').style.display = 'none';
+    });
+});
+
+function updateUserPreview(option) {
+    const userPreview = document.getElementById('userPreview');
+    const userName = document.getElementById('userName');
+    const userId = document.getElementById('userId');
+    const userAvatar = document.getElementById('userAvatar');
+
+    const username = option.textContent;
+    const id = option.value;
+    const avatar = option.dataset.avatar;
+
+    userName.textContent = username;
+    userId.textContent = `ID: ${id}`;
+
+    if (avatar) {
+        userAvatar.innerHTML = `<img src="https://cdn.discordapp.com/avatars/${id}/${avatar}.png" style="width: 100%; height: 100%; object-fit: cover;" alt="Avatar">`;
+    } else {
+        userAvatar.innerHTML = '<i class="fas fa-user" style="font-size: 2rem; color: var(--color-primary-400);"></i>';
+    }
+
+    userPreview.style.display = 'block';
+}
+
+async function loadUserData(userId) {
+    const guildId = '<%= guild.id %>';
+
+    try {
+        const response = await fetch(`/api/manage/${guildId}/user/${userId}/data`);
+        const data = await response.json();
+
+        if (response.ok) {
+            selectedUserData = data;
+            populateUserData(data);
+            document.getElementById('userOverviewCard').style.display = 'block';
+            showNotification('User data loaded successfully', 'success');
+        } else {
+            throw new Error(data.message || 'Failed to load user data');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+        throw error;
+    }
+}
+
+function populateUserData(data) {
+    // Overview card
+    document.getElementById('overviewLevel').textContent = data.xp?.level || 0;
+    document.getElementById('overviewXP').textContent = (data.xp?.xp || 0).toLocaleString();
+    document.getElementById('overviewReputation').textContent = (data.reputation?.reputation || 0).toLocaleString();
+    document.getElementById('overviewNetWorth').textContent = ((data.economy?.wallet || 0) + (data.economy?.bank || 0)).toLocaleString();
+
+    document.getElementById('overviewAccountCreated').textContent = data.user?.created_at ? new Date(data.user.created_at).toLocaleString() : 'Unknown';
+    document.getElementById('overviewJoinedServer').textContent = data.user?.joined_at ? new Date(data.user.joined_at).toLocaleString() : 'Unknown';
+    document.getElementById('overviewLastActive').textContent = data.user?.last_active ? new Date(data.user.last_active).toLocaleString() : 'Never';
+    document.getElementById('overviewMessages').textContent = (data.xp?.messages || 0).toLocaleString();
+
+    // XP Section
+    const currentLevel = data.xp?.level || 0;
+    const currentXP = data.xp?.xp || 0;
+    const nextLevel = currentLevel + 1;
+    const requiredXP = calculateRequiredXP(nextLevel);
+    const progressXP = currentXP % requiredXP;
+    const progress = (progressXP / requiredXP) * 100;
+
+    document.getElementById('currentLevel').textContent = currentLevel;
+    document.getElementById('currentXP').textContent = currentXP.toLocaleString();
+    document.getElementById('nextLevel').textContent = nextLevel;
+    document.getElementById('progressXP').textContent = progressXP.toLocaleString();
+    document.getElementById('requiredXP').textContent = requiredXP.toLocaleString();
+    document.getElementById('xpProgressBar').style.width = `${progress}%`;
+    document.getElementById('xpProgressBar').textContent = `${Math.round(progress)}%`;
+    document.getElementById('totalMessages').textContent = (data.xp?.messages || 0).toLocaleString();
+    document.getElementById('voiceMinutes').textContent = (data.xp?.voice_minutes || 0).toLocaleString();
+
+    // Reputation Section
+    document.getElementById('totalReputation').textContent = (data.reputation?.reputation || 0).toLocaleString();
+    document.getElementById('reputationGiven').textContent = (data.reputation?.given || 0).toLocaleString();
+    document.getElementById('reputationReceived').textContent = (data.reputation?.received || 0).toLocaleString();
+
+    // Economy Section
+    const wallet = data.economy?.wallet || 0;
+    const bank = data.economy?.bank || 0;
+    document.getElementById('walletBalance').textContent = wallet.toLocaleString();
+    document.getElementById('bankBalance').textContent = bank.toLocaleString();
+    document.getElementById('netWorth').textContent = (wallet + bank).toLocaleString();
+
+    // Transactions
+    populateTransactions(data.transactions || []);
+
+    // Inventory
+    populateInventory(data.inventory || []);
+}
+
+function calculateRequiredXP(level) {
+    return Math.floor(100 * Math.pow(level, 1.5));
+}
+
+function populateTransactions(transactions) {
+    const container = document.getElementById('transactionsTable');
+
+    if (!transactions || transactions.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);"><i class="fas fa-receipt"></i> No transactions found</div>';
+        return;
+    }
+
+    const html = transactions.slice(0, 10).map(t => {
+        const isPositive = t.amount > 0;
+        const color = isPositive ? 'var(--color-success)' : 'var(--color-danger)';
+        const icon = isPositive ? 'fa-plus' : 'fa-minus';
+
+        return `
+            <div class="transaction-row">
+                <div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary); font-weight: var(--font-weight-semibold);">${t.type}</div>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">${new Date(t.timestamp).toLocaleString()}</div>
+                </div>
+                <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-bold); color: ${color};">
+                    <i class="fas ${icon}"></i> ${Math.abs(t.amount).toLocaleString()}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = html;
+}
+
+function populateInventory(inventory) {
+    const container = document.getElementById('inventoryList');
+
+    if (!inventory || inventory.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);"><i class="fas fa-box-open"></i> No items in inventory</div>';
+        return;
+    }
+
+    const html = inventory.map(item => `
+        <div class="inventory-item">
+            <span style="font-size: var(--font-size-xl);">${item.item_emoji || '📦'}</span>
+            <div style="flex: 1;">
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-primary); font-weight: var(--font-weight-semibold);">${item.item_name}</div>
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">${item.item_description || 'No description'}</div>
+            </div>
+            <div>
+                <span class="badge badge-primary">x${item.quantity}</span>
+            </div>
+        </div>
+    `).join('');
+
+    container.innerHTML = html;
+}
+
+async function handleXPUpdate(event) {
+    event.preventDefault();
+    if (!selectedUserId) return false;
+
+    const xp = document.getElementById('setXPInput').value;
+    const level = document.getElementById('setLevelInput').value;
+
+    if (!xp && !level) {
+        showNotification('Please enter XP or Level value', 'error');
+        return false;
+    }
+
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/user/${selectedUserId}/xp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ xp: xp ? parseInt(xp) : null, level: level ? parseInt(level) : null })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification('XP updated successfully', 'success');
+            await loadUserData(selectedUserId);
+            document.getElementById('setXPInput').value = '';
+            document.getElementById('setLevelInput').value = '';
+        } else {
+            throw new Error(data.message || 'Failed to update XP');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+
+    return false;
+}
+
+async function resetUserXP() {
+    if (!selectedUserId) return;
+
+    if (!confirm('Are you sure you want to reset this user\'s XP? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/user/${selectedUserId}/xp/reset`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification('XP reset successfully', 'success');
+            await loadUserData(selectedUserId);
+        } else {
+            throw new Error(data.message || 'Failed to reset XP');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+async function handleReputationUpdate(event) {
+    event.preventDefault();
+    if (!selectedUserId) return false;
+
+    const reputation = document.getElementById('setReputationInput').value;
+
+    if (!reputation) {
+        showNotification('Please enter a reputation value', 'error');
+        return false;
+    }
+
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/user/${selectedUserId}/reputation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reputation: parseInt(reputation) })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification('Reputation updated successfully', 'success');
+            await loadUserData(selectedUserId);
+            document.getElementById('setReputationInput').value = '';
+        } else {
+            throw new Error(data.message || 'Failed to update reputation');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+
+    return false;
+}
+
+async function resetUserReputation() {
+    if (!selectedUserId) return;
+
+    if (!confirm('Are you sure you want to reset this user\'s reputation? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/user/${selectedUserId}/reputation/reset`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification('Reputation reset successfully', 'success');
+            await loadUserData(selectedUserId);
+        } else {
+            throw new Error(data.message || 'Failed to reset reputation');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+async function handleEconomyUpdate(event) {
+    event.preventDefault();
+    if (!selectedUserId) return false;
+
+    const amount = document.getElementById('currencyAmount').value;
+    const target = document.getElementById('currencyTarget').value;
+
+    if (!amount || amount === '0') {
+        showNotification('Please enter a valid amount', 'error');
+        return false;
+    }
+
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/user/${selectedUserId}/economy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount: parseInt(amount), target })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification('Economy updated successfully', 'success');
+            await loadUserData(selectedUserId);
+            document.getElementById('currencyAmount').value = '';
+        } else {
+            throw new Error(data.message || 'Failed to update economy');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+
+    return false;
+}
+
+async function resetUserEconomy() {
+    if (!selectedUserId) return;
+
+    if (!confirm('Are you sure you want to reset this user\'s economy? This action cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/user/${selectedUserId}/economy/reset`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification('Economy reset successfully', 'success');
+            await loadUserData(selectedUserId);
+        } else {
+            throw new Error(data.message || 'Failed to reset economy');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+async function bulkResetXP() {
+    if (!confirm('⚠️ WARNING: This will reset XP for ALL users in your server. This action cannot be undone.\n\nType "CONFIRM" to proceed.')) {
+        return;
+    }
+
+    const confirmation = prompt('Type "CONFIRM" to reset all users XP:');
+    if (confirmation !== 'CONFIRM') {
+        showNotification('Action cancelled', 'info');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/bulk/xp/reset`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification(`Successfully reset XP for ${data.count} users`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('bulkActionsModal')).hide();
+        } else {
+            throw new Error(data.message || 'Failed to reset XP');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+async function bulkResetReputation() {
+    if (!confirm('⚠️ WARNING: This will reset reputation for ALL users in your server. This action cannot be undone.\n\nType "CONFIRM" to proceed.')) {
+        return;
+    }
+
+    const confirmation = prompt('Type "CONFIRM" to reset all users reputation:');
+    if (confirmation !== 'CONFIRM') {
+        showNotification('Action cancelled', 'info');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/bulk/reputation/reset`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification(`Successfully reset reputation for ${data.count} users`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('bulkActionsModal')).hide();
+        } else {
+            throw new Error(data.message || 'Failed to reset reputation');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+async function bulkResetEconomy() {
+    if (!confirm('⚠️ WARNING: This will reset economy for ALL users in your server. This action cannot be undone.\n\nType "CONFIRM" to proceed.')) {
+        return;
+    }
+
+    const confirmation = prompt('Type "CONFIRM" to reset all users economy:');
+    if (confirmation !== 'CONFIRM') {
+        showNotification('Action cancelled', 'info');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/bulk/economy/reset`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showNotification(`Successfully reset economy for ${data.count} users`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('bulkActionsModal')).hide();
+        } else {
+            throw new Error(data.message || 'Failed to reset economy');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+async function exportUserData() {
+    try {
+        const response = await fetch(`/api/manage/<%= guild.id %>/bulk/export`);
+        const blob = await response.blob();
+
+        if (response.ok) {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `user-data-<%= guild.id %>-${Date.now()}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            showNotification('User data exported successfully', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('bulkActionsModal')).hide();
+        } else {
+            throw new Error('Failed to export user data');
+        }
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+function showNotification(message, type = 'info') {
+    // This should integrate with your existing notification system
+    // For now, using console and alert
+    console.log(`[${type.toUpperCase()}] ${message}`);
+
+    // Create a toast notification
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? 'var(--color-success)' : type === 'error' ? 'var(--color-danger)' : 'var(--color-primary-500)'};
+        color: white;
+        padding: var(--spacing-4) var(--spacing-6);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    `;
+    toast.textContent = message;
+
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => document.body.removeChild(toast), 300);
+    }, 3000);
+}
+</script>
+
+<style>
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+}
+</style>

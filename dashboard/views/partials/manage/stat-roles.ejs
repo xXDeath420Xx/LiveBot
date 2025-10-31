@@ -1,0 +1,297 @@
+<%
+const configs = statroleConfigs || [];
+%>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-award"></i>
+                <span>Stat Roles</span>
+            </div>
+            <div class="page-section-subtitle">
+                Automatically assign roles when users reach statistical milestones
+            </div>
+        </div>
+        <button type="button" class="btn btn-primary" id="add-stat-role">
+            <i class="fas fa-plus"></i>
+            <span>Add Stat Role</span>
+        </button>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Stat Roles</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= configs.length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Message Milestones</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= configs.filter(c => c.stat_type === 'messages').length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Voice Milestones</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= configs.filter(c => c.stat_type === 'voice_minutes').length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Highest Requirement</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= configs.length > 0 ? Math.max(...configs.map(c => c.required_value)) : 0 %></div>
+        </div>
+    </div>
+
+    <!-- Stat Role Configuration Form -->
+    <form action="/manage/<%= guild.id %>/stat-roles/update" method="POST" id="stat-roles-form">
+        <div id="stat-roles-container" style="margin-bottom: var(--spacing-4);">
+            <% if (configs.length > 0) { %>
+                <% configs.forEach((config, index) => { %>
+                    <div class="stat-role-card" data-index="<%= index %>">
+                        <div class="stat-role-header">
+                            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                                <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--color-primary-500); display: flex; align-items: center; justify-content: center;">
+                                    <i class="fas fa-award" style="color: white; font-size: var(--font-size-lg);"></i>
+                                </div>
+                                <div>
+                                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">Stat Role #<%= index + 1 %></div>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                        <%= config.stat_type === 'messages' ? 'Message Milestone' : 'Voice Time Milestone' %>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-danger remove-stat-role">
+                                <i class="fas fa-trash"></i>
+                                <span>Remove</span>
+                            </button>
+                        </div>
+
+                        <div class="stat-role-body">
+                            <div class="grid grid-cols-3" style="gap: var(--spacing-4);">
+                                <div>
+                                    <label class="form-label">Role to Award</label>
+                                    <select class="form-select" name="configs[<%= index %>][roleId]" required>
+                                        <option value="">Select a role</option>
+                                        <% roles.forEach(role => { %>
+                                            <option value="<%= role.id %>" <%= config.role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                                        <% }) %>
+                                    </select>
+                                    <div class="form-help">Role given when milestone is reached</div>
+                                </div>
+
+                                <div>
+                                    <label class="form-label">Statistic to Track</label>
+                                    <select class="form-select" name="configs[<%= index %>][stat]" required>
+                                        <option value="messages" <%= config.stat_type === 'messages' ? 'selected' : '' %>>Messages Sent</option>
+                                        <option value="voice_minutes" <%= config.stat_type === 'voice_minutes' ? 'selected' : '' %>>Minutes in Voice</option>
+                                    </select>
+                                    <div class="form-help">Type of activity to track</div>
+                                </div>
+
+                                <div>
+                                    <label class="form-label">Required Value</label>
+                                    <input type="number" class="form-control" name="configs[<%= index %>][requiredValue]" value="<%= config.required_value %>" placeholder="1000" min="1" required>
+                                    <div class="form-help">Number required for role</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <% }) %>
+            <% } %>
+        </div>
+
+        <!-- Empty State -->
+        <% if (configs.length === 0) { %>
+            <div class="empty-state" id="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-award"></i>
+                </div>
+                <div class="empty-state-title">No Stat Roles Configured</div>
+                <div class="empty-state-description">
+                    Create stat roles to automatically reward active members with roles
+                </div>
+                <button type="button" class="btn btn-primary" id="add-first-stat-role">
+                    <i class="fas fa-plus"></i>
+                    <span>Add First Stat Role</span>
+                </button>
+            </div>
+        <% } %>
+
+        <!-- Submit Button -->
+        <% if (configs.length > 0) { %>
+            <div style="display: flex; justify-content: flex-end; gap: var(--spacing-3); padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i>
+                    <span>Save All Stat Roles</span>
+                </button>
+            </div>
+        <% } %>
+    </form>
+</div>
+
+<style>
+.stat-role-card {
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--spacing-4);
+    overflow: hidden;
+}
+
+.stat-role-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    background: var(--color-dark-700);
+}
+
+.stat-role-body {
+    padding: var(--spacing-4);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const container = document.getElementById('stat-roles-container');
+    const emptyState = document.getElementById('empty-state');
+    const addButton = document.getElementById('add-stat-role');
+    const addFirstButton = document.getElementById('add-first-stat-role');
+
+    function createStatRoleCard(index) {
+        const card = document.createElement('div');
+        card.className = 'stat-role-card';
+        card.setAttribute('data-index', index);
+        card.innerHTML = `
+            <div class="stat-role-header">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                    <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--color-primary-500); display: flex; align-items: center; justify-content: center;">
+                        <i class="fas fa-award" style="color: white; font-size: var(--font-size-lg);"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">Stat Role #${index + 1}</div>
+                        <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">New Milestone</div>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-danger remove-stat-role">
+                    <i class="fas fa-trash"></i>
+                    <span>Remove</span>
+                </button>
+            </div>
+
+            <div class="stat-role-body">
+                <div class="grid grid-cols-3" style="gap: var(--spacing-4);">
+                    <div>
+                        <label class="form-label">Role to Award</label>
+                        <select class="form-select" name="configs[${index}][roleId]" required>
+                            <option value="">Select a role</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"><%= role.name %></option>
+                            <% }) %>
+                        </select>
+                        <div class="form-help">Role given when milestone is reached</div>
+                    </div>
+
+                    <div>
+                        <label class="form-label">Statistic to Track</label>
+                        <select class="form-select" name="configs[${index}][stat]" required>
+                            <option value="messages">Messages Sent</option>
+                            <option value="voice_minutes">Minutes in Voice</option>
+                        </select>
+                        <div class="form-help">Type of activity to track</div>
+                    </div>
+
+                    <div>
+                        <label class="form-label">Required Value</label>
+                        <input type="number" class="form-control" name="configs[${index}][requiredValue]" placeholder="1000" min="1" required>
+                        <div class="form-help">Number required for role</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        return card;
+    }
+
+    function addStatRole() {
+        const existingCards = container.querySelectorAll('.stat-role-card');
+        const newIndex = existingCards.length;
+        const newCard = createStatRoleCard(newIndex);
+
+        if (emptyState) {
+            emptyState.style.display = 'none';
+        }
+
+        container.appendChild(newCard);
+
+        // Show submit button
+        const existingSubmit = document.querySelector('#stat-roles-form > div:last-child');
+        if (!existingSubmit || !existingSubmit.querySelector('button[type="submit"]')) {
+            const submitDiv = document.createElement('div');
+            submitDiv.style.cssText = 'display: flex; justify-content: flex-end; gap: var(--spacing-3); padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);';
+            submitDiv.innerHTML = `
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i>
+                    <span>Save All Stat Roles</span>
+                </button>
+            `;
+            document.getElementById('stat-roles-form').appendChild(submitDiv);
+        }
+    }
+
+    if (addButton) {
+        addButton.addEventListener('click', addStatRole);
+    }
+
+    if (addFirstButton) {
+        addFirstButton.addEventListener('click', addStatRole);
+    }
+
+    container.addEventListener('click', (e) => {
+        if (e.target.closest('.remove-stat-role')) {
+            const card = e.target.closest('.stat-role-card');
+            card.remove();
+
+            // Reindex remaining cards
+            const remainingCards = container.querySelectorAll('.stat-role-card');
+            remainingCards.forEach((card, idx) => {
+                card.setAttribute('data-index', idx);
+                const titleEl = card.querySelector('.stat-role-header div div');
+                if (titleEl) titleEl.textContent = `Stat Role #${idx + 1}`;
+
+                // Update input names
+                card.querySelectorAll('select, input').forEach(input => {
+                    const name = input.name;
+                    input.name = name.replace(/\[\d+\]/, `[${idx}]`);
+                });
+            });
+
+            // Show empty state if no cards left
+            if (remainingCards.length === 0 && emptyState) {
+                emptyState.style.display = 'block';
+            }
+        }
+    });
+});
+</script>

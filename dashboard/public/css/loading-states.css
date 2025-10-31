@@ -1,0 +1,563 @@
+/* ============================================
+   LOADING STATES & SKELETON SCREENS
+   Modern CSS animations for dashboard
+   ============================================ */
+
+/* Skeleton Animation */
+@keyframes skeleton-shimmer {
+    0% {
+        background-position: -1000px 0;
+    }
+    100% {
+        background-position: 1000px 0;
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+@keyframes slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================
+   SKELETON LOADING COMPONENT
+   ============================================ */
+
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05) 0%,
+        rgba(255, 255, 255, 0.1) 50%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+    background-size: 1000px 100%;
+    animation: skeleton-shimmer 2s infinite ease-in-out;
+    border-radius: 6px;
+}
+
+.skeleton-text {
+    height: 0.875rem;
+    margin-bottom: 0.5rem;
+    border-radius: 4px;
+}
+
+.skeleton-text:last-child {
+    margin-bottom: 0;
+}
+
+.skeleton-text.lg {
+    height: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.skeleton-text.sm {
+    height: 0.75rem;
+}
+
+.skeleton-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.skeleton-avatar.lg {
+    width: 128px;
+    height: 128px;
+}
+
+.skeleton-avatar.sm {
+    width: 40px;
+    height: 40px;
+}
+
+.skeleton-card {
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.skeleton-card-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.skeleton-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* ============================================
+   LOADING STATES CONTAINER
+   ============================================ */
+
+.loading-state {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.loading-state.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    backdrop-filter: blur(2px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.loading-overlay.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+/* ============================================
+   LOADING SPINNERS & INDICATORS
+   ============================================ */
+
+.spinner {
+    display: inline-block;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top: 3px solid #7289da;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.spinner.sm {
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+}
+
+.spinner.md {
+    width: 40px;
+    height: 40px;
+    border-width: 3px;
+}
+
+.spinner.lg {
+    width: 60px;
+    height: 60px;
+    border-width: 4px;
+}
+
+.spinner-text {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.95rem;
+}
+
+.spinner-dots {
+    display: inline-block;
+    position: relative;
+    width: 40px;
+    height: 20px;
+}
+
+.spinner-dots div {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #7289da;
+    animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.spinner-dots div:nth-child(1) {
+    left: 8px;
+    animation-delay: -0.32s;
+}
+
+.spinner-dots div:nth-child(2) {
+    left: 17px;
+    animation-delay: -0.16s;
+}
+
+.spinner-dots div:nth-child(3) {
+    left: 26px;
+    animation-delay: 0;
+}
+
+/* ============================================
+   LOADING BARS & PROGRESS
+   ============================================ */
+
+.loading-bar {
+    height: 3px;
+    background: linear-gradient(
+        90deg,
+        #7289da,
+        #5865f2,
+        #7289da
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: 2px;
+}
+
+.progress-bar-animated {
+    background: linear-gradient(
+        90deg,
+        rgba(114, 137, 218, 0.3),
+        rgba(114, 137, 218, 0.8),
+        rgba(114, 137, 218, 0.3)
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+}
+
+/* ============================================
+   LOADING PAGE STATES
+   ============================================ */
+
+.page-loading {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+}
+
+.page-loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.page-loading-text {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1rem;
+    letter-spacing: 0.05em;
+}
+
+/* ============================================
+   SERVER LIST SKELETON
+   ============================================ */
+
+.server-card-skeleton {
+    padding: 1rem;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.server-card-skeleton .skeleton-card-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0;
+}
+
+.server-card-skeleton .skeleton-avatar {
+    flex-shrink: 0;
+}
+
+.server-card-skeleton .skeleton-info {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.server-card-skeleton .skeleton-text:first-child {
+    width: 60%;
+}
+
+.server-card-skeleton .skeleton-text:last-child {
+    width: 40%;
+}
+
+/* ============================================
+   MANAGE PAGE SKELETON
+   ============================================ */
+
+.manage-page-skeleton {
+    display: flex;
+    gap: 2rem;
+}
+
+.sidebar-skeleton {
+    width: 240px;
+    flex-shrink: 0;
+}
+
+.sidebar-skeleton .skeleton-item {
+    height: 2.5rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+}
+
+.content-skeleton {
+    flex-grow: 1;
+}
+
+.content-skeleton .skeleton-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.content-skeleton .skeleton-avatar.lg {
+    flex-shrink: 0;
+}
+
+.content-skeleton .skeleton-header-info {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.content-skeleton .skeleton-text:first-child {
+    width: 30%;
+}
+
+.content-skeleton .skeleton-text:last-child {
+    width: 20%;
+}
+
+.content-skeleton .skeleton-section {
+    margin-bottom: 2rem;
+}
+
+.content-skeleton .skeleton-list-item {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+}
+
+.content-skeleton .skeleton-list-item-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.content-skeleton .skeleton-list-item-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.content-skeleton .skeleton-list-item-content .skeleton-text:first-child {
+    width: 50%;
+}
+
+.content-skeleton .skeleton-list-item-content .skeleton-text:last-child {
+    width: 30%;
+}
+
+/* ============================================
+   FORM SUBMISSION LOADING
+   ============================================ */
+
+.form-loading {
+    position: relative;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.form-loading::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: inherit;
+    z-index: 10;
+}
+
+.btn-loading {
+    position: relative;
+    color: transparent;
+}
+
+.btn-loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+/* ============================================
+   API CALL LOADING STATES
+   ============================================ */
+
+.data-loading {
+    position: relative;
+    min-height: 200px;
+}
+
+.data-loading .loading-state {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.api-loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 2rem;
+    text-align: center;
+}
+
+.api-loading-icon {
+    font-size: 2rem;
+    color: #7289da;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.api-loading-text {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.95rem;
+}
+
+/* ============================================
+   CONTENT TRANSITIONS
+   ============================================ */
+
+.fade-in {
+    animation: slide-in 0.3s ease-out;
+}
+
+.fade-out {
+    animation: fade-out 0.3s ease-out;
+}
+
+@keyframes fade-out {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+    .manage-page-skeleton {
+        flex-direction: column;
+    }
+
+    .sidebar-skeleton {
+        width: 100%;
+    }
+
+    .spinner.lg {
+        width: 40px;
+        height: 40px;
+        border-width: 3px;
+    }
+
+    .page-loading {
+        gap: 1rem;
+    }
+
+    .server-card-skeleton .skeleton-text:first-child {
+        width: 80%;
+    }
+
+    .content-skeleton .skeleton-text:first-child {
+        width: 60%;
+    }
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton,
+    .spinner,
+    .spinner-dots div,
+    .loading-bar,
+    .progress-bar-animated,
+    .fade-in,
+    .api-loading-icon {
+        animation: none;
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-loading::after {
+        animation: none;
+        border: 2px solid #7289da;
+    }
+}

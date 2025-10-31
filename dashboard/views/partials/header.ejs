@@ -1,32 +1,74 @@
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark-2">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CertiFried MultiTool</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" href="/css/unified-style.css">
+    <link rel="stylesheet" href="/css/landing.css">
+    <link rel="stylesheet" href="/css/text-readability.css">
+    <link rel="stylesheet" href="/css/dashboard-polish.css">
+    <style>
+        /* Custom styles to ensure header matches your dark theme from landing.css */
+        .navbar-custom {
+            background-color: var(--background-secondary, #2b2d31);
+            border-bottom: 1px solid var(--border-color, #40444B);
+        }
+        .navbar-custom .navbar-brand,
+        .navbar-custom .nav-link {
+            color: var(--text-normal, #dcddde);
+            transition: color 0.2s ease-in-out;
+        }
+        .navbar-custom .nav-link:hover,
+        .navbar-custom .navbar-brand:hover {
+            color: var(--header-primary, #fff);
+        }
+        .navbar-custom .navbar-toggler {
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        .navbar-custom .navbar-toggler-icon {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28255, 255, 255, 0.8%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+        }
+    </style>
+    <script src="/js/dashboard-enhancements.js"></script>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-custom">
     <div class="container-fluid">
-        <a class="navbar-brand" href="/">
-            <img src="/images/CertiFried.png" alt="Logo" class="navbar-logo">
-            CertiFried Announcer
+        <a class="navbar-brand d-flex align-items-center" href="/">
+            <img src="/images/CertiFried.png" alt="Logo" style="height: 280px; width: 280px; border-radius: var(--radius-lg); object-fit: contain; background: var(--color-bg-secondary); padding: 10px; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);">
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ms-auto align-items-center">
-                <li class="nav-item">
-                    <a href="/help" class="btn btn-outline-secondary me-2">Help/Docs</a>
-                </li>
-                <li class="nav-item">
-                    <a href="/dashboard" class="btn btn-outline-secondary me-2">Server List</a>
-                </li>
-                <% if (user) { %>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle text-white" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png" width="32" height="32" class="rounded-circle me-2" alt="<%= user.username %>">
-                            Signed in as <%= user.username %>
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="navbarDropdown">
-                            <li><a class="dropdown-item" href="/logout">Log Out</a></li>
-                        </ul>
-                    </li>
-                <% } %>
+
+        <div class="collapse navbar-collapse" id="mainNav">
+            <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+                <li class="nav-item"><a class="nav-link" href="/commands">Commands</a></li>
+                <li class="nav-item"><a class="nav-link" href="/status">Status</a></li>
+                <li class="nav-item"><a class="nav-link" href="/donate">Donate</a></li>
             </ul>
+
+            <div class="d-flex gap-2 align-items-center">
+                <% if (user) { %>
+                    <% if (user.isSuperAdmin) { %>
+                        <a href="/super-admin" class="btn btn-warning"><i class="fas fa-user-shield me-2"></i>Super Admin</a>
+                    <% } %>
+                    <a href="/servers" class="btn btn-secondary">My Servers</a>
+                    <a href="/logout" class="btn btn-danger">Log Out</a>
+                <% } else { %>
+                    <a href="/login" class="btn btn-primary"><i class="fab fa-discord me-2"></i>Login</a>
+                <% } %>
+            </div>
         </div>
     </div>
 </nav>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>

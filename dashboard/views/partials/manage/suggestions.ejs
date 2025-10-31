@@ -1,0 +1,337 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-lightbulb"></i>
+                <span>Suggestions System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Manage user suggestions, voting, and suggestion settings
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Pending</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);"><%= suggestionStats?.pending || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Approved</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= suggestionStats?.approved || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Implemented</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= suggestionStats?.implemented || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Rejected</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-danger);"><%= suggestionStats?.rejected || 0 %></div>
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-cog" style="color: var(--color-primary-400);"></i>
+            Configuration
+        </h3>
+        <form action="/manage/<%= guild.id %>/suggestions/config" method="POST">
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <div class="form-check" style="margin-bottom: var(--spacing-3);">
+                        <input class="form-check-input" type="checkbox" id="suggestionsEnabled" name="enabled" <%= suggestionConfig?.enabled ? 'checked' : '' %>>
+                        <label class="form-check-label" for="suggestionsEnabled">
+                            Enable Suggestions System
+                        </label>
+                    </div>
+                    <label class="form-label">Suggestions Channel</label>
+                    <select class="form-select" name="suggestion_channel_id">
+                        <option value="">Select channel...</option>
+                        <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= suggestionConfig?.suggestion_channel_id === channel.id ? 'selected' : '' %>>
+                                #<%= channel.name %>
+                            </option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div>
+                    <div class="form-check" style="margin-bottom: var(--spacing-3);">
+                        <input class="form-check-input" type="checkbox" id="approvalRequired" name="approval_required" <%= suggestionConfig?.approval_required ? 'checked' : '' %>>
+                        <label class="form-check-label" for="approvalRequired">
+                            Require Staff Approval
+                        </label>
+                    </div>
+                    <label class="form-label">Staff Review Channel</label>
+                    <select class="form-select" name="staff_review_channel_id">
+                        <option value="">None</option>
+                        <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= suggestionConfig?.staff_review_channel_id === channel.id ? 'selected' : '' %>>
+                                #<%= channel.name %>
+                            </option>
+                        <% }); %>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Staff Role</label>
+                    <select class="form-select" name="staff_role_id">
+                        <option value="">None</option>
+                        <% roles.forEach(role => { %>
+                            <option value="<%= role.id %>" <%= suggestionConfig?.staff_role_id === role.id ? 'selected' : '' %>>
+                                <%= role.name %>
+                            </option>
+                        <% }); %>
+                    </select>
+                    <div class="form-help">Role that can manage suggestions</div>
+                </div>
+                <div>
+                    <div class="form-check" style="margin-top: var(--spacing-6);">
+                        <input class="form-check-input" type="checkbox" id="allowComments" name="allow_comments" <%= suggestionConfig?.allow_comments !== false ? 'checked' : '' %>>
+                        <label class="form-check-label" for="allowComments">
+                            Allow Comments on Suggestions
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Configuration</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Filter Suggestions -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-filter" style="color: var(--color-accent-purple);"></i>
+            Filter Suggestions
+        </h3>
+        <form method="GET">
+            <div class="grid grid-cols-4" style="gap: var(--spacing-3); align-items: end;">
+                <div>
+                    <label class="form-label">Status</label>
+                    <select class="form-select" name="status">
+                        <option value="">All</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="implemented">Implemented</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="under_review">Under Review</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Tag</label>
+                    <select class="form-select" name="tag">
+                        <option value="">All</option>
+                        <% (suggestionTags || []).forEach(tag => { %>
+                            <option value="<%= tag.tag_id %>"><%= tag.tag_name %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Sort By</label>
+                    <select class="form-select" name="sort">
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="most_voted">Most Voted</option>
+                    </select>
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-search"></i>
+                        <span>Filter</span>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Suggestions List -->
+    <% if (suggestions && suggestions.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Suggestion</th>
+                        <th>Author</th>
+                        <th>Status</th>
+                        <th>Votes</th>
+                        <th>Created</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% suggestions.forEach(suggestion => {
+                        const upvotes = suggestion.upvotes || 0;
+                        const downvotes = suggestion.downvotes || 0;
+                        const netVotes = upvotes - downvotes;
+                    %>
+                        <tr>
+                            <td>
+                                <code style="font-size: var(--font-size-sm); color: var(--color-primary-400);">#<%= suggestion.suggestion_id %></code>
+                            </td>
+                            <td style="max-width: 300px;">
+                                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                    <%= suggestion.title || 'No Title' %>
+                                </div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                    <%= (suggestion.content || '').substring(0, 80) %><%= (suggestion.content || '').length > 80 ? '...' : '' %>
+                                </div>
+                            </td>
+                            <td>
+                                <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= suggestion.author_id %></code>
+                            </td>
+                            <td>
+                                <% if (suggestion.status === 'pending') { %>
+                                    <span class="badge badge-warning">Pending</span>
+                                <% } else if (suggestion.status === 'approved') { %>
+                                    <span class="badge badge-success">Approved</span>
+                                <% } else if (suggestion.status === 'implemented') { %>
+                                    <span class="badge badge-primary">Implemented</span>
+                                <% } else if (suggestion.status === 'rejected') { %>
+                                    <span class="badge badge-danger">Rejected</span>
+                                <% } else if (suggestion.status === 'under_review') { %>
+                                    <span class="badge" style="background: var(--color-accent-purple);">Under Review</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: var(--spacing-1);">
+                                    <span class="badge badge-success" style="font-size: var(--font-size-xs);">👍 <%= upvotes %></span>
+                                    <span class="badge badge-danger" style="font-size: var(--font-size-xs);">👎 <%= downvotes %></span>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                    <%= new Date(suggestion.created_at).toLocaleDateString() %>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <div style="display: flex; gap: var(--spacing-1); justify-content: flex-end; flex-wrap: wrap;">
+                                    <% if (suggestion.status === 'pending' || suggestion.status === 'under_review') { %>
+                                        <form action="/manage/<%= guild.id %>/suggestions/approve" method="POST" style="display: inline;">
+                                            <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
+                                            <button type="submit" class="btn btn-sm btn-success" title="Approve">
+                                                <i class="fas fa-check"></i>
+                                            </button>
+                                        </form>
+                                        <form action="/manage/<%= guild.id %>/suggestions/reject" method="POST" style="display: inline;">
+                                            <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Reject">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </form>
+                                    <% } %>
+                                    <% if (suggestion.status === 'approved') { %>
+                                        <form action="/manage/<%= guild.id %>/suggestions/implement" method="POST" style="display: inline;">
+                                            <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
+                                            <button type="submit" class="btn btn-sm btn-primary" title="Mark as Implemented">
+                                                <i class="fas fa-check-double"></i>
+                                            </button>
+                                        </form>
+                                    <% } %>
+                                    <form action="/manage/<%= guild.id %>/suggestions/delete" method="POST" style="display: inline;">
+                                        <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
+                                        <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Delete this suggestion?')" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-8); text-align: center;">
+            <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
+                <i class="fas fa-lightbulb"></i>
+                No suggestions yet. Enable the system and set a suggestions channel to get started.
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.form-check-input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.form-check-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+</style>

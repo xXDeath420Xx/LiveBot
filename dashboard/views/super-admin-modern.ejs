@@ -1,0 +1,962 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Super Admin Panel',
+    additionalCSS: []
+}) %>
+
+<style>
+/* Super Admin Page Styles */
+.action-card {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-6);
+    height: 100%;
+    transition: all var(--transition-base);
+}
+
+.action-card:hover {
+    border-color: var(--color-primary-500);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+}
+
+.action-card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    margin-bottom: var(--spacing-4);
+}
+
+.action-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-xl);
+}
+
+.action-card-icon.warning {
+    background: linear-gradient(135deg, rgba(243, 156, 18, 0.2) 0%, rgba(230, 126, 34, 0.2) 100%);
+    color: var(--color-warning);
+}
+
+.action-card-icon.danger {
+    background: linear-gradient(135deg, rgba(240, 71, 71, 0.2) 0%, rgba(192, 57, 43, 0.2) 100%);
+    color: var(--color-danger);
+}
+
+.action-card-icon.primary {
+    background: linear-gradient(135deg, rgba(79, 172, 254, 0.2) 0%, rgba(0, 242, 254, 0.2) 100%);
+    color: var(--color-primary-400);
+}
+
+.action-card-title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.action-card-description {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--spacing-4);
+    line-height: var(--line-height-relaxed);
+}
+
+.stats-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.stats-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-4);
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--spacing-3);
+    transition: all var(--transition-fast);
+}
+
+.stats-list-item:hover {
+    background: var(--color-dark-500);
+    transform: translateX(4px);
+}
+
+.stats-list-item:last-child {
+    margin-bottom: 0;
+}
+
+.stats-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.stats-label i {
+    color: var(--color-primary-400);
+}
+
+.stats-value {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+}
+
+.guild-input-group {
+    display: flex;
+    gap: var(--spacing-3);
+}
+
+.guild-input-group .form-input {
+    flex: 1;
+}
+
+.refresh-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    padding: var(--spacing-2) var(--spacing-3);
+    background: rgba(79, 172, 254, 0.1);
+    border-radius: var(--radius-full);
+    border: 1px solid rgba(79, 172, 254, 0.2);
+}
+
+.refresh-indicator i {
+    color: var(--color-primary-400);
+}
+
+/* Badge Styles */
+.badge-success {
+    background: rgba(46, 213, 115, 0.15);
+    color: var(--color-success);
+    padding: var(--spacing-2) var(--spacing-4);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+}
+
+.badge-info {
+    background: rgba(79, 172, 254, 0.15);
+    color: var(--color-primary-400);
+    padding: var(--spacing-2) var(--spacing-4);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+}
+
+.badge-warning {
+    background: rgba(243, 156, 18, 0.15);
+    color: var(--color-warning);
+    padding: var(--spacing-2) var(--spacing-4);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+}
+
+/* Stats Cards */
+.admin-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--spacing-4);
+    margin-bottom: var(--spacing-8);
+}
+
+@media (max-width: 1200px) {
+    .admin-stats-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
+
+<div class="app-layout">
+    <%- include('partials/sidebar', {
+        user: user,
+        currentPage: 'super-admin'
+    }) %>
+
+    <div class="main-content">
+        <%- include('partials/topbar', {
+            breadcrumbs: [
+                { label: 'Dashboard', url: '/dashboard' },
+                { label: 'Super Admin Panel', url: '/super-admin' }
+            ],
+            user: user
+        }) %>
+
+        <div class="content">
+            <div class="content-container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div class="page-header-top">
+                        <div>
+                            <h1 class="page-title">
+                                <i class="fas fa-user-shield" style="color: var(--color-danger);"></i>
+                                Super Admin Panel
+                            </h1>
+                            <p class="page-description">
+                                Global system management and control center
+                            </p>
+                        </div>
+                        <div style="display: flex; gap: var(--spacing-3); align-items: center;">
+                            <span class="refresh-indicator">
+                                <i class="fas fa-shield-alt"></i>
+                                Admin Access
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Global Stats Cards -->
+                <div class="admin-stats-grid">
+                    <div class="card">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-server" style="font-size: var(--font-size-2xl); color: var(--color-primary-400); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value" id="total-guilds">...</div>
+                            <div class="stat-label">Total Guilds</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-users" style="font-size: var(--font-size-2xl); color: var(--color-accent-blue); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value" id="total-users">...</div>
+                            <div class="stat-label">Total Users</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-video" style="font-size: var(--font-size-2xl); color: var(--color-danger); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value" id="live-streamers">...</div>
+                            <div class="stat-label">Live Streamers</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-clock" style="font-size: var(--font-size-2xl); color: var(--color-success); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value" id="bot-uptime">...</div>
+                            <div class="stat-label">Bot Uptime</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body stat-card">
+                            <i class="fas fa-memory" style="font-size: var(--font-size-2xl); color: var(--color-warning); margin-bottom: var(--spacing-3);"></i>
+                            <div class="stat-value" id="memory-usage">...</div>
+                            <div class="stat-label">Memory Usage</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Cards Grid -->
+                <div class="grid grid-cols-2" style="margin-bottom: var(--spacing-8);">
+                    <!-- System Actions Card -->
+                    <div class="action-card">
+                        <div class="action-card-header">
+                            <div class="action-card-icon warning">
+                                <i class="fas fa-cogs"></i>
+                            </div>
+                            <div>
+                                <div class="action-card-title">System Actions</div>
+                            </div>
+                        </div>
+                        <p class="action-card-description">
+                            Perform global operations on the bot system. Use with caution.
+                        </p>
+                        <div style="display: flex; flex-direction: column; gap: var(--spacing-3);">
+                            <button class="btn btn-warning" id="reinitialize-bot-btn">
+                                <i class="fas fa-sync-alt"></i>
+                                Re-initialize Bot (Global)
+                            </button>
+                            <button class="btn btn-danger" id="reset-database-btn">
+                                <i class="fas fa-trash"></i>
+                                Reset Database
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Guild-Specific Actions Card -->
+                    <div class="action-card">
+                        <div class="action-card-header">
+                            <div class="action-card-icon primary">
+                                <i class="fas fa-server"></i>
+                            </div>
+                            <div>
+                                <div class="action-card-title">Guild-Specific Actions</div>
+                            </div>
+                        </div>
+                        <p class="action-card-description">
+                            Perform operations on a specific guild using its ID.
+                        </p>
+                        <div class="guild-input-group">
+                            <input type="text"
+                                   class="form-input"
+                                   id="guild-id-input"
+                                   placeholder="Enter Guild ID...">
+                            <button class="btn btn-primary" id="reinitialize-guild-btn">
+                                <i class="fas fa-sync"></i>
+                                Re-initialize
+                            </button>
+                        </div>
+                        <div class="guild-input-group" style="margin-top: var(--spacing-3);">
+                            <input type="text"
+                                   class="form-input"
+                                   id="leave-guild-id-input"
+                                   placeholder="Enter Guild ID...">
+                            <button class="btn btn-danger" id="leave-guild-btn">
+                                <i class="fas fa-sign-out-alt"></i>
+                                Force Leave Guild
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Smart User Management Section -->
+                <div style="margin-bottom: var(--spacing-8);">
+                    <h2 style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-6); display: flex; align-items: center; gap: var(--spacing-3);">
+                        <i class="fas fa-users-cog" style="color: var(--color-primary-400);"></i>
+                        Smart User Management
+                    </h2>
+
+                    <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-6);">
+                        <!-- Audit Users Panel -->
+                        <div class="action-card">
+                            <div class="action-card-header">
+                                <div class="action-card-icon primary">
+                                    <i class="fas fa-search"></i>
+                                </div>
+                                <div>
+                                    <div class="action-card-title">Audit Users</div>
+                                </div>
+                            </div>
+                            <p class="action-card-description">
+                                Scan all guilds to find and link Discord users to their streamer profiles.
+                            </p>
+                            <button class="btn btn-primary" id="audit-users-btn" style="width: 100%;">
+                                <i class="fas fa-search"></i>
+                                Run Full Audit
+                            </button>
+
+                            <!-- Progress Display -->
+                            <div id="audit-progress" style="margin-top: var(--spacing-4); display: none;">
+                                <div style="padding: var(--spacing-4); background: var(--color-dark-600); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                                    <div style="margin-bottom: var(--spacing-3);">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-2);">
+                                            <span style="font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text-primary);" id="audit-status">Initializing...</span>
+                                            <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);" id="audit-percentage">0%</span>
+                                        </div>
+                                        <div style="width: 100%; height: 8px; background: var(--color-dark-500); border-radius: var(--radius-full); overflow: hidden;">
+                                            <div id="audit-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--color-primary-400), var(--color-primary-500)); transition: width 0.3s ease;"></div>
+                                        </div>
+                                    </div>
+                                    <div id="audit-messages" style="max-height: 150px; overflow-y: auto; font-size: var(--font-size-xs); color: var(--color-text-secondary);">
+                                        <!-- Progress messages will appear here -->
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Results Display -->
+                            <div id="audit-results" style="margin-top: var(--spacing-4); display: none;">
+                                <div style="padding: var(--spacing-4); background: var(--color-dark-600); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-3); font-size: var(--font-size-sm);">
+                                        <div><strong>Guilds Scanned:</strong> <span id="audit-guilds">-</span></div>
+                                        <div><strong>Members:</strong> <span id="audit-members">-</span></div>
+                                        <div><strong>Exact Matches:</strong> <span id="audit-exact">-</span></div>
+                                        <div><strong>Fuzzy Matches:</strong> <span id="audit-fuzzy">-</span></div>
+                                        <div><strong>New Links:</strong> <span id="audit-new-links">-</span></div>
+                                        <div><strong>Existing:</strong> <span id="audit-existing">-</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Search Streamer Panel -->
+                        <div class="action-card">
+                            <div class="action-card-header">
+                                <div class="action-card-icon primary">
+                                    <i class="fas fa-user-search"></i>
+                                </div>
+                                <div>
+                                    <div class="action-card-title">Search Streamer</div>
+                                </div>
+                            </div>
+                            <p class="action-card-description">
+                                Find all platforms and Discord users linked to a specific streamer.
+                            </p>
+                            <div style="display: flex; flex-direction: column; gap: var(--spacing-3);">
+                                <input type="text" class="form-input" id="search-streamer-input" placeholder="Enter streamer username...">
+                                <select class="form-input" id="search-platform-select">
+                                    <option value="">All Platforms</option>
+                                    <option value="twitch">Twitch</option>
+                                    <option value="kick">Kick</option>
+                                    <option value="youtube">YouTube</option>
+                                    <option value="tiktok">TikTok</option>
+                                    <option value="trovo">Trovo</option>
+                                    <option value="facebook">Facebook</option>
+                                    <option value="instagram">Instagram</option>
+                                </select>
+                                <button class="btn btn-primary" id="search-streamer-btn" style="width: 100%;">
+                                    <i class="fas fa-search"></i>
+                                    Search
+                                </button>
+                            </div>
+                            <div id="search-results" style="margin-top: var(--spacing-4); display: none;">
+                                <div style="padding: var(--spacing-4); background: var(--color-dark-600); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); max-height: 300px; overflow-y: auto;">
+                                    <div id="search-results-content"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- View User Links Panel -->
+                        <div class="action-card">
+                            <div class="action-card-header">
+                                <div class="action-card-icon primary">
+                                    <i class="fas fa-link"></i>
+                                </div>
+                                <div>
+                                    <div class="action-card-title">View User Links</div>
+                                </div>
+                            </div>
+                            <p class="action-card-description">
+                                Display all streamers linked to a specific Discord user.
+                            </p>
+                            <div style="display: flex; flex-direction: column; gap: var(--spacing-3);">
+                                <input type="text" class="form-input" id="user-id-input" placeholder="Enter Discord User ID...">
+                                <button class="btn btn-primary" id="view-links-btn" style="width: 100%;">
+                                    <i class="fas fa-link"></i>
+                                    View Links
+                                </button>
+                            </div>
+                            <div id="links-results" style="margin-top: var(--spacing-4); display: none;">
+                                <div style="padding: var(--spacing-4); background: var(--color-dark-600); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); max-height: 300px; overflow-y: auto;">
+                                    <div id="links-results-content"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detailed Stats Card -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-header-title">
+                            <i class="fas fa-chart-bar"></i>
+                            <span>Global System Statistics</span>
+                        </div>
+                        <button class="btn btn-sm btn-secondary" onclick="loadStats()">
+                            <i class="fas fa-refresh"></i>
+                            Refresh Stats
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <ul class="stats-list">
+                            <li class="stats-list-item">
+                                <span class="stats-label">
+                                    <i class="fas fa-server"></i>
+                                    Total Guilds
+                                </span>
+                                <span class="stats-value" id="total-guilds-detail">...</span>
+                            </li>
+                            <li class="stats-list-item">
+                                <span class="stats-label">
+                                    <i class="fas fa-users"></i>
+                                    Total Users
+                                </span>
+                                <span class="stats-value" id="total-users-detail">...</span>
+                            </li>
+                            <li class="stats-list-item">
+                                <span class="stats-label">
+                                    <i class="fas fa-video"></i>
+                                    Live Streamers
+                                </span>
+                                <span class="stats-value">
+                                    <span class="badge-success" id="live-streamers-detail">...</span>
+                                </span>
+                            </li>
+                            <li class="stats-list-item">
+                                <span class="stats-label">
+                                    <i class="fas fa-clock"></i>
+                                    Bot Uptime
+                                </span>
+                                <span class="stats-value">
+                                    <span class="badge-info" id="bot-uptime-detail">...</span>
+                                </span>
+                            </li>
+                            <li class="stats-list-item">
+                                <span class="stats-label">
+                                    <i class="fas fa-memory"></i>
+                                    Memory Usage
+                                </span>
+                                <span class="stats-value">
+                                    <span class="badge-warning" id="memory-usage-detail">...</span>
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const reinitializeBotBtn = document.getElementById('reinitialize-bot-btn');
+    const resetDatabaseBtn = document.getElementById('reset-database-btn');
+    const reinitializeGuildBtn = document.getElementById('reinitialize-guild-btn');
+    const guildIdInput = document.getElementById('guild-id-input');
+
+    // Load stats on page load
+    loadStats();
+
+    // Re-initialize Bot (Global)
+    if (reinitializeBotBtn) {
+        reinitializeBotBtn.addEventListener('click', async () => {
+            if (confirm('Are you sure you want to re-initialize the entire bot? This will restart the bot process.')) {
+                try {
+                    reinitializeBotBtn.disabled = true;
+                    reinitializeBotBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Re-initializing...';
+
+                    const response = await fetch('/api/admin/reinit-bot', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(data.message || 'Bot re-initialized successfully');
+                    } else {
+                        alert(`Error: ${data.error}`);
+                    }
+                } catch (error) {
+                    console.error('Error re-initializing bot:', error);
+                    alert('An error occurred while trying to re-initialize the bot.');
+                } finally {
+                    reinitializeBotBtn.disabled = false;
+                    reinitializeBotBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Re-initialize Bot (Global)';
+                }
+            }
+        });
+    }
+
+    // Re-initialize Guild
+    if (reinitializeGuildBtn) {
+        reinitializeGuildBtn.addEventListener('click', async () => {
+            const guildId = guildIdInput.value.trim();
+            if (!guildId) {
+                alert('Please enter a Guild ID.');
+                return;
+            }
+            if (confirm(`Are you sure you want to re-initialize guild ${guildId}?`)) {
+                try {
+                    reinitializeGuildBtn.disabled = true;
+                    reinitializeGuildBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+                    const response = await fetch('/api/admin/reinit-guild', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ guildId })
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(data.message || 'Guild re-initialized successfully');
+                        guildIdInput.value = '';
+                    } else {
+                        alert(`Error: ${data.error}`);
+                    }
+                } catch (error) {
+                    console.error(`Error re-initializing guild ${guildId}:`, error);
+                    alert(`An error occurred while trying to re-initialize guild ${guildId}.`);
+                } finally {
+                    reinitializeGuildBtn.disabled = false;
+                    reinitializeGuildBtn.innerHTML = '<i class="fas fa-sync"></i> Re-initialize';
+                }
+            }
+        });
+    }
+
+    // Force Leave Guild
+    const leaveGuildBtn = document.getElementById('leave-guild-btn');
+    const leaveGuildIdInput = document.getElementById('leave-guild-id-input');
+    if (leaveGuildBtn) {
+        leaveGuildBtn.addEventListener('click', async () => {
+            const guildId = leaveGuildIdInput.value.trim();
+            if (!guildId) {
+                alert('Please enter a Guild ID');
+                return;
+            }
+
+            if (confirm(`Are you sure you want to force the bot to leave guild ${guildId}? This action cannot be undone.`)) {
+                try {
+                    leaveGuildBtn.disabled = true;
+                    leaveGuildBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Leaving...';
+
+                    const response = await fetch('/api/admin/leave-guild', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ guildId })
+                    });
+                    const data = await response.json();
+
+                    if (data.success) {
+                        alert(data.message || 'Successfully left the guild');
+                        leaveGuildIdInput.value = '';
+                    } else {
+                        alert(`Error: ${data.error}`);
+                    }
+                } catch (error) {
+                    console.error(`Error leaving guild ${guildId}:`, error);
+                    alert(`An error occurred while trying to leave guild ${guildId}.`);
+                } finally {
+                    leaveGuildBtn.disabled = false;
+                    leaveGuildBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Force Leave Guild';
+                }
+            }
+        });
+    }
+
+    // Reset Database
+    if (resetDatabaseBtn) {
+        resetDatabaseBtn.addEventListener('click', async () => {
+            if (confirm('WARNING: Are you absolutely sure you want to reset the entire database? This action is irreversible and will delete ALL bot data.')) {
+                const confirmText = prompt('Type "RESET DATABASE" to confirm this destructive action:');
+                if (confirmText === 'RESET DATABASE') {
+                    try {
+                        resetDatabaseBtn.disabled = true;
+                        resetDatabaseBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
+
+                        const response = await fetch('/api/admin/reset-database', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        const data = await response.json();
+
+                        if (data.success) {
+                            alert(data.message || 'Database reset successfully');
+                        } else {
+                            alert(`Error: ${data.error}`);
+                        }
+                    } catch (error) {
+                        console.error('Error resetting database:', error);
+                        alert('An error occurred while trying to reset the database.');
+                    } finally {
+                        resetDatabaseBtn.disabled = false;
+                        resetDatabaseBtn.innerHTML = '<i class="fas fa-trash"></i> Reset Database';
+                    }
+                } else {
+                    alert('Database reset cancelled. Confirmation text did not match.');
+                }
+            }
+        });
+    }
+
+    // Auto-refresh stats every 30 seconds
+    setInterval(loadStats, 30000);
+
+    // ============================================================================
+    // Smart User Management Handlers
+    // ============================================================================
+
+    // Audit Users Button with SSE Progress
+    const auditUsersBtn = document.getElementById('audit-users-btn');
+    if (auditUsersBtn) {
+        auditUsersBtn.addEventListener('click', () => {
+            // Disable button
+            auditUsersBtn.disabled = true;
+            auditUsersBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running Audit...';
+
+            // Show progress container, hide results
+            document.getElementById('audit-progress').style.display = 'block';
+            document.getElementById('audit-results').style.display = 'none';
+
+            // Clear previous messages
+            const messagesContainer = document.getElementById('audit-messages');
+            messagesContainer.innerHTML = '';
+
+            // Create EventSource for SSE
+            const eventSource = new EventSource('/api/admin/audit-users');
+
+            let totalGuilds = 0;
+            let currentGuild = 0;
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    // Update progress bar
+                    if (data.totalGuilds) {
+                        totalGuilds = data.totalGuilds;
+                    }
+                    if (data.currentGuild) {
+                        currentGuild = data.currentGuild;
+                        const percentage = Math.round((currentGuild / totalGuilds) * 100);
+                        document.getElementById('audit-progress-bar').style.width = `${percentage}%`;
+                        document.getElementById('audit-percentage').textContent = `${percentage}%`;
+                    }
+
+                    // Update status message
+                    if (data.message) {
+                        document.getElementById('audit-status').textContent = data.message;
+
+                        // Add message to log
+                        const messageDiv = document.createElement('div');
+                        messageDiv.style.padding = 'var(--spacing-1) 0';
+                        messageDiv.style.borderBottom = '1px solid var(--color-dark-500)';
+
+                        // Color based on message type
+                        let icon = '';
+                        let color = 'var(--color-text-secondary)';
+                        if (data.type === 'error') {
+                            icon = '<i class="fas fa-exclamation-circle"></i> ';
+                            color = 'var(--color-danger)';
+                        } else if (data.type === 'match') {
+                            icon = '<i class="fas fa-check-circle"></i> ';
+                            color = 'var(--color-success)';
+                        } else if (data.type === 'info') {
+                            icon = '<i class="fas fa-info-circle"></i> ';
+                            color = 'var(--color-primary-400)';
+                        } else if (data.type === 'progress') {
+                            icon = '<i class="fas fa-sync fa-spin"></i> ';
+                        }
+
+                        messageDiv.innerHTML = `<span style="color: ${color};">${icon}${data.message}</span>`;
+                        messagesContainer.appendChild(messageDiv);
+
+                        // Auto-scroll to bottom
+                        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                    }
+
+                    // Handle completion
+                    if (data.type === 'complete' && data.results) {
+                        eventSource.close();
+
+                        // Update progress bar to 100%
+                        document.getElementById('audit-progress-bar').style.width = '100%';
+                        document.getElementById('audit-percentage').textContent = '100%';
+                        document.getElementById('audit-status').textContent = 'Audit completed!';
+
+                        // Show results
+                        setTimeout(() => {
+                            document.getElementById('audit-results').style.display = 'block';
+                            document.getElementById('audit-guilds').textContent = data.results.totalGuilds;
+                            document.getElementById('audit-members').textContent = data.results.totalMembers;
+                            document.getElementById('audit-exact').textContent = data.results.exactMatches;
+                            document.getElementById('audit-fuzzy').textContent = data.results.fuzzyMatches;
+                            document.getElementById('audit-new-links').textContent = data.results.newLinks;
+                            document.getElementById('audit-existing').textContent = data.results.existingLinks;
+                        }, 500);
+
+                        // Re-enable button
+                        auditUsersBtn.disabled = false;
+                        auditUsersBtn.innerHTML = '<i class="fas fa-search"></i> Run Full Audit';
+                    }
+
+                } catch (error) {
+                    console.error('Error parsing SSE data:', error);
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE connection error:', error);
+                eventSource.close();
+
+                // Show error
+                document.getElementById('audit-status').textContent = 'Error occurred during audit';
+                document.getElementById('audit-status').style.color = 'var(--color-danger)';
+
+                // Re-enable button
+                auditUsersBtn.disabled = false;
+                auditUsersBtn.innerHTML = '<i class="fas fa-search"></i> Run Full Audit';
+            };
+        });
+    }
+
+    // Search Streamer Button
+    const searchStreamerBtn = document.getElementById('search-streamer-btn');
+    if (searchStreamerBtn) {
+        searchStreamerBtn.addEventListener('click', async () => {
+            const username = document.getElementById('search-streamer-input').value.trim();
+            const platform = document.getElementById('search-platform-select').value;
+
+            if (!username) {
+                alert('Please enter a streamer username.');
+                return;
+            }
+
+            try {
+                searchStreamerBtn.disabled = true;
+                searchStreamerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+
+                const response = await fetch('/api/admin/search-streamer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, platform })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    const resultsDiv = document.getElementById('search-results');
+                    const contentDiv = document.getElementById('search-results-content');
+
+                    resultsDiv.style.display = 'block';
+
+                    if (data.matches.length > 0) {
+                        contentDiv.innerHTML = '<div style="font-size: var(--font-size-sm);">' +
+                            data.matches.map(m =>
+                                `<div style="padding: var(--spacing-3); margin-bottom: var(--spacing-2); background: var(--color-dark-500); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary-400);">
+                                    <div style="font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-1);">
+                                        ${m.streamerUsername} <span style="color: var(--color-text-muted);">(${m.platform})</span>
+                                    </div>
+                                    <div style="color: var(--color-text-muted); font-size: var(--font-size-xs);">
+                                        Discord User: ${m.discordUsername} (${m.discordUserId})
+                                    </div>
+                                    <div style="color: var(--color-text-muted); font-size: var(--font-size-xs);">
+                                        Guild: ${m.guildName}
+                                    </div>
+                                </div>`
+                            ).join('') +
+                            '</div>';
+                    } else {
+                        contentDiv.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-4);">No matches found.</div>';
+                    }
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Error searching streamer:', error);
+                alert('An error occurred while searching for the streamer.');
+            } finally {
+                searchStreamerBtn.disabled = false;
+                searchStreamerBtn.innerHTML = '<i class="fas fa-search"></i> Search';
+            }
+        });
+    }
+
+    // View Links Button
+    const viewLinksBtn = document.getElementById('view-links-btn');
+    if (viewLinksBtn) {
+        viewLinksBtn.addEventListener('click', async () => {
+            const userId = document.getElementById('user-id-input').value.trim();
+
+            if (!userId) {
+                alert('Please enter a Discord User ID.');
+                return;
+            }
+
+            try {
+                viewLinksBtn.disabled = true;
+                viewLinksBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+
+                const response = await fetch('/api/admin/view-links', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    const resultsDiv = document.getElementById('links-results');
+                    const contentDiv = document.getElementById('links-results-content');
+
+                    resultsDiv.style.display = 'block';
+
+                    if (data.links.length > 0) {
+                        contentDiv.innerHTML = '<div style="font-size: var(--font-size-sm);">' +
+                            data.links.map(l => {
+                                const verifiedBadge = l.verified ?
+                                    '<span style="background: rgba(46, 213, 115, 0.15); color: var(--color-success); padding: 2px 8px; border-radius: var(--radius-full); font-size: var(--font-size-xs);">✓ Verified</span>' :
+                                    '<span style="background: rgba(243, 156, 18, 0.15); color: var(--color-warning); padding: 2px 8px; border-radius: var(--radius-full); font-size: var(--font-size-xs);">⏳ Pending</span>';
+
+                                return `<div style="padding: var(--spacing-3); margin-bottom: var(--spacing-2); background: var(--color-dark-500); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary-400);">
+                                    <div style="font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-1); display: flex; justify-content: space-between; align-items: center;">
+                                        <span>${l.streamer_username} <span style="color: var(--color-text-muted);">(${l.platform})</span></span>
+                                        ${verifiedBadge}
+                                    </div>
+                                    <div style="color: var(--color-text-muted); font-size: var(--font-size-xs);">
+                                        Linked: ${new Date(l.linked_at).toLocaleDateString()}
+                                    </div>
+                                </div>`;
+                            }).join('') +
+                            '</div>';
+                    } else {
+                        contentDiv.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-4);">No links found for this user.</div>';
+                    }
+                } else {
+                    alert(`Error: ${data.error}`);
+                }
+            } catch (error) {
+                console.error('Error viewing links:', error);
+                alert('An error occurred while viewing links.');
+            } finally {
+                viewLinksBtn.disabled = false;
+                viewLinksBtn.innerHTML = '<i class="fas fa-link"></i> View Links';
+            }
+        });
+    }
+});
+
+async function loadStats() {
+    try {
+        const response = await fetch('/api/admin/stats');
+        const data = await response.json();
+
+        if (data.success) {
+            // Update top stats cards
+            document.getElementById('total-guilds').textContent = data.stats.totalGuilds.toLocaleString();
+            document.getElementById('total-users').textContent = data.stats.totalUsers.toLocaleString();
+            document.getElementById('live-streamers').textContent = data.stats.liveStreamers.toLocaleString();
+
+            // Format uptime
+            const uptimeHours = Math.floor(data.stats.uptime / 3600);
+            const uptimeMinutes = Math.floor((data.stats.uptime % 3600) / 60);
+            const uptimeText = `${uptimeHours}h ${uptimeMinutes}m`;
+            document.getElementById('bot-uptime').textContent = uptimeText;
+
+            // Format memory usage (server already sends in MB)
+            const memoryMB = data.stats.memoryUsage || 0;
+            document.getElementById('memory-usage').textContent = `${memoryMB} MB`;
+
+            // Update detailed stats
+            document.getElementById('total-guilds-detail').textContent = data.stats.totalGuilds.toLocaleString();
+            document.getElementById('total-users-detail').textContent = data.stats.totalUsers.toLocaleString();
+            document.getElementById('live-streamers-detail').textContent = data.stats.liveStreamers.toLocaleString();
+            document.getElementById('bot-uptime-detail').textContent = uptimeText;
+            document.getElementById('memory-usage-detail').textContent = `${memoryMB} MB`;
+        } else {
+            console.error('Failed to load stats:', data.error);
+        }
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
+}
+</script>

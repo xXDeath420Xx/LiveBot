@@ -1,0 +1,141 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-paint-brush"></i>
+                <span>Bot Appearance</span>
+            </div>
+            <div class="page-section-subtitle">
+                Customize how the bot appears in your server
+            </div>
+        </div>
+    </div>
+
+    <form action="/manage/<%= guild.id %>/update-bot-appearance" method="POST" enctype="multipart/form-data">
+        <!-- Bot Nickname -->
+        <div style="margin-bottom: var(--spacing-6);">
+            <label class="form-label">Bot Nickname</label>
+            <input type="text" class="form-control" name="bot_nickname" value="<%= settings.bot_nickname || '' %>" placeholder="Leave blank for default">
+            <div class="form-help">
+                Customize the bot's display name in this server. Type "reset" to clear.
+            </div>
+        </div>
+
+        <!-- Bot Avatar -->
+        <div style="margin-bottom: var(--spacing-6);">
+            <label class="form-label">Bot Avatar</label>
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+                <div>
+                    <label class="form-sublabel">Avatar URL</label>
+                    <input type="text" class="form-control" name="bot_avatar_url_text" value="<%= settings.webhook_avatar_url || '' %>" placeholder="https://i.imgur.com/example.png">
+                </div>
+                <div>
+                    <label class="form-sublabel">Or Upload Image</label>
+                    <input class="form-control" type="file" name="bot_avatar_file" accept="image/*">
+                </div>
+            </div>
+            <div class="form-check" style="margin-top: var(--spacing-3);">
+                <input class="form-check-input" type="checkbox" id="reset_bot_avatar" name="reset_bot_avatar">
+                <label class="form-check-label" for="reset_bot_avatar">
+                    Reset to default avatar
+                </label>
+            </div>
+        </div>
+
+        <!-- Embed Color -->
+        <div style="margin-bottom: var(--spacing-6);">
+            <label class="form-label">Embed Color</label>
+            <div style="display: flex; align-items: center; gap: var(--spacing-4);">
+                <input type="color" class="form-control-color" name="embed_color" value="<%= settings.embed_color || '#5865F2' %>" style="width: 100px; height: 50px; cursor: pointer; border-radius: var(--radius-md);">
+                <div>
+                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= settings.embed_color || '#5865F2' %></div>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Color used for announcement embeds</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview -->
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+            <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); margin-bottom: var(--spacing-4);">
+                PREVIEW
+            </div>
+            <div style="display: flex; gap: var(--spacing-3); border-left: 4px solid <%= settings.embed_color || '#5865F2' %>; padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--color-primary-500); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fas fa-robot" style="color: white;"></i>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                        <%= settings.bot_nickname || 'CertiFried MultiTool' %>
+                    </div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                        This is how announcement embeds will appear with your custom settings
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: var(--spacing-3);">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Appearance Settings</span>
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="location.reload()">
+                <i class="fas fa-undo"></i>
+                <span>Reset Form</span>
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-sublabel {
+    display: block;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.form-control-color {
+    border: 2px solid var(--color-dark-400);
+    background: var(--color-dark-600);
+    transition: all var(--transition-base);
+}
+
+.form-control-color:hover {
+    border-color: var(--color-primary-400);
+}
+
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.form-check-input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.form-check-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+</style>

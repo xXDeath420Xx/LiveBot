@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status - CertiFried MultiTool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/unified-dark-theme.css">
+    <style>
+        .status-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        .status-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(233, 69, 96, 0.5);
+            box-shadow: 0 10px 30px rgba(233, 69, 96, 0.2);
+        }
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #e94560 0%, #533483 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .streamer-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            overflow: hidden;
+            position: relative;
+            padding: 1rem !important;
+        }
+        .streamer-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(135deg, #e94560 0%, #533483 100%);
+        }
+        .streamer-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(233, 69, 96, 0.5);
+            box-shadow: 0 8px 20px rgba(233, 69, 96, 0.2);
+        }
+        .platform-badge {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 6px;
+            display: inline-block;
+            margin: 2px;
+        }
+        .platform-twitch { background: #9146FF; color: white; }
+        .platform-kick { background: #53FC18; color: #000; }
+        .platform-youtube { background: #FF0000; color: white; }
+        .platform-tiktok { background: #000000; color: white; border: 1px solid #FE2C55; }
+        .platform-trovo { background: #19E68C; color: #000; }
+        .platform-facebook { background: #1877F2; color: white; }
+        .platform-instagram { background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); color: white; }
+        .live-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .streamer-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 2px solid rgba(233, 69, 96, 0.5);
+            object-fit: cover;
+        }
+        .uptime-badge {
+            background: rgba(52, 211, 153, 0.15);
+            color: #34D399;
+            border: 1px solid rgba(52, 211, 153, 0.3);
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .empty-state {
+            background: rgba(255, 255, 255, 0.03);
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 60px 20px;
+        }
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+        }
+        .stat-icon i {
+            font-size: 1.8rem;
+        }
+        .icon-uptime {
+            background: linear-gradient(135deg, rgba(52, 211, 153, 0.1) 0%, rgba(52, 211, 153, 0.05) 100%);
+            color: #34D399;
+        }
+        .icon-live {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
+            color: #EF4444;
+        }
+        .icon-servers {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
+            color: #3B82F6;
+        }
+        .icon-users {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(168, 85, 247, 0.05) 100%);
+            color: #A855F7;
+        }
+    </style>
+    <meta http-equiv="refresh" content="30">
+</head>
+<body>
+
+<%- include('partials/header', { user: user }) %>
+
+<main class="page-container">
+    <!-- Header -->
+    <div class="text-center mb-5">
+        <h1 class="display-4 mb-3">
+            <i class="fas fa-chart-line me-3 text-gradient"></i>Bot Status
+        </h1>
+        <p class="lead text-muted">Real-time monitoring across all platforms</p>
+        <small class="text-muted"><i class="fas fa-sync-alt"></i> Auto-refreshes every 30 seconds</small>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row g-4 mb-5">
+        <div class="col-md-6 col-lg-3">
+            <div class="status-card p-4">
+                <div class="stat-icon icon-uptime mx-auto">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <h6 class="text-center text-muted mb-2">Bot Uptime</h6>
+                <div class="stat-value text-center"><%= generalStats.uptimeFormatted %></div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="status-card p-4">
+                <div class="stat-icon icon-live mx-auto">
+                    <i class="fas fa-broadcast-tower"></i>
+                </div>
+                <h6 class="text-center text-muted mb-2">Live Now</h6>
+                <div class="stat-value text-center"><%= liveStreamers ? liveStreamers.length : 0 %></div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="status-card p-4">
+                <div class="stat-icon icon-servers mx-auto">
+                    <i class="fas fa-server"></i>
+                </div>
+                <h6 class="text-center text-muted mb-2">Total Servers</h6>
+                <div class="stat-value text-center"><%= generalStats.totalGuilds %></div>
+            </div>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <div class="status-card p-4">
+                <div class="stat-icon icon-users mx-auto">
+                    <i class="fas fa-users"></i>
+                </div>
+                <h6 class="text-center text-muted mb-2">Total Users</h6>
+                <div class="stat-value text-center"><%= (generalStats.totalUsers || 0).toLocaleString() %></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Streamers Section -->
+    <div class="mb-4">
+        <h3 class="mb-4">
+            <i class="fas fa-circle text-danger me-2 live-pulse"></i>
+            Live Streamers
+            <span class="badge bg-danger ms-2"><%= liveStreamers ? liveStreamers.length : 0 %></span>
+        </h3>
+    </div>
+
+    <% if (liveStreamers && liveStreamers.length > 0) { %>
+        <div class="row g-3">
+            <% liveStreamers.forEach(streamer => { %>
+                <div class="col-md-6 col-xl-4">
+                    <div class="streamer-card h-100">
+                        <div class="d-flex align-items-center mb-2">
+                            <img src="<%= streamer.avatar_url || 'https://via.placeholder.com/48' %>"
+                                 alt="<%= streamer.display_name %>"
+                                 class="streamer-avatar me-2"
+                                 onerror="this.src='https://via.placeholder.com/48'">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1 fw-bold"><%= streamer.display_name %></h6>
+                                <div>
+                                    <% streamer.platforms.forEach(platform => { %>
+                                        <span class="platform-badge platform-<%= platform.platform_lower %>">
+                                            <% if (platform.platform_lower === 'twitch') { %>
+                                                <i class="fab fa-twitch"></i>
+                                            <% } else if (platform.platform_lower === 'youtube') { %>
+                                                <i class="fab fa-youtube"></i>
+                                            <% } else if (platform.platform_lower === 'kick') { %>
+                                                <img src="/images/kick.png" alt="Kick" style="width: 14px; height: 14px; display: inline-block; margin-right: 4px;">
+                                            <% } else if (platform.platform_lower === 'tiktok') { %>
+                                                <i class="fab fa-tiktok"></i>
+                                            <% } else if (platform.platform_lower === 'trovo') { %>
+                                                <img src="/images/trovo.png" alt="Trovo" style="width: 14px; height: 14px; display: inline-block; margin-right: 4px;">
+                                            <% } else if (platform.platform_lower === 'facebook') { %>
+                                                <i class="fab fa-facebook"></i>
+                                            <% } else if (platform.platform_lower === 'instagram') { %>
+                                                <i class="fab fa-instagram"></i>
+                                            <% } else { %>
+                                                <i class="fas fa-broadcast-tower"></i>
+                                            <% } %>
+                                            <%= platform.name %>
+                                        </span>
+                                    <% }); %>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <span class="uptime-badge">
+                                <i class="fas fa-hourglass-half me-1"></i>
+                                <%= streamer.uptime %>
+                            </span>
+                            <% if (streamer.platforms.length === 1) { %>
+                                <a href="<%= streamer.platforms[0].url %>" target="_blank" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-external-link-alt"></i> Watch
+                                </a>
+                            <% } else { %>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="fas fa-external-link-alt"></i> Watch
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <% streamer.platforms.forEach(platform => { %>
+                                            <li><a class="dropdown-item" href="<%= platform.url %>" target="_blank">
+                                                <%= platform.name %>
+                                            </a></li>
+                                        <% }); %>
+                                    </ul>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+            <% }); %>
+        </div>
+    <% } else { %>
+        <div class="empty-state text-center">
+            <i class="fas fa-bed fa-4x text-muted mb-4"></i>
+            <h4 class="text-muted mb-2">Nobody's Streaming Right Now</h4>
+            <p class="text-muted mb-0">Live streams will appear here when streamers go live</p>
+        </div>
+    <% } %>
+</main>
+
+<%- include('partials/footer') %>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

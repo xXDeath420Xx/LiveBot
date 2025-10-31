@@ -1,0 +1,271 @@
+<%
+const groupedCommands = commands.reduce((acc, cmd) => {
+    const category = cmd.category || 'General';
+    if (!acc[category]) { acc[category] = []; }
+    acc[category].push(cmd);
+    return acc;
+}, {});
+
+const categoryIcons = {
+    'Streamer': 'fas fa-stream',
+    'Team': 'fas fa-users',
+    'Admin': 'fas fa-shield-alt',
+    'Moderation': 'fas fa-gavel',
+    'Utility': 'fas fa-tools',
+    'Fun': 'fas fa-gamepad',
+    'Music': 'fas fa-music',
+    'Economy': 'fas fa-coins',
+    'RPG': 'fas fa-dragon',
+    'General': 'fas fa-terminal',
+    'Ticket': 'fas fa-ticket-alt',
+    'Form': 'fas fa-file-alt',
+    'Birthday': 'fas fa-birthday-cake',
+    'Weather': 'fas fa-cloud-sun',
+    'Rank': 'fas fa-chart-line',
+    'Suggestion': 'fas fa-lightbulb',
+    'Events': 'fas fa-calendar-alt',
+    'Feeds': 'fas fa-rss',
+    'Config': 'fas fa-cog'
+};
+
+const totalCommands = Object.values(groupedCommands).reduce((sum, cmds) => sum + cmds.length, 0);
+const categoryCount = Object.keys(groupedCommands).length;
+%>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-terminal"></i>
+                <span>Bot Commands</span>
+            </div>
+            <div class="page-section-subtitle">
+                Browse and manage all available slash commands
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Commands</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= totalCommands %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Categories</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= categoryCount %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Command Type</div>
+            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-accent-purple); margin-top: var(--spacing-1);">
+                <i class="fas fa-slash"></i> Slash Commands
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <div class="input-group">
+            <span class="input-group-icon">
+                <i class="fas fa-search"></i>
+            </span>
+            <input type="text" id="commandSearch" class="form-control" placeholder="Search commands by name or description...">
+        </div>
+    </div>
+
+    <!-- Command Categories -->
+    <% for (const category in groupedCommands) { %>
+        <div class="command-category" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                    <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <i class="<%= categoryIcons[category] || 'fas fa-terminal' %>" style="color: white; font-size: 1.25rem;"></i>
+                    </div>
+                    <div>
+                        <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= category %></h4>
+                        <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);"><%= groupedCommands[category].length %> command<%= groupedCommands[category].length !== 1 ? 's' : '' %></p>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-secondary" onclick="toggleCategory('<%= category.replace(/'/g, "\\'") %>')">
+                    <i class="fas fa-chevron-down category-toggle-icon" id="toggle-<%= category.replace(/\s+/g, '-') %>"></i>
+                    <span>Collapse</span>
+                </button>
+            </div>
+
+            <div class="category-commands" id="category-<%= category.replace(/\s+/g, '-') %>">
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 250px;">Command</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% groupedCommands[category].forEach(command => { %>
+                                <tr class="command-row" data-command-name="<%= command.name.toLowerCase() %>" data-description="<%= command.description.toLowerCase() %>" data-category="<%= category.toLowerCase() %>">
+                                    <td>
+                                        <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                            <span style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; font-weight: var(--font-weight-bold); color: var(--color-primary-400);">
+                                                /<%= command.name %>
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="color: var(--color-text-secondary);">
+                                            <%= command.description %>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Info Banner -->
+    <div style="background: linear-gradient(135deg, rgba(88, 101, 242, 0.1), rgba(88, 101, 242, 0.05)); border: 1px solid rgba(88, 101, 242, 0.3); border-radius: var(--radius-lg); padding: var(--spacing-4);">
+        <div style="display: flex; gap: var(--spacing-3);">
+            <i class="fas fa-info-circle" style="color: var(--color-primary-400); font-size: 1.25rem; margin-top: 2px;"></i>
+            <div>
+                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                    How to use commands
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    All commands use Discord's slash command system. Type <code style="background: var(--color-dark-700); padding: 2px 6px; border-radius: 3px; color: var(--color-primary-400);">/</code> in any channel and Discord will show available commands with auto-complete.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-700);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-3);
+    text-align: left;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-3);
+    border-bottom: 1px solid var(--color-dark-500);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.input-group {
+    display: flex;
+    align-items: stretch;
+}
+
+.input-group-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--spacing-3);
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-right: none;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    color: var(--color-text-muted);
+}
+
+.category-commands {
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.category-commands.collapsed {
+    max-height: 0;
+    opacity: 0;
+}
+
+.category-toggle-icon {
+    transition: transform 0.3s ease;
+}
+
+.category-toggle-icon.rotated {
+    transform: rotate(-90deg);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Search functionality
+    const searchInput = document.getElementById('commandSearch');
+    const commandRows = document.querySelectorAll('.command-row');
+    const categories = document.querySelectorAll('.command-category');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+
+            categories.forEach(category => {
+                let hasVisibleCommand = false;
+                const rows = category.querySelectorAll('.command-row');
+
+                rows.forEach(row => {
+                    const commandName = row.dataset.commandName;
+                    const description = row.dataset.description;
+
+                    if (query === '' || commandName.includes(query) || description.includes(query)) {
+                        row.style.display = '';
+                        hasVisibleCommand = true;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+
+                // Hide entire category if no commands match
+                category.style.display = hasVisibleCommand ? '' : 'none';
+            });
+        });
+    }
+});
+
+function toggleCategory(category) {
+    const categoryId = category.replace(/\s+/g, '-');
+    const commandsDiv = document.getElementById(`category-${categoryId}`);
+    const toggleIcon = document.getElementById(`toggle-${categoryId}`);
+
+    if (commandsDiv.classList.contains('collapsed')) {
+        commandsDiv.classList.remove('collapsed');
+        toggleIcon.classList.remove('rotated');
+    } else {
+        commandsDiv.classList.add('collapsed');
+        toggleIcon.classList.add('rotated');
+    }
+}
+</script>

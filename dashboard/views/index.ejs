@@ -1,24 +1,794 @@
-<%- include('partials/header-landing', { client_id: client_id, user: user }) %>
-<div class="container">
-    <div class="hero">
-        <img src="https://cdn.discordapp.com/app-icons/1409904443125665875/e2810a3002f2321487f54c9d54e58b14.png?size=128" alt="Bot Logo" class="hero-logo">
-        <h1>CertiFried Announcer</h1>
-        <p>The only multi-platform stream announcement bot you'll ever need. Reliable, fast, and fully customizable.</p>
-        <div class="hero-buttons">
-            <a href="https://discord.com/api/oauth2/authorize?client_id=<%= client_id %>&permissions=8&scope=bot%20applications.commands" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Invite to Server</a>
-            <a href="/dashboard" class="btn btn-secondary">Open Dashboard</a>
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CertiFried MultiTool - The Ultimate All-in-One Discord Bot</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/unified-dark-theme.css">
+    <style>
+        /* Modern Hero Section */
+        .hero {
+            padding: 8rem 2rem;
+            background: linear-gradient(135deg, #0a0e27 0%, #1e2028 50%, #16181d 100%);
+            position: relative;
+            overflow: hidden;
+            margin: 0;
+            border-radius: 0;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background:
+                radial-gradient(circle at 20% 50%, rgba(88, 101, 242, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 50%, rgba(155, 89, 182, 0.15) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            max-width: 1200px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .hero-logo {
+            width: 420px;
+            height: 420px;
+            border-radius: 20px;
+            margin-bottom: 2rem;
+            box-shadow: 0 0 60px rgba(88, 101, 242, 0.4);
+            animation: float 4s ease-in-out infinite;
+            border: 3px solid rgba(88, 101, 242, 0.3);
+            transition: all 0.3s ease;
+        }
+
+        .hero-logo:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 80px rgba(88, 101, 242, 0.6);
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff 0%, #b9bbbe 50%, #5865F2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1.5rem;
+            line-height: 1.2;
+            animation: slideInDown 0.8s ease-out;
+        }
+
+        @keyframes slideInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.8);
+            max-width: 700px;
+            margin: 0 auto 2.5rem;
+            line-height: 1.7;
+            animation: slideInDown 0.8s ease-out 0.1s backwards;
+        }
+
+        .hero .btn-group-hero {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            animation: slideInDown 0.8s ease-out 0.2s backwards;
+        }
+
+        .btn-primary, .btn-secondary {
+            padding: 1rem 2rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border: none;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #5865F2 0%, #4752C4 100%);
+            box-shadow: 0 4px 20px rgba(88, 101, 242, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(88, 101, 242, 0.5);
+            background: linear-gradient(135deg, #6b77f4 0%, #5860d4 100%);
+            color: white;
+        }
+
+        .btn-outline-secondary {
+            border: 2px solid rgba(88, 101, 242, 0.5);
+            background: transparent;
+            color: white;
+        }
+
+        .btn-outline-secondary:hover {
+            background: rgba(88, 101, 242, 0.2);
+            border-color: rgba(88, 101, 242, 0.8);
+            transform: translateY(-4px);
+        }
+
+        /* Stats Cards */
+        .stats-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 2rem;
+            margin-top: 4rem;
+            max-width: 1000px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .stat-card {
+            background: rgba(88, 101, 242, 0.08);
+            border: 1px solid rgba(88, 101, 242, 0.2);
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            animation: scaleIn 0.6s ease-out backwards;
+        }
+
+        .stat-card:nth-child(1) { animation-delay: 0.3s; }
+        .stat-card:nth-child(2) { animation-delay: 0.4s; }
+        .stat-card:nth-child(3) { animation-delay: 0.5s; }
+        .stat-card:nth-child(4) { animation-delay: 0.6s; }
+
+        @keyframes scaleIn {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .stat-card:hover {
+            background: rgba(88, 101, 242, 0.15);
+            border-color: rgba(88, 101, 242, 0.4);
+            transform: translateY(-8px);
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #5865F2 0%, #b959f6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: block;
+        }
+
+        .stat-label {
+            font-size: 0.95rem;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 0.5rem;
+            font-weight: 500;
+        }
+
+        /* Feature Cards Enhancement */
+        .feature-icon {
+            color: #5865F2;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .content-card {
+            background: rgba(255, 255, 255, 0.03) !important;
+            border: 1px solid rgba(88, 101, 242, 0.2) !important;
+            border-radius: 15px !important;
+            backdrop-filter: blur(10px) !important;
+            transition: all 0.3s ease;
+        }
+
+        .content-card:hover {
+            background: rgba(255, 255, 255, 0.06) !important;
+            border-color: rgba(88, 101, 242, 0.5) !important;
+            box-shadow: 0 12px 40px rgba(88, 101, 242, 0.2);
+            transform: translateY(-8px);
+        }
+
+        .content-card:hover .feature-icon {
+            color: #6b77f4;
+            transform: scale(1.2) rotate(10deg);
+            text-shadow: 0 0 20px rgba(88, 101, 242, 0.5);
+        }
+
+        .section-header {
+            margin: 4rem 0 3rem 0;
+            text-align: center;
+        }
+
+        .section-header h2 {
+            font-size: 2.8rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ffffff 0%, #b9bbbe 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+        }
+
+        /* Platform Badges */
+        .platform-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 25px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .platform-badge::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .platform-badge:hover {
+            transform: translateY(-6px) scale(1.05);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .platform-badge:hover::before {
+            left: 100%;
+        }
+
+        .badge-twitch { background: linear-gradient(135deg, #9146FF, #7c3aed); color: white; }
+        .badge-kick { background: linear-gradient(135deg, #53FC18, #4ade80); color: #000; }
+        .badge-youtube { background: linear-gradient(135deg, #FF0000, #dc2626); color: white; }
+        .badge-tiktok { background: linear-gradient(135deg, #000000, #1f2937); color: white; border: 1px solid #FE2C55; }
+        .badge-trovo { background: linear-gradient(135deg, #19D760, #10b981); color: white; }
+        .badge-facebook { background: linear-gradient(135deg, #1877F2, #1d4ed8); color: white; }
+        .badge-instagram { background: linear-gradient(45deg, #F58529, #DD2A7B, #8134AF); color: white; }
+
+        .feature-detail {
+            margin-bottom: 3rem;
+        }
+
+        .category-badge {
+            background: linear-gradient(135deg, #5865F2, #4752C4);
+            color: white;
+            padding: 8px 18px;
+            border-radius: 25px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: inline-block;
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.3);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero {
+                padding: 4rem 1rem;
+            }
+
+            .hero h1 {
+                font-size: 2.2rem;
+            }
+
+            .hero p {
+                font-size: 1rem;
+            }
+
+            .stats-section {
+                gap: 1.5rem;
+            }
+
+            .section-header h2 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<%- include('partials/header', { user: user }) %>
+
+<main>
+    <!-- Hero Section -->
+    <div class="hero text-center">
+        <div class="hero-content">
+            <img src="/images/CertiFried.png" alt="CertiFried MultiTool Logo" class="hero-logo rounded-circle">
+            <h1>CertiFried MultiTool</h1>
+            <p>The ultimate all-in-one Discord bot combining streaming announcements, AI music, advanced moderation, economy, games, and 40+ powerful features into one comprehensive solution</p>
+            <div class="btn-group-hero">
+                <% if (user) { %>
+                    <a href="/dashboard" class="btn btn-primary"><i class="fas fa-tachometer-alt me-2"></i>Go to Dashboard</a>
+                <% } else { %>
+                    <a href="/login" class="btn btn-primary"><i class="fab fa-discord me-2"></i>Login with Discord</a>
+                <% } %>
+                <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.clientId || '#' %>&permissions=8&scope=bot+applications.commands" class="btn btn-outline-secondary" target="_blank"><i class="fas fa-rocket me-2"></i>Invite Bot</a>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="stats-section">
+                <div class="stat-card">
+                    <span class="stat-value">7</span>
+                    <span class="stat-label">Streaming Platforms</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value">40+</span>
+                    <span class="stat-label">Features</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value">100%</span>
+                    <span class="stat-label">Free Forever</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-value">24/7</span>
+                    <span class="stat-label">Uptime</span>
+                </div>
+            </div>
         </div>
     </div>
-    <div class="center-title">
-         <h2 class="section-title">Features</h2>
+
+    <div class="page-container">
+        <!-- Quick Stats -->
+        <div class="row g-4 mb-5 text-center">
+            <div class="col-md-3">
+                <div class="content-card p-4">
+                    <h2 class="text-gradient display-5 fw-bold">7</h2>
+                    <p class="text-muted mb-0">Streaming Platforms</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="content-card p-4">
+                    <h2 class="text-gradient display-5 fw-bold">40+</h2>
+                    <p class="text-muted mb-0">Unique Features</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="content-card p-4">
+                    <h2 class="text-gradient display-5 fw-bold">100%</h2>
+                    <p class="text-muted mb-0">Free & Open</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="content-card p-4">
+                    <h2 class="text-gradient display-5 fw-bold">24/7</h2>
+                    <p class="text-muted mb-0">Uptime</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Core Features Overview -->
+        <div class="section-header">
+            <h2 class="display-5 fw-bold">Replace 10+ Bots With One</h2>
+            <p class="text-muted lead">Everything your Discord community needs, professionally integrated</p>
+        </div>
+
+        <div class="row g-4 mb-5">
+            <div class="col-md-4">
+                <div class="content-card text-center h-100">
+                    <div class="feature-icon fs-1 mb-3"><i class="fas fa-satellite-dish"></i></div>
+                    <h4>Multi-Platform Streaming</h4>
+                    <p class="text-muted">Automatically announce when your streamers go live on Twitch, YouTube, Kick, TikTok, Trovo, Facebook, or Instagram</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="content-card text-center h-100">
+                    <div class="feature-icon fs-1 mb-3"><i class="fas fa-brain"></i></div>
+                    <h4>AI DJ Music System</h4>
+                    <p class="text-muted">Gemini AI generates custom playlists with voice commentary and banter using PiperTTS voice synthesis</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="content-card text-center h-100">
+                    <div class="feature-icon fs-1 mb-3"><i class="fas fa-shield-alt"></i></div>
+                    <h4>Advanced Security</h4>
+                    <p class="text-muted">Anti-raid, anti-nuke, automod, comprehensive logging, and powerful moderation tools</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="content-card text-center h-100">
+                    <div class="feature-icon fs-1 mb-3"><i class="fas fa-coins"></i></div>
+                    <h4>Full Economy System</h4>
+                    <p class="text-muted">Currency, shops, gambling, trading, daily rewards, and leaderboards</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="content-card text-center h-100">
+                    <div class="feature-icon fs-1 mb-3"><i class="fas fa-gamepad"></i></div>
+                    <h4>RPG & Games</h4>
+                    <p class="text-muted">Leveling system, XP rewards, mini-games, battles, and interactive commands</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="content-card text-center h-100">
+                    <div class="feature-icon fs-1 mb-3"><i class="fas fa-cogs"></i></div>
+                    <h4>Full Web Dashboard</h4>
+                    <p class="text-muted">Configure everything through an intuitive web interface - no commands required</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Feature Categories -->
+        <div class="section-header">
+            <h2 class="display-5 fw-bold">Comprehensive Feature Breakdown</h2>
+            <p class="text-muted lead">Deep dive into what makes CertiFried the most complete Discord bot</p>
+        </div>
+
+        <!-- Streaming Features -->
+        <div class="feature-detail">
+            <div class="content-card p-4">
+                <span class="category-badge"><i class="fas fa-broadcast-tower me-2"></i>Streaming & Announcements</span>
+                <h3 class="mt-3">Multi-Platform Stream Monitoring</h3>
+                <p class="text-muted">Never miss when your community goes live. CertiFried monitors 7 major platforms and posts beautiful announcements automatically.</p>
+
+                <div class="mb-3">
+                    <h5 class="mb-3">Supported Platforms:</h5>
+                    <span class="platform-badge badge-twitch"><i class="fab fa-twitch me-2"></i>Twitch</span>
+                    <span class="platform-badge badge-youtube"><i class="fab fa-youtube me-2"></i>YouTube</span>
+                    <span class="platform-badge badge-kick"><img src="/images/kick.png" alt="Kick" style="width: 16px; height: 16px; display: inline-block; margin-right: 8px;">Kick</span>
+                    <span class="platform-badge badge-tiktok"><i class="fab fa-tiktok me-2"></i>TikTok</span>
+                    <span class="platform-badge badge-trovo"><img src="/images/trovo.png" alt="Trovo" style="width: 16px; height: 16px; display: inline-block; margin-right: 8px;">Trovo</span>
+                    <span class="platform-badge badge-facebook"><i class="fab fa-facebook me-2"></i>Facebook</span>
+                    <span class="platform-badge badge-instagram"><i class="fab fa-instagram me-2"></i>Instagram</span>
+                </div>
+
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-check-circle text-success me-2"></i>Customizable Announcements</h5>
+                        <ul class="text-muted">
+                            <li>Custom webhook profiles per streamer</li>
+                            <li>Role mentions and auto-assignment</li>
+                            <li>Embeds with thumbnails and game info</li>
+                            <li>Multiple channels per server</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-users text-success me-2"></i>Twitch Team Sync</h5>
+                        <ul class="text-muted">
+                            <li>Auto-sync entire Twitch teams</li>
+                            <li>Mass add/remove streamers</li>
+                            <li>CSV import/export</li>
+                            <li>Schedule-based announcements</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Music Features -->
+        <div class="feature-detail">
+            <div class="content-card p-4">
+                <span class="category-badge"><i class="fas fa-music me-2"></i>Music & Entertainment</span>
+                <h3 class="mt-3">AI-Powered Music Experience</h3>
+                <p class="text-muted">The most advanced music system with AI DJ capabilities, voice commentary, and comprehensive playback controls.</p>
+
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-microphone text-success me-2"></i>AI DJ Mode</h5>
+                        <ul class="text-muted">
+                            <li>Gemini AI generates custom playlists</li>
+                            <li>PiperTTS voice synthesis for DJ commentary</li>
+                            <li>Contextual banter and track introductions</li>
+                            <li>Skip commentary and reactions</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-play-circle text-success me-2"></i>Standard Music Features</h5>
+                        <ul class="text-muted">
+                            <li>Play from YouTube, Spotify, SoundCloud</li>
+                            <li>Queue management and playlists</li>
+                            <li>Audio filters (bass boost, nightcore, etc.)</li>
+                            <li>Interactive music panel with buttons</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Moderation Features -->
+        <div class="feature-detail">
+            <div class="content-card p-4">
+                <span class="category-badge"><i class="fas fa-gavel me-2"></i>Moderation & Security</span>
+                <h3 class="mt-3">Enterprise-Grade Server Protection</h3>
+                <p class="text-muted">Keep your community safe with advanced moderation tools, automated systems, and comprehensive logging.</p>
+
+                <div class="row mt-4">
+                    <div class="col-md-4">
+                        <h5><i class="fas fa-robot text-success me-2"></i>AutoMod</h5>
+                        <ul class="text-muted small">
+                            <li>Spam detection</li>
+                            <li>Link filtering</li>
+                            <li>Bad word filtering</li>
+                            <li>Caps lock detection</li>
+                            <li>Mention spam protection</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <h5><i class="fas fa-shield text-success me-2"></i>Anti-Raid/Nuke</h5>
+                        <ul class="text-muted small">
+                            <li>Mass join detection</li>
+                            <li>Permission abuse prevention</li>
+                            <li>Channel/role protection</li>
+                            <li>Automated lockdowns</li>
+                            <li>Backup & restore</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <h5><i class="fas fa-clipboard-list text-success me-2"></i>Mod Tools</h5>
+                        <ul class="text-muted small">
+                            <li>Warn, kick, ban, timeout</li>
+                            <li>Timed punishments</li>
+                            <li>Case management</li>
+                            <li>Mod notes</li>
+                            <li>Comprehensive logs</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Community Features -->
+        <div class="feature-detail">
+            <div class="content-card p-4">
+                <span class="category-badge"><i class="fas fa-users me-2"></i>Community Engagement</span>
+                <h3 class="mt-3">Build An Active Community</h3>
+                <p class="text-muted">Engage your members with leveling, giveaways, polls, forms, tickets, and more.</p>
+
+                <div class="row mt-4">
+                    <div class="col-md-3">
+                        <h5><i class="fas fa-trophy text-warning me-2"></i>Leveling & XP</h5>
+                        <ul class="text-muted small">
+                            <li>Message XP</li>
+                            <li>Voice XP</li>
+                            <li>Role rewards</li>
+                            <li>Leaderboards</li>
+                            <li>Custom backgrounds</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-3">
+                        <h5><i class="fas fa-gift text-danger me-2"></i>Giveaways</h5>
+                        <ul class="text-muted small">
+                            <li>Timed giveaways</li>
+                            <li>Multiple winners</li>
+                            <li>Role requirements</li>
+                            <li>Reroll functionality</li>
+                            <li>Raffle mode</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-3">
+                        <h5><i class="fas fa-poll text-info me-2"></i>Polls & Voting</h5>
+                        <ul class="text-muted small">
+                            <li>Multiple choice polls</li>
+                            <li>Anonymous voting</li>
+                            <li>Timed polls</li>
+                            <li>Results display</li>
+                            <li>Role-based voting</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-3">
+                        <h5><i class="fas fa-ticket-alt text-success me-2"></i>Tickets & Forms</h5>
+                        <ul class="text-muted small">
+                            <li>Support tickets</li>
+                            <li>Custom forms</li>
+                            <li>Panel buttons</li>
+                            <li>Transcripts</li>
+                            <li>Auto-close</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Economy & Games -->
+        <div class="feature-detail">
+            <div class="content-card p-4">
+                <span class="category-badge"><i class="fas fa-coins me-2"></i>Economy & Gaming</span>
+                <h3 class="mt-3">Virtual Economy & RPG Systems</h3>
+                <p class="text-muted">Create an engaging economy with currency, shops, gambling, trading, and RPG elements.</p>
+
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-store text-success me-2"></i>Economy System</h5>
+                        <ul class="text-muted">
+                            <li>Server currency and wallet system</li>
+                            <li>Custom shop with items and roles</li>
+                            <li>Daily/weekly rewards</li>
+                            <li>Work commands and jobs</li>
+                            <li>Currency leaderboards</li>
+                            <li>Trading between members</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-gamepad text-success me-2"></i>Games & Gambling</h5>
+                        <ul class="text-muted">
+                            <li>Blackjack, slots, dice, coinflip</li>
+                            <li>RPG battles and duels</li>
+                            <li>Inventory system</li>
+                            <li>Achievement system</li>
+                            <li>Mini-games and trivia</li>
+                            <li>Risk-reward mechanics</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Utility Features -->
+        <div class="feature-detail">
+            <div class="content-card p-4">
+                <span class="category-badge"><i class="fas fa-tools me-2"></i>Utilities & Automation</span>
+                <h3 class="mt-3">Powerful Automation Tools</h3>
+                <p class="text-muted">Automate your server with welcome messages, auto-roles, reaction roles, reminders, social feeds, and more.</p>
+
+                <div class="row mt-4">
+                    <div class="col-md-3">
+                        <h5>Welcome System</h5>
+                        <ul class="text-muted small">
+                            <li>Custom messages</li>
+                            <li>Embed cards</li>
+                            <li>Auto-roles</li>
+                            <li>DM greetings</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-3">
+                        <h5>Reaction Roles</h5>
+                        <ul class="text-muted small">
+                            <li>Self-assignable roles</li>
+                            <li>Button panels</li>
+                            <li>Dropdown menus</li>
+                            <li>Emoji reactions</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-3">
+                        <h5>Social Feeds</h5>
+                        <ul class="text-muted small">
+                            <li>Reddit posts</li>
+                            <li>Twitter feeds</li>
+                            <li>YouTube uploads</li>
+                            <li>TikTok videos</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-3">
+                        <h5>More Tools</h5>
+                        <ul class="text-muted small">
+                            <li>Reminders</li>
+                            <li>Custom commands</li>
+                            <li>Tags system</li>
+                            <li>Starboard</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Additional Features -->
+        <div class="content-card p-4 mb-5">
+            <h3 class="mb-4 text-center">And Much More...</h3>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Birthday tracking & announcements</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Weather alerts & notifications</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Scheduled events & reminders</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Temporary voice channels</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Auto-publisher for announcements</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Stat-based role assignment</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Server backups & restoration</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Comprehensive analytics</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Custom tags and aliases</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> ModMail system</li>
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Advanced permission system</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Multi-language support (i18n)</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Suggestion system with voting</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> Message sniper & deleted logs</li>
+                        <li class="mb-2"><i class="fas fa-check text-success me-2"></i> And 20+ more features!</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Why Choose Section -->
+        <div class="section-header">
+            <h2 class="display-5 fw-bold">Why Choose CertiFried MultiTool?</h2>
+        </div>
+
+        <div class="row g-4 mb-5">
+            <div class="col-md-3">
+                <div class="content-card h-100 p-4 text-center">
+                    <div class="feature-icon fs-1 mb-3 text-primary"><i class="fas fa-rocket"></i></div>
+                    <h5>All-in-One Solution</h5>
+                    <p class="text-muted small">Replace 10+ specialized bots with one comprehensive platform. Less clutter, more features, better performance.</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="content-card h-100 p-4 text-center">
+                    <div class="feature-icon fs-1 mb-3 text-success"><i class="fas fa-gauge-high"></i></div>
+                    <h5>High Performance</h5>
+                    <p class="text-muted small">Optimized with Redis caching, efficient database queries, and smart rate limiting for lightning-fast responses.</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="content-card h-100 p-4 text-center">
+                    <div class="feature-icon fs-1 mb-3 text-info"><i class="fas fa-brain"></i></div>
+                    <h5>AI Powered</h5>
+                    <p class="text-muted small">Leverages Google Gemini AI for playlist generation, scheduling optimization, and intelligent features.</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="content-card h-100 p-4 text-center">
+                    <div class="feature-icon fs-1 mb-3 text-warning"><i class="fas fa-sliders"></i></div>
+                    <h5>Fully Customizable</h5>
+                    <p class="text-muted small">Every feature can be tailored to your community's needs through an intuitive web dashboard.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA Section -->
+        <div class="content-card text-center p-5 mb-4">
+            <h2 class="mb-3">Ready to Transform Your Discord Server?</h2>
+            <p class="text-muted lead mb-4">Join the community and experience the most feature-rich Discord bot available</p>
+            <div class="d-flex gap-3 justify-content-center flex-wrap">
+                <% if (user) { %>
+                    <a href="/dashboard" class="btn btn-primary btn-lg"><i class="fas fa-tachometer-alt me-2"></i>Go to Dashboard</a>
+                <% } else { %>
+                    <a href="/login" class="btn btn-primary btn-lg"><i class="fab fa-discord me-2"></i>Login with Discord</a>
+                <% } %>
+                <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.clientId || '#' %>&permissions=8&scope=bot+applications.commands" class="btn btn-success btn-lg" target="_blank"><i class="fas fa-plus me-2"></i>Invite to Server</a>
+                <a href="/commands" class="btn btn-outline-secondary btn-lg"><i class="fas fa-book me-2"></i>View Commands</a>
+                <a href="/status" class="btn btn-outline-secondary btn-lg"><i class="fas fa-broadcast-tower me-2"></i>Live Status</a>
+            </div>
+        </div>
     </div>
-    <div class="features-grid">
-        <div class="feature-card"><h3>Multi-Platform Support</h3><p>Get instant notifications for Twitch, YouTube, Kick, Trovo, and TikTok.</p></div>
-        <div class="feature-card"><h3>Custom Messages</h3><p>Customize announcements per-streamer using placeholders like <code>{username}</code>.</p></div>
-        <div class="feature-card"><h3>Web Dashboard</h3><p>Manage everything from a simple and intuitive web dashboard. No more commands!</p></div>
-        <div class="feature-card"><h3>Bulk Management</h3><p>Use CSV import/export or mass add/remove commands to manage your streamers in seconds.</p></div>
-        <div class="feature-card"><h3>Live Role</h3><p>Automatically assign a "Live" role to linked Discord users when they go live.</p></div>
-        <div class="feature-card"><h3>Reliable & Fast</h3><p>Built with efficiency in mind to deliver announcements as quickly as possible.</p></div>
-    </div>
-</div>
-<%- include('partials/footer-landing') %>
+</main>
+
+<%- include('partials/footer') %>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

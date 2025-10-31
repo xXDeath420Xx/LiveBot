@@ -1,0 +1,628 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Documentation',
+    additionalCSS: []
+}) %>
+
+<style>
+.docs-container {
+    max-width: 1400px;
+    margin: var(--spacing-8) auto;
+    padding: var(--spacing-6);
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: var(--spacing-8);
+}
+
+.docs-sidebar {
+    position: sticky;
+    top: calc(var(--spacing-8));
+    height: fit-content;
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-6);
+    box-shadow: var(--shadow-base);
+    transition: all var(--transition-base);
+}
+
+.docs-sidebar h3 {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-4);
+}
+
+.docs-nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-2);
+}
+
+.docs-nav-section {
+    margin-bottom: var(--spacing-4);
+}
+
+.docs-nav-heading {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: var(--spacing-2);
+}
+
+.docs-nav-link {
+    display: block;
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-base);
+}
+
+.docs-nav-link:hover {
+    background: var(--color-dark-600);
+    color: var(--color-text-primary);
+}
+
+.docs-nav-link.active {
+    background: var(--gradient-primary);
+    color: white;
+}
+
+.docs-content {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-8);
+    box-shadow: var(--shadow-base);
+    transition: all var(--transition-base);
+}
+
+.docs-header {
+    margin-bottom: var(--spacing-8);
+    padding-bottom: var(--spacing-6);
+    border-bottom: 2px solid var(--color-border-primary);
+}
+
+.docs-title {
+    font-size: var(--font-size-4xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-3);
+}
+
+.docs-subtitle {
+    font-size: var(--font-size-lg);
+    color: var(--color-text-muted);
+}
+
+.docs-section {
+    margin-bottom: var(--spacing-10);
+}
+
+.docs-section h2 {
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-4);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.docs-section h3 {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-top: var(--spacing-6);
+    margin-bottom: var(--spacing-3);
+}
+
+.docs-section p {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    line-height: var(--line-height-relaxed);
+    margin-bottom: var(--spacing-4);
+}
+
+.docs-section ul, .docs-section ol {
+    margin-left: var(--spacing-6);
+    margin-bottom: var(--spacing-4);
+    color: var(--color-text-secondary);
+}
+
+.docs-section li {
+    margin-bottom: var(--spacing-2);
+    line-height: var(--line-height-relaxed);
+}
+
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--spacing-4);
+    margin: var(--spacing-6) 0;
+}
+
+.feature-card {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-xl);
+    padding: var(--spacing-5);
+    transition: all var(--transition-base);
+    box-shadow: var(--shadow-base);
+}
+
+.feature-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--color-primary-500);
+    box-shadow: var(--shadow-lg);
+}
+
+.feature-card h4 {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.feature-card p {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin: 0;
+}
+
+.code-block {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-4);
+    margin: var(--spacing-4) 0;
+    overflow-x: auto;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: var(--font-size-sm);
+    color: var(--color-success-400);
+}
+
+.info-box {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-left: 4px solid var(--color-primary-500);
+    padding: var(--spacing-4);
+    border-radius: var(--radius-lg);
+    margin: var(--spacing-4) 0;
+}
+
+.warning-box {
+    background: linear-gradient(135deg, rgba(250, 166, 26, 0.15) 0%, rgba(250, 166, 26, 0.1) 100%);
+    border: 1px solid rgba(250, 166, 26, 0.3);
+    border-left: 4px solid var(--color-warning-500);
+    padding: var(--spacing-4);
+    border-radius: var(--radius-lg);
+    margin: var(--spacing-4) 0;
+}
+
+.success-box {
+    background: linear-gradient(135deg, rgba(67, 181, 129, 0.15) 0%, rgba(67, 181, 129, 0.1) 100%);
+    border: 1px solid rgba(67, 181, 129, 0.3);
+    border-left: 4px solid var(--color-success-500);
+    padding: var(--spacing-4);
+    border-radius: var(--radius-lg);
+    margin: var(--spacing-4) 0;
+}
+
+@media (max-width: 992px) {
+    .docs-container {
+        grid-template-columns: 1fr;
+    }
+
+    .docs-sidebar {
+        position: static;
+    }
+}
+</style>
+
+<div class="breadcrumb-modern" style="margin-bottom: var(--spacing-6); max-width: 1400px; margin-left: auto; margin-right: auto; padding: var(--spacing-3) var(--spacing-4);">
+    <a href="/"><i class="fas fa-home"></i> Home</a>
+    <span class="breadcrumb-modern-separator"><i class="fas fa-chevron-right"></i></span>
+    <span style="color: var(--color-text-primary);">Documentation</span>
+</div>
+
+<div class="docs-container">
+    <aside class="docs-sidebar">
+        <div style="background: var(--color-bg-secondary); padding: var(--spacing-4); border-radius: var(--radius-lg); margin-bottom: var(--spacing-6);">
+            <h3 style="margin: 0;"><i class="fas fa-bookmark" style="color: var(--color-primary-500);"></i> Contents</h3>
+        </div>
+        <nav class="docs-nav">
+            <div class="docs-nav-section">
+                <div class="docs-nav-heading">Getting Started</div>
+                <a href="#introduction" class="docs-nav-link">Introduction</a>
+                <a href="#setup" class="docs-nav-link">Setup Guide</a>
+                <a href="#dashboard" class="docs-nav-link">Dashboard</a>
+            </div>
+            <div class="docs-nav-section">
+                <div class="docs-nav-heading">Features</div>
+                <a href="#streamers" class="docs-nav-link">Stream Notifications</a>
+                <a href="#moderation" class="docs-nav-link">Moderation</a>
+                <a href="#economy" class="docs-nav-link">Economy & Games</a>
+                <a href="#music" class="docs-nav-link">AI DJ Music</a>
+                <a href="#tickets" class="docs-nav-link">Tickets & Forms</a>
+            </div>
+            <div class="docs-nav-section">
+                <div class="docs-nav-heading">Resources</div>
+                <a href="/commands" class="docs-nav-link">Commands List</a>
+                <a href="/status" class="docs-nav-link">Live Status</a>
+                <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" class="docs-nav-link">Support Server</a>
+            </div>
+        </nav>
+    </aside>
+
+    <main class="docs-content">
+        <div class="docs-header">
+            <h1 class="docs-title">CertiFried MultiTool Documentation</h1>
+            <p class="docs-subtitle">Complete guide to using CertiFried MultiTool for your Discord server</p>
+        </div>
+
+        <!-- Introduction -->
+        <div class="docs-section" id="introduction">
+            <h2><i class="fas fa-info-circle" style="color: var(--color-primary-400);"></i> Introduction</h2>
+            <p>
+                CertiFried MultiTool is an all-in-one Discord bot designed to replace multiple bots with a single,
+                comprehensive solution. With 40+ features spanning streaming notifications, moderation, economy,
+                music, and more, it's the ultimate toolkit for modern Discord communities.
+            </p>
+
+            <div class="success-box">
+                <strong><i class="fas fa-check-circle"></i> Why Choose CertiFried?</strong>
+                <ul style="margin: var(--spacing-2) 0 0 var(--spacing-6);">
+                    <li>Replace 10+ bots with one comprehensive solution</li>
+                    <li>Support for 7 streaming platforms</li>
+                    <li>Advanced AI features with Gemini integration</li>
+                    <li>100% free and open source</li>
+                    <li>Active development and support</li>
+                </ul>
+            </div>
+
+            <h3>Key Features</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4><i class="fas fa-satellite-dish" style="color: var(--color-primary-400);"></i> Multi-Platform Streaming</h4>
+                    <p>Track streams on Twitch, YouTube, Kick, TikTok, Trovo, Facebook Gaming, and Instagram Live</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-brain" style="color: var(--color-purple-400);"></i> AI DJ Music</h4>
+                    <p>Gemini-powered music system with voice commentary using PiperTTS</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-shield-alt" style="color: var(--color-success-400);"></i> Advanced Security</h4>
+                    <p>Anti-raid, anti-nuke, automod, and comprehensive logging</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-coins" style="color: var(--color-warning-400);"></i> Full Economy</h4>
+                    <p>Currency, shops, gambling, trading, and leaderboards</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-gamepad" style="color: var(--color-info-400);"></i> RPG & Games</h4>
+                    <p>Leveling, mini-games, battles, and interactive commands</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-ticket-alt" style="color: var(--color-danger-400);"></i> Support System</h4>
+                    <p>Tickets, modmail, forms, and suggestion tracking</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Guide -->
+        <div class="docs-section" id="setup">
+            <h2><i class="fas fa-rocket" style="color: var(--color-success-400);"></i> Setup Guide</h2>
+
+            <h3>Step 1: Invite the Bot</h3>
+            <p>Click the button below to invite CertiFried MultiTool to your Discord server:</p>
+            <div class="code-block">
+                Required Permissions: Administrator (or individual permissions for specific features)
+            </div>
+            <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.clientId || 'YOUR_CLIENT_ID' %>&permissions=8&scope=bot+applications.commands"
+               class="btn btn-primary" target="_blank" style="display: inline-block; margin: var(--spacing-4) 0;">
+                <i class="fas fa-plus"></i> Invite to Server
+            </a>
+
+            <h3>Step 2: Run Setup Command</h3>
+            <p>Once the bot joins your server, run the initial setup:</p>
+            <div class="code-block">
+                /admin setup
+            </div>
+            <p>This command will:</p>
+            <ul>
+                <li>Create necessary database entries</li>
+                <li>Set default configurations</li>
+                <li>Provide quick setup options</li>
+            </ul>
+
+            <h3>Step 3: Access the Dashboard</h3>
+            <p>For advanced configuration, log in to the web dashboard:</p>
+            <ol>
+                <li>Visit <a href="/login" style="color: var(--color-primary-400);">the dashboard</a></li>
+                <li>Click "Login with Discord"</li>
+                <li>Authorize the application</li>
+                <li>Select your server from the list</li>
+            </ol>
+
+            <div class="info-box">
+                <strong><i class="fas fa-info-circle"></i> Note:</strong> You need "Manage Server" permissions
+                to access the dashboard for a server.
+            </div>
+        </div>
+
+        <!-- Dashboard Guide -->
+        <div class="docs-section" id="dashboard">
+            <h2><i class="fas fa-tachometer-alt" style="color: var(--color-primary-400);"></i> Dashboard Guide</h2>
+            <p>
+                The CertiFried dashboard provides a user-friendly interface to configure all bot features without
+                using commands.
+            </p>
+
+            <h3>Dashboard Sections</h3>
+            <ul>
+                <li><strong>Streamers:</strong> Add/remove streamers and configure notifications</li>
+                <li><strong>Teams:</strong> Manage Twitch team subscriptions</li>
+                <li><strong>Appearance:</strong> Customize embed colors and bot behavior</li>
+                <li><strong>Welcome:</strong> Set up welcome/farewell messages</li>
+                <li><strong>Moderation:</strong> Configure automod rules and infractions</li>
+                <li><strong>Economy:</strong> Manage currency, shops, and item settings</li>
+                <li><strong>Music:</strong> Configure music channels and AI DJ settings</li>
+                <li><strong>Tickets:</strong> Create ticket categories and forms</li>
+                <li><strong>Analytics:</strong> View server statistics and activity</li>
+            </ul>
+        </div>
+
+        <!-- Stream Notifications -->
+        <div class="docs-section" id="streamers">
+            <h2><i class="fas fa-satellite-dish" style="color: var(--color-primary-400);"></i> Stream Notifications</h2>
+            <p>
+                CertiFried supports 7 streaming platforms with customizable notifications.
+            </p>
+
+            <h3>Supported Platforms</h3>
+            <ul>
+                <li><strong>Twitch:</strong> Full support with game/category tracking</li>
+                <li><strong>YouTube:</strong> Live streams and premieres</li>
+                <li><strong>Kick:</strong> Real-time stream status</li>
+                <li><strong>TikTok:</strong> Live stream notifications</li>
+                <li><strong>Trovo:</strong> Stream tracking and notifications</li>
+                <li><strong>Facebook Gaming:</strong> Live stream alerts</li>
+                <li><strong>Instagram Live:</strong> Live broadcast notifications</li>
+            </ul>
+
+            <h3>Adding a Streamer</h3>
+            <p>Via Command:</p>
+            <div class="code-block">
+                /streamer add platform:twitch username:shroud channel:#streams
+            </div>
+
+            <p>Via Dashboard:</p>
+            <ol>
+                <li>Navigate to Manage → Streamers</li>
+                <li>Click "Add Streamer"</li>
+                <li>Fill in platform, username, and channel</li>
+                <li>Customize message (optional)</li>
+                <li>Save configuration</li>
+            </ol>
+
+            <h3>Customization Options</h3>
+            <ul>
+                <li><strong>Custom Message:</strong> Use variables like {username}, {title}, {game}, {url}</li>
+                <li><strong>Override Nickname:</strong> Display a custom name instead of platform username</li>
+                <li><strong>Role Mentions:</strong> Ping specific roles when streamer goes live</li>
+                <li><strong>Delete on End:</strong> Automatically delete announcement when stream ends</li>
+            </ul>
+        </div>
+
+        <!-- Moderation -->
+        <div class="docs-section" id="moderation">
+            <h2><i class="fas fa-shield-alt" style="color: var(--color-success-400);"></i> Moderation & Security</h2>
+
+            <h3>AutoMod System</h3>
+            <p>Automatically moderate content based on configurable rules:</p>
+            <ul>
+                <li><strong>Spam Detection:</strong> Caps, emoji, duplicate messages</li>
+                <li><strong>Link Filtering:</strong> Block or whitelist specific domains</li>
+                <li><strong>Word Filters:</strong> Block blacklisted words/phrases</li>
+                <li><strong>Heat System:</strong> Escalating punishments based on violations</li>
+            </ul>
+
+            <h3>Anti-Raid Protection</h3>
+            <ul>
+                <li>Detect suspicious join patterns</li>
+                <li>Lockdown mode activation</li>
+                <li>Temporary verification requirements</li>
+                <li>Mass ban/kick capabilities</li>
+            </ul>
+
+            <h3>Anti-Nuke Protection</h3>
+            <ul>
+                <li>Monitor role/channel deletions</li>
+                <li>Detect mass bans/kicks</li>
+                <li>Automatic backup and restoration</li>
+                <li>Quarantine malicious accounts</li>
+            </ul>
+
+            <div class="warning-box">
+                <strong><i class="fas fa-exclamation-triangle"></i> Important:</strong> Ensure the bot has
+                a role higher than other members to properly enforce moderation actions.
+            </div>
+        </div>
+
+        <!-- Economy & Games -->
+        <div class="docs-section" id="economy">
+            <h2><i class="fas fa-coins" style="color: var(--color-warning-400);"></i> Economy & Games</h2>
+
+            <h3>Economy System</h3>
+            <p>Full-featured economy with customizable currency:</p>
+            <ul>
+                <li><strong>Currency:</strong> Wallet and bank storage</li>
+                <li><strong>Daily/Weekly:</strong> Timed rewards</li>
+                <li><strong>Work Commands:</strong> Earn money through activities</li>
+                <li><strong>Shop System:</strong> Buy/sell items and roles</li>
+                <li><strong>Leaderboards:</strong> Track top earners</li>
+            </ul>
+
+            <h3>Gambling Features</h3>
+            <ul>
+                <li>Slots machine</li>
+                <li>Coinflip</li>
+                <li>Dice rolls</li>
+                <li>Blackjack</li>
+                <li>Roulette</li>
+            </ul>
+
+            <h3>Mini-Games</h3>
+            <ul>
+                <li>Trivia quizzes</li>
+                <li>Hangman</li>
+                <li>Counting game</li>
+                <li>Guess the number</li>
+                <li>Rock-paper-scissors</li>
+            </ul>
+        </div>
+
+        <!-- AI DJ Music -->
+        <div class="docs-section" id="music">
+            <h2><i class="fas fa-brain" style="color: var(--color-purple-400);"></i> AI DJ Music System</h2>
+            <p>
+                Unique music feature powered by Google's Gemini AI with voice synthesis.
+            </p>
+
+            <h3>Features</h3>
+            <ul>
+                <li><strong>AI Playlist Generation:</strong> Gemini creates themed playlists</li>
+                <li><strong>Voice Commentary:</strong> PiperTTS provides DJ banter</li>
+                <li><strong>Music Queue:</strong> Standard music bot functionality</li>
+                <li><strong>Spotify Integration:</strong> Play tracks from Spotify</li>
+                <li><strong>Lyrics Display:</strong> Show synchronized lyrics</li>
+            </ul>
+
+            <h3>Commands</h3>
+            <div class="code-block">
+                /music play query:song name
+                /music queue - View current queue
+                /music skip - Skip current song
+                /aidj start - Start AI DJ mode
+            </div>
+
+            <div class="info-box">
+                <strong><i class="fas fa-info-circle"></i> Requirements:</strong> Bot needs to join a voice
+                channel and have proper permissions.
+            </div>
+        </div>
+
+        <!-- Tickets & Forms -->
+        <div class="docs-section" id="tickets">
+            <h2><i class="fas fa-ticket-alt" style="color: var(--color-danger-400);"></i> Tickets & Forms</h2>
+
+            <h3>Ticket System</h3>
+            <p>Professional support ticket system with:</p>
+            <ul>
+                <li>Multiple ticket categories</li>
+                <li>Custom forms for ticket creation</li>
+                <li>Ticket transcripts</li>
+                <li>Staff assignment</li>
+                <li>Priority levels</li>
+            </ul>
+
+            <h3>Custom Forms</h3>
+            <p>Create application forms, surveys, and questionnaires:</p>
+            <ul>
+                <li>Multiple question types (text, select, number)</li>
+                <li>Required/optional fields</li>
+                <li>Form submissions management</li>
+                <li>Export responses to CSV</li>
+            </ul>
+
+            <h3>Modmail</h3>
+            <p>DM-based support system where users can privately message staff.</p>
+        </div>
+
+        <!-- Support -->
+        <div class="docs-section">
+            <h2><i class="fas fa-life-ring" style="color: var(--color-info-400);"></i> Getting Help</h2>
+            <p>If you need assistance or have questions:</p>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4><i class="fab fa-discord"></i> Discord Support</h4>
+                    <p>Join our support server for live help</p>
+                    <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" class="btn btn-primary btn-sm" style="margin-top: var(--spacing-2);">
+                        Join Server
+                    </a>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-book"></i> Commands List</h4>
+                    <p>View all available bot commands</p>
+                    <a href="/commands" class="btn btn-secondary btn-sm" style="margin-top: var(--spacing-2);">
+                        View Commands
+                    </a>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-broadcast-tower"></i> Status Page</h4>
+                    <p>Check bot status and live streams</p>
+                    <a href="/status" class="btn btn-secondary btn-sm" style="margin-top: var(--spacing-2);">
+                        View Status
+                    </a>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+// Smooth scrolling for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            // Update active link
+            document.querySelectorAll('.docs-nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            this.classList.add('active');
+        }
+    });
+});
+
+// Highlight active section on scroll
+const sections = document.querySelectorAll('.docs-section');
+const navLinks = document.querySelectorAll('.docs-nav-link[href^="#"]');
+
+function highlightNav() {
+    let current = '';
+
+    sections.forEach(section => {
+        const sectionTop = section.offsetTop;
+        const sectionHeight = section.clientHeight;
+        if (window.scrollY >= (sectionTop - 100)) {
+            current = section.getAttribute('id');
+        }
+    });
+
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === '#' + current) {
+            link.classList.add('active');
+        }
+    });
+}
+
+window.addEventListener('scroll', highlightNav);
+highlightNav(); // Initial highlight
+</script>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>

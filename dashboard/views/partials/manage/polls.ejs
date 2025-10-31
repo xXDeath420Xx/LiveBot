@@ -1,0 +1,245 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-poll"></i>
+                <span>Polls</span>
+            </div>
+            <div class="page-section-subtitle">
+                Create and manage polls to get feedback from your community
+            </div>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPollModal">
+            <i class="fas fa-plus"></i>
+            <span>Create Poll</span>
+        </button>
+    </div>
+
+    <!-- Stats Overview -->
+    <% if (polls && polls.length > 0) { %>
+        <%
+        const activeCount = polls.filter(p => p.is_active).length;
+        const endedCount = polls.filter(p => !p.is_active).length;
+        %>
+        <div class="grid grid-cols-2" style="margin-bottom: var(--spacing-6);">
+            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Polls</div>
+                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= activeCount %></div>
+            </div>
+            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Ended Polls</div>
+                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= endedCount %></div>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Polls List -->
+    <% if (polls && polls.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Question</th>
+                        <th>Channel</th>
+                        <th>Ends At</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% polls.forEach(poll => { %>
+                        <tr>
+                            <td>
+                                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                    <%= poll.question %>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                    <i class="fas fa-hashtag" style="color: var(--color-primary-400);"></i>
+                                    <%= channels.find(c => c.id === poll.channel_id)?.name || 'Unknown' %>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                    <%= new Date(poll.ends_at).toLocaleString() %>
+                                </div>
+                            </td>
+                            <td>
+                                <% if (poll.is_active) { %>
+                                    <span class="badge badge-success">Active</span>
+                                <% } else { %>
+                                    <span class="badge" style="background: var(--color-dark-400);">Ended</span>
+                                <% } %>
+                            </td>
+                            <td class="text-end">
+                                <div style="display: flex; gap: var(--spacing-2); justify-content: flex-end;">
+                                    <% if (poll.is_active) { %>
+                                        <form action="/manage/<%= guild.id %>/end-poll" method="POST" class="d-inline">
+                                            <input type="hidden" name="pollId" value="<%= poll.id %>">
+                                            <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('End this poll now?');">
+                                                <i class="fas fa-stop"></i>
+                                                <span>End Now</span>
+                                            </button>
+                                        </form>
+                                    <% } %>
+                                    <form action="/manage/<%= guild.id %>/delete-poll" method="POST" class="d-inline">
+                                        <input type="hidden" name="pollId" value="<%= poll.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this poll?');">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-poll"></i>
+            </div>
+            <div class="empty-state-title">No Polls Yet</div>
+            <div class="empty-state-description">
+                Create your first poll to gather feedback from your community
+            </div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPollModal">
+                <i class="fas fa-plus"></i>
+                <span>Create First Poll</span>
+            </button>
+        </div>
+    <% } %>
+</div>
+
+<!-- Create Poll Modal -->
+<div class="modal fade" id="createPollModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Poll</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/create-poll" method="POST">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Question</label>
+                        <input type="text" class="form-control" name="question" required placeholder="What should we do next?">
+                        <div class="form-help">The question you want to ask</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Options (comma-separated)</label>
+                        <input type="text" class="form-control" name="options" required placeholder="Option 1, Option 2, Option 3">
+                        <div class="form-help">Poll options separated by commas</div>
+                    </div>
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Duration (minutes)</label>
+                            <input type="number" class="form-control" name="duration_minutes" value="60" min="1" required>
+                        </div>
+                        <div>
+                            <label class="form-label">Channel</label>
+                            <select class="form-select" name="channel_id" required>
+                                <option value="">Select...</option>
+                                <% channels.forEach(channel => { %>
+                                    <option value="<%= channel.id %>">#<%= channel.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-poll"></i>
+                        <span>Start Poll</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+</style>

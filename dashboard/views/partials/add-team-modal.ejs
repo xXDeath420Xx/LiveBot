@@ -1,0 +1,42 @@
+<!-- Add Team Modal -->
+<div class="modal fade" id="addTeamModal" tabindex="-1" aria-labelledby="addTeamModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTeamModalLabel">Add Twitch Team</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/add-team" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="team-name" class="form-label">Twitch Team Name</label>
+                        <input type="text" class="form-control" id="team-name" name="teamName" required placeholder="e.g., 'livebot'">
+                        <div class="form-text">This is the team's slug from the URL (e.g., twitch.tv/team/<strong>livebot</strong>).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="team-announcement-channel-id" class="form-label">Announcement Channel</label>
+                        <select class="form-select" id="team-announcement-channel-id" name="announcementChannelId">
+                            <option value="">-- Use Server Default --</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>"><%= channel.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="team-live-role-id" class="form-label">Live Role</label>
+                        <select class="form-select" id="team-live-role-id" name="liveRoleId">
+                            <option value="">-- None --</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"><%= role.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Add and Synchronize Team</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

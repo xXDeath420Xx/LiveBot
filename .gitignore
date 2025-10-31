@@ -1,7 +1,39 @@
+# Environment variables
 .env
-node_modules
-dashboard/sessions/*.json
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Logs
+logs/
+*.log
+
+# Dashboard specific
+dashboard/sessions/
 uploads/
-*.sql
-*.save
-sessions/*.json
+
+# Build output
+dist/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# IDE config
+.vscode/
+.idea/
+
+# Playwright user data
+user-data-dir/
+/.claude/settings.local.json
+/temp_audio/1ALX6hwPxoM.webm
+/fix-ytdlp.sh
+/install-playwright.sh
+/test-oxylabs-proxy.sh
+/test-proxy.js
+/test_proxy.sh
+/update-ytdlp.sh

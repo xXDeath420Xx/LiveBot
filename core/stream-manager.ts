@@ -1,0 +1,770 @@
+import { Client, GuildMember, TextChannel } from "discord.js";
+import { RowDataPacket, PoolConnection } from 'mysql2/promise';
+import db from "../utils/db";
+import * as twitchApi from "../utils/twitch-api";
+import * as kickApi from "../utils/kick-api";
+import * as facebookApi from "../utils/facebook-api";
+import * as instagramApi from "../utils/instagram-api";
+import * as youtubeApi from "../utils/youtube-api";
+import * as tiktokApi from "../utils/tiktok-api";
+import * as trovoApi from "../utils/trovo-api";
+import logger from "../utils/logger";
+import { announcementQueue } from "../jobs/announcement-queue";
+import { offlineQueue } from "../jobs/offline-queue";
+
+interface LiveAnnouncementData {
+    messageId: string;
+    streamerId: number;
+    platform: string;
+    username: string;
+    discordUserId: string | null;
+    deleteOnEnd?: boolean;
+}
+
+interface AnnouncementRow extends RowDataPacket {
+    guild_id: string;
+    platform: string;
+    username: string;
+    channel_id: string;
+    message_id: string;
+    streamer_id: number;
+    discord_user_id: string | null;
+    stream_started_at: Date | null;
+    updated_at: Date;
+}
+
+interface SubscriptionRow extends RowDataPacket {
+    subscription_id: number;
+    guild_id: string;
+    sub_channel_id: string | null;
+    sub_role_id: string | null;
+    override_nickname: string | null;
+    override_avatar_url: string | null;
+    team_subscription_id: number | null;
+    delete_on_end: number;
+    streamer_id: number;
+    discord_user_id: string | null;
+    username: string;
+    platform: string;
+}
+
+interface TeamRow extends RowDataPacket {
+    id: number;
+    team_channel_id: string | null;
+    team_role_id: string | null;
+    team_webhook_name: string | null;
+    team_webhook_avatar: string | null;
+}
+
+interface GuildSettingRow extends RowDataPacket {
+    guild_id: string;
+    guild_channel_id: string | null;
+    guild_role_id: string | null;
+    guild_webhook_name: string | null;
+    guild_webhook_avatar: string | null;
+}
+
+interface StreamerRow extends RowDataPacket {
+    username: string;
+    platform: string;
+}
+
+interface StreamData {
+    title?: string;
+    thumbnail_url?: string;
+    game_name?: string;
+    viewer_count?: number | string;
+    started_at?: string;
+    startedAt?: string;
+    stream_started_at?: string;
+}
+
+interface PlatformAPI {
+    isStreamerLive: (username: string) => Promise<boolean>;
+    getStreamDetails: (username: string) => Promise<StreamData | null>;
+}
+
+const liveAnnouncements = new Map<string, LiveAnnouncementData>();
+
+// Counter to track stream check passes for embed updates
+let streamCheckPassCounter = 0;
+const EMBED_UPDATE_INTERVAL = 5; // Update embeds every 5th pass
+
+// Load active announcements from database on startup
+async function loadAnnouncementsFromDatabase(): Promise<void> {
+    let connection: PoolConnection | undefined;
+    try {
+        connection = await db.getConnection();
+        const [rows] = await connection.query<AnnouncementRow[]>('SELECT * FROM live_announcements');
+
+        for (const row of rows) {
+            const key = `${row.guild_id}-${row.platform}-${row.username}-${row.channel_id}`;
+            liveAnnouncements.set(key, {
+                messageId: row.message_id,
+                streamerId: row.streamer_id,
+                platform: row.platform,
+                username: row.username,
+                discordUserId: row.discord_user_id
+            });
+        }
+
+        logger.info(`Loaded ${rows.length} active announcements from database`, { category: "streams" });
+    } catch (error: any) {
+        // If table doesn't exist yet, just log a warning
+        if (error.code === 'ER_NO_SUCH_TABLE') {
+            logger.warn('live_announcements table does not exist yet. Run stream-state-migration.sql to create it.', { category: "streams" });
+        } else {
+            logger.error('Failed to load announcements from database:', { error, category: "streams" });
+        }
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+// Save announcement to database
+async function saveAnnouncementToDatabase(guildId: string, platform: string, username: string, channelId: string, messageId: string, streamerId: number, discordUserId: string | null, streamStartedAt: Date | null = null): Promise<void> {
+    let connection: PoolConnection | undefined;
+    try {
+        connection = await db.getConnection();
+        await connection.query(
+            `INSERT INTO live_announcements (guild_id, platform, username, channel_id, message_id, streamer_id, discord_user_id, stream_started_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE message_id = VALUES(message_id), stream_started_at = VALUES(stream_started_at), updated_at = CURRENT_TIMESTAMP`,
+            [guildId, platform, username, channelId, messageId, streamerId, discordUserId, streamStartedAt]
+        );
+    } catch (error: any) {
+        if (error.code !== 'ER_NO_SUCH_TABLE') {
+            logger.error('Failed to save announcement to database:', { error, guildId, platform, username, category: "streams" });
+        }
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+// Delete announcement from database
+async function deleteAnnouncementFromDatabase(guildId: string, platform: string, username: string, channelId: string): Promise<void> {
+    let connection: PoolConnection | undefined;
+    try {
+        connection = await db.getConnection();
+        await connection.query(
+            'DELETE FROM live_announcements WHERE guild_id = ? AND platform = ? AND username = ? AND channel_id = ?',
+            [guildId, platform, username, channelId]
+        );
+    } catch (error: any) {
+        if (error.code !== 'ER_NO_SUCH_TABLE') {
+            logger.error('Failed to delete announcement from database:', { error, guildId, platform, username, category: "streams" });
+        }
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+// Clear all announcements from both memory and database
+async function clearAllAnnouncements(): Promise<void> {
+    let connection: PoolConnection | undefined;
+    try {
+        connection = await db.getConnection();
+        await connection.query('DELETE FROM live_announcements');
+        liveAnnouncements.clear();
+        logger.info('Cleared all announcement state from memory and database', { category: "streams" });
+    } catch (error: any) {
+        if (error.code !== 'ER_NO_SUCH_TABLE') {
+            logger.error('Failed to clear announcements from database:', { error, category: "streams" });
+        }
+        // Still clear memory even if database fails
+        liveAnnouncements.clear();
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+const platformModules: Record<string, PlatformAPI> = {
+    twitch: twitchApi,
+    kick: kickApi,
+    facebook: facebookApi,
+    instagram: instagramApi,
+    youtube: youtubeApi,
+    tiktok: tiktokApi,
+    trovo: trovoApi,
+};
+
+async function aggressiveCleanup(client: Client): Promise<void> {
+    logger.info("Starting aggressive cleanup of stale live roles...", { category: "streams" });
+    let connection: PoolConnection | undefined;
+    try {
+        connection = await db.getConnection();
+        const [allGuilds] = await connection.query<RowDataPacket[]>('SELECT guild_id FROM guilds');
+
+        const membersToProcess = new Map<string, { member: GuildMember; guilds: Map<string, Set<string>> }>();
+        const liveStatusCache = new Map<string, boolean>();
+
+        // Phase 1: Gather all members with live roles across all guilds
+        for (const g of allGuilds) {
+            const guild = await client.guilds.fetch(g.guild_id).catch(() => null);
+            if (!guild) continue;
+
+            const [guildRoles] = await connection.query<RowDataPacket[]>('SELECT live_role_id FROM guilds WHERE guild_id = ? AND live_role_id IS NOT NULL', [guild.id]);
+            const [teamRoles] = await connection.query<RowDataPacket[]>('SELECT live_role_id FROM twitch_teams WHERE guild_id = ? AND live_role_id IS NOT NULL', [guild.id]);
+            const [subRoles] = await connection.query<RowDataPacket[]>('SELECT live_role_id FROM subscriptions WHERE guild_id = ? AND live_role_id IS NOT NULL', [guild.id]);
+
+            const allRoleIds = new Set<string>([...guildRoles.map(r => r.live_role_id), ...teamRoles.map(r => r.live_role_id), ...subRoles.map(r => r.live_role_id)]);
+
+            if (allRoleIds.size === 0) continue;
+
+            const members = await guild.members.fetch().catch(() => {
+                logger.warn(`Failed to fetch members for guild ${guild.id}.`, { guildId: guild.id, category: "streams" });
+                return new Map();
+            });
+
+            for (const member of members.values()) {
+                const memberRoles = member.roles.cache.filter(role => allRoleIds.has(role.id));
+                if (memberRoles.size > 0) {
+                    if (!membersToProcess.has(member.id)) {
+                        membersToProcess.set(member.id, { member, guilds: new Map() });
+                    }
+                    membersToProcess.get(member.id)!.guilds.set(guild.id, new Set(memberRoles.keys()));
+                }
+            }
+        }
+
+        logger.info(`Found ${membersToProcess.size} unique members with live roles across all guilds for cleanup check.`);
+
+        // Phase 2: Process unique members
+        for (const { member, guilds } of membersToProcess.values()) {
+            try {
+                const [streamerRows] = await connection.query<StreamerRow[]>('SELECT username, platform FROM streamers WHERE discord_user_id = ?', [member.id]);
+
+                let isActuallyLive = false;
+                if (streamerRows.length > 0) {
+                    for (const streamer of streamerRows) {
+                        const cacheKey = `${streamer.platform}:${streamer.username}`;
+                        if (liveStatusCache.has(cacheKey)) {
+                            isActuallyLive = liveStatusCache.get(cacheKey)!;
+                        } else {
+                            const api = platformModules[streamer.platform];
+                            if (api) {
+                                const liveStatus = await api.isStreamerLive(streamer.username);
+                                liveStatusCache.set(cacheKey, liveStatus);
+                                isActuallyLive = liveStatus;
+                            }
+                        }
+                        if (isActuallyLive) break;
+                    }
+                }
+
+                if (!isActuallyLive) {
+                    for (const [guildId, roleIds] of guilds.entries()) {
+                        const guild = await client.guilds.fetch(guildId).catch(() => null);
+                        if (!guild) continue;
+
+                        const guildMember = await guild.members.fetch(member.id).catch(() => null);
+                        if (!guildMember) continue;
+
+                        for (const roleId of roleIds) {
+                            if (guildMember.roles.cache.has(roleId)) {
+                                const roleToRemove = await guild.roles.fetch(roleId).catch(() => null);
+                                if (roleToRemove) {
+                                    logger.info(`Removing stale role '${roleToRemove.name}' from ${guildMember.user.tag} in guild ${guild.name}.`, { guildId: guild.id, userId: guildMember.id, category: "streams" });
+                                    await guildMember.roles.remove(roleToRemove).catch(e => logger.error(`Failed to remove role ${roleId} from member ${guildMember.id} in guild ${guild.id}`, { error: e }));
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                logger.error(`Error processing member ${member.id} in global cleanup`, { error: e, userId: member.id, category: "streams" });
+            }
+        }
+
+    } catch (error) {
+        logger.error("Critical _error during aggressive cleanup.", { _error, category: "streams" });
+    } finally {
+        if (connection) connection.release();
+        logger.info("Aggressive role cleanup finished.", { category: "streams" });
+    }
+}
+
+async function purgeOldAnnouncements(client: Client): Promise<void> {
+    logger.info("Purging all old bot announcements from configured channels...", { category: "streams" });
+    let connection: PoolConnection | undefined;
+    try {
+        connection = await db.getConnection();
+        const [guildCh] = await connection.query<RowDataPacket[]>('SELECT announcement_channel_id FROM guilds WHERE announcement_channel_id IS NOT NULL');
+        const [teamCh] = await connection.query<RowDataPacket[]>('SELECT announcement_channel_id FROM twitch_teams WHERE announcement_channel_id IS NOT NULL');
+        const [subCh] = await connection.query<RowDataPacket[]>('SELECT announcement_channel_id FROM subscriptions WHERE announcement_channel_id IS NOT NULL');
+
+        const allChannelIds = new Set<string>([...guildCh.map(r => r.announcement_channel_id), ...teamCh.map(r => r.announcement_channel_id), ...subCh.map(r => r.announcement_channel_id)]);
+
+        for (const channelId of allChannelIds) {
+            try {
+                const channel = await client.channels.fetch(channelId) as TextChannel;
+                const messages = await channel.messages.fetch({ limit: 100 });
+                const botMessages = messages.filter(m => m.author.id === client.user?.id || m.webhookId);
+                if (botMessages.size > 0) {
+                    await channel.bulkDelete(botMessages);
+                    logger.info(`Purged ${botMessages.size} old announcements from #${channel.name}.`, { category: "streams" });
+                }
+            } catch (e: any) {
+                logger.warn(`Could not purge announcements from channel ${channelId}. It may no longer exist or permissions are missing.`, { error: e.message, category: "streams" });
+            }
+        }
+    } catch (error) {
+        logger.error("Critical _error during announcement purge.", { _error, category: "streams" });
+    } finally {
+        if (connection) connection.release();
+        logger.info("Announcement purge finished.", { category: "streams" });
+    }
+}
+
+async function checkStreamers(client: Client): Promise<void> {
+    await loadAnnouncementsFromDatabase();
+
+    // Increment and check pass counter for embed updates
+    streamCheckPassCounter++;
+    const shouldUpdateEmbeds = streamCheckPassCounter >= EMBED_UPDATE_INTERVAL;
+
+    if (shouldUpdateEmbeds) {
+        logger.info(`[Stream Manager] Pass #${streamCheckPassCounter}: Will update embeds for live streamers`, { category: "streams" });
+        streamCheckPassCounter = 0; // Reset counter
+    } else {
+        logger.info(`[Stream Manager] Pass #${streamCheckPassCounter}/${EMBED_UPDATE_INTERVAL}`, { category: "streams" });
+    }
+
+    let connection: PoolConnection | undefined;
+    try {
+        connection = await db.getConnection();
+        const [subscriptions, teams, guildSettings] = await Promise.all([
+            connection.query<SubscriptionRow[]>(
+                `SELECT sub.subscription_id, sub.guild_id, sub.announcement_channel_id AS sub_channel_id, sub.live_role_id AS sub_role_id, sub.override_nickname, sub.override_avatar_url, sub.team_subscription_id, sub.delete_on_end, s.streamer_id, s.discord_user_id, s.username, s.platform, s.profile_image_url
+                 FROM subscriptions sub JOIN streamers s ON sub.streamer_id = s.streamer_id`
+            ),
+            connection.query<TeamRow[]>('SELECT id, announcement_channel_id AS team_channel_id, live_role_id AS team_role_id, webhook_name AS team_webhook_name, webhook_avatar_url AS team_webhook_avatar FROM twitch_teams'),
+            connection.query<GuildSettingRow[]>('SELECT guild_id, announcement_channel_id AS guild_channel_id, live_role_id AS guild_role_id, bot_nickname AS guild_webhook_name, webhook_avatar_url AS guild_webhook_avatar FROM guilds')
+        ]);
+
+        logger.info(`[Stream Manager] Loaded ${subscriptions[0].length} subscriptions, ${teams[0].length} teams, ${guildSettings[0].length} guilds`, { category: "streams" });
+
+        const teamsMap = new Map(teams[0].map(t => [t.id, t]));
+        const guildsMap = new Map(guildSettings[0].map(g => [g.guild_id, g]));
+
+        const streamersToCheck = new Map<string, { streamerInfo: any; subscriptions: SubscriptionRow[] }>();
+        for (const sub of subscriptions[0]) {
+            const key = `${sub.platform}-${sub.username}`;
+            if (!streamersToCheck.has(key)) {
+                streamersToCheck.set(key, {
+                    streamerInfo: {
+                        streamer_id: sub.streamer_id,
+                        discord_user_id: sub.discord_user_id,
+                        username: sub.username,
+                        platform: sub.platform,
+                        profile_image_url: sub.profile_image_url,
+                    },
+                    subscriptions: []
+                });
+            }
+            streamersToCheck.get(key)!.subscriptions.push(sub);
+        }
+
+        logger.info(`[Stream Manager] Checking ${streamersToCheck.size} unique streamers now...`, { category: "streams" });
+
+        const roleOperationsByGuild = new Map<string, Map<string, Map<string, { shouldHaveRole: boolean; member: GuildMember; streamerName: string }>>>();
+
+        let processedCount = 0;
+        for (const { streamerInfo, subscriptions } of Array.from(streamersToCheck.values())) {
+            processedCount++;
+            logger.info(`[Stream Manager] Processing streamer ${processedCount}/${streamersToCheck.size}: ${streamerInfo.username} (${streamerInfo.platform})`, {
+                category: "streams",
+                progress: `${processedCount}/${streamersToCheck.size}`,
+                streamer: streamerInfo.username,
+                platform: streamerInfo.platform
+            });
+            await processUniqueStreamer(client, streamerInfo, subscriptions, guildsMap, teamsMap, roleOperationsByGuild, shouldUpdateEmbeds);
+            logger.info(`[Stream Manager] Completed processing streamer ${processedCount}/${streamersToCheck.size}: ${streamerInfo.username}`, {
+                category: "streams",
+                progress: `${processedCount}/${streamersToCheck.size}`
+            });
+        }
+
+        logger.info(`[Stream Manager] Finished checking all ${processedCount} streamers`, { category: "streams" });
+
+        // After processing all streamers, consolidate and apply role changes
+        for (const [guildId, userRoleMap] of roleOperationsByGuild.entries()) {
+            for (const [discordUserId, roleMap] of userRoleMap.entries()) {
+                for (const [roleId, { shouldHaveRole, member, streamerName }] of roleMap.entries()) {
+                    try {
+                        const guild = member.guild;
+                        const liveRole = await guild.roles.fetch(roleId).catch(() => null);
+                        if (!liveRole) continue;
+
+                        const hasRole = member.roles.cache.has(roleId);
+
+                        if (shouldHaveRole && !hasRole) {
+                            await member.roles.add(liveRole).catch(e =>
+                                logger.error(`Failed to add role:`, { error: e, guildId: guild.id, memberId: member.id, roleId: liveRole.id, category: "streams" })
+                            );
+                            logger.info(`Added live role '${liveRole.name}' to ${member.user.tag}`, { guildId: guild.id, userId: member.id, streamer: streamerName, category: "streams" });
+                        } else if (!shouldHaveRole && hasRole) {
+                            await member.roles.remove(liveRole).catch(e =>
+                                logger.error(`Failed to remove role:`, { error: e, guildId: guild.id, memberId: member.id, roleId: liveRole.id, category: "streams" })
+                            );
+                            logger.info(`Removed live role '${liveRole.name}' from ${member.user.tag}`, { guildId: guild.id, userId: member.id, category: "streams" });
+                        }
+                    } catch (error) {
+                        logger.error(`Error applying role changes for user ${discordUserId}:`, { _error, guildId, category: "streams" });
+                    }
+                }
+            }
+        }
+
+    } catch (error) {
+        logger.error("Failed to run stream checker process:", { _error, category: "streams" });
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+async function processUniqueStreamer(
+    client: Client,
+    streamer: any,
+    subscriptions: SubscriptionRow[],
+    guildsMap: Map<string, GuildSettingRow>,
+    teamsMap: Map<number, TeamRow>,
+    roleOperationsByGuild: Map<string, Map<string, Map<string, { shouldHaveRole: boolean; member: GuildMember; streamerName: string }>>>,
+    shouldUpdateEmbeds: boolean = false
+): Promise<void> {
+    logger.info(`[processUniqueStreamer] ENTRY: Processing ${streamer.username} on ${streamer.platform}`, {
+        category: "streams",
+        streamer: streamer.username,
+        platform: streamer.platform,
+        subscriptionCount: subscriptions.length
+    });
+
+    const api = platformModules[streamer.platform];
+    if (!api) {
+        logger.error(`[processUniqueStreamer] No API module found for platform: ${streamer.platform}`, {
+            category: "streams",
+            platform: streamer.platform,
+            availablePlatforms: Object.keys(platformModules)
+        });
+        return;
+    }
+
+    logger.info(`[processUniqueStreamer] API module found, checking if ${streamer.username} is live...`, {
+        category: "streams",
+        apiType: typeof api,
+        hasIsStreamerLive: typeof api.isStreamerLive,
+        hasGetStreamDetails: typeof api.getStreamDetails
+    });
+
+    try {
+        logger.info(`[processUniqueStreamer] Calling api.isStreamerLive for ${streamer.username}...`, { category: "streams" });
+        const isLive = await api.isStreamerLive(streamer.username);
+        logger.info(`[processUniqueStreamer] isStreamerLive returned: ${isLive} for ${streamer.username}`, {
+            category: "streams",
+            isLive,
+            streamer: streamer.username,
+            platform: streamer.platform
+        });
+
+        let streamData: StreamData | null = null;
+        if (isLive) {
+            logger.info(`[processUniqueStreamer] Streamer ${streamer.username} is LIVE, fetching details...`, { category: "streams" });
+            streamData = await api.getStreamDetails(streamer.username);
+            logger.info(`[processUniqueStreamer] getStreamDetails returned for ${streamer.username}:`, {
+                category: "streams",
+                hasData: !!streamData,
+                title: streamData?.title,
+                viewers: streamData?.viewer_count
+            });
+            if (!streamData) {
+                logger.warn(`[Stream Manager] Streamer ${streamer.username} on ${streamer.platform} reported live but getStreamDetails returned null. Skipping announcement.`, { category: "streams" });
+            }
+        } else {
+            logger.info(`[processUniqueStreamer] Streamer ${streamer.username} is NOT live`, { category: "streams" });
+        }
+
+        const guildOperations = new Map<string, any>();
+
+        logger.info(`[processUniqueStreamer] Processing ${subscriptions.length} subscriptions for ${streamer.username}`, {
+            category: "streams",
+            subscriptionCount: subscriptions.length
+        });
+
+        for (const sub of subscriptions) {
+            const guildDefault = guildsMap.get(sub.guild_id);
+            logger.info(`[processUniqueStreamer] Processing subscription for guild ${sub.guild_id}`, {
+                category: "streams",
+                hasGuildDefault: !!guildDefault,
+                subChannelId: sub.sub_channel_id,
+                guildId: sub.guild_id
+            });
+
+            if (!guildDefault) {
+                logger.warn(`[processUniqueStreamer] No guild default found for ${sub.guild_id}, skipping`, {
+                    category: "streams"
+                });
+                continue;
+            }
+
+            if (!guildOperations.has(sub.guild_id)) {
+                const guild = await client.guilds.fetch(sub.guild_id).catch(() => null);
+                if (!guild) continue;
+
+                let member: GuildMember | null = null;
+                if (streamer.discord_user_id) {
+                    member = await guild.members.fetch(streamer.discord_user_id).catch(() => null);
+                }
+
+                guildOperations.set(sub.guild_id, {
+                    guild,
+                    member,
+                    guildDefault,
+                    roleIds: new Set<string>(),
+                    channelAnnouncements: new Map<string, { deleteOnEnd: boolean; webhookConfig: any }>()
+                });
+            }
+
+            const guildOp = guildOperations.get(sub.guild_id);
+            const team = sub.team_subscription_id ? teamsMap.get(sub.team_subscription_id) : null;
+
+            const finalRoleId = sub.sub_role_id || team?.team_role_id || guildDefault.guild_role_id;
+            const finalChannelId = sub.sub_channel_id || team?.team_channel_id || guildDefault.guild_channel_id;
+
+            logger.info(`[processUniqueStreamer] Subscription channel resolution for ${streamer.username}`, {
+                category: "streams",
+                finalChannelId,
+                finalRoleId,
+                subChannelId: sub.sub_channel_id,
+                teamChannelId: team?.team_channel_id,
+                guildChannelId: guildDefault.guild_channel_id
+            });
+
+            if (finalRoleId) {
+                guildOp.roleIds.add(finalRoleId);
+            }
+
+            if (finalChannelId) {
+                if (!guildOp.channelAnnouncements.has(finalChannelId)) {
+                    const webhookConfig = {
+                        username: sub.override_nickname || team?.team_webhook_name || guildDefault.guild_webhook_name || (guildOp.member ? guildOp.member.user.username : streamer.username),
+                        avatarURL: sub.override_avatar_url || (guildOp.member ? guildOp.member.user.displayAvatarURL() : null) || streamer.profile_image_url || team?.team_webhook_avatar || guildDefault.guild_webhook_avatar
+                    };
+
+                    guildOp.channelAnnouncements.set(finalChannelId, {
+                        deleteOnEnd: sub.delete_on_end !== 0,
+                        webhookConfig,
+                        subscription: sub,  // Store subscription data for queue job
+                        team: team
+                    });
+                }
+            }
+        }
+
+        logger.info(`[processUniqueStreamer] Starting guild operations for ${streamer.username}`, {
+            category: "streams",
+            guildCount: guildOperations.size,
+            streamer: streamer.username
+        });
+
+        // Convert to Array to avoid TypeScript downlevelIteration issues
+        const guildOperationsArray = Array.from(guildOperations.entries());
+        for (const [guildId, guildOp] of guildOperationsArray) {
+            const { guild, member, roleIds, channelAnnouncements } = guildOp;
+
+            logger.info(`[processUniqueStreamer] Processing guild ${guildId} for ${streamer.username}`, {
+                category: "streams",
+                guildId,
+                channelAnnouncementCount: channelAnnouncements.size,
+                roleIdCount: roleIds.size,
+                hasMember: !!member
+            });
+
+            if (member && roleIds.size > 0 && streamer.discord_user_id) {
+                for (const roleId of roleIds) {
+                    if (!roleOperationsByGuild.has(guildId)) {
+                        roleOperationsByGuild.set(guildId, new Map());
+                    }
+                    if (!roleOperationsByGuild.get(guildId)!.has(streamer.discord_user_id)) {
+                        roleOperationsByGuild.get(guildId)!.set(streamer.discord_user_id, new Map());
+                    }
+
+                    const userRoleMap = roleOperationsByGuild.get(guildId)!.get(streamer.discord_user_id)!;
+
+                    if (isLive && streamData) {
+                        userRoleMap.set(roleId, {
+                            shouldHaveRole: true,
+                            member,
+                            streamerName: streamer.username
+                        });
+                    } else if (!userRoleMap.has(roleId)) {
+                        userRoleMap.set(roleId, {
+                            shouldHaveRole: false,
+                            member,
+                            streamerName: streamer.username
+                        });
+                    }
+                }
+            }
+
+            // Convert to Array to avoid TypeScript downlevelIteration issues
+            const channelAnnouncementsArray = Array.from(channelAnnouncements.entries()) as [string, any][];
+            for (const [channelId, { deleteOnEnd, webhookConfig, subscription, team }] of channelAnnouncementsArray) {
+                const announcementKey = `${guild.id}-${streamer.platform}-${streamer.username}-${channelId}`;
+                const announcementData = liveAnnouncements.get(announcementKey);
+
+                logger.info(`[processUniqueStreamer] Processing channel ${channelId} for ${streamer.username}`, {
+                    category: "streams",
+                    channelId,
+                    isLive,
+                    hasStreamData: !!streamData,
+                    hasAnnouncementData: !!announcementData,
+                    announcementKey
+                });
+
+                if (isLive && streamData) {
+                    logger.info(`[processUniqueStreamer] Streamer is LIVE - queuing announcement job for ${streamer.username}`, {
+                        category: "streams",
+                        hasAnnouncementData: !!announcementData,
+                        channel: channelId,
+                        guild: guild.id
+                    });
+
+                    try {
+                        // Build platform URL for the live stream
+                        const platformUrls: Record<string, string> = {
+                            twitch: `https://twitch.tv/${streamer.username}`,
+                            kick: `https://kick.com/${streamer.username}`,
+                            youtube: `https://youtube.com/channel/${streamer.username}`,
+                            tiktok: `https://tiktok.com/@${streamer.username}`,
+                            trovo: `https://trovo.live/s/${streamer.username}`,
+                            facebook: `https://facebook.com/gaming/${streamer.username}`,
+                            instagram: `https://instagram.com/${streamer.username}`,
+                        };
+
+                        const platformUrl = platformUrls[streamer.platform] || `https://${streamer.platform}.com/${streamer.username}`;
+
+                        // Queue announcement job for the announcement worker to handle
+                        await announcementQueue.add('announcement', {
+                            sub: {
+                                subscription_id: subscription.subscription_id,
+                                streamer_id: streamer.streamer_id,
+                                guild_id: guild.id,
+                                username: streamer.username,
+                                announcement_channel_id: channelId,
+                                team_subscription_id: subscription.team_subscription_id || undefined,
+                                discord_user_id: streamer.discord_user_id || undefined,
+                                live_role_id: subscription.sub_role_id || undefined
+                            },
+                            liveData: {
+                                game: streamData.game_name || null,
+                                title: streamData.title || null,
+                                thumbnailUrl: streamData.thumbnail_url || null,
+                                platform: streamer.platform,
+                                url: platformUrl,
+                                username: streamer.username,
+                                profileImageUrl: streamer.profile_image_url || null
+                            }
+                        });
+
+                        logger.info(`[processUniqueStreamer] Queued announcement job for ${streamer.username}`, {
+                            category: "streams",
+                            queuedFor: 'announcement-queue'
+                        });
+                    } catch (queueError: any) {
+                        logger.error(`[processUniqueStreamer] Failed to queue announcement for ${streamer.username}:`, {
+                            error: queueError.message,
+                            stack: queueError.stack,
+                            guildId: guild.id,
+                            channelId,
+                            category: "streams"
+                        });
+                    }
+                } else {
+                    // Stream is OFFLINE - queue offline job for cleanup
+                    if (announcementData) {
+                        const shouldDelete = announcementData.deleteOnEnd !== undefined ? announcementData.deleteOnEnd : deleteOnEnd;
+
+                        logger.info(`[processUniqueStreamer] Streamer is OFFLINE - queuing offline job for ${streamer.username}`, {
+                            category: "streams",
+                            hasAnnouncementData: !!announcementData,
+                            channel: channelId,
+                            guild: guild.id,
+                            deleteOnEnd: shouldDelete
+                        });
+
+                        try {
+                            // Collect all role IDs to remove (guild, team, subscription)
+                            const guildDefault = guildsMap.get(guild.id);
+                            const team = subscription.team_subscription_id ? teamsMap.get(subscription.team_subscription_id) : null;
+
+                            const rolesToRemove = [
+                                guildDefault?.guild_role_id,
+                                team?.team_role_id,
+                                subscription.sub_role_id
+                            ].filter(Boolean) as string[];
+
+                            // Queue offline job for the offline worker to handle
+                            await offlineQueue.add('offline', {
+                                subscription_id: subscription.subscription_id,
+                                streamer_id: streamer.streamer_id,
+                                guild_id: guild.id,
+                                username: streamer.username,
+                                platform: streamer.platform,
+                                discord_user_id: streamer.discord_user_id,
+                                channel_id: channelId,
+                                message_id: announcementData.messageId,
+                                delete_on_end: shouldDelete,
+                                role_ids: rolesToRemove
+                            });
+
+                            logger.info(`[processUniqueStreamer] Queued offline job for ${streamer.username}`, {
+                                category: "streams",
+                                queuedFor: 'offline-queue',
+                                roleCount: rolesToRemove.length,
+                                deleteOnEnd: shouldDelete
+                            });
+
+                            // Remove from memory immediately to avoid double-queueing
+                            liveAnnouncements.delete(announcementKey);
+
+                        } catch (queueError: any) {
+                            logger.error(`[processUniqueStreamer] Failed to queue offline job for ${streamer.username}:`, {
+                                error: queueError.message,
+                                stack: queueError.stack,
+                                guildId: guild.id,
+                                channelId,
+                                category: "streams"
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+    } catch (error: any) {
+        logger.error(`Error processing unique streamer ${streamer.username} on ${streamer.platform}:`, {
+            error: error.message || error,
+            stack: error.stack,
+            category: "streams"
+        });
+    }
+}
+
+async function init(client: Client): Promise<void> {
+    logger.info("Initializing aggressive stream manager...");
+
+    await aggressiveCleanup(client);
+    await purgeOldAnnouncements(client);
+    await clearAllAnnouncements();
+    await checkStreamers(client);
+}
+
+function getLiveAnnouncements(): Map<string, LiveAnnouncementData> {
+    return liveAnnouncements;
+}
+
+export {
+    init,
+    checkStreamers,
+    getLiveAnnouncements
+};
