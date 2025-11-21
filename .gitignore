@@ -3,6 +3,7 @@
 
 # Node.js
 node_modules/
+piper_models/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
