@@ -342,12 +342,17 @@ function start(botClient) {
 
     app.engine('ejs', async (filePath, options, callback) => {
         try {
-            // Manually create synchronous include function
-            const includeFile = (templatePath, data = {}) => {
-                const fullPath = path.resolve(viewsDir, templatePath + (templatePath.endsWith('.ejs') ? '' : '.ejs'));
-                const template = fs.readFileSync(fullPath, 'utf8');
-                return ejs.render(template, { ...options, ...data, include: includeFile, filename: fullPath });
-            };
+            // Create include function that resolves relative paths from the calling file
+            function makeInclude(callerFile) {
+                return (templatePath, data = {}) => {
+                    const ext = templatePath.endsWith('.ejs') ? '' : '.ejs';
+                    const baseDir = callerFile ? path.dirname(callerFile) : viewsDir;
+                    const fullPath = path.resolve(baseDir, templatePath + ext);
+                    const template = fs.readFileSync(fullPath, 'utf8');
+                    return ejs.render(template, { ...options, ...data, filename: fullPath, include: makeInclude(fullPath) });
+                };
+            }
+            const includeFile = makeInclude(filePath);
 
             // Set required EJS options
             options.filename = filePath;
