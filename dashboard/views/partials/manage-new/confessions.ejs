@@ -1,0 +1,243 @@
+<%# Confessions System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Pending',
+            value: locals.confessionStats?.pending || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Approved',
+            value: locals.confessionStats?.approved || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Rejected',
+            value: locals.confessionStats?.rejected || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'danger'
+        }) %>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-purple-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Anonymous Confessions</h3>
+                    <p class="text-sm text-gray-400">Allow members to submit anonymous confessions</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'confessions_enabled',
+                id: 'confessions_enabled',
+                checked: locals.confessionConfig?.enabled || false,
+                label: 'Enable Confessions',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="confessions-form" action="/api/guilds/<%= guildId %>/confessions/config" method="PUT">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-group">
+                    <label class="form-label">Confession Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: locals.confessionConfig?.channel_id,
+                        placeholder: 'Select confession channel'
+                    }) %>
+                    <p class="form-hint">Where approved confessions will be posted</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Moderation Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'mod_channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: locals.confessionConfig?.mod_channel_id,
+                        placeholder: 'No moderation channel'
+                    }) %>
+                    <p class="form-hint">For staff to review confessions</p>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <label class="flex items-center gap-3 cursor-pointer p-3 bg-dark-700 rounded-lg">
+                    <input type="checkbox" name="require_approval" id="require_approval" class="form-checkbox" <%= locals.confessionConfig?.require_approval ? 'checked' : '' %>>
+                    <div>
+                        <span class="text-white font-medium">Require Approval</span>
+                        <p class="text-xs text-gray-500">Confessions must be approved by staff before posting</p>
+                    </div>
+                </label>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Pending Confessions -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Pending Confessions</h3>
+        <div id="pending-confessions">
+            <% if (locals.pendingConfessions && pendingConfessions.length > 0) { %>
+                <div class="space-y-3">
+                    <% pendingConfessions.forEach(confession => { %>
+                        <div class="p-4 bg-dark-700 rounded-lg border-l-4 border-accent-yellow">
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="flex-1">
+                                    <p class="text-gray-300 italic">"<%= confession.content %>"</p>
+                                    <p class="text-xs text-gray-500 mt-2">
+                                        Submitted <%= new Date(confession.submitted_at).toLocaleString() %>
+                                    </p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="approveConfession('<%= confession.id %>')" class="p-2 text-gray-400 hover:text-accent-green hover:bg-dark-600 rounded-lg transition-colors" title="Approve">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                        </svg>
+                                    </button>
+                                    <button onclick="rejectConfession('<%= confession.id %>')" class="p-2 text-gray-400 hover:text-accent-red hover:bg-dark-600 rounded-lg transition-colors" title="Reject">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    <% }) %>
+                </div>
+            <% } else { %>
+                <div class="text-center py-8 text-gray-400">
+                    <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                    </svg>
+                    <p>No pending confessions</p>
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Recent Confessions -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Recent Confessions</h3>
+        <div id="recent-confessions">
+            <% if (locals.recentConfessions && recentConfessions.length > 0) { %>
+                <div class="space-y-3">
+                    <% recentConfessions.forEach(confession => {
+                        const isApproved = confession.approved === 1;
+                    %>
+                        <div class="p-4 bg-dark-700 rounded-lg border-l-4 <%= isApproved ? 'border-accent-green' : 'border-accent-red' %>">
+                            <div class="flex items-start justify-between gap-4">
+                                <div class="flex-1">
+                                    <p class="text-gray-300 italic">"<%= confession.content %>"</p>
+                                    <p class="text-xs text-gray-500 mt-2">
+                                        Submitted <%= new Date(confession.submitted_at).toLocaleString() %>
+                                    </p>
+                                </div>
+                                <span class="px-2 py-1 text-xs font-medium rounded-full <%= isApproved ? 'bg-accent-green/20 text-accent-green' : 'bg-accent-red/20 text-accent-red' %>">
+                                    <%= isApproved ? 'Approved' : 'Rejected' %>
+                                </span>
+                            </div>
+                        </div>
+                    <% }) %>
+                </div>
+            <% } else { %>
+                <div class="text-center py-8 text-gray-400">
+                    <p>No recent confessions</p>
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-purple-500/10 to-primary-500/10 border-purple-500/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center text-2xl">
+                    🤫
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How It Works</h4>
+                <ul class="text-sm text-gray-300 space-y-1.5">
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">1.</span>
+                        Users run <code class="text-primary-400">/confess [message]</code> to submit anonymously
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">2.</span>
+                        If approval is required, staff review in the mod channel
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">3.</span>
+                        Approved confessions are posted to the confession channel
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-purple-400">4.</span>
+                        User identity is never revealed (except to server owner for safety)
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('confessions-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        enabled: document.getElementById('confessions_enabled').checked,
+        channel_id: formData.get('channel_id'),
+        mod_channel_id: formData.get('mod_channel_id') || null,
+        require_approval: document.getElementById('require_approval').checked
+    };
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Confession settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save settings'); }
+});
+
+async function approveConfession(id) {
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/confessions/${id}/approve`, { method: 'POST' });
+        if (response.ok) {
+            showToast('success', 'Confession approved');
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to approve confession'); }
+}
+
+async function rejectConfession(id) {
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/confessions/${id}/reject`, { method: 'POST' });
+        if (response.ok) {
+            showToast('success', 'Confession rejected');
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to reject confession'); }
+}
+</script>

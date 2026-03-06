@@ -1,0 +1,359 @@
+<%# Advanced Protection - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Raid Protection',
+            value: (raidConfig && raidConfig.enabled) ? 'Active' : 'Disabled',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: (raidConfig && raidConfig.enabled) ? 'success' : 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Self-Bot Detection',
+            value: (selfbotConfig && selfbotConfig.enabled) ? 'Active' : 'Disabled',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>',
+            color: (selfbotConfig && selfbotConfig.enabled) ? 'success' : 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Adaptive Spam',
+            value: (adaptiveSpamConfig && adaptiveSpamConfig.enabled) ? 'Active' : 'Disabled',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>',
+            color: (adaptiveSpamConfig && adaptiveSpamConfig.enabled) ? 'success' : 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Recent Incidents',
+            value: ((raidIncidents ? raidIncidents.length : 0) + (selfbotDetections ? selfbotDetections.length : 0)),
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
+            color: 'primary'
+        }) %>
+    </div>
+
+    <!-- Raid Protection -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-accent-red/10 rounded-lg">
+                    <svg class="w-5 h-5 text-accent-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Raid Protection</h3>
+                    <p class="text-sm text-gray-400">Detect coordinated mass-join attacks</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'raid_enabled',
+                id: 'raid_enabled',
+                checked: raidConfig && raidConfig.enabled,
+                label: 'Enable',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="raid-protection-form">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label">Join Threshold</label>
+                    <input type="number" name="join_threshold" class="form-input w-full" value="<%= raidConfig ? raidConfig.join_threshold : '10' %>" min="3" max="50">
+                    <p class="form-hint">Joins within timeframe to trigger</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Timeframe (seconds)</label>
+                    <input type="number" name="join_timeframe_seconds" class="form-input w-full" value="<%= raidConfig ? raidConfig.join_timeframe_seconds : '30' %>" min="10" max="300">
+                    <p class="form-hint">Window to count joins</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">New Account Age (hours)</label>
+                    <input type="number" name="new_account_age_hours" class="form-input w-full" value="<%= raidConfig ? raidConfig.new_account_age_hours : '24' %>" min="1" max="720">
+                    <p class="form-hint">Flag accounts younger than this</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label">New Account Ratio (%)</label>
+                    <input type="number" name="new_account_ratio" class="form-input w-full" value="<%= raidConfig ? (raidConfig.new_account_ratio * 100) : '70' %>" min="30" max="100" step="5">
+                    <p class="form-hint">% of new accounts to trigger</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Action</label>
+                    <select name="action" class="form-input w-full">
+                        <option value="mute" <%= raidConfig && raidConfig.action === 'mute' ? 'selected' : '' %>>Mute Raiders</option>
+                        <option value="kick" <%= raidConfig && raidConfig.action === 'kick' ? 'selected' : '' %>>Kick Raiders</option>
+                        <option value="ban" <%= raidConfig && raidConfig.action === 'ban' ? 'selected' : '' %>>Ban Raiders</option>
+                        <option value="alert" <%= raidConfig && raidConfig.action === 'alert' ? 'selected' : '' %>>Alert Only</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Alert Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'raid_alert_channel_id',
+                        channels: Array.from(channels.values()).filter(c => c.type === 0),
+                        selected: raidConfig ? raidConfig.alert_channel_id : null,
+                        placeholder: 'Select alert channel'
+                    }) %>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label">Mute Duration (minutes)</label>
+                    <input type="number" name="mute_duration_minutes" class="form-input w-full" value="<%= raidConfig ? raidConfig.mute_duration_minutes : '60' %>" min="1" max="10080">
+                </div>
+                <div class="flex items-center gap-3 pt-7">
+                    <input type="checkbox" id="purge_messages" name="purge_messages" class="w-4 h-4 rounded border-dark-400 bg-dark-700 text-primary-500" <%= raidConfig && raidConfig.purge_messages ? 'checked' : '' %>>
+                    <label for="purge_messages" class="text-sm text-gray-300">Purge messages from raiders</label>
+                </div>
+            </div>
+
+            <div class="p-3 bg-accent-red/10 border-l-4 border-accent-red rounded-r-lg mb-4">
+                <p class="text-sm text-gray-300">
+                    <strong>How it works:</strong> Triggers when <%= raidConfig ? raidConfig.join_threshold : '10' %> users join within <%= raidConfig ? raidConfig.join_timeframe_seconds : '30' %> seconds AND at least <%= raidConfig ? Math.round(raidConfig.new_account_ratio * 100) : '70' %>% have accounts younger than <%= raidConfig ? raidConfig.new_account_age_hours : '24' %> hours.
+                </p>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save Raid Protection
+            </button>
+        </form>
+    </div>
+
+    <!-- Self-Bot Detection -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-accent-yellow/10 rounded-lg">
+                    <svg class="w-5 h-5 text-accent-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Self-Bot Detection</h3>
+                    <p class="text-sm text-gray-400">Detect users running unauthorized automation</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'selfbot_enabled',
+                id: 'selfbot_enabled',
+                checked: selfbotConfig && selfbotConfig.enabled,
+                label: 'Enable',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="selfbot-detection-form">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label">Min Response Time (ms)</label>
+                    <input type="number" name="min_response_time_ms" class="form-input w-full" value="<%= selfbotConfig ? selfbotConfig.min_response_time_ms : '50' %>" min="10" max="500">
+                    <p class="form-hint">Flag responses faster than this</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Burst Threshold</label>
+                    <input type="number" name="message_burst_threshold" class="form-input w-full" value="<%= selfbotConfig ? selfbotConfig.message_burst_threshold : '20' %>" min="5" max="100">
+                    <p class="form-hint">Messages in burst window to flag</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Burst Window (ms)</label>
+                    <input type="number" name="message_burst_window_ms" class="form-input w-full" value="<%= selfbotConfig ? selfbotConfig.message_burst_window_ms : '1000' %>" min="100" max="5000">
+                    <p class="form-hint">Window to count burst messages</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label">Pattern Threshold</label>
+                    <input type="number" name="pattern_threshold" class="form-input w-full" value="<%= selfbotConfig ? selfbotConfig.pattern_threshold : '3' %>" min="1" max="10">
+                    <p class="form-hint">Suspicious patterns before action</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Action</label>
+                    <select name="selfbot_action" class="form-input w-full">
+                        <option value="mute" <%= selfbotConfig && selfbotConfig.action === 'mute' ? 'selected' : '' %>>Mute User</option>
+                        <option value="kick" <%= selfbotConfig && selfbotConfig.action === 'kick' ? 'selected' : '' %>>Kick User</option>
+                        <option value="ban" <%= selfbotConfig && selfbotConfig.action === 'ban' ? 'selected' : '' %>>Ban User</option>
+                        <option value="alert" <%= selfbotConfig && selfbotConfig.action === 'alert' ? 'selected' : '' %>>Alert Only</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Alert Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'selfbot_alert_channel_id',
+                        channels: Array.from(channels.values()).filter(c => c.type === 0),
+                        selected: selfbotConfig ? selfbotConfig.alert_channel_id : null,
+                        placeholder: 'Select alert channel'
+                    }) %>
+                </div>
+            </div>
+
+            <div class="p-3 bg-accent-yellow/10 border-l-4 border-accent-yellow rounded-r-lg mb-4">
+                <p class="text-sm font-medium text-white mb-2">Detection Signals:</p>
+                <ul class="text-sm text-gray-300 space-y-1 ml-4 list-disc">
+                    <li><strong>Inhuman response times</strong> - Consistent replies under 50ms</li>
+                    <li><strong>Message bursts</strong> - 20+ messages in under 1 second</li>
+                    <li><strong>Pattern regularity</strong> - Messages at exact intervals</li>
+                    <li><strong>API-like behavior</strong> - Identical formatting, no variation</li>
+                </ul>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save Self-Bot Detection
+            </button>
+        </form>
+    </div>
+
+    <!-- Adaptive Spam -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Adaptive Spam Detection</h3>
+                    <p class="text-sm text-gray-400">Learn patterns and detect evolving spam</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'adaptive_spam_enabled',
+                id: 'adaptive_spam_enabled',
+                checked: adaptiveSpamConfig && adaptiveSpamConfig.enabled,
+                label: 'Enable',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="adaptive-spam-form">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label">Cross-Channel Threshold</label>
+                    <input type="number" name="cross_channel_threshold" class="form-input w-full" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.cross_channel_threshold : '3' %>" min="2" max="10">
+                    <p class="form-hint">Channels with same message to flag</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Timeframe (min)</label>
+                    <input type="number" name="cross_channel_timeframe_minutes" class="form-input w-full" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.cross_channel_timeframe_minutes : '5' %>" min="1" max="30">
+                    <p class="form-hint">Window for cross-channel detection</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Deviation Multiplier</label>
+                    <input type="number" name="deviation_multiplier" class="form-input w-full" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.deviation_multiplier : '2.0' %>" min="1.5" max="5.0" step="0.1">
+                    <p class="form-hint">Flag when rate exceeds baseline by X</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label">New Account Boost (7d)</label>
+                    <input type="number" name="new_account_multiplier_7d" class="form-input w-full" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.new_account_multiplier_7d : '1.5' %>" min="1.0" max="3.0" step="0.1">
+                    <p class="form-hint">Score boost for accounts &lt;7 days</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">New Account Boost (24h)</label>
+                    <input type="number" name="new_account_multiplier_24h" class="form-input w-full" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.new_account_multiplier_24h : '2.0' %>" min="1.0" max="5.0" step="0.1">
+                    <p class="form-hint">Score boost for accounts &lt;24 hours</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Action</label>
+                    <select name="adaptive_action" class="form-input w-full">
+                        <option value="mute" <%= adaptiveSpamConfig && adaptiveSpamConfig.action === 'mute' ? 'selected' : '' %>>Mute User</option>
+                        <option value="kick" <%= adaptiveSpamConfig && adaptiveSpamConfig.action === 'kick' ? 'selected' : '' %>>Kick User</option>
+                        <option value="ban" <%= adaptiveSpamConfig && adaptiveSpamConfig.action === 'ban' ? 'selected' : '' %>>Ban User</option>
+                        <option value="alert" <%= adaptiveSpamConfig && adaptiveSpamConfig.action === 'alert' ? 'selected' : '' %>>Alert Only</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="form-label">Alert Channel</label>
+                <%- include('../../components/forms/channelSelect', {
+                    name: 'adaptive_alert_channel_id',
+                    channels: Array.from(channels.values()).filter(c => c.type === 0),
+                    selected: adaptiveSpamConfig ? adaptiveSpamConfig.alert_channel_id : null,
+                    placeholder: 'Select alert channel'
+                }) %>
+            </div>
+
+            <div class="p-3 bg-primary-500/10 border-l-4 border-primary-500 rounded-r-lg mb-4">
+                <p class="text-sm font-medium text-white mb-2">Adaptive Features:</p>
+                <ul class="text-sm text-gray-300 space-y-1 ml-4 list-disc">
+                    <li><strong>User Baselines</strong> - Learns normal message rates per user</li>
+                    <li><strong>Cross-Channel Detection</strong> - Flags same message in multiple channels</li>
+                    <li><strong>Pattern Effectiveness</strong> - Tracks which rules catch real spam</li>
+                    <li><strong>New Account Weighting</strong> - Stricter detection for new accounts</li>
+                </ul>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save Adaptive Spam Settings
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('raid-protection-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    data.enabled = document.getElementById('raid_enabled').checked;
+    data.new_account_ratio = parseFloat(data.new_account_ratio) / 100;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/advanced-protection/raid', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Raid protection settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save settings'); }
+});
+
+document.getElementById('selfbot-detection-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    data.enabled = document.getElementById('selfbot_enabled').checked;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/advanced-protection/selfbot', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Self-bot detection settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save settings'); }
+});
+
+document.getElementById('adaptive-spam-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData);
+    data.enabled = document.getElementById('adaptive_spam_enabled').checked;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/advanced-protection/adaptive-spam', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Adaptive spam settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save settings'); }
+});
+</script>

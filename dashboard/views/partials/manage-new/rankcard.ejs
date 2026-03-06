@@ -1,0 +1,789 @@
+<%# Rank Card Customization - Tailwind Version %>
+
+<div class="space-y-6" id="rankcard-root">
+    <!-- Rank Card Customization Header Card -->
+    <div class="card">
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-white">Rank Card Customization</h3>
+            <p class="text-sm text-gray-400">Personalize your rank card appearance with custom backgrounds, colors, and styles</p>
+        </div>
+
+        <!-- Live Preview -->
+        <div class="form-group">
+            <div class="flex items-center justify-between mb-2">
+                <label class="form-label mb-0">Live Preview</label>
+                <button type="button" id="rc-refresh-btn" class="inline-flex items-center gap-1.5 text-sm text-primary-400 hover:text-primary-300 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+            <div class="p-4 bg-dark-700 rounded-lg flex items-center justify-center">
+                <img
+                    id="rc-preview-img"
+                    src="/api/guilds/<%= guildId %>/rank-card/preview?userId=<%= user.id %>&t=<%= Date.now() %>"
+                    alt="Rank Card Preview"
+                    class="max-w-full rounded-lg shadow-lg"
+                    style="max-height: 220px;"
+                >
+            </div>
+            <p class="form-hint">This is how your rank card will appear when using the /level command</p>
+        </div>
+    </div>
+
+    <!-- Background Section -->
+    <div class="card">
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-white">Background</h3>
+            <p class="text-sm text-gray-400">Choose a preset, upload a custom image, or use a solid color / gradient</p>
+        </div>
+
+        <!-- Preset Gallery -->
+        <div class="form-group">
+            <label class="form-label">Preset Backgrounds</label>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="rc-preset-grid">
+                <!-- Populated by JS -->
+            </div>
+            <p class="form-hint">Click a preset to apply it instantly</p>
+        </div>
+
+        <!-- Upload Custom -->
+        <div class="form-group mt-6">
+            <label class="form-label">Upload Custom Background</label>
+            <div class="flex items-center gap-4">
+                <label class="btn btn-secondary cursor-pointer">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    Choose Image
+                    <input type="file" id="rc-bg-upload" accept="image/*" class="hidden">
+                </label>
+                <span id="rc-upload-status" class="text-sm text-gray-400"></span>
+            </div>
+            <p class="form-hint">Max 5MB. Recommended size: 934x282 pixels. Will be resized automatically.</p>
+        </div>
+
+        <!-- Solid Color -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div class="form-group">
+                <label class="form-label">Solid Color</label>
+                <div class="flex items-center gap-3">
+                    <div class="relative">
+                        <input type="color" id="rc-bg-solid-color" value="#1a1a2e" class="sr-only">
+                        <button type="button" id="rc-bg-solid-swatch" class="w-10 h-10 rounded-lg border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #1a1a2e;" onclick="document.getElementById('rc-bg-solid-color').click()"></button>
+                    </div>
+                    <span id="rc-bg-solid-hex" class="text-sm text-gray-300 font-mono">#1a1a2e</span>
+                    <button type="button" id="rc-apply-solid-btn" class="btn btn-primary btn-sm ml-auto">Apply</button>
+                </div>
+                <p class="form-hint">Single color background</p>
+            </div>
+
+            <!-- Gradient -->
+            <div class="form-group">
+                <label class="form-label">Gradient</label>
+                <div class="flex items-center gap-3">
+                    <div class="relative">
+                        <input type="color" id="rc-bg-grad-start" value="#667eea" class="sr-only">
+                        <button type="button" id="rc-bg-grad-start-swatch" class="w-10 h-10 rounded-lg border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #667eea;" onclick="document.getElementById('rc-bg-grad-start').click()"></button>
+                    </div>
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                    </svg>
+                    <div class="relative">
+                        <input type="color" id="rc-bg-grad-end" value="#764ba2" class="sr-only">
+                        <button type="button" id="rc-bg-grad-end-swatch" class="w-10 h-10 rounded-lg border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #764ba2;" onclick="document.getElementById('rc-bg-grad-end').click()"></button>
+                    </div>
+                    <button type="button" id="rc-apply-gradient-btn" class="btn btn-primary btn-sm ml-auto">Apply</button>
+                </div>
+                <p class="form-hint">Two-color gradient background</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Colors Section -->
+    <div class="card">
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-white">Colors</h3>
+            <p class="text-sm text-gray-400">Customize the colors of different elements on your rank card</p>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <!-- Progress Bar Start -->
+            <div class="form-group">
+                <label class="form-label text-xs">Progress Bar Start</label>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input type="color" id="rc-color-progress_bar_color_start" value="#667eea" class="sr-only" data-color-field="progress_bar_color_start">
+                        <button type="button" class="rc-color-swatch w-8 h-8 rounded-md border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #667eea;" data-for="rc-color-progress_bar_color_start"></button>
+                    </div>
+                    <span class="rc-color-hex text-xs text-gray-400 font-mono" data-for="progress_bar_color_start">#667eea</span>
+                </div>
+            </div>
+
+            <!-- Progress Bar End -->
+            <div class="form-group">
+                <label class="form-label text-xs">Progress Bar End</label>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input type="color" id="rc-color-progress_bar_color_end" value="#764ba2" class="sr-only" data-color-field="progress_bar_color_end">
+                        <button type="button" class="rc-color-swatch w-8 h-8 rounded-md border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #764ba2;" data-for="rc-color-progress_bar_color_end"></button>
+                    </div>
+                    <span class="rc-color-hex text-xs text-gray-400 font-mono" data-for="progress_bar_color_end">#764ba2</span>
+                </div>
+            </div>
+
+            <!-- Username -->
+            <div class="form-group">
+                <label class="form-label text-xs">Username</label>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input type="color" id="rc-color-username_color" value="#ffffff" class="sr-only" data-color-field="username_color">
+                        <button type="button" class="rc-color-swatch w-8 h-8 rounded-md border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #ffffff;" data-for="rc-color-username_color"></button>
+                    </div>
+                    <span class="rc-color-hex text-xs text-gray-400 font-mono" data-for="username_color">#ffffff</span>
+                </div>
+            </div>
+
+            <!-- XP Text -->
+            <div class="form-group">
+                <label class="form-label text-xs">XP Text</label>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input type="color" id="rc-color-xp_text_color" value="#b9bbbe" class="sr-only" data-color-field="xp_text_color">
+                        <button type="button" class="rc-color-swatch w-8 h-8 rounded-md border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #b9bbbe;" data-for="rc-color-xp_text_color"></button>
+                    </div>
+                    <span class="rc-color-hex text-xs text-gray-400 font-mono" data-for="xp_text_color">#b9bbbe</span>
+                </div>
+            </div>
+
+            <!-- Level Badge -->
+            <div class="form-group">
+                <label class="form-label text-xs">Level Badge</label>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input type="color" id="rc-color-level_color" value="#ffffff" class="sr-only" data-color-field="level_color">
+                        <button type="button" class="rc-color-swatch w-8 h-8 rounded-md border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #ffffff;" data-for="rc-color-level_color"></button>
+                    </div>
+                    <span class="rc-color-hex text-xs text-gray-400 font-mono" data-for="level_color">#ffffff</span>
+                </div>
+            </div>
+
+            <!-- Rank Badge -->
+            <div class="form-group">
+                <label class="form-label text-xs">Rank Badge</label>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input type="color" id="rc-color-rank_color" value="#ffd700" class="sr-only" data-color-field="rank_color">
+                        <button type="button" class="rc-color-swatch w-8 h-8 rounded-md border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #ffd700;" data-for="rc-color-rank_color"></button>
+                    </div>
+                    <span class="rc-color-hex text-xs text-gray-400 font-mono" data-for="rank_color">#ffd700</span>
+                </div>
+            </div>
+
+            <!-- Avatar Border -->
+            <div class="form-group">
+                <label class="form-label text-xs">Avatar Border</label>
+                <div class="flex items-center gap-2">
+                    <div class="relative">
+                        <input type="color" id="rc-color-avatar_border_color" value="#3498db" class="sr-only" data-color-field="avatar_border_color">
+                        <button type="button" class="rc-color-swatch w-8 h-8 rounded-md border-2 border-dark-400 cursor-pointer hover:border-primary-400 transition-colors" style="background-color: #3498db;" data-for="rc-color-avatar_border_color"></button>
+                    </div>
+                    <span class="rc-color-hex text-xs text-gray-400 font-mono" data-for="avatar_border_color">#3498db</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay & Border Settings -->
+    <div class="card">
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold text-white">Overlay & Border</h3>
+            <p class="text-sm text-gray-400">Fine-tune overlay darkness and avatar border visibility</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Overlay Opacity -->
+            <div class="form-group">
+                <label class="form-label">Overlay Opacity</label>
+                <div class="flex items-center gap-4">
+                    <input
+                        type="range"
+                        id="rc-overlay-slider"
+                        min="0"
+                        max="100"
+                        value="60"
+                        class="flex-1 h-2 bg-dark-600 rounded-lg appearance-none cursor-pointer accent-primary-500"
+                    >
+                    <span id="rc-overlay-value" class="text-sm font-mono text-gray-300 w-12 text-right">60%</span>
+                </div>
+                <p class="form-hint">Controls how dark the overlay is on top of the background. 0% = no overlay, 100% = fully dark.</p>
+            </div>
+
+            <!-- Avatar Border Toggle -->
+            <div class="form-group">
+                <label class="form-label">Avatar Border</label>
+                <div class="flex items-center justify-between p-4 bg-dark-700 rounded-lg">
+                    <div>
+                        <p class="font-medium text-white">Show Border</p>
+                        <p class="text-xs text-gray-500">Display a colored ring around your avatar</p>
+                    </div>
+                    <label class="toggle h-6 w-11" id="rc-border-toggle-label">
+                        <input
+                            type="checkbox"
+                            id="rc-border-toggle"
+                            class="sr-only"
+                            checked
+                        >
+                        <span class="toggle-dot h-4 w-4 translate-x-6"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Section -->
+    <div class="card">
+        <div class="flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Reset Customization</h3>
+                <p class="text-sm text-gray-400">Remove all customizations and return to the default rank card style</p>
+            </div>
+            <button type="button" id="rc-reset-btn" class="btn bg-red-600/20 text-red-400 border border-red-500/30 hover:bg-red-600/30 hover:text-red-300 transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Reset All
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div id="rc-toast-container" class="fixed bottom-6 right-6 z-50 space-y-2"></div>
+
+<script>
+(function() {
+    const GUILD_ID = '<%= guildId %>';
+    const USER_ID = '<%= user.id %>';
+    const API_BASE = '/api/guilds/' + GUILD_ID + '/rank-card';
+
+    // Preset descriptions for the gallery
+    const PRESET_DESCRIPTIONS = {
+        midnight: 'Deep blue & purple night sky',
+        sunset: 'Warm orange & pink horizon',
+        forest: 'Lush green woodland tones',
+        ocean: 'Cool blue aquatic depths',
+        fire: 'Fiery red & orange blaze',
+        neon: 'Vibrant electric glow',
+        sakura: 'Soft pink cherry blossom',
+        void: 'Dark minimal emptiness'
+    };
+
+    // Preset gradient colors for visual swatches
+    const PRESET_GRADIENTS = {
+        midnight: ['#0f0c29', '#24243e'],
+        sunset: ['#f12711', '#f5af19'],
+        forest: ['#0b8793', '#360033'],
+        ocean: ['#2193b0', '#6dd5ed'],
+        fire: ['#f83600', '#f9d423'],
+        neon: ['#b721ff', '#21d4fd'],
+        sakura: ['#ff9a9e', '#fecfef'],
+        void: ['#0a0a0a', '#1a1a2e']
+    };
+
+    var currentSettings = null;
+    var presets = [];
+    var debounceTimers = {};
+
+    // ── Toast helper ──
+    function rcToast(type, message) {
+        // Use global showToast if available
+        if (typeof showToast === 'function') {
+            showToast(type, message);
+            return;
+        }
+        // Fallback inline toast
+        var container = document.getElementById('rc-toast-container');
+        var toast = document.createElement('div');
+        var bgColor = type === 'success' ? 'bg-green-600/90' : type === 'error' ? 'bg-red-600/90' : 'bg-blue-600/90';
+        toast.className = bgColor + ' text-white text-sm px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-300 transform translate-y-2 opacity-0';
+        toast.textContent = message;
+        container.appendChild(toast);
+        requestAnimationFrame(function() {
+            toast.classList.remove('translate-y-2', 'opacity-0');
+        });
+        setTimeout(function() {
+            toast.classList.add('translate-y-2', 'opacity-0');
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 3000);
+    }
+
+    // ── Preview refresh ──
+    function refreshPreview() {
+        var img = document.getElementById('rc-preview-img');
+        if (img) {
+            img.src = API_BASE + '/preview?userId=' + USER_ID + '&t=' + Date.now();
+        }
+    }
+
+    // ── API helpers ──
+    async function fetchSettings() {
+        try {
+            var res = await fetch(API_BASE + '/settings?userId=' + USER_ID);
+            var data = await res.json();
+            if (data.success) {
+                currentSettings = data.settings;
+                populateUI();
+            }
+        } catch (err) {
+            rcToast('error', 'Failed to load rank card settings');
+        }
+    }
+
+    async function fetchPresets() {
+        try {
+            var res = await fetch(API_BASE + '/presets');
+            var data = await res.json();
+            if (data.success) {
+                presets = data.presets;
+                renderPresetGrid();
+            }
+        } catch (err) {
+            rcToast('error', 'Failed to load presets');
+        }
+    }
+
+    async function updateSettings(updates) {
+        try {
+            // Merge updates into current settings so the PUT sends complete data
+            var body = Object.assign({}, currentSettings, updates);
+            // Remove non-setting fields
+            delete body.guild_id;
+            delete body.user_id;
+            delete body.id;
+            delete body.created_at;
+            delete body.updated_at;
+
+            var res = await fetch(API_BASE + '/settings?userId=' + USER_ID, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            var data = await res.json();
+            if (data.success) {
+                Object.assign(currentSettings, updates);
+                refreshPreview();
+                return true;
+            } else {
+                throw new Error(data.error || 'Update failed');
+            }
+        } catch (err) {
+            rcToast('error', err.message || 'Failed to update settings');
+            return false;
+        }
+    }
+
+    // ── Debounce ──
+    function debounce(key, fn, delay) {
+        if (!delay) delay = 500;
+        clearTimeout(debounceTimers[key]);
+        debounceTimers[key] = setTimeout(fn, delay);
+    }
+
+    // ── Populate UI from loaded settings ──
+    function populateUI() {
+        if (!currentSettings) return;
+
+        // Colors
+        var colorFields = [
+            'progress_bar_color_start', 'progress_bar_color_end',
+            'username_color', 'xp_text_color', 'level_color',
+            'rank_color', 'avatar_border_color'
+        ];
+        colorFields.forEach(function(field) {
+            var value = currentSettings[field];
+            if (!value) return;
+            var input = document.getElementById('rc-color-' + field);
+            if (input) {
+                input.value = value;
+            }
+            var swatch = document.querySelector('.rc-color-swatch[data-for="rc-color-' + field + '"]');
+            if (swatch) {
+                swatch.style.backgroundColor = value;
+            }
+            var hex = document.querySelector('.rc-color-hex[data-for="' + field + '"]');
+            if (hex) {
+                hex.textContent = value;
+            }
+        });
+
+        // Overlay
+        var overlayVal = Math.round((currentSettings.overlay_opacity != null ? currentSettings.overlay_opacity : 0.6) * 100);
+        var slider = document.getElementById('rc-overlay-slider');
+        var overlayLabel = document.getElementById('rc-overlay-value');
+        if (slider) slider.value = overlayVal;
+        if (overlayLabel) overlayLabel.textContent = overlayVal + '%';
+
+        // Avatar border toggle
+        var borderToggle = document.getElementById('rc-border-toggle');
+        var borderLabel = document.getElementById('rc-border-toggle-label');
+        var dotEl = borderLabel ? borderLabel.querySelector('.toggle-dot') : null;
+        var isEnabled = currentSettings.avatar_border_enabled === 1 || currentSettings.avatar_border_enabled === true;
+        if (borderToggle) borderToggle.checked = isEnabled;
+        if (borderLabel) {
+            if (isEnabled) {
+                borderLabel.classList.add('active');
+                if (dotEl) dotEl.classList.add('translate-x-6');
+            } else {
+                borderLabel.classList.remove('active');
+                if (dotEl) dotEl.classList.remove('translate-x-6');
+            }
+        }
+
+        // Background solid color
+        if (currentSettings.background_type === 'solid' && currentSettings.background_value) {
+            var solidInput = document.getElementById('rc-bg-solid-color');
+            var solidSwatch = document.getElementById('rc-bg-solid-swatch');
+            var solidHex = document.getElementById('rc-bg-solid-hex');
+            if (solidInput) solidInput.value = currentSettings.background_value;
+            if (solidSwatch) solidSwatch.style.backgroundColor = currentSettings.background_value;
+            if (solidHex) solidHex.textContent = currentSettings.background_value;
+        }
+
+        // Background gradient
+        if (currentSettings.background_type === 'gradient' && currentSettings.background_value) {
+            var parts = currentSettings.background_value.split(',');
+            if (parts.length === 2) {
+                var gradStart = document.getElementById('rc-bg-grad-start');
+                var gradEnd = document.getElementById('rc-bg-grad-end');
+                var gradStartSwatch = document.getElementById('rc-bg-grad-start-swatch');
+                var gradEndSwatch = document.getElementById('rc-bg-grad-end-swatch');
+                if (gradStart) gradStart.value = parts[0];
+                if (gradEnd) gradEnd.value = parts[1];
+                if (gradStartSwatch) gradStartSwatch.style.backgroundColor = parts[0];
+                if (gradEndSwatch) gradEndSwatch.style.backgroundColor = parts[1];
+            }
+        }
+
+        // Highlight active preset
+        highlightActivePreset();
+    }
+
+    // ── Preset gallery ──
+    function renderPresetGrid() {
+        var grid = document.getElementById('rc-preset-grid');
+        if (!grid) return;
+
+        // Clear existing children safely
+        while (grid.firstChild) {
+            grid.removeChild(grid.firstChild);
+        }
+
+        presets.forEach(function(preset) {
+            var card = document.createElement('button');
+            card.type = 'button';
+            card.dataset.preset = preset.name;
+            card.className = 'rc-preset-card group relative p-4 bg-dark-700 rounded-lg border-2 border-dark-400 hover:border-primary-500/50 transition-all duration-200 text-left cursor-pointer';
+
+            // Build card content with safe DOM methods
+            var row = document.createElement('div');
+            row.className = 'flex items-center gap-3 mb-1';
+
+            var swatch = document.createElement('div');
+            swatch.className = 'w-8 h-8 rounded-md opacity-80 group-hover:opacity-100 transition-opacity';
+            var gradient = PRESET_GRADIENTS[preset.name];
+            if (gradient) {
+                swatch.style.background = 'linear-gradient(135deg, ' + gradient[0] + ', ' + gradient[1] + ')';
+            }
+
+            var label = document.createElement('span');
+            label.className = 'font-medium text-white text-sm';
+            label.textContent = preset.label;
+
+            row.appendChild(swatch);
+            row.appendChild(label);
+
+            var desc = document.createElement('p');
+            desc.className = 'text-xs text-gray-500 mt-1';
+            desc.textContent = PRESET_DESCRIPTIONS[preset.name] || '';
+
+            card.appendChild(row);
+            card.appendChild(desc);
+
+            card.addEventListener('click', function() { applyPreset(preset.name); });
+            grid.appendChild(card);
+        });
+
+        highlightActivePreset();
+    }
+
+    function highlightActivePreset() {
+        var cards = document.querySelectorAll('.rc-preset-card');
+        cards.forEach(function(card) {
+            var isActive = currentSettings &&
+                currentSettings.background_type === 'preset' &&
+                currentSettings.background_value === card.dataset.preset;
+            if (isActive) {
+                card.classList.remove('border-dark-400');
+                card.classList.add('border-primary-500', 'ring-1', 'ring-primary-500/30');
+            } else {
+                card.classList.add('border-dark-400');
+                card.classList.remove('border-primary-500', 'ring-1', 'ring-primary-500/30');
+            }
+        });
+    }
+
+    async function applyPreset(presetName) {
+        var ok = await updateSettings({
+            background_type: 'preset',
+            background_value: presetName
+        });
+        if (ok) {
+            rcToast('success', 'Applied "' + presetName + '" preset');
+            highlightActivePreset();
+        }
+    }
+
+    // ── Color picker event wiring ──
+    function setupColorPickers() {
+        var colorInputs = document.querySelectorAll('[data-color-field]');
+        colorInputs.forEach(function(input) {
+            var field = input.dataset.colorField;
+
+            // Swatch click opens color picker
+            var swatch = document.querySelector('.rc-color-swatch[data-for="' + input.id + '"]');
+            if (swatch) {
+                swatch.addEventListener('click', function() { input.click(); });
+            }
+
+            input.addEventListener('input', function() {
+                var val = this.value;
+                // Update swatch
+                if (swatch) swatch.style.backgroundColor = val;
+                // Update hex text
+                var hex = document.querySelector('.rc-color-hex[data-for="' + field + '"]');
+                if (hex) hex.textContent = val;
+
+                // Debounced save
+                debounce('color-' + field, async function() {
+                    var update = {};
+                    update[field] = val;
+                    var ok = await updateSettings(update);
+                    if (ok) rcToast('success', 'Color updated');
+                }, 500);
+            });
+        });
+    }
+
+    // ── Solid color background ──
+    function setupSolidColor() {
+        var colorInput = document.getElementById('rc-bg-solid-color');
+        var swatch = document.getElementById('rc-bg-solid-swatch');
+        var hexLabel = document.getElementById('rc-bg-solid-hex');
+        var applyBtn = document.getElementById('rc-apply-solid-btn');
+
+        if (colorInput) {
+            colorInput.addEventListener('input', function() {
+                if (swatch) swatch.style.backgroundColor = this.value;
+                if (hexLabel) hexLabel.textContent = this.value;
+            });
+        }
+
+        if (applyBtn) {
+            applyBtn.addEventListener('click', async function() {
+                var val = colorInput ? colorInput.value : '#1a1a2e';
+                var ok = await updateSettings({
+                    background_type: 'solid',
+                    background_value: val
+                });
+                if (ok) {
+                    rcToast('success', 'Solid color background applied');
+                    highlightActivePreset();
+                }
+            });
+        }
+    }
+
+    // ── Gradient background ──
+    function setupGradient() {
+        var startInput = document.getElementById('rc-bg-grad-start');
+        var endInput = document.getElementById('rc-bg-grad-end');
+        var startSwatch = document.getElementById('rc-bg-grad-start-swatch');
+        var endSwatch = document.getElementById('rc-bg-grad-end-swatch');
+        var applyBtn = document.getElementById('rc-apply-gradient-btn');
+
+        if (startInput) {
+            startInput.addEventListener('input', function() {
+                if (startSwatch) startSwatch.style.backgroundColor = this.value;
+            });
+        }
+        if (endInput) {
+            endInput.addEventListener('input', function() {
+                if (endSwatch) endSwatch.style.backgroundColor = this.value;
+            });
+        }
+
+        if (applyBtn) {
+            applyBtn.addEventListener('click', async function() {
+                var startVal = startInput ? startInput.value : '#667eea';
+                var endVal = endInput ? endInput.value : '#764ba2';
+                var ok = await updateSettings({
+                    background_type: 'gradient',
+                    background_value: startVal + ',' + endVal
+                });
+                if (ok) {
+                    rcToast('success', 'Gradient background applied');
+                    highlightActivePreset();
+                }
+            });
+        }
+    }
+
+    // ── Image upload ──
+    function setupUpload() {
+        var fileInput = document.getElementById('rc-bg-upload');
+        var status = document.getElementById('rc-upload-status');
+
+        if (fileInput) {
+            fileInput.addEventListener('change', async function() {
+                var file = this.files[0];
+                if (!file) return;
+
+                if (file.size > 5 * 1024 * 1024) {
+                    rcToast('error', 'Image must be under 5MB');
+                    return;
+                }
+
+                if (status) status.textContent = 'Uploading...';
+
+                var formData = new FormData();
+                formData.append('background', file);
+
+                try {
+                    var res = await fetch(API_BASE + '/background?userId=' + USER_ID, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    var data = await res.json();
+                    if (data.success) {
+                        rcToast('success', 'Custom background uploaded');
+                        if (status) status.textContent = 'Uploaded!';
+                        if (currentSettings) {
+                            currentSettings.background_type = 'image';
+                            currentSettings.background_value = null;
+                        }
+                        refreshPreview();
+                        highlightActivePreset();
+                        setTimeout(function() { if (status) status.textContent = ''; }, 3000);
+                    } else {
+                        throw new Error(data.error || 'Upload failed');
+                    }
+                } catch (err) {
+                    rcToast('error', err.message || 'Failed to upload image');
+                    if (status) status.textContent = 'Upload failed';
+                }
+
+                // Reset file input so the same file can be re-selected
+                this.value = '';
+            });
+        }
+    }
+
+    // ── Overlay slider ──
+    function setupOverlay() {
+        var slider = document.getElementById('rc-overlay-slider');
+        var label = document.getElementById('rc-overlay-value');
+
+        if (slider) {
+            slider.addEventListener('input', function() {
+                var pct = parseInt(this.value);
+                if (label) label.textContent = pct + '%';
+
+                debounce('overlay', async function() {
+                    var ok = await updateSettings({ overlay_opacity: pct / 100 });
+                    if (ok) rcToast('success', 'Overlay updated');
+                }, 500);
+            });
+        }
+    }
+
+    // ── Avatar border toggle ──
+    function setupBorderToggle() {
+        var toggle = document.getElementById('rc-border-toggle');
+        var toggleLabel = document.getElementById('rc-border-toggle-label');
+
+        if (toggle) {
+            toggle.addEventListener('change', async function() {
+                var enabled = this.checked;
+                var dotEl = toggleLabel ? toggleLabel.querySelector('.toggle-dot') : null;
+
+                if (enabled) {
+                    if (toggleLabel) toggleLabel.classList.add('active');
+                    if (dotEl) dotEl.classList.add('translate-x-6');
+                } else {
+                    if (toggleLabel) toggleLabel.classList.remove('active');
+                    if (dotEl) dotEl.classList.remove('translate-x-6');
+                }
+
+                var ok = await updateSettings({ avatar_border_enabled: enabled ? 1 : 0 });
+                if (ok) rcToast('success', 'Avatar border ' + (enabled ? 'enabled' : 'disabled'));
+            });
+        }
+    }
+
+    // ── Reset ──
+    function setupReset() {
+        var btn = document.getElementById('rc-reset-btn');
+        if (btn) {
+            btn.addEventListener('click', async function() {
+                if (!confirm('Reset all rank card customization to defaults? This cannot be undone.')) return;
+
+                try {
+                    var res = await fetch(API_BASE + '/settings?userId=' + USER_ID, {
+                        method: 'DELETE'
+                    });
+                    var data = await res.json();
+                    if (data.success) {
+                        rcToast('success', 'Rank card reset to defaults');
+                        // Reload settings and preview
+                        await fetchSettings();
+                        refreshPreview();
+                    } else {
+                        throw new Error(data.error || 'Reset failed');
+                    }
+                } catch (err) {
+                    rcToast('error', err.message || 'Failed to reset rank card');
+                }
+            });
+        }
+    }
+
+    // ── Refresh button ──
+    function setupRefresh() {
+        var btn = document.getElementById('rc-refresh-btn');
+        if (btn) {
+            btn.addEventListener('click', function() {
+                refreshPreview();
+                rcToast('success', 'Preview refreshed');
+            });
+        }
+    }
+
+    // ── Init ──
+    document.addEventListener('DOMContentLoaded', function() {
+        setupColorPickers();
+        setupSolidColor();
+        setupGradient();
+        setupUpload();
+        setupOverlay();
+        setupBorderToggle();
+        setupReset();
+        setupRefresh();
+
+        // Load data
+        fetchSettings();
+        fetchPresets();
+    });
+})();
+</script>

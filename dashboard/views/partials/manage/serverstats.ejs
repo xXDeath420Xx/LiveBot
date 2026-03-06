@@ -1,0 +1,701 @@
+<style>
+/* Compact Server Stats Styles */
+.ss-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 14px;
+}
+
+.ss-title h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ss-title h1 i { color: #a78bfa; }
+
+.ss-title p {
+    color: rgba(255, 255, 255, 0.5);
+    margin: 4px 0 0 0;
+    font-size: 0.8rem;
+}
+
+.ss-period-select {
+    appearance: none;
+    background: rgba(167, 139, 250, 0.1);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 8px;
+    padding: 8px 36px 8px 14px;
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23a78bfa' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+}
+
+.ss-period-select:hover {
+    background-color: rgba(167, 139, 250, 0.15);
+    border-color: rgba(167, 139, 250, 0.5);
+}
+
+.ss-period-select:focus {
+    outline: none;
+    border-color: #a78bfa;
+}
+
+.ss-period-select option {
+    background: #1a1d21;
+    color: #ffffff;
+}
+
+/* Stats Overview Grid */
+.ss-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.ss-stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+
+.ss-stat-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.ss-stat-icon {
+    width: 36px;
+    height: 36px;
+    background: rgba(167, 139, 250, 0.15);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 10px;
+}
+
+.ss-stat-icon i { font-size: 0.9rem; color: #a78bfa; }
+.ss-stat-icon.green { background: rgba(34, 197, 94, 0.15); }
+.ss-stat-icon.green i { color: #22c55e; }
+.ss-stat-icon.red { background: rgba(239, 68, 68, 0.15); }
+.ss-stat-icon.red i { color: #ef4444; }
+.ss-stat-icon.blue { background: rgba(59, 130, 246, 0.15); }
+.ss-stat-icon.blue i { color: #3b82f6; }
+.ss-stat-icon.amber { background: rgba(251, 191, 36, 0.15); }
+.ss-stat-icon.amber i { color: #fbbf24; }
+.ss-stat-icon.pink { background: rgba(236, 72, 153, 0.15); }
+.ss-stat-icon.pink i { color: #ec4899; }
+
+.ss-stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #a78bfa;
+    margin-bottom: 4px;
+}
+
+.ss-stat-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+/* Section Cards */
+.ss-section {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.ss-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ss-section-header i { font-size: 0.9rem; color: #a78bfa; }
+.ss-section-header h3 { font-size: 0.9rem; font-weight: 600; color: #ffffff; margin: 0; }
+
+.ss-section-body { padding: 0; }
+
+/* Grid Layouts */
+.ss-two-col {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.ss-three-col {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+/* Rank List */
+.ss-rank-list { list-style: none; padding: 0; margin: 0; }
+
+.ss-rank-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.2s ease;
+}
+
+.ss-rank-entry:last-child { border-bottom: none; }
+.ss-rank-entry:hover { background: rgba(167, 139, 250, 0.05); }
+
+.ss-rank-info { display: flex; align-items: center; gap: 12px; }
+
+.ss-rank-pos {
+    width: 28px;
+    height: 28px;
+    background: rgba(167, 139, 250, 0.15);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.75rem;
+    color: #a78bfa;
+}
+
+.ss-rank-pos.gold { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.ss-rank-pos.silver { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
+.ss-rank-pos.bronze { background: rgba(180, 83, 9, 0.2); color: #d97706; }
+
+.ss-rank-name { font-weight: 600; color: #ffffff; font-size: 0.8rem; }
+.ss-rank-name i { color: #a78bfa; margin-right: 6px; font-size: 0.75rem; }
+
+.ss-rank-value { display: flex; align-items: center; gap: 6px; }
+.ss-rank-count { font-weight: 700; color: #a78bfa; font-size: 0.85rem; }
+.ss-rank-label { font-size: 0.7rem; color: rgba(255, 255, 255, 0.4); }
+
+/* Heatmap */
+.ss-heatmap-container { padding: 16px; }
+
+.ss-heatmap {
+    display: grid;
+    grid-template-columns: 40px repeat(24, 1fr);
+    gap: 2px;
+    font-size: 0.65rem;
+}
+
+.ss-heatmap-header {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.4);
+    padding: 4px 0;
+    font-weight: 600;
+}
+
+.ss-heatmap-day {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 8px;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 600;
+}
+
+.ss-heatmap-cell {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.05);
+    transition: all 0.2s;
+    cursor: pointer;
+    position: relative;
+}
+
+.ss-heatmap-cell:hover { transform: scale(1.2); z-index: 10; }
+.ss-heatmap-cell.level-1 { background: rgba(167, 139, 250, 0.2); }
+.ss-heatmap-cell.level-2 { background: rgba(167, 139, 250, 0.4); }
+.ss-heatmap-cell.level-3 { background: rgba(167, 139, 250, 0.6); }
+.ss-heatmap-cell.level-4 { background: rgba(167, 139, 250, 0.8); }
+.ss-heatmap-cell.level-5 { background: #a78bfa; }
+
+.ss-heatmap-legend {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 12px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ss-heatmap-legend-cell {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}
+
+/* Emoji Stats */
+.ss-emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    padding: 16px;
+}
+
+.ss-emoji-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 12px 8px;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.ss-emoji-item:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.ss-emoji-display { font-size: 1.5rem; margin-bottom: 6px; }
+.ss-emoji-count { font-size: 0.8rem; font-weight: 700; color: #a78bfa; }
+.ss-emoji-name { font-size: 0.65rem; color: rgba(255, 255, 255, 0.4); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Message Trend Sparkline */
+.ss-trend-container { padding: 16px; }
+
+.ss-sparkline {
+    height: 60px;
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.ss-sparkline-bar {
+    flex: 1;
+    background: linear-gradient(to top, rgba(167, 139, 250, 0.3), rgba(167, 139, 250, 0.8));
+    border-radius: 2px 2px 0 0;
+    min-height: 4px;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.ss-sparkline-bar:hover {
+    background: linear-gradient(to top, rgba(167, 139, 250, 0.5), #a78bfa);
+}
+
+.ss-trend-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* Loading & Empty States */
+.ss-loading, .ss-empty, .ss-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ss-loading i { font-size: 1.5rem; color: #a78bfa; margin-bottom: 10px; animation: spin 1s linear infinite; }
+.ss-empty i { font-size: 1.5rem; margin-bottom: 10px; opacity: 0.4; }
+.ss-error i { font-size: 1.5rem; color: #f87171; margin-bottom: 10px; }
+.ss-loading span, .ss-empty p, .ss-error p { font-size: 0.8rem; margin: 0; }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .ss-stats-grid { grid-template-columns: repeat(3, 1fr); }
+    .ss-three-col { grid-template-columns: 1fr; }
+    .ss-emoji-grid { grid-template-columns: repeat(5, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .ss-header { flex-direction: column; align-items: flex-start; }
+    .ss-stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .ss-two-col { grid-template-columns: 1fr; }
+    .ss-emoji-grid { grid-template-columns: repeat(3, 1fr); }
+    .ss-rank-entry { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .ss-rank-value { margin-left: 40px; }
+    .ss-heatmap { display: none; }
+    .ss-heatmap-mobile { display: block; }
+}
+</style>
+
+<div class="page-section">
+    <div class="ss-header">
+        <div class="ss-title">
+            <h1><i class="fas fa-chart-bar"></i> Server Statistics</h1>
+            <p>Detailed analytics and activity insights</p>
+        </div>
+        <select id="period-select" class="ss-period-select" onchange="loadServerStats()">
+            <option value="7d">Last 7 Days</option>
+            <option value="30d">Last 30 Days</option>
+            <option value="90d">Last 90 Days</option>
+        </select>
+    </div>
+
+    <!-- Stats Overview -->
+    <div id="stats-overview" class="ss-stats-grid">
+        <div class="ss-stat-card">
+            <div class="ss-stat-icon"><i class="fas fa-comments"></i></div>
+            <div class="ss-stat-value" id="stat-messages">-</div>
+            <div class="ss-stat-label">Messages</div>
+        </div>
+        <div class="ss-stat-card">
+            <div class="ss-stat-icon blue"><i class="fas fa-users"></i></div>
+            <div class="ss-stat-value" id="stat-members">-</div>
+            <div class="ss-stat-label">Members</div>
+        </div>
+        <div class="ss-stat-card">
+            <div class="ss-stat-icon green"><i class="fas fa-user-plus"></i></div>
+            <div class="ss-stat-value" id="stat-joined">-</div>
+            <div class="ss-stat-label">Joined</div>
+        </div>
+        <div class="ss-stat-card">
+            <div class="ss-stat-icon red"><i class="fas fa-user-minus"></i></div>
+            <div class="ss-stat-value" id="stat-left">-</div>
+            <div class="ss-stat-label">Left</div>
+        </div>
+        <div class="ss-stat-card">
+            <div class="ss-stat-icon amber"><i class="fas fa-microphone"></i></div>
+            <div class="ss-stat-value" id="stat-voice">-</div>
+            <div class="ss-stat-label">Voice Mins</div>
+        </div>
+        <div class="ss-stat-card">
+            <div class="ss-stat-icon pink"><i class="fas fa-terminal"></i></div>
+            <div class="ss-stat-value" id="stat-commands">-</div>
+            <div class="ss-stat-label">Commands</div>
+        </div>
+    </div>
+
+    <!-- Message Trend -->
+    <div class="ss-section">
+        <div class="ss-section-header">
+            <i class="fas fa-chart-line"></i>
+            <h3>Message Activity Trend</h3>
+        </div>
+        <div class="ss-section-body">
+            <div id="message-trend" class="ss-trend-container">
+                <div class="ss-loading">
+                    <i class="fas fa-spinner"></i>
+                    <span>Loading trend...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Messagers & Channel Activity -->
+    <div class="ss-two-col">
+        <div class="ss-section">
+            <div class="ss-section-header">
+                <i class="fas fa-trophy"></i>
+                <h3>Top Message Senders</h3>
+            </div>
+            <div class="ss-section-body" id="top-messagers">
+                <div class="ss-loading">
+                    <i class="fas fa-spinner"></i>
+                    <span>Loading leaderboard...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="ss-section">
+            <div class="ss-section-header">
+                <i class="fas fa-hashtag"></i>
+                <h3>Most Active Channels</h3>
+            </div>
+            <div class="ss-section-body" id="channel-activity">
+                <div class="ss-loading">
+                    <i class="fas fa-spinner"></i>
+                    <span>Loading channels...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Heatmap -->
+    <div class="ss-section">
+        <div class="ss-section-header">
+            <i class="fas fa-fire"></i>
+            <h3>Peak Activity Hours</h3>
+        </div>
+        <div class="ss-section-body">
+            <div id="activity-heatmap" class="ss-heatmap-container">
+                <div class="ss-loading">
+                    <i class="fas fa-spinner"></i>
+                    <span>Loading heatmap...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Emoji Stats -->
+    <div class="ss-section">
+        <div class="ss-section-header">
+            <i class="fas fa-smile"></i>
+            <h3>Top Emojis</h3>
+        </div>
+        <div class="ss-section-body" id="emoji-stats">
+            <div class="ss-loading">
+                <i class="fas fa-spinner"></i>
+                <span>Loading emojis...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+async function loadServerStats() {
+    const period = document.getElementById('period-select').value;
+
+    // Show loading states
+    document.querySelectorAll('.ss-stat-value').forEach(el => el.textContent = '-');
+    document.getElementById('top-messagers').innerHTML = '<div class="ss-loading"><i class="fas fa-spinner"></i><span>Loading...</span></div>';
+    document.getElementById('channel-activity').innerHTML = '<div class="ss-loading"><i class="fas fa-spinner"></i><span>Loading...</span></div>';
+    document.getElementById('activity-heatmap').innerHTML = '<div class="ss-loading"><i class="fas fa-spinner"></i><span>Loading...</span></div>';
+    document.getElementById('emoji-stats').innerHTML = '<div class="ss-loading"><i class="fas fa-spinner"></i><span>Loading...</span></div>';
+    document.getElementById('message-trend').innerHTML = '<div class="ss-loading"><i class="fas fa-spinner"></i><span>Loading...</span></div>';
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/serverstats?period=${period}`);
+        const data = await response.json();
+
+        // Update overview stats
+        const stats = data.currentStats || {};
+        document.getElementById('stat-messages').textContent = (stats.total_messages || 0).toLocaleString();
+        document.getElementById('stat-members').textContent = (stats.total_members || 0).toLocaleString();
+        document.getElementById('stat-joined').textContent = (stats.members_joined || 0).toLocaleString();
+        document.getElementById('stat-left').textContent = (stats.members_left || 0).toLocaleString();
+        document.getElementById('stat-voice').textContent = formatMinutes(stats.voice_minutes || 0);
+        document.getElementById('stat-commands').textContent = (stats.commands_used || 0).toLocaleString();
+
+        // Message trend sparkline
+        renderMessageTrend(data.dailyMessages || []);
+
+        // Top messagers
+        renderTopMessagers(data.topMessagers || []);
+
+        // Channel activity
+        renderChannelActivity(data.channelActivity || []);
+
+        // Activity heatmap
+        renderHeatmap(data.peakHours || []);
+
+        // Emoji stats
+        renderEmojiStats(data.topEmojis || []);
+
+    } catch (error) {
+        console.error('Error loading server stats:', error);
+        showError('top-messagers');
+        showError('channel-activity');
+        showError('activity-heatmap');
+        showError('emoji-stats');
+        showError('message-trend');
+    }
+}
+
+function formatMinutes(mins) {
+    if (mins >= 60) {
+        const hours = Math.floor(mins / 60);
+        return hours.toLocaleString() + 'h';
+    }
+    return mins.toLocaleString();
+}
+
+function renderMessageTrend(dailyMessages) {
+    const container = document.getElementById('message-trend');
+    if (!dailyMessages.length) {
+        container.innerHTML = '<div class="ss-empty"><i class="fas fa-chart-line"></i><p>No message data for this period</p></div>';
+        return;
+    }
+
+    const maxMessages = Math.max(...dailyMessages.map(d => d.messages));
+    const bars = dailyMessages.map(d => {
+        const height = maxMessages > 0 ? (d.messages / maxMessages) * 100 : 0;
+        const date = new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return `<div class="ss-sparkline-bar" style="height: ${Math.max(height, 5)}%;" title="${date}: ${d.messages.toLocaleString()} messages"></div>`;
+    }).join('');
+
+    const firstDate = new Date(dailyMessages[0].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const lastDate = new Date(dailyMessages[dailyMessages.length - 1].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    container.innerHTML = `
+        <div class="ss-sparkline">${bars}</div>
+        <div class="ss-trend-labels">
+            <span>${firstDate}</span>
+            <span>${lastDate}</span>
+        </div>
+    `;
+}
+
+function renderTopMessagers(messagers) {
+    const container = document.getElementById('top-messagers');
+    if (!messagers.length) {
+        container.innerHTML = '<div class="ss-empty"><i class="fas fa-inbox"></i><p>No message data for this period</p></div>';
+        return;
+    }
+
+    const html = messagers.map((user, i) => {
+        let posClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        return `
+            <div class="ss-rank-entry">
+                <div class="ss-rank-info">
+                    <div class="ss-rank-pos ${posClass}">${i + 1}</div>
+                    <div class="ss-rank-name"><i class="fas fa-user"></i>User ${user.user_id.slice(-6)}</div>
+                </div>
+                <div class="ss-rank-value">
+                    <span class="ss-rank-count">${user.total_messages.toLocaleString()}</span>
+                    <span class="ss-rank-label">msgs</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `<div class="ss-rank-list">${html}</div>`;
+}
+
+function renderChannelActivity(channels) {
+    const container = document.getElementById('channel-activity');
+    if (!channels.length) {
+        container.innerHTML = '<div class="ss-empty"><i class="fas fa-inbox"></i><p>No channel data for this period</p></div>';
+        return;
+    }
+
+    const html = channels.map((ch, i) => {
+        let posClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        return `
+            <div class="ss-rank-entry">
+                <div class="ss-rank-info">
+                    <div class="ss-rank-pos ${posClass}">${i + 1}</div>
+                    <div class="ss-rank-name"><i class="fas fa-hashtag"></i>${ch.channel_name || ch.channel_id}</div>
+                </div>
+                <div class="ss-rank-value">
+                    <span class="ss-rank-count">${ch.total_messages.toLocaleString()}</span>
+                    <span class="ss-rank-label">msgs</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `<div class="ss-rank-list">${html}</div>`;
+}
+
+function renderHeatmap(peakHours) {
+    const container = document.getElementById('activity-heatmap');
+
+    // Build heatmap data structure
+    const heatData = {};
+    let maxCount = 0;
+    peakHours.forEach(h => {
+        const key = `${h.day_of_week}-${h.hour_of_day}`;
+        heatData[key] = h.message_count;
+        if (h.message_count > maxCount) maxCount = h.message_count;
+    });
+
+    if (maxCount === 0) {
+        container.innerHTML = '<div class="ss-empty"><i class="fas fa-fire"></i><p>No activity data available yet</p></div>';
+        return;
+    }
+
+    // Build heatmap grid
+    let html = '<div class="ss-heatmap">';
+
+    // Header row (hours)
+    html += '<div class="ss-heatmap-header"></div>';
+    for (let h = 0; h < 24; h++) {
+        html += `<div class="ss-heatmap-header">${h % 6 === 0 ? h : ''}</div>`;
+    }
+
+    // Data rows
+    for (let d = 0; d < 7; d++) {
+        html += `<div class="ss-heatmap-day">${dayNames[d]}</div>`;
+        for (let h = 0; h < 24; h++) {
+            const count = heatData[`${d}-${h}`] || 0;
+            const level = getHeatLevel(count, maxCount);
+            html += `<div class="ss-heatmap-cell level-${level}" title="${dayNames[d]} ${h}:00 - ${count.toLocaleString()} messages"></div>`;
+        }
+    }
+
+    html += '</div>';
+
+    // Legend
+    html += `
+        <div class="ss-heatmap-legend">
+            <span>Less</span>
+            <div class="ss-heatmap-legend-cell" style="background: rgba(255,255,255,0.05);"></div>
+            <div class="ss-heatmap-legend-cell level-1" style="background: rgba(167,139,250,0.2);"></div>
+            <div class="ss-heatmap-legend-cell level-2" style="background: rgba(167,139,250,0.4);"></div>
+            <div class="ss-heatmap-legend-cell level-3" style="background: rgba(167,139,250,0.6);"></div>
+            <div class="ss-heatmap-legend-cell level-4" style="background: rgba(167,139,250,0.8);"></div>
+            <div class="ss-heatmap-legend-cell level-5" style="background: #a78bfa;"></div>
+            <span>More</span>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+function getHeatLevel(count, max) {
+    if (count === 0) return 0;
+    const pct = count / max;
+    if (pct <= 0.2) return 1;
+    if (pct <= 0.4) return 2;
+    if (pct <= 0.6) return 3;
+    if (pct <= 0.8) return 4;
+    return 5;
+}
+
+function renderEmojiStats(emojis) {
+    const container = document.getElementById('emoji-stats');
+    if (!emojis.length) {
+        container.innerHTML = '<div class="ss-empty"><i class="fas fa-smile"></i><p>No emoji usage data for this period</p></div>';
+        return;
+    }
+
+    const html = emojis.slice(0, 10).map(e => {
+        const display = e.is_custom ? `<img src="https://cdn.discordapp.com/emojis/${e.emoji_id}.webp?size=32" alt="${e.emoji_name}" style="width:24px;height:24px;">` : e.emoji_name;
+        return `
+            <div class="ss-emoji-item">
+                <div class="ss-emoji-display">${display}</div>
+                <div class="ss-emoji-count">${e.use_count.toLocaleString()}</div>
+                <div class="ss-emoji-name">${e.emoji_name || 'emoji'}</div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `<div class="ss-emoji-grid">${html}</div>`;
+}
+
+function showError(elementId) {
+    document.getElementById(elementId).innerHTML = '<div class="ss-error"><i class="fas fa-exclamation-triangle"></i><p>Error loading data</p></div>';
+}
+
+// Load stats on page load
+loadServerStats();
+</script>

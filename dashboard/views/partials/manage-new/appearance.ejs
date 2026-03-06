@@ -1,0 +1,160 @@
+<%# Bot Appearance - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="card">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-primary-500/10 rounded-lg">
+                <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Bot Appearance</h3>
+                <p class="text-sm text-gray-400">Customize how the bot appears in your server</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Appearance Form -->
+    <form id="appearance-form" class="space-y-6">
+        <!-- Bot Nickname -->
+        <div class="card">
+            <h4 class="text-lg font-semibold text-white mb-4">Bot Nickname</h4>
+            <div class="form-group">
+                <label class="form-label">Display Name</label>
+                <input type="text" name="bot_nickname" class="form-input w-full" value="<%= locals.settings?.bot_nickname || '' %>" placeholder="Leave blank for default">
+                <p class="form-hint">Customize the bot's display name in this server. Type "reset" to clear.</p>
+            </div>
+        </div>
+
+        <!-- Bot Avatar -->
+        <div class="card">
+            <h4 class="text-lg font-semibold text-white mb-4">Bot Avatar</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label">Avatar URL</label>
+                    <input type="url" name="bot_avatar_url" id="avatar-url-input" class="form-input w-full" value="<%= locals.settings?.bot_avatar_url || '' %>" placeholder="https://i.imgur.com/example.png">
+                    <p class="form-hint">Direct link to an image file</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Or Upload Image</label>
+                    <input type="file" name="bot_avatar_file" id="avatar-file-input" class="form-input w-full" accept="image/*">
+                    <p class="form-hint">PNG, JPG, or GIF (max 8MB)</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="checkbox" id="reset_bot_avatar" name="reset_bot_avatar" class="w-4 h-4 rounded border-dark-400 bg-dark-700 text-primary-500 focus:ring-primary-500">
+                <label for="reset_bot_avatar" class="text-sm text-gray-400">Reset to default avatar</label>
+            </div>
+        </div>
+
+        <!-- Embed Color -->
+        <div class="card">
+            <h4 class="text-lg font-semibold text-white mb-4">Embed Color</h4>
+            <div class="flex items-center gap-6">
+                <div class="relative">
+                    <input type="color" name="embed_color" id="embed-color-input" class="w-20 h-20 rounded-lg cursor-pointer border-2 border-dark-400 bg-dark-700" value="<%= locals.settings?.embed_color || '#a78bfa' %>">
+                </div>
+                <div>
+                    <div class="text-lg font-semibold text-white" id="color-hex-display"><%= locals.settings?.embed_color || '#a78bfa' %></div>
+                    <p class="text-sm text-gray-400">Color used for announcement embeds</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview -->
+        <div class="card">
+            <h4 class="text-lg font-semibold text-gray-500 uppercase text-sm tracking-wider mb-4">Preview</h4>
+            <div class="flex gap-3 p-4 bg-dark-700 rounded-lg" style="border-left: 4px solid <%= locals.settings?.embed_color || '#a78bfa' %>;" id="preview-embed">
+                <div class="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0" id="preview-avatar">
+                    <% if (locals.settings?.bot_avatar_url) { %>
+                        <img src="<%= settings.bot_avatar_url %>" class="w-10 h-10 rounded-full" alt="Bot Avatar">
+                    <% } else { %>
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                    <% } %>
+                </div>
+                <div class="flex-1">
+                    <div class="font-semibold text-white mb-2" id="preview-name"><%= locals.settings?.bot_nickname || 'CertiFried MultiTool' %></div>
+                    <div class="text-sm text-gray-400">This is how announcement embeds will appear with your custom settings</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex gap-3">
+            <button type="submit" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save Appearance Settings
+            </button>
+            <button type="button" onclick="location.reload()" class="btn btn-secondary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                Reset Form
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+// Live preview updates
+document.querySelector('input[name="bot_nickname"]')?.addEventListener('input', function(e) {
+    document.getElementById('preview-name').textContent = e.target.value || 'CertiFried MultiTool';
+});
+
+document.getElementById('embed-color-input')?.addEventListener('input', function(e) {
+    document.getElementById('color-hex-display').textContent = e.target.value.toUpperCase();
+    document.getElementById('preview-embed').style.borderLeftColor = e.target.value;
+});
+
+document.getElementById('avatar-url-input')?.addEventListener('input', function(e) {
+    const previewAvatar = document.getElementById('preview-avatar');
+    if (e.target.value) {
+        previewAvatar.innerHTML = `<img src="${e.target.value}" class="w-10 h-10 rounded-full object-cover" alt="Bot Avatar" onerror="this.style.display='none'">`;
+    } else {
+        previewAvatar.innerHTML = `
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+        `;
+    }
+});
+
+document.getElementById('avatar-file-input')?.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const previewAvatar = document.getElementById('preview-avatar');
+            previewAvatar.innerHTML = `<img src="${e.target.result}" class="w-10 h-10 rounded-full object-cover" alt="Bot Avatar">`;
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+// Form submission
+document.getElementById('appearance-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/appearance', {
+            method: 'PUT',
+            body: formData
+        });
+
+        if (response.ok) {
+            showToast('success', 'Appearance settings saved');
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save appearance settings');
+    }
+});
+</script>

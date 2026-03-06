@@ -1,0 +1,404 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-lock"></i>
+                <span>Quarantine System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Isolate problematic users with restricted permissions until issues are resolved
+            </div>
+        </div>
+    </div>
+
+    <!-- Quarantine Status Overview -->
+    <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">System Status</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= quarantineConfig && quarantineConfig.is_enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
+                <%= quarantineConfig && quarantineConfig.is_enabled ? 'Active' : 'Disabled' %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Quarantine Role</div>
+            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <% if (quarantineConfig && quarantineConfig.quarantine_role_id) { %>
+                    <% const qRole = roles.find(r => r.id === quarantineConfig.quarantine_role_id); %>
+                    <%= qRole ? qRole.name : 'Role not found' %>
+                <% } else { %>
+                    <span style="color: var(--color-text-muted);">Not Set</span>
+                <% } %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Quarantined Users</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);">
+                <%= quarantinedUsers ? quarantinedUsers.length : 0 %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-cog" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
+            Quarantine Configuration
+        </h3>
+        <form action="/manage/<%= guild.id %>/update-quarantine" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <div style="margin-bottom: var(--spacing-4);">
+                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <input class="form-check-input" type="checkbox" role="switch" id="quarantine-enabled" name="is_enabled" <%= quarantineConfig && quarantineConfig.is_enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
+                    <label class="form-check-label" for="quarantine-enabled" style="cursor: pointer; flex: 1;">
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Quarantine System</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Allow moderators to quarantine users using the /quarantine command</div>
+                    </label>
+                </div>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">
+                    <i class="fas fa-user-slash" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
+                    Quarantine Role
+                </label>
+                <select class="form-select" id="quarantine-role" name="quarantine_role_id" required>
+                    <option value="">-- Select a Role --</option>
+                    <% roles.forEach(role => { %>
+                        <option value="<%= role.id %>" <%= quarantineConfig && quarantineConfig.quarantine_role_id === role.id ? 'selected' : '' %>>
+                            @<%= role.name %>
+                        </option>
+                    <% }) %>
+                </select>
+                <div class="form-help">Users will be assigned this role when quarantined. Ensure this role has very limited permissions.</div>
+            </div>
+
+            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-warning); padding: var(--spacing-4); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4);">
+                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                    <i class="fas fa-exclamation-triangle" style="color: var(--color-warning); margin-right: var(--spacing-2);"></i>
+                    Important Notes:
+                </div>
+                <ul style="margin: 0; padding-left: var(--spacing-6); color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                    <li style="margin-bottom: var(--spacing-1);">When a user is quarantined, all their roles are removed and replaced with the quarantine role</li>
+                    <li style="margin-bottom: var(--spacing-1);">The quarantine role should have minimal permissions (view channels only)</li>
+                    <li style="margin-bottom: var(--spacing-1);">Create a dedicated quarantine channel that only quarantined users can access</li>
+                    <li>Use the /quarantine command to quarantine or release users</li>
+                </ul>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Quarantine Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Quarantined Users List -->
+    <div>
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-users" style="color: var(--color-warning); margin-right: var(--spacing-2);"></i>
+            Currently Quarantined Users
+        </h3>
+
+        <% if (quarantinedUsers && quarantinedUsers.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Quarantined By</th>
+                            <th>Reason</th>
+                            <th>Date</th>
+                            <th style="width: 150px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% quarantinedUsers.forEach(user => { %>
+                            <tr>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                        <% if (user.avatar_url) { %>
+                                            <img src="<%= user.avatar_url %>" alt="<%= user.username %>" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--color-dark-400);">
+                                        <% } else { %>
+                                            <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center; font-weight: var(--font-weight-bold); color: var(--color-text-muted);">
+                                                <%= user.username ? user.username.charAt(0).toUpperCase() : '?' %>
+                                            </div>
+                                        <% } %>
+                                        <div>
+                                            <div style="font-weight: var(--font-weight-medium); color: var(--color-text-primary);">
+                                                <%= user.username || 'Unknown User' %>
+                                            </div>
+                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                                ID: <%= user.user_id %>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                        <%= user.moderator_tag || user.moderator_id || 'System' %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary);">
+                                        <%= user.reason || 'No reason provided' %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                        <%= user.quarantined_at ? new Date(user.quarantined_at).toLocaleDateString() : 'Unknown' %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <form action="/manage/<%= guild.id %>/release-quarantine" method="POST" class="d-inline">
+                                        <input type="hidden" name="userId" value="<%= user.user_id %>">
+                                        <button type="submit" class="btn btn-sm btn-success" title="Release from quarantine">
+                                            <i class="fas fa-unlock"></i>
+                                            <span>Release</span>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-user-check"></i>
+                </div>
+                <div class="empty-state-title">No Quarantined Users</div>
+                <div class="empty-state-description">
+                    <% if (quarantineConfig && quarantineConfig.is_enabled) { %>
+                        All clear! No users are currently in quarantine.
+                    <% } else { %>
+                        Enable the quarantine system to start using this feature.
+                    <% } %>
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Usage Guide -->
+    <div style="margin-top: var(--spacing-6); background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-book" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
+            How to Use Quarantine
+        </h3>
+        <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+            <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md);">
+                <div style="font-weight: var(--font-weight-semibold); color: var(--color-primary-400); margin-bottom: var(--spacing-2);">
+                    <i class="fas fa-lock" style="margin-right: var(--spacing-2);"></i>
+                    Quarantine a User
+                </div>
+                <div style="font-family: var(--font-mono); background: var(--color-dark-800); padding: var(--spacing-3); border-radius: var(--radius-sm); margin-bottom: var(--spacing-2); color: var(--color-text-primary);">
+                    /quarantine user:@username enable:true
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                    Removes all roles and restricts the user to quarantine channels
+                </div>
+            </div>
+            <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md);">
+                <div style="font-weight: var(--font-weight-semibold); color: var(--color-success); margin-bottom: var(--spacing-2);">
+                    <i class="fas fa-unlock" style="margin-right: var(--spacing-2);"></i>
+                    Release a User
+                </div>
+                <div style="font-family: var(--font-mono); background: var(--color-dark-800); padding: var(--spacing-3); border-radius: var(--radius-sm); margin-bottom: var(--spacing-2); color: var(--color-text-primary);">
+                    /quarantine user:@username enable:false
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                    Removes the quarantine role and restores access
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);">
+            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                <i class="fas fa-lightbulb" style="color: var(--color-warning); margin-right: var(--spacing-2);"></i>
+                Best Practices:
+            </div>
+            <ul style="margin: 0; padding-left: var(--spacing-6); color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                <li style="margin-bottom: var(--spacing-1);">Set up a quarantine channel where quarantined users can appeal or discuss their situation</li>
+                <li style="margin-bottom: var(--spacing-1);">Configure the quarantine role to only have view permissions in the quarantine channel</li>
+                <li style="margin-bottom: var(--spacing-1);">Document your quarantine policy in your server rules</li>
+                <li>Use quarantine for cooling-off periods or investigation, not as a permanent punishment</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--color-dark-700);
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    color: var(--color-text-primary);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-control, .form-select {
+    width: 100%;
+    padding: var(--spacing-3);
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-base);
+}
+
+.form-control:focus, .form-select:focus {
+    outline: none;
+    border-color: var(--color-primary-500);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.form-check-input {
+    appearance: none;
+    background-color: var(--color-dark-500);
+    border: 2px solid var(--color-dark-400);
+    border-radius: 12px;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.form-check-input:checked {
+    background-color: var(--color-success);
+    border-color: var(--color-success);
+}
+
+.form-check-input::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    top: 1px;
+    left: 1px;
+    transition: transform 0.3s ease;
+}
+
+.form-check-input:checked::before {
+    transform: translateX(24px);
+}
+
+.form-check-label {
+    margin: 0;
+}
+
+.empty-state {
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-12) var(--spacing-8);
+    text-align: center;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+    opacity: 0.5;
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    max-width: 400px;
+    margin: 0 auto;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Add interactive feedback for the switch
+    const switchEl = document.getElementById('quarantine-enabled');
+
+    if (switchEl) {
+        switchEl.addEventListener('change', function() {
+            const label = this.closest('.form-check').querySelector('.form-check-label > div:first-child');
+            if (label) {
+                if (this.checked) {
+                    label.style.color = 'var(--color-success)';
+                } else {
+                    label.style.color = 'var(--color-text-primary)';
+                }
+            }
+        });
+
+        // Initialize state
+        const label = switchEl.closest('.form-check').querySelector('.form-check-label > div:first-child');
+        if (label && switchEl.checked) {
+            label.style.color = 'var(--color-success)';
+        }
+    }
+
+    // Confirm before releasing from quarantine
+    const releaseForms = document.querySelectorAll('form[action*="release-quarantine"]');
+    releaseForms.forEach(form => {
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Are you sure you want to release this user from quarantine?')) {
+                e.preventDefault();
+            }
+        });
+    });
+});
+</script>

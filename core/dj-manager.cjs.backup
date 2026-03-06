@@ -1,0 +1,557 @@
+"use strict";
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __generator = (this && this.__generator) || function (thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
+    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (g && (g = 0, op[0] && (_ = 0)), _) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+};
+var __spreadArray = (this && this.__spreadArray) || function (to, from, pack) {
+    if (pack || arguments.length === 2) for (var i = 0, l = from.length, ar; i < l; i++) {
+        if (ar || !(i in from)) {
+            if (!ar) ar = Array.prototype.slice.call(from, 0, i);
+            ar[i] = from[i];
+        }
+    }
+    return to.concat(ar || Array.prototype.slice.call(from));
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+var fs = require("fs");
+var path = require("path");
+var logger_1 = require("../utils/logger");
+var child_process_1 = require("child_process");
+var geminiApi = require("../utils/gemini-api.js");
+var musicMetrics = require("./music-metrics.js");
+var db_1 = require("../utils/db");
+// --- Piper TTS Configuration ---
+var PIPER_PATH = process.env.PIPER_PATH || '/root/.local/bin/piper';
+var PIPER_MODEL_DIR = process.env.PIPER_MODEL_DIR || '/root/CertiFriedAnnouncer/piper_models';
+var PIPER_DEFAULT_MODEL = process.env.PIPER_DEFAULT_MODEL || 'en/en_US/amy/medium/en_US-amy-medium.onnx';
+// --- FFmpeg Configuration ---
+var FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
+var DJManager = /** @class */ (function () {
+    function DJManager(client) {
+        var _this = this;
+        this.client = client;
+        this.player = client.player;
+        this.player.events.on("playerFinish", function (queue, finishedTrack) { return _this.onPlayerFinish(queue, finishedTrack); });
+        this.player.events.on("queueEnd", function (queue) { return _this.onQueueEnd(queue); });
+        this.player.events.on("playerError", function (queue, error) { return _this.onPlayerError(queue, error); });
+    }
+    DJManager.prototype.getDJVoiceModel = function (guildId) {
+        return __awaiter(this, void 0, void 0, function () {
+            var config, voiceMap, error_1;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, db_1.default.execute("SELECT dj_voice FROM music_config WHERE guild_id = ?", [guildId])];
+                    case 1:
+                        config = (_a.sent())[0][0];
+                        if (config && config.dj_voice) {
+                            // If dj_voice contains a path separator or .onnx extension, use it as-is
+                            if (config.dj_voice.includes('/') || config.dj_voice.includes('.onnx')) {
+                                return [2 /*return*/, config.dj_voice];
+                            }
+                            voiceMap = this.getAllVoices();
+                            return [2 /*return*/, voiceMap[config.dj_voice] || PIPER_DEFAULT_MODEL];
+                        }
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_1 = _a.sent();
+                        logger_1.default.warn("[DJ] Failed to fetch DJ voice for guild ".concat(guildId, ", using default: ").concat(error_1.message));
+                        return [3 /*break*/, 3];
+                    case 3: return [2 /*return*/, PIPER_DEFAULT_MODEL];
+                }
+            });
+        });
+    };
+    DJManager.prototype.getAllVoices = function () {
+        return {
+            // US English - Female Voices
+            'female': 'en_US/amy/medium/en_US-amy-medium.onnx',
+            'amy': 'en_US/amy/medium/en_US-amy-medium.onnx',
+            'amy-low': 'en_US/amy/low/en_US-amy-low.onnx',
+            'kristin': 'en_US/kristin/medium/en_US-kristin-medium.onnx',
+            'kathleen': 'en_US/kathleen/low/en_US-kathleen-low.onnx',
+            'hfc-female': 'en_US/hfc_female/medium/en_US-hfc_female-medium.onnx',
+            'ljspeech': 'en_US/ljspeech/medium/en_US-ljspeech-medium.onnx',
+            'ljspeech-high': 'en_US/ljspeech/high/en_US-ljspeech-high.onnx',
+            'lessac': 'en_US/lessac/medium/en_US-lessac-medium.onnx',
+            'lessac-high': 'en_US/lessac/high/en_US-lessac-high.onnx',
+            'lessac-low': 'en_US/lessac/low/en_US-lessac-low.onnx',
+            // US English - Male Voices
+            'male': 'en_US/joe/medium/en_US-joe-medium.onnx',
+            'joe': 'en_US/joe/medium/en_US-joe-medium.onnx',
+            'bryce': 'en_US/bryce/medium/en_US-bryce-medium.onnx',
+            'danny': 'en_US/danny/low/en_US-danny-low.onnx',
+            'john': 'en_US/john/medium/en_US-john-medium.onnx',
+            'hfc-male': 'en_US/hfc_male/medium/en_US-hfc_male-medium.onnx',
+            'ryan': 'en_US/ryan/medium/en_US-ryan-medium.onnx',
+            'ryan-high': 'en_US/ryan/high/en_US-ryan-high.onnx',
+            'ryan-low': 'en_US/ryan/low/en_US-ryan-low.onnx',
+            'sam': 'en_US/sam/medium/en_US-sam-medium.onnx',
+            'norman': 'en_US/norman/medium/en_US-norman-medium.onnx',
+            // US English - Neutral/Other Voices
+            'arctic': 'en_US/arctic/medium/en_US-arctic-medium.onnx',
+            'kusal': 'en_US/kusal/medium/en_US-kusal-medium.onnx',
+            'l2arctic': 'en_US/l2arctic/medium/en_US-l2arctic-medium.onnx',
+            'libritts': 'en_US/libritts/high/en_US-libritts-high.onnx',
+            'libritts-r': 'en_US/libritts_r/medium/en_US-libritts_r-medium.onnx',
+            'reza': 'en_US/reza_ibrahim/medium/en_US-reza_ibrahim-medium.onnx',
+            // UK English - Female Voices
+            'uk-female': 'en_GB/alba/medium/en_GB-alba-medium.onnx',
+            'alba': 'en_GB/alba/medium/en_GB-alba-medium.onnx',
+            'cori': 'en_GB/cori/medium/en_GB-cori-medium.onnx',
+            'cori-high': 'en_GB/cori/high/en_GB-cori-high.onnx',
+            'jenny': 'en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium.onnx',
+            'southern-english-female': 'en_GB/southern_english_female/low/en_GB-southern_english_female-low.onnx',
+            // UK English - Male Voices
+            'uk-male': 'en_GB/alan/medium/en_GB-alan-medium.onnx',
+            'alan': 'en_GB/alan/medium/en_GB-alan-medium.onnx',
+            'alan-low': 'en_GB/alan/low/en_GB-alan-low.onnx',
+            'northern-english-male': 'en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx',
+            // UK English - Neutral/Other Voices
+            'aru': 'en_GB/aru/medium/en_GB-aru-medium.onnx',
+            'semaine': 'en_GB/semaine/medium/en_GB-semaine-medium.onnx',
+            'vctk': 'en_GB/vctk/medium/en_GB-vctk-medium.onnx'
+        };
+    };
+    DJManager.prototype.getVoicesList = function () {
+        var voices = this.getAllVoices();
+        return Object.keys(voices).map(function (key) { return ({
+            name: key,
+            path: voices[key],
+            locale: voices[key].startsWith('en_US/') ? 'US English' : 'UK English',
+            quality: voices[key].includes('/high/') ? 'High' : voices[key].includes('/low/') ? 'Low' : 'Medium'
+        }); });
+    };
+    DJManager.prototype.generatePiperAudio = function (text, modelName, finalOutputPath) {
+        return __awaiter(this, void 0, void 0, function () {
+            var modelPath;
+            return __generator(this, function (_a) {
+                modelPath = path.join(PIPER_MODEL_DIR, modelName);
+                if (!fs.existsSync(modelPath)) {
+                    throw new Error("Piper model not found at: ".concat(modelPath));
+                }
+                return [2 /*return*/, new Promise(function (resolve, reject) {
+                        logger_1.default.info("[DJ/Pipeline] Starting Piper -> FFmpeg audio generation for: ".concat(finalOutputPath));
+                        var piper = (0, child_process_1.spawn)(PIPER_PATH, ['--model', modelPath, '--output-raw']);
+                        var ffmpeg = (0, child_process_1.spawn)(FFMPEG_PATH, ['-f', 's16le', '-ar', '22050', '-ac', '1', '-i', 'pipe:0', '-c:a', 'libopus', '-b:a', '64k', '-y', finalOutputPath]);
+                        piper.stdin.write(text);
+                        piper.stdin.end();
+                        piper.stdout.pipe(ffmpeg.stdin);
+                        var piperStderr = '';
+                        piper.stderr.on('data', function (data) { piperStderr += data; });
+                        var ffmpegStderr = '';
+                        ffmpeg.stderr.on('data', function (data) { ffmpegStderr += data; });
+                        piper.on('error', function (err) { logger_1.default.error("[DJ/Piper] Failed to start Piper process: ".concat(err.message)); reject(err); });
+                        ffmpeg.on('error', function (err) { logger_1.default.error("[DJ/FFmpeg] Failed to start FFmpeg process: ".concat(err.message)); reject(err); });
+                        ffmpeg.on('close', function (code) {
+                            if (code === 0) {
+                                logger_1.default.info("[DJ/FFmpeg] FFmpeg process finished successfully. Audio saved to ".concat(finalOutputPath));
+                                resolve(finalOutputPath);
+                            }
+                            else {
+                                logger_1.default.error("[DJ/FFmpeg] FFmpeg process exited with code ".concat(code, ". Stderr: ").concat(ffmpegStderr));
+                                logger_1.default.error("[DJ/Piper] Piper Stderr (for context): ".concat(piperStderr));
+                                reject(new Error("FFmpeg failed with code ".concat(code)));
+                            }
+                        });
+                    })];
+            });
+        });
+    };
+    DJManager.prototype.playPlaylistIntro = function (queue_1, playlistTracks_1) {
+        return __awaiter(this, arguments, void 0, function (queue, playlistTracks, addToEnd) {
+            var commentaryText, script, piperTempFilePath, audioFilePath, djVoiceModel, piperError_1, commentarySearchResult, commentaryTrack, tracksToAdd, error_2;
+            var _a, _b, _c, _d, _e, _f;
+            if (addToEnd === void 0) { addToEnd = false; }
+            return __generator(this, function (_g) {
+                switch (_g.label) {
+                    case 0:
+                        logger_1.default.info("[DJ] playPlaylistIntro triggered for guild ".concat(queue.guild.id, "."));
+                        if (!playlistTracks || playlistTracks.length === 0) {
+                            logger_1.default.warn("[DJ] No playlist tracks provided for intro commentary for guild ".concat(queue.guild.id, "."));
+                            return [2 /*return*/];
+                        }
+                        if (!queue.metadata.djMode) return [3 /*break*/, 11];
+                        _g.label = 1;
+                    case 1:
+                        _g.trys.push([1, 9, , 10]);
+                        // Validate playlistTracks before proceeding
+                        if (!Array.isArray(playlistTracks) || playlistTracks.length === 0) {
+                            logger_1.default.warn("[DJ] Invalid playlist tracks provided for guild ".concat(queue.guild.id, ". Skipping commentary."));
+                            return [2 /*return*/];
+                        }
+                        return [4 /*yield*/, geminiApi.generatePlaylistCommentary(playlistTracks)];
+                    case 2:
+                        commentaryText = _g.sent();
+                        script = commentaryText || "Here's your upcoming playlist!";
+                        logger_1.default.info("[DJ] Generated intro script for guild ".concat(queue.guild.id, ": ").concat(script));
+                        piperTempFilePath = path.join(__dirname, "../temp_audio/".concat(queue.guild.id, "_intro_commentary_piper.opus"));
+                        audioFilePath = void 0;
+                        _g.label = 3;
+                    case 3:
+                        _g.trys.push([3, 6, , 7]);
+                        return [4 /*yield*/, this.getDJVoiceModel(queue.guild.id)];
+                    case 4:
+                        djVoiceModel = _g.sent();
+                        return [4 /*yield*/, this.generatePiperAudio(script, djVoiceModel, piperTempFilePath)];
+                    case 5:
+                        audioFilePath = _g.sent();
+                        return [3 /*break*/, 7];
+                    case 6:
+                        piperError_1 = _g.sent();
+                        logger_1.default.error("[DJ] Audio generation pipeline failed for intro commentary: ".concat(piperError_1.message, ". Adding tracks without intro."));
+                        queue.addTrack(playlistTracks); // Add tracks directly if commentary fails
+                        (_b = (_a = this.client.musicPanelManager) === null || _a === void 0 ? void 0 : _a.get(queue.guild.id)) === null || _b === void 0 ? void 0 : _b.updatePanel();
+                        return [2 /*return*/];
+                    case 7: return [4 /*yield*/, this.player.search(audioFilePath, {
+                            requestedBy: this.client.user,
+                            metadata: { isDJCommentary: true }
+                        })];
+                    case 8:
+                        commentarySearchResult = _g.sent();
+                        if (!commentarySearchResult || !commentarySearchResult.hasTracks()) {
+                            logger_1.default.error("[DJ] Failed to resolve commentary track from local file: ".concat(audioFilePath, ". Adding tracks without intro."));
+                            queue.addTrack(playlistTracks);
+                            (_d = (_c = this.client.musicPanelManager) === null || _c === void 0 ? void 0 : _c.get(queue.guild.id)) === null || _d === void 0 ? void 0 : _d.updatePanel();
+                            return [2 /*return*/];
+                        }
+                        commentaryTrack = commentarySearchResult.tracks[0];
+                        commentaryTrack.title = 'DJ Playlist Intro';
+                        commentaryTrack.description = 'DJ Intro for upcoming playlist';
+                        commentaryTrack.author = 'DJ Bot';
+                        commentaryTrack.thumbnail = 'https://i.imgur.com/GBp9Ahl.png';
+                        tracksToAdd = __spreadArray([commentaryTrack], playlistTracks, true);
+                        queue.addTrack(tracksToAdd);
+                        logger_1.default.info("[DJ] Added commentary and ".concat(playlistTracks.length, " playlist tracks."));
+                        return [3 /*break*/, 10];
+                    case 9:
+                        error_2 = _g.sent();
+                        logger_1.default.error("[DJ] Failed to generate or inject intro commentary for guild ".concat(queue.guild.id, ":"), { error: error_2.message, stack: error_2.stack });
+                        // Ensure tracks are added even if commentary completely fails
+                        try {
+                            queue.addTrack(playlistTracks);
+                        }
+                        catch (addError) {
+                            logger_1.default.error("[DJ] Critical error: Failed to add tracks after commentary failure:", { error: addError.message, stack: addError.stack });
+                        }
+                        return [3 /*break*/, 10];
+                    case 10: return [3 /*break*/, 12];
+                    case 11:
+                        // If not in DJ mode, just add the tracks.
+                        queue.addTrack(playlistTracks);
+                        _g.label = 12;
+                    case 12:
+                        (_f = (_e = this.client.musicPanelManager) === null || _e === void 0 ? void 0 : _e.get(queue.guild.id)) === null || _f === void 0 ? void 0 : _f.updatePanel();
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    DJManager.prototype.playSkipBanter = function (queue, skippedTrack, skipper) {
+        return __awaiter(this, void 0, void 0, function () {
+            var requester, metrics, commentaryText, filePath, djVoiceModel, audioFilePath, searchResult, banterTrack, error_3;
+            var _a, _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        if (!queue.metadata.djMode)
+                            return [2 /*return*/];
+                        _c.label = 1;
+                    case 1:
+                        _c.trys.push([1, 10, 11, 12]);
+                        return [4 /*yield*/, musicMetrics.incrementSkipButtonPresses(queue.guild.id, skipper.id)];
+                    case 2:
+                        _c.sent();
+                        requester = skippedTrack.requestedBy;
+                        if (!requester) return [3 /*break*/, 4];
+                        return [4 /*yield*/, musicMetrics.incrementSkipCount(skippedTrack.url, queue.guild.id, requester.id)];
+                    case 3:
+                        _c.sent();
+                        _c.label = 4;
+                    case 4: return [4 /*yield*/, musicMetrics.getMusicMetrics(skippedTrack.url, queue.guild.id, skipper.id)];
+                    case 5:
+                        metrics = _c.sent();
+                        return [4 /*yield*/, geminiApi.generatePassiveAggressiveCommentary(metrics)];
+                    case 6:
+                        commentaryText = _c.sent();
+                        filePath = path.join(__dirname, "../temp_audio/".concat(queue.guild.id, "_skip_banter.opus"));
+                        return [4 /*yield*/, this.getDJVoiceModel(queue.guild.id)];
+                    case 7:
+                        djVoiceModel = _c.sent();
+                        return [4 /*yield*/, this.generatePiperAudio(commentaryText, djVoiceModel, filePath)];
+                    case 8:
+                        audioFilePath = _c.sent();
+                        return [4 /*yield*/, this.player.search(audioFilePath, {
+                                requestedBy: this.client.user,
+                                metadata: { isDJCommentary: true, isSkipBanter: true }
+                            })];
+                    case 9:
+                        searchResult = _c.sent();
+                        if (searchResult.hasTracks()) {
+                            banterTrack = searchResult.tracks[0];
+                            banterTrack.title = 'DJ Banter';
+                            queue.insertTrack(banterTrack, 0);
+                            logger_1.default.info("[DJ] Inserted skip banter for guild ".concat(queue.guild.id, "."));
+                        }
+                        return [3 /*break*/, 12];
+                    case 10:
+                        error_3 = _c.sent();
+                        logger_1.default.error("[DJ] Failed to play skip banter for guild ".concat(queue.guild.id, ":"), { error: error_3.message, stack: error_3.stack });
+                        return [3 /*break*/, 12];
+                    case 11:
+                        (_b = (_a = this.client.musicPanelManager) === null || _a === void 0 ? void 0 : _a.get(queue.guild.id)) === null || _b === void 0 ? void 0 : _b.updatePanel();
+                        return [7 /*endfinally*/];
+                    case 12: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    DJManager.prototype.onPlayerFinish = function (queue, finishedTrack) {
+        return __awaiter(this, void 0, void 0, function () {
+            var localPath_1, requester, djInitiatorId, finalUserId;
+            var _this = this;
+            var _a, _b, _c, _d, _e;
+            return __generator(this, function (_f) {
+                switch (_f.label) {
+                    case 0:
+                        logger_1.default.info("[DJ] onPlayerFinish event triggered for guild ".concat(queue.guild.id, ". Track: ").concat(finishedTrack.title, ", Queue Size: ").concat(queue.tracks.size));
+                        (_b = (_a = this.client.musicPanelManager) === null || _a === void 0 ? void 0 : _a.get(queue.guild.id)) === null || _b === void 0 ? void 0 : _b.updatePanel();
+                        if (!(((_c = finishedTrack.metadata) === null || _c === void 0 ? void 0 : _c.isDJCommentary) || ((_d = finishedTrack.metadata) === null || _d === void 0 ? void 0 : _d.isSkipBanter))) return [3 /*break*/, 1];
+                        localPath_1 = finishedTrack.url;
+                        if (localPath_1 && fs.existsSync(localPath_1)) {
+                            fs.unlink(localPath_1, function (err) {
+                                if (err)
+                                    logger_1.default.error("[Cleanup] Failed to delete commentary temp file: ".concat(localPath_1), err.message);
+                                else
+                                    logger_1.default.info("[Cleanup] Deleted commentary temp file: ".concat(localPath_1));
+                            });
+                        }
+                        return [3 /*break*/, 3];
+                    case 1:
+                        if (!finishedTrack.requestedBy) return [3 /*break*/, 3];
+                        requester = finishedTrack.requestedBy;
+                        djInitiatorId = (_e = queue.metadata) === null || _e === void 0 ? void 0 : _e.djInitiatorId;
+                        finalUserId = (requester.id === this.client.user.id && djInitiatorId) ? djInitiatorId : requester.id;
+                        return [4 /*yield*/, musicMetrics.incrementPlayCount(finishedTrack.url, queue.guild.id, finalUserId)];
+                    case 2:
+                        _f.sent();
+                        _f.label = 3;
+                    case 3:
+                        if (queue.tracks.size > 0 && queue.tracks.size <= 3 && queue.metadata.djMode && !queue.metadata.isGenerating) {
+                            logger_1.default.info("[DJ] Queue nearing end (".concat(queue.tracks.size, " tracks left). Triggering onQueueEnd to pre-fetch next playlist."));
+                            this.onQueueEnd(queue).catch(function (e) { return logger_1.default.error("[DJ] Error during pre-emptive onQueueEnd: ".concat(e.message)); });
+                        }
+                        else if (queue.tracks.size === 0 && queue.metadata.djMode) {
+                            logger_1.default.info("[DJ] Queue is empty after track finish. Manually triggering onQueueEnd logic.");
+                            setTimeout(function () { return _this.onQueueEnd(queue); }, 500);
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    DJManager.prototype.onQueueEnd = function (queue) {
+        return __awaiter(this, void 0, void 0, function () {
+            var panel, shouldAddToEnd, _a, inputSong, inputArtist, inputGenre, playedTracks, djInitiatorId, prompt_1, djUser_1, channel, ytExtractor, videoInfo, error_4, geminiRecommendedTracks, BATCH_SIZE, resolvedTracks, i, batch, batchPromises, batchResults, channel, channel;
+            var _this = this;
+            var _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        logger_1.default.info("[DJ] queueEnd event triggered for guild ".concat(queue.guild.id, "."));
+                        panel = (_b = this.client.musicPanelManager) === null || _b === void 0 ? void 0 : _b.get(queue.guild.id);
+                        if (queue.metadata.isGenerating) {
+                            logger_1.default.warn("[DJ] Playlist generation is already in progress for guild ".concat(queue.guild.id, ". Skipping."));
+                            return [2 /*return*/];
+                        }
+                        if (!queue.metadata.djMode) return [3 /*break*/, 29];
+                        shouldAddToEnd = queue.tracks.size > 0;
+                        _c.label = 1;
+                    case 1:
+                        _c.trys.push([1, , 26, 29]);
+                        queue.metadata.isGenerating = true;
+                        if (!panel) return [3 /*break*/, 3];
+                        return [4 /*yield*/, panel.updatePanel()];
+                    case 2:
+                        _c.sent();
+                        _c.label = 3;
+                    case 3:
+                        logger_1.default.info("[DJ] DJ mode is active. Generating new playlist. addToEnd: ".concat(shouldAddToEnd));
+                        _a = queue.metadata, inputSong = _a.inputSong, inputArtist = _a.inputArtist, inputGenre = _a.inputGenre, playedTracks = _a.playedTracks, djInitiatorId = _a.djInitiatorId, prompt_1 = _a.prompt;
+                        return [4 /*yield*/, this.client.users.fetch(djInitiatorId).catch(function () { return null; })];
+                    case 4:
+                        djUser_1 = _c.sent();
+                        if (!!djUser_1) return [3 /*break*/, 6];
+                        logger_1.default.error("[DJ] Could not fetch the DJ initiator user (ID: ".concat(djInitiatorId, "). Ending session."));
+                        return [4 /*yield*/, this.client.channels.cache.get(queue.metadata.channelId)];
+                    case 5:
+                        channel = _c.sent();
+                        if (channel && channel.isTextBased())
+                            channel.send("🎧 | Could not identify the original DJ. Ending the session.");
+                        if (queue.connection)
+                            queue.delete();
+                        return [2 /*return*/];
+                    case 6:
+                        if (!(prompt_1 && (prompt_1.includes('youtube.com') || prompt_1.includes('youtu.be')))) return [3 /*break*/, 11];
+                        logger_1.default.info("[DJ] Detected YouTube URL in prompt: ".concat(prompt_1, ". Extracting video info..."));
+                        _c.label = 7;
+                    case 7:
+                        _c.trys.push([7, 10, , 11]);
+                        ytExtractor = this.player.extractors.get('com.certifried.ytdlp') ||
+                            this.player.extractors.get('com.certifried.playwright-youtube');
+                        if (!(ytExtractor && ytExtractor.getVideoInfo)) return [3 /*break*/, 9];
+                        return [4 /*yield*/, ytExtractor.getVideoInfo(prompt_1)];
+                    case 8:
+                        videoInfo = _c.sent();
+                        if (videoInfo && videoInfo.title && videoInfo.author) {
+                            logger_1.default.info("[DJ] Extracted video info: \"".concat(videoInfo.title, "\" by \"").concat(videoInfo.author, "\""));
+                            // Use the extracted video info as seed song/artist instead of URL
+                            inputSong = videoInfo.title;
+                            inputArtist = videoInfo.author;
+                            prompt_1 = null; // Clear the prompt so it uses song/artist instead
+                        }
+                        _c.label = 9;
+                    case 9: return [3 /*break*/, 11];
+                    case 10:
+                        error_4 = _c.sent();
+                        logger_1.default.error("[DJ] Failed to extract YouTube video info: ".concat(error_4.message, ". Using prompt as-is."));
+                        return [3 /*break*/, 11];
+                    case 11: return [4 /*yield*/, geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre, playedTracks, prompt_1)];
+                    case 12:
+                        geminiRecommendedTracks = _c.sent();
+                        if (!(geminiRecommendedTracks && geminiRecommendedTracks.length > 0)) return [3 /*break*/, 23];
+                        BATCH_SIZE = 3;
+                        resolvedTracks = [];
+                        i = 0;
+                        _c.label = 13;
+                    case 13:
+                        if (!(i < geminiRecommendedTracks.length)) return [3 /*break*/, 16];
+                        batch = geminiRecommendedTracks.slice(i, i + BATCH_SIZE);
+                        batchPromises = batch.map(function (recTrack) { return __awaiter(_this, void 0, void 0, function () {
+                            var query, searchResult, track;
+                            return __generator(this, function (_a) {
+                                switch (_a.label) {
+                                    case 0:
+                                        query = "".concat(recTrack.title, " ").concat(recTrack.artist);
+                                        return [4 /*yield*/, this.player.search(query, { requestedBy: djUser_1, metadata: { artist: recTrack.artist } })];
+                                    case 1:
+                                        searchResult = _a.sent();
+                                        if (searchResult.hasTracks()) {
+                                            track = searchResult.tracks[0];
+                                            if (!track.url.includes('youtube.com/shorts'))
+                                                return [2 /*return*/, track];
+                                        }
+                                        return [2 /*return*/, null];
+                                }
+                            });
+                        }); });
+                        return [4 /*yield*/, Promise.all(batchPromises)];
+                    case 14:
+                        batchResults = _c.sent();
+                        resolvedTracks.push.apply(resolvedTracks, batchResults.filter(function (track) { return track !== null; }));
+                        logger_1.default.info("[DJ] Processed batch ".concat(Math.floor(i / BATCH_SIZE) + 1, "/").concat(Math.ceil(geminiRecommendedTracks.length / BATCH_SIZE), " (").concat(resolvedTracks.length, " tracks found so far)"));
+                        _c.label = 15;
+                    case 15:
+                        i += BATCH_SIZE;
+                        return [3 /*break*/, 13];
+                    case 16:
+                        if (!(resolvedTracks.length > 0)) return [3 /*break*/, 20];
+                        playedTracks.push.apply(playedTracks, resolvedTracks.map(function (t) { return t.title; }));
+                        return [4 /*yield*/, this.playPlaylistIntro(queue, resolvedTracks, shouldAddToEnd)];
+                    case 17:
+                        _c.sent();
+                        if (!(!queue.isPlaying() && !shouldAddToEnd)) return [3 /*break*/, 19];
+                        return [4 /*yield*/, queue.node.play()];
+                    case 18:
+                        _c.sent();
+                        _c.label = 19;
+                    case 19: return [3 /*break*/, 22];
+                    case 20:
+                        logger_1.default.warn("[DJ] No playable tracks found for new recommendations.");
+                        return [4 /*yield*/, this.client.channels.cache.get(queue.metadata.channelId)];
+                    case 21:
+                        channel = _c.sent();
+                        if (channel && channel.isTextBased())
+                            channel.send("🎧 | The AI DJ has run out of new recommendations. Ending the session.");
+                        if (queue.connection)
+                            queue.delete();
+                        _c.label = 22;
+                    case 22: return [3 /*break*/, 25];
+                    case 23:
+                        logger_1.default.info("[DJ] Gemini AI did not return new recommendations. Ending DJ session.");
+                        return [4 /*yield*/, this.client.channels.cache.get(queue.metadata.channelId)];
+                    case 24:
+                        channel = _c.sent();
+                        if (channel && channel.isTextBased())
+                            channel.send("🎧 | The AI DJ has run out of new recommendations. Ending the session.");
+                        if (queue.connection)
+                            queue.delete();
+                        _c.label = 25;
+                    case 25: return [3 /*break*/, 29];
+                    case 26:
+                        queue.metadata.isGenerating = false;
+                        if (!panel) return [3 /*break*/, 28];
+                        return [4 /*yield*/, panel.updatePanel()];
+                    case 27:
+                        _c.sent();
+                        _c.label = 28;
+                    case 28: return [7 /*endfinally*/];
+                    case 29: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    DJManager.prototype.onPlayerError = function (queue, error) {
+        return __awaiter(this, void 0, void 0, function () {
+            var channel;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        logger_1.default.error("[Player Error] Guild: ".concat(queue.guild.id, ", Error: ").concat(error.message));
+                        return [4 /*yield*/, this.client.channels.cache.get(queue.metadata.channelId)];
+                    case 1:
+                        channel = _a.sent();
+                        if (channel && channel.isTextBased()) {
+                            channel.send("\uD83C\uDFA7 | Encountered an error with a track and had to skip it. Sorry about that!");
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    return DJManager;
+}());
+exports.default = DJManager;

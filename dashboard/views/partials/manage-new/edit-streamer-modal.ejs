@@ -1,0 +1,399 @@
+<%# Edit Streamer Modal - Tailwind Version %>
+
+<div id="edit-streamer-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-4xl max-h-[90vh] flex flex-col">
+        <form id="edit-streamer-form" class="flex flex-col h-full">
+            <div class="modal-header flex-shrink-0">
+                <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                    Edit Streamer: <span id="edit-streamer-name" class="text-primary-400"></span>
+                </h3>
+                <button type="button" onclick="closeEditStreamerModal()" class="text-gray-400 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body flex-1 overflow-y-auto space-y-6">
+                <input type="hidden" name="consolidated_streamer_id" id="edit-consolidated-streamer-id">
+
+                <!-- Discord Link Section -->
+                <div class="form-group">
+                    <label class="form-label flex items-center gap-2">
+                        <svg class="w-4 h-4 text-primary-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03z"/>
+                        </svg>
+                        Linked Discord User (Optional)
+                    </label>
+                    <input type="text" name="discord_user_id" id="edit-discord-user-id" class="form-input w-full" placeholder="Discord User ID (e.g., 123456789012345678)">
+                    <p class="form-hint">Link this streamer to a Discord user for additional features</p>
+                </div>
+
+                <hr class="border-dark-400">
+
+                <!-- Subscriptions Section -->
+                <div>
+                    <h4 class="text-base font-semibold text-white mb-2 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                        </svg>
+                        Announcement Subscriptions
+                    </h4>
+                    <p class="text-sm text-gray-400 mb-4">Manage individual platform subscriptions and their announcement settings</p>
+
+                    <div id="subscriptions-container" class="space-y-4">
+                        <!-- Subscriptions populated by JS -->
+                    </div>
+                </div>
+
+                <hr class="border-dark-400">
+
+                <!-- Add Platform Section -->
+                <div>
+                    <h4 class="text-base font-semibold text-white mb-2 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                        </svg>
+                        Add Additional Platform
+                    </h4>
+                    <p class="text-sm text-gray-400 mb-4">Link another platform account to this streamer</p>
+
+                    <div class="p-4 bg-dark-700 rounded-lg space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="form-group">
+                                <label class="form-label">Platform</label>
+                                <select id="add-platform" class="form-input w-full">
+                                    <option value="">-- Select Platform --</option>
+                                    <option value="twitch">Twitch</option>
+                                    <option value="youtube">YouTube</option>
+                                    <option value="kick">Kick</option>
+                                    <option value="tiktok">TikTok</option>
+                                    <option value="trovo">Trovo</option>
+                                    <option value="facebook">Facebook</option>
+                                    <option value="instagram">Instagram</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Username</label>
+                                <input type="text" id="add-username" class="form-input w-full" placeholder="Platform username">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Announcement Channel</label>
+                                <select id="add-channel" class="form-input w-full">
+                                    <option value="">-- Use Server Default --</option>
+                                    <% channels.forEach(channel => { %>
+                                        <option value="<%= channel.id %>"># <%= channel.name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="button" id="add-platform-btn" class="btn btn-success">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Add Platform
+                        </button>
+                    </div>
+                </div>
+
+                <hr class="border-dark-400">
+
+                <!-- Moderation Section -->
+                <div class="p-4 bg-accent-red/5 rounded-lg border border-accent-red/20">
+                    <h4 class="text-base font-semibold text-white mb-2 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-accent-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        Moderation Controls
+                    </h4>
+                    <p class="text-sm text-gray-400 mb-4">Blacklisting will remove all streamer data and prevent them from being re-added to this server</p>
+                    <div id="blacklist-controls">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer flex-shrink-0">
+                <button type="button" onclick="closeEditStreamerModal()" class="btn btn-secondary">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const editChannels = <%- JSON.stringify(channels) %>;
+const editRoles = <%- JSON.stringify(roles) %>;
+let currentEditStreamer = null;
+
+function openEditStreamerModal(streamer) {
+    currentEditStreamer = streamer;
+    document.getElementById('edit-streamer-name').textContent = streamer.name;
+    document.getElementById('edit-consolidated-streamer-id').value = streamer.id;
+    document.getElementById('edit-discord-user-id').value = streamer.discord_user_id || '';
+
+    buildSubscriptions(streamer);
+    buildBlacklistControls(streamer);
+
+    document.getElementById('edit-streamer-modal').classList.remove('hidden');
+}
+
+function closeEditStreamerModal() {
+    document.getElementById('edit-streamer-modal').classList.add('hidden');
+}
+
+function buildSubscriptions(streamer) {
+    const container = document.getElementById('subscriptions-container');
+    container.innerHTML = '';
+
+    if (!streamer.subscriptions || streamer.subscriptions.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+                <svg class="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                </svg>
+                <p>No announcement subscriptions configured for this streamer</p>
+            </div>
+        `;
+        return;
+    }
+
+    streamer.subscriptions.forEach(sub => {
+        const subId = sub.subscription_id;
+        const channelName = editChannels.find(c => c.id == sub.announcement_channel_id)?.name || 'Server Default';
+
+        let channelOptions = '<option value="">-- Use Server Default --</option>';
+        editChannels.forEach(c => {
+            channelOptions += `<option value="${c.id}" ${sub.announcement_channel_id == c.id ? 'selected' : ''}># ${c.name}</option>`;
+        });
+
+        let roleOptions = '<option value="">-- None --</option>';
+        editRoles.forEach(r => {
+            roleOptions += `<option value="${r.id}" ${sub.live_role_id == r.id ? 'selected' : ''}>${r.name}</option>`;
+        });
+
+        const card = document.createElement('div');
+        card.className = 'p-4 bg-dark-700 rounded-lg border border-dark-400';
+        card.id = `sub-card-${subId}`;
+        card.innerHTML = `
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-dark-500">
+                <div class="flex items-center gap-2">
+                    <span class="px-2 py-1 text-xs font-bold rounded bg-purple-500/20 text-purple-400 uppercase">${sub.platform}</span>
+                    <span class="text-gray-300">${sub.platform_username || streamer.name}</span>
+                    <span class="text-gray-500">in</span>
+                    <span class="text-white font-medium">#${channelName}</span>
+                </div>
+                <button type="button" onclick="deleteSubscription('${subId}')" class="btn btn-danger btn-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                    Delete
+                </button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Announcement Channel</label>
+                    <select name="subscriptions[${subId}][announcement_channel_id]" class="form-input w-full">${channelOptions}</select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Live Role</label>
+                    <select name="subscriptions[${subId}][live_role_id]" class="form-input w-full">${roleOptions}</select>
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label">Custom Message</label>
+                    <textarea name="subscriptions[${subId}][custom_message]" class="form-input w-full" rows="2" placeholder="Hey @everyone, {username} is live!">${sub.custom_message || ''}</textarea>
+                    <p class="form-hint">Variables: {username}, {game}, {title}, {url}</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Webhook Display Name</label>
+                    <input type="text" name="subscriptions[${subId}][override_nickname]" class="form-input w-full" value="${sub.override_nickname || ''}" placeholder="Leave blank for default">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Webhook Avatar URL</label>
+                    <input type="url" name="subscriptions[${subId}][override_avatar_url]" class="form-input w-full" value="${sub.override_avatar_url || ''}" placeholder="Leave blank for default">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="subscriptions[${subId}][keep_summary]" class="toggle-input" ${!sub.delete_on_end ? 'checked' : ''}>
+                        <span class="text-sm text-gray-300">Keep announcement message after stream ends</span>
+                    </label>
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+function buildBlacklistControls(streamer) {
+    const container = document.getElementById('blacklist-controls');
+    const identifier = streamer.discord_user_id || streamer.name;
+
+    if (streamer.is_blacklisted) {
+        container.innerHTML = `
+            <button type="button" onclick="unblacklistStreamer('${identifier}', '${streamer.id}')" class="btn btn-success">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Remove from Blacklist
+            </button>
+        `;
+    } else {
+        container.innerHTML = `
+            <button type="button" onclick="blacklistStreamer('${identifier}')" class="btn btn-danger">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                </svg>
+                Blacklist This Streamer
+            </button>
+        `;
+    }
+}
+
+async function deleteSubscription(subId) {
+    if (!confirm('Delete this subscription? This cannot be undone.')) return;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/streamers/subscriptions/' + subId, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            document.getElementById(`sub-card-${subId}`)?.remove();
+            showToast('success', 'Subscription deleted');
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to delete subscription');
+    }
+}
+
+async function blacklistStreamer(identifier) {
+    if (!confirm('Blacklist this streamer? All their data will be removed.')) return;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/streamers/blacklist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Streamer blacklisted');
+            closeEditStreamerModal();
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to blacklist streamer');
+    }
+}
+
+async function unblacklistStreamer(identifier, streamerId) {
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/streamers/unblacklist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier, streamer_id: streamerId })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Streamer removed from blacklist');
+            closeEditStreamerModal();
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to remove from blacklist');
+    }
+}
+
+document.getElementById('add-platform-btn')?.addEventListener('click', async () => {
+    const platform = document.getElementById('add-platform').value;
+    const username = document.getElementById('add-username').value;
+    const channelId = document.getElementById('add-channel').value;
+
+    if (!platform || !username) {
+        showToast('error', 'Please select a platform and enter a username');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/streamers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                platform,
+                username,
+                discord_user_id: document.getElementById('edit-discord-user-id').value,
+                announcement_channel_id: channelId
+            })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Platform added');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to add platform');
+    }
+});
+
+document.getElementById('edit-streamer-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    const data = {
+        consolidated_streamer_id: formData.get('consolidated_streamer_id'),
+        discord_user_id: formData.get('discord_user_id'),
+        subscriptions: {}
+    };
+
+    // Collect subscription data
+    for (const [key, value] of formData.entries()) {
+        const match = key.match(/subscriptions\[(\d+)\]\[(\w+)\]/);
+        if (match) {
+            const [, subId, field] = match;
+            if (!data.subscriptions[subId]) data.subscriptions[subId] = {};
+            data.subscriptions[subId][field] = value === 'on' ? true : value;
+        }
+    }
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/streamers/' + data.consolidated_streamer_id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Streamer updated');
+            closeEditStreamerModal();
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to update streamer');
+    }
+});
+
+// Close on background click
+document.getElementById('edit-streamer-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeEditStreamerModal();
+});
+</script>

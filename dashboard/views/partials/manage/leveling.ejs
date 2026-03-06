@@ -1,0 +1,503 @@
+<style>
+/* Compact Leveling Page Styles */
+.leveling-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.leveling-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.leveling-section-header i { font-size: 1rem; color: #a78bfa; }
+.leveling-section-header.rewards i { color: #fbbf24; }
+.leveling-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
+.leveling-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
+
+.leveling-section-body { padding: 18px; }
+
+/* Toggle Switch */
+.leveling-toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+}
+
+.leveling-toggle-wrapper:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.leveling-toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.leveling-toggle input { opacity: 0; width: 0; height: 0; }
+
+.leveling-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: 0.2s;
+    border-radius: 24px;
+}
+
+.leveling-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+.leveling-toggle input:checked + .leveling-toggle-slider {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    border-color: #a78bfa;
+}
+
+.leveling-toggle input:checked + .leveling-toggle-slider:before {
+    transform: translateX(20px);
+}
+
+.leveling-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
+.leveling-toggle-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
+
+/* Form Group */
+.leveling-form-group { margin-bottom: 16px; }
+
+.leveling-form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+
+.leveling-form-label i { color: #a78bfa; margin-right: 6px; }
+
+.leveling-form-input,
+.leveling-form-select {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.leveling-form-input:focus,
+.leveling-form-select:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+
+.leveling-form-select option { background: #1a1d21; color: #ffffff; }
+
+.leveling-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Form Grid */
+.leveling-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+/* Add Reward Form */
+.leveling-add-reward {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+.leveling-add-reward-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr auto;
+    gap: 12px;
+    align-items: end;
+}
+
+/* Rewards Table */
+.leveling-rewards-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.leveling-rewards-table thead { background: rgba(0, 0, 0, 0.3); }
+
+.leveling-rewards-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.leveling-rewards-table th:first-child { border-radius: 10px 0 0 0; }
+.leveling-rewards-table th:last-child { border-radius: 0 10px 0 0; text-align: right; }
+
+.leveling-rewards-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.leveling-rewards-table tbody tr { transition: all 0.2s; }
+.leveling-rewards-table tbody tr:hover { background: rgba(167, 139, 250, 0.05); }
+.leveling-rewards-table tbody tr:last-child td { border-bottom: none; }
+.leveling-rewards-table tbody tr:last-child td:first-child { border-radius: 0 0 0 10px; }
+.leveling-rewards-table tbody tr:last-child td:last-child { border-radius: 0 0 10px 0; }
+
+/* Level Badge */
+.level-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(96, 165, 250, 0.2));
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 6px;
+    color: #a78bfa;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+.level-badge i { font-size: 0.75rem; }
+
+/* Role Name */
+.reward-role-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 0.85rem;
+}
+
+.reward-role-icon {
+    width: 28px;
+    height: 28px;
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.reward-role-icon i { color: #fbbf24; font-size: 0.75rem; }
+
+/* Delete Button */
+.leveling-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: 6px;
+    color: #f87171;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.leveling-delete-btn:hover {
+    background: rgba(248, 113, 113, 0.2);
+    border-color: rgba(248, 113, 113, 0.5);
+}
+
+/* Save Button */
+.leveling-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.leveling-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
+
+.leveling-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.leveling-add-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
+
+/* Empty State */
+.leveling-empty-state {
+    text-align: center;
+    padding: 32px 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px dashed rgba(167, 139, 250, 0.2);
+    border-radius: 10px;
+}
+
+.leveling-empty-icon { font-size: 2rem; color: rgba(251, 191, 36, 0.4); margin-bottom: 12px; }
+.leveling-empty-text { color: rgba(255, 255, 255, 0.5); font-size: 0.85rem; }
+
+/* Table Wrapper */
+.leveling-table-wrapper {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .leveling-form-grid { grid-template-columns: 1fr; }
+    .leveling-add-reward-grid { grid-template-columns: 1fr; }
+    .leveling-add-btn { width: 100%; justify-content: center; }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-chart-line"></i>
+                <span>Leveling System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Reward your members for their activity with XP and levels
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Section -->
+    <div class="leveling-section-card">
+        <div class="leveling-section-header">
+            <i class="fas fa-cog"></i>
+            <div>
+                <h3>System Configuration</h3>
+                <p>Configure how XP is earned and distributed</p>
+            </div>
+        </div>
+        <div class="leveling-section-body">
+            <form action="/manage/<%= guild.id %>/update-leveling" method="POST">
+                <!-- Enable Toggle -->
+                <label class="leveling-toggle-wrapper">
+                    <div class="leveling-toggle">
+                        <input type="checkbox" id="leveling_enabled" name="leveling_enabled" <%= settings.leveling_enabled ? 'checked' : '' %>>
+                        <span class="leveling-toggle-slider"></span>
+                    </div>
+                    <div>
+                        <div class="leveling-toggle-label">Enable Leveling System</div>
+                        <div class="leveling-toggle-desc">Members will earn XP for messages</div>
+                    </div>
+                </label>
+
+                <!-- XP Settings -->
+                <div class="leveling-form-grid">
+                    <div class="leveling-form-group">
+                        <label class="leveling-form-label">
+                            <i class="fas fa-star"></i>XP Rate (per message)
+                        </label>
+                        <input type="number" class="leveling-form-input" name="leveling_xp_rate" value="<%= settings.leveling_xp_rate || 15 %>" min="1" max="100">
+                        <span class="leveling-form-hint">XP earned per eligible message (1-100)</span>
+                    </div>
+
+                    <div class="leveling-form-group">
+                        <label class="leveling-form-label">
+                            <i class="fas fa-clock"></i>XP Cooldown (seconds)
+                        </label>
+                        <input type="number" class="leveling-form-input" name="leveling_xp_cooldown" value="<%= settings.leveling_xp_cooldown || 60 %>" min="10" max="300">
+                        <span class="leveling-form-hint">Time before earning XP again (10-300)</span>
+                    </div>
+                </div>
+
+                <!-- Level-Up Channel -->
+                <div class="leveling-form-group">
+                    <label class="leveling-form-label">
+                        <i class="fas fa-hashtag"></i>Level-Up Announcement Channel
+                    </label>
+                    <select class="leveling-form-select" name="level_up_channel_id">
+                        <option value="">Same channel as message (default)</option>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= settings.level_up_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                    <span class="leveling-form-hint">Channel where level-up messages will be sent</span>
+                </div>
+
+                <!-- Ignored Channels -->
+                <div class="leveling-form-group">
+                    <label class="leveling-form-label">
+                        <i class="fas fa-ban"></i>Ignored Channels
+                    </label>
+                    <select class="leveling-form-select" name="leveling_ignored_channels" multiple size="4" style="min-height: 100px;">
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= (settings.leveling_ignored_channels || []).includes(channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                    <span class="leveling-form-hint">Messages in these channels won't earn XP (Ctrl+Click to select multiple)</span>
+                </div>
+
+                <!-- Ignored Roles -->
+                <div class="leveling-form-group" style="margin-bottom: 0;">
+                    <label class="leveling-form-label">
+                        <i class="fas fa-user-slash"></i>Ignored Roles
+                    </label>
+                    <select class="leveling-form-select" name="leveling_ignored_roles" multiple size="4" style="min-height: 100px;">
+                        <% roles.forEach(role => { %>
+                            <option value="<%= role.id %>" <%= (settings.leveling_ignored_roles || []).includes(role.id) ? 'selected' : '' %>><%= role.name %></option>
+                        <% }) %>
+                    </select>
+                    <span class="leveling-form-hint">Users with these roles won't earn XP (Ctrl+Click to select multiple)</span>
+                </div>
+
+                <div style="margin-top: 24px;">
+                    <button type="submit" class="leveling-save-btn">
+                        <i class="fas fa-save"></i>
+                        Save Configuration
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Role Rewards Section -->
+    <div class="leveling-section-card">
+        <div class="leveling-section-header rewards">
+            <i class="fas fa-trophy"></i>
+            <div>
+                <h3>Role Rewards</h3>
+                <p>Automatically assign roles when members reach certain levels</p>
+            </div>
+        </div>
+        <div class="leveling-section-body">
+            <!-- Add Role Reward Form -->
+            <form action="/manage/<%= guild.id %>/add-role-reward" method="POST" class="leveling-add-reward">
+                <div class="leveling-add-reward-grid">
+                    <div class="leveling-form-group" style="margin-bottom: 0;">
+                        <label class="leveling-form-label">Level Required</label>
+                        <input type="number" name="level" class="leveling-form-input" required min="1" max="1000" placeholder="10">
+                    </div>
+                    <div class="leveling-form-group" style="margin-bottom: 0;">
+                        <label class="leveling-form-label">Role to Award</label>
+                        <select name="role_id" class="leveling-form-select" required>
+                            <option value="">Select role...</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"><%= role.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div>
+                        <button type="submit" class="leveling-add-btn">
+                            <i class="fas fa-plus"></i>
+                            Add Reward
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Existing Role Rewards -->
+            <% if (rewards && rewards.length > 0) { %>
+                <div class="leveling-table-wrapper">
+                    <table class="leveling-rewards-table">
+                        <thead>
+                            <tr>
+                                <th>Level</th>
+                                <th>Role</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% rewards.sort((a, b) => a.level - b.level).forEach(reward => {
+                                const role = roles.find(r => r.id === reward.role_id);
+                            %>
+                                <tr>
+                                    <td>
+                                        <div class="level-badge">
+                                            <i class="fas fa-level-up-alt"></i>
+                                            Level <%= reward.level %>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="reward-role-name">
+                                            <div class="reward-role-icon">
+                                                <i class="fas fa-crown"></i>
+                                            </div>
+                                            <%= role ? role.name : 'Unknown Role' %>
+                                        </div>
+                                    </td>
+                                    <td style="text-align: right;">
+                                        <form action="/manage/<%= guild.id %>/remove-role-reward" method="POST" style="display: inline;">
+                                            <input type="hidden" name="rewardId" value="<%= reward.id %>">
+                                            <button type="submit" class="leveling-delete-btn" onclick="return confirm('Remove this role reward?');">
+                                                <i class="fas fa-trash"></i>
+                                                Remove
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } else { %>
+                <div class="leveling-empty-state">
+                    <div class="leveling-empty-icon">
+                        <i class="fas fa-trophy"></i>
+                    </div>
+                    <div class="leveling-empty-text">No role rewards configured yet</div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,297 @@
+<%# RPG System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Characters',
+            value: locals.rpgStats?.totalCharacters || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Players',
+            value: locals.rpgStats?.activePlayers || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: 'success'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Quests Completed',
+            value: locals.rpgStats?.questsCompleted || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Battles Fought',
+            value: locals.rpgStats?.battlesFought || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>',
+            color: 'danger'
+        }) %>
+    </div>
+
+    <!-- D&D 5e Classes -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">D&D 5e Classes</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-accent-red transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">🪓</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Barbarian</div>
+                        <div class="text-xs text-accent-red">d12 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Primal rage and devastating attacks</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-purple-500 transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">🎵</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Bard</div>
+                        <div class="text-xs text-purple-400">d8 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Magical music and inspiration</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-accent-yellow transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">✨</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Cleric</div>
+                        <div class="text-xs text-accent-yellow">d8 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Divine magic and healing power</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-accent-green transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">🌿</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Druid</div>
+                        <div class="text-xs text-accent-green">d8 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Nature magic and wild shape</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-accent-red transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">⚔️</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Fighter</div>
+                        <div class="text-xs text-accent-red">d10 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Martial combat mastery</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-primary-400 transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">👊</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Monk</div>
+                        <div class="text-xs text-primary-400">d8 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Ki-powered martial arts</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-orange-500 transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">🛡️</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Paladin</div>
+                        <div class="text-xs text-orange-400">d10 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Holy warrior with divine smite</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-accent-green transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">🏹</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Ranger</div>
+                        <div class="text-xs text-accent-green">d10 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Wilderness expert and hunter</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-gray-500 transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">🗡️</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Rogue</div>
+                        <div class="text-xs text-gray-400">d8 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Stealth and sneak attack</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-accent-red transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">🔥</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Sorcerer</div>
+                        <div class="text-xs text-accent-red">d6 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Innate magical bloodline</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-purple-500 transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">👁️</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Warlock</div>
+                        <div class="text-xs text-purple-400">d8 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Otherworldly patron pact</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg border border-dark-400 hover:border-primary-400 transition-colors">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xl">🔮</span>
+                    <div>
+                        <div class="font-bold text-white text-sm">Wizard</div>
+                        <div class="text-xs text-primary-400">d6 Hit Die</div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500">Scholarly arcane magic</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Features -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Game Features</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="flex gap-3">
+                <div class="text-xl text-primary-400">👤</div>
+                <div>
+                    <div class="font-semibold text-white mb-1">Character System</div>
+                    <p class="text-sm text-gray-400">Create characters with all 12 official D&D 5e classes</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <div class="text-xl text-orange-400">📄</div>
+                <div>
+                    <div class="font-semibold text-white mb-1">D&D Beyond Import</div>
+                    <p class="text-sm text-gray-400">Import characters directly from D&D Beyond PDF sheets</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <div class="text-xl text-accent-green">⬆️</div>
+                <div>
+                    <div class="font-semibold text-white mb-1">Leveling System</div>
+                    <p class="text-sm text-gray-400">Gain experience from battles and quests to level up</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <div class="text-xl text-accent-yellow">📜</div>
+                <div>
+                    <div class="font-semibold text-white mb-1">Quest System</div>
+                    <p class="text-sm text-gray-400">Complete quests for rewards and rare items</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <div class="text-xl text-purple-400">📦</div>
+                <div>
+                    <div class="font-semibold text-white mb-1">Inventory System</div>
+                    <p class="text-sm text-gray-400">Collect items, equip gear, and manage resources</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <div class="text-xl text-accent-red">⚔️</div>
+                <div>
+                    <div class="font-semibold text-white mb-1">Battle System</div>
+                    <p class="text-sm text-gray-400">Fight enemies in turn-based combat</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <div class="text-xl text-orange-400">🗺️</div>
+                <div>
+                    <div class="font-semibold text-white mb-1">Exploration</div>
+                    <p class="text-sm text-gray-400">Travel to different zones with level requirements</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <div class="text-xl text-primary-500">✨</div>
+                <div>
+                    <div class="font-semibold text-white mb-1">Skills & Abilities</div>
+                    <p class="text-sm text-gray-400">Unlock class-specific abilities as you level up</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Player Commands -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Player Commands</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h4 class="text-primary-400 font-semibold mb-3">Character Management</h4>
+                <div class="space-y-2">
+                    <code class="block p-2 bg-dark-700 rounded text-sm text-gray-300">/rpg character create</code>
+                    <code class="block p-2 bg-dark-700 rounded text-sm text-gray-300">/rpg character import</code>
+                    <code class="block p-2 bg-dark-700 rounded text-sm text-gray-300">/rpg character view</code>
+                    <code class="block p-2 bg-dark-700 rounded text-sm text-gray-300">/rpg character delete</code>
+                </div>
+            </div>
+            <div>
+                <h4 class="text-accent-green font-semibold mb-3">Gameplay</h4>
+                <div class="space-y-2">
+                    <code class="block p-2 bg-dark-700 rounded text-sm text-gray-300">/rpg quest list</code>
+                    <code class="block p-2 bg-dark-700 rounded text-sm text-gray-300">/rpg quest start</code>
+                    <code class="block p-2 bg-dark-700 rounded text-sm text-gray-300">/rpg battle start</code>
+                    <code class="block p-2 bg-dark-700 rounded text-sm text-gray-300">/rpg travel</code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Players -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Top Players</h3>
+        <% if (locals.rpgStats && rpgStats.topPlayers && rpgStats.topPlayers.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Rank</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Character</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Class</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Level</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Experience</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% rpgStats.topPlayers.forEach((player, index) => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4 text-lg">
+                                    <% if (index === 0) { %>🥇
+                                    <% } else if (index === 1) { %>🥈
+                                    <% } else if (index === 2) { %>🥉
+                                    <% } else { %>
+                                        <span class="text-gray-500 font-semibold">#<%= index + 1 %></span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="font-semibold text-white"><%= player.character_name %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-primary-500/20 text-primary-400 capitalize"><%= player.class %></span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <span class="text-accent-green font-bold"><%= player.level %></span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <span class="text-primary-400"><%= player.experience.toLocaleString() %></span>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 bg-dark-700 rounded-lg">
+                <p class="text-gray-400 mb-2">No players yet</p>
+                <p class="text-sm text-gray-500">Start your adventure with <code class="bg-dark-600 px-2 py-1 rounded">/rpg character create</code></p>
+            </div>
+        <% } %>
+    </div>
+</div>

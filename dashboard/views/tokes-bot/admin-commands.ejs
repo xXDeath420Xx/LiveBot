@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+    <style>
+        .command-card {
+            background: var(--ember-bg-card);
+            border: 1px solid var(--ember-border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .command-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+        .command-name {
+            font-weight: 600;
+            color: var(--ember-primary);
+            font-size: 1.1rem;
+        }
+        .command-aliases {
+            color: var(--ember-text-muted);
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+        }
+        .command-desc {
+            color: var(--ember-text-secondary);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        .command-meta {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--ember-border);
+            font-size: 0.85rem;
+            color: var(--ember-text-muted);
+        }
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--ember-bg-elevated);
+            border: 1px solid var(--ember-border);
+            border-radius: 24px;
+            transition: 0.3s;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            bottom: 2px;
+            background: var(--ember-text-muted);
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--ember-primary-dim);
+            border-color: var(--ember-primary);
+        }
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+            background: var(--ember-primary);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: var(--ember-bg-card);
+            border: 1px solid var(--ember-border);
+            border-radius: 12px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--ember-text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--ember-text-secondary);
+        }
+    </style>
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+                <span class="ember-badge ember-badge-error">Admin</span>
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Public Site</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/admin" class="ember-nav-link">Overview</a>
+                <a href="/tokes-bot/admin/users" class="ember-nav-link">Users</a>
+                <a href="/tokes-bot/admin/moderation" class="ember-nav-link">Moderation</a>
+                <a href="/tokes-bot/admin/analytics" class="ember-nav-link">Analytics</a>
+                <a href="/tokes-bot/admin/health" class="ember-nav-link">Health</a>
+                <a href="/tokes-bot/admin/commands" class="ember-nav-link active">Commands</a>
+                <a href="/tokes-bot/admin/sessions" class="ember-nav-link">Sessions</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Global Commands</h1>
+                <p class="ember-dashboard-subtitle">Configure bot-wide command settings</p>
+            </div>
+
+            <div id="commandsList">
+                <p class="ember-text-muted">Loading commands...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Edit Modal -->
+    <div class="modal" id="editModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Edit Command</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="editForm">
+                <input type="hidden" id="edit-id" name="id">
+                <div class="form-group">
+                    <label class="form-label">Command</label>
+                    <input type="text" id="edit-key" class="ember-input" disabled>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Aliases (comma separated)</label>
+                    <input type="text" id="edit-aliases" name="aliases" class="ember-input" placeholder="lit, blaze, burn">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Default Response</label>
+                    <textarea id="edit-response" name="response" class="ember-input" rows="3" placeholder="{{username}} takes a toke!"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cooldown (seconds)</label>
+                    <input type="number" id="edit-cooldown" name="cooldown" class="ember-input" min="0" max="300">
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                    <button type="button" class="ember-btn ember-btn-ghost" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="ember-btn ember-btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <footer class="ember-footer">
+        <div class="ember-container">
+            <div class="ember-footer-content">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        async function loadCommands() {
+            try {
+                const res = await fetch('/tokes-bot/api/admin/commands');
+                const data = await res.json();
+                renderCommands(data.commands || []);
+            } catch (error) {
+                console.error('Failed to load commands:', error);
+                document.getElementById('commandsList').textContent = 'Failed to load commands';
+            }
+        }
+
+        function renderCommands(commands) {
+            const container = document.getElementById('commandsList');
+            container.textContent = '';
+
+            if (!commands.length) {
+                container.textContent = 'No commands configured';
+                return;
+            }
+
+            commands.forEach(cmd => {
+                const card = document.createElement('div');
+                card.className = 'command-card';
+
+                const header = document.createElement('div');
+                header.className = 'command-header';
+
+                const nameDiv = document.createElement('div');
+                const name = document.createElement('div');
+                name.className = 'command-name';
+                name.textContent = '!' + cmd.command_key;
+                nameDiv.appendChild(name);
+
+                if (cmd.default_aliases) {
+                    const aliases = document.createElement('div');
+                    aliases.className = 'command-aliases';
+                    try {
+                        const aliasArr = JSON.parse(cmd.default_aliases);
+                        aliases.textContent = 'Aliases: ' + aliasArr.map(a => '!' + a).join(', ');
+                    } catch(e) {
+                        aliases.textContent = 'Aliases: ' + cmd.default_aliases;
+                    }
+                    nameDiv.appendChild(aliases);
+                }
+
+                const actions = document.createElement('div');
+                actions.style.display = 'flex';
+                actions.style.alignItems = 'center';
+                actions.style.gap = '1rem';
+
+                const toggle = document.createElement('label');
+                toggle.className = 'toggle-switch';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = cmd.is_enabled === 1;
+                checkbox.onchange = () => toggleCommand(cmd.command_key, checkbox.checked);
+                const slider = document.createElement('span');
+                slider.className = 'toggle-slider';
+                toggle.appendChild(checkbox);
+                toggle.appendChild(slider);
+
+                const editBtn = document.createElement('button');
+                editBtn.className = 'ember-btn ember-btn-ghost';
+                editBtn.textContent = 'Edit';
+                editBtn.onclick = () => openEditModal(cmd);
+
+                actions.appendChild(toggle);
+                actions.appendChild(editBtn);
+
+                header.appendChild(nameDiv);
+                header.appendChild(actions);
+
+                const desc = document.createElement('div');
+                desc.className = 'command-desc';
+                desc.textContent = cmd.description || 'No description';
+
+                const meta = document.createElement('div');
+                meta.className = 'command-meta';
+                meta.textContent = 'Category: ' + (cmd.category || 'General') + ' | Cooldown: ' + (cmd.cooldown_default || 5) + 's';
+
+                card.appendChild(header);
+                card.appendChild(desc);
+                card.appendChild(meta);
+                container.appendChild(card);
+            });
+        }
+
+        async function toggleCommand(commandKey, enabled) {
+            try {
+                const res = await fetch('/tokes-bot/api/admin/commands/' + commandKey + '/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled })
+                });
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to toggle command');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function openEditModal(cmd) {
+            document.getElementById('edit-id').value = cmd.command_key;
+            document.getElementById('edit-key').value = '!' + cmd.command_key;
+            try {
+                const aliases = JSON.parse(cmd.default_aliases || '[]');
+                document.getElementById('edit-aliases').value = aliases.join(', ');
+            } catch(e) {
+                document.getElementById('edit-aliases').value = cmd.default_aliases || '';
+            }
+            document.getElementById('edit-response').value = cmd.default_response || '';
+            document.getElementById('edit-cooldown').value = cmd.cooldown_default || 5;
+            document.getElementById('editModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').classList.remove('active');
+        }
+
+        document.getElementById('editForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const commandKey = document.getElementById('edit-id').value;
+            const aliasesStr = document.getElementById('edit-aliases').value;
+            const aliases = aliasesStr.split(',').map(a => a.trim()).filter(a => a);
+
+            try {
+                const res = await fetch('/tokes-bot/api/admin/commands/' + commandKey, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        default_aliases: aliases,
+                        default_response: document.getElementById('edit-response').value,
+                        cooldown_default: parseInt(document.getElementById('edit-cooldown').value) || 5
+                    })
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    closeModal();
+                    loadCommands();
+                } else {
+                    alert(result.error || 'Failed to save command');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+
+        document.getElementById('editModal').addEventListener('click', (e) => {
+            if (e.target.id === 'editModal') closeModal();
+        });
+
+        loadCommands();
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

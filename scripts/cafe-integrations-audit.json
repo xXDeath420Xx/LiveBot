@@ -1,0 +1,1829 @@
+{
+  "timestamp": "2026-02-18T10:51:58.057Z",
+  "guild": {
+    "id": "877253051994501130",
+    "name": "CruciCafe Fam",
+    "memberCount": 65
+  },
+  "webhooks": [
+    {
+      "id": "929808077341995039",
+      "name": "Dyno™ #changelogs",
+      "channelId": "929808019288653874",
+      "channelName": "dyno-updates",
+      "type": 2,
+      "creatorId": "155149108183695360",
+      "creatorBot": "Dyno",
+      "creatorUsername": "Dyno",
+      "avatar": "https://cdn.discordapp.com/avatars/929808077341995039/35d362d2ec482effd8150bbef665adf9.png",
+      "token": null
+    },
+    {
+      "id": "929814141638680586",
+      "name": "Dyno",
+      "channelId": "929808038280454215",
+      "channelName": "join-leave-logs",
+      "type": 1,
+      "creatorId": "155149108183695360",
+      "creatorBot": "Dyno",
+      "creatorUsername": "Dyno",
+      "avatar": "https://cdn.discordapp.com/avatars/929814141638680586/3aab69fbee9858c904e563205441bc2a.png",
+      "token": null
+    },
+    {
+      "id": "929814141785505842",
+      "name": "Dyno",
+      "channelId": "929807988817027072",
+      "channelName": "role-logs",
+      "type": 1,
+      "creatorId": "155149108183695360",
+      "creatorBot": "Dyno",
+      "creatorUsername": "Dyno",
+      "avatar": "https://cdn.discordapp.com/avatars/929814141785505842/3aab69fbee9858c904e563205441bc2a.png",
+      "token": null
+    },
+    {
+      "id": "929826784541831178",
+      "name": "Dyno",
+      "channelId": "929807942440591412",
+      "channelName": "member-logs",
+      "type": 1,
+      "creatorId": "155149108183695360",
+      "creatorBot": "Dyno",
+      "creatorUsername": "Dyno",
+      "avatar": "https://cdn.discordapp.com/avatars/929826784541831178/3aab69fbee9858c904e563205441bc2a.png",
+      "token": null
+    },
+    {
+      "id": "930169549268074516",
+      "name": "Dyno",
+      "channelId": "929807957653344337",
+      "channelName": "message-logs",
+      "type": 1,
+      "creatorId": "155149108183695360",
+      "creatorBot": "Dyno",
+      "creatorUsername": "Dyno",
+      "avatar": "https://cdn.discordapp.com/avatars/930169549268074516/3aab69fbee9858c904e563205441bc2a.png",
+      "token": null
+    },
+    {
+      "id": "939064550861447200",
+      "name": "Dyno",
+      "channelId": "929808001634828300",
+      "channelName": "voice-logs",
+      "type": 1,
+      "creatorId": "155149108183695360",
+      "creatorBot": "Dyno",
+      "creatorUsername": "Dyno",
+      "avatar": "https://cdn.discordapp.com/avatars/939064550861447200/3aab69fbee9858c904e563205441bc2a.png",
+      "token": null
+    },
+    {
+      "id": "947509992389509203",
+      "name": "Captain Hook",
+      "channelId": "877299505513529406",
+      "channelName": "discord-updates",
+      "type": 1,
+      "creatorId": "777171743487950849",
+      "creatorBot": "User: crucicafe",
+      "creatorUsername": "crucicafe",
+      "avatar": null,
+      "token": "[REDACTED]"
+    },
+    {
+      "id": "956853762935357481",
+      "name": "Dyno",
+      "channelId": "929807906268926052",
+      "channelName": "mod-logs",
+      "type": 1,
+      "creatorId": "155149108183695360",
+      "creatorBot": "Dyno",
+      "creatorUsername": "Dyno",
+      "avatar": "https://cdn.discordapp.com/avatars/956853762935357481/3aab69fbee9858c904e563205441bc2a.png",
+      "token": null
+    },
+    {
+      "id": "957638631902814298",
+      "name": "Dyno",
+      "channelId": "929807924891635722",
+      "channelName": "channel-logs",
+      "type": 1,
+      "creatorId": "155149108183695360",
+      "creatorBot": "Dyno",
+      "creatorUsername": "Dyno",
+      "avatar": "https://cdn.discordapp.com/avatars/957638631902814298/3aab69fbee9858c904e563205441bc2a.png",
+      "token": null
+    },
+    {
+      "id": "978067633134006285",
+      "name": "BotRix Stream Announce",
+      "channelId": "877260396195618867",
+      "channelName": "🎥┊content-creators",
+      "type": 1,
+      "creatorId": "777171743487950849",
+      "creatorBot": "User: crucicafe",
+      "creatorUsername": "crucicafe",
+      "avatar": "https://cdn.discordapp.com/avatars/978067633134006285/9727e6399f8da0326ce4db979b493a31.png",
+      "token": null
+    }
+  ],
+  "reactRoles": {
+    "channelName": "😎┊react-roles",
+    "channelId": "904428293846098011",
+    "totalMessages": 2,
+    "messagesWithReactions": 0,
+    "messages": [],
+    "allMessages": [
+      {
+        "id": "929818025983619182",
+        "author": {
+          "id": "155149108183695360",
+          "username": "Dyno",
+          "tag": "Dyno#3861",
+          "bot": true,
+          "identifiedAs": "Dyno"
+        },
+        "content": null,
+        "embeds": [
+          {
+            "title": "Are you a Streamer?",
+            "description": "Let us know if you stream on Twitch to gain the <@905450509371068487> role and let us all know when you're streaming",
+            "color": null,
+            "author": null,
+            "footer": null,
+            "fields": [],
+            "image": null,
+            "thumbnail": null
+          }
+        ],
+        "reactions": [],
+        "timestamp": "2022-01-09T19:24:52.578Z",
+        "components": 1
+      },
+      {
+        "id": "929814101574701067",
+        "author": {
+          "id": "155149108183695360",
+          "username": "Dyno",
+          "tag": "Dyno#3861",
+          "bot": true,
+          "identifiedAs": "Dyno"
+        },
+        "content": null,
+        "embeds": [
+          {
+            "title": "Color Roles:",
+            "description": "If you'd like to display as a different color, please choose from the list below",
+            "color": null,
+            "author": null,
+            "footer": null,
+            "fields": [],
+            "image": null,
+            "thumbnail": null
+          }
+        ],
+        "reactions": [],
+        "timestamp": "2022-01-09T19:09:16.926Z",
+        "components": 2
+      }
+    ]
+  },
+  "automodRules": [
+    {
+      "id": "1030554520465440818",
+      "name": "Block Mention Spam",
+      "enabled": true,
+      "triggerType": "MentionSpam",
+      "triggerTypeRaw": 5,
+      "eventType": 1,
+      "actions": [
+        {
+          "type": "BlockMessage",
+          "typeRaw": 1,
+          "metadata": {
+            "durationSeconds": null,
+            "channelId": null,
+            "customMessage": null
+          }
+        }
+      ],
+      "triggerMetadata": {
+        "keywordFilter": [],
+        "regexPatterns": [],
+        "presets": [],
+        "allowList": [],
+        "mentionTotalLimit": 20
+      },
+      "exemptRoles": [],
+      "exemptChannels": [],
+      "creator": null,
+      "createdByDynoOrMEE6": false
+    }
+  ],
+  "welcomeChannel": {
+    "channelName": "👋┊welcome",
+    "channelId": "877253668133552240",
+    "totalMessages": 50,
+    "mee6Messages": 50,
+    "mee6WelcomeFormat": {
+      "id": "1473623184044593294",
+      "author": {
+        "id": "159985870458322944",
+        "username": "MEE6",
+        "tag": "MEE6#4876",
+        "bot": true,
+        "identifiedAs": "MEE6"
+      },
+      "content": "Hey <@1473622894138491007>, welcome to **CruciCafe Fam**!",
+      "embeds": [],
+      "reactions": [],
+      "timestamp": "2026-02-18T10:12:25.671Z",
+      "components": 0
+    },
+    "allMessages": [
+      {
+        "id": "1473623184044593294",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1473622894138491007>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2026-02-18T10:12:25.671Z",
+        "components": 0
+      },
+      {
+        "id": "1360667754159673597",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@549230844271656960>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2025-04-12T17:27:52.576Z",
+        "components": 0
+      },
+      {
+        "id": "1276205255419498517",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@243846595819339777>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-08-22T15:44:03.639Z",
+        "components": 0
+      },
+      {
+        "id": "1274017065120043090",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@527521753434423321>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-08-16T14:48:58.417Z",
+        "components": 0
+      },
+      {
+        "id": "1271449087748866140",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@554162762767663114>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-08-09T12:44:44.901Z",
+        "components": 0
+      },
+      {
+        "id": "1252259091833946125",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@354703431086374912>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-06-17T13:50:33.342Z",
+        "components": 0
+      },
+      {
+        "id": "1250477473976815676",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1225910613016969348>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-06-12T15:51:02.544Z",
+        "components": 0
+      },
+      {
+        "id": "1248316406009692311",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@587261919266865162>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-06-06T16:43:43.790Z",
+        "components": 0
+      },
+      {
+        "id": "1248282474195320863",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@584686686353489950>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-06-06T14:28:53.815Z",
+        "components": 0
+      },
+      {
+        "id": "1237408962190512170",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@96799314713538560>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-05-07T14:21:26.533Z",
+        "components": 0
+      },
+      {
+        "id": "1233811922512515132",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1149172784954626079>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-04-27T16:08:05.444Z",
+        "components": 0
+      },
+      {
+        "id": "1232797335621210125",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1068275934874042469>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-04-24T20:56:29.079Z",
+        "components": 0
+      },
+      {
+        "id": "1229151770090143784",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1229147818069987501>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-04-14T19:30:18.525Z",
+        "components": 0
+      },
+      {
+        "id": "1228788691774738525",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1173605961781497921>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-04-13T19:27:33.909Z",
+        "components": 0
+      },
+      {
+        "id": "1225108763732607109",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@951242360606576680>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-04-03T15:44:50.694Z",
+        "components": 0
+      },
+      {
+        "id": "1225107623876100260",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@675525398980722699>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-04-03T15:40:18.931Z",
+        "components": 0
+      },
+      {
+        "id": "1211395359683645490",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@456226577798135808>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2024-02-25T19:32:40.386Z",
+        "components": 0
+      },
+      {
+        "id": "1135023264150868050",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1134620519845605376>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-07-30T01:37:13.886Z",
+        "components": 0
+      },
+      {
+        "id": "1094102707909959690",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@769324757543813140>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-04-08T03:33:33.011Z",
+        "components": 0
+      },
+      {
+        "id": "1090345590132588585",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@705500174776139857>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-03-28T18:44:06.329Z",
+        "components": 0
+      },
+      {
+        "id": "1086901007386152961",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@826340508368502844>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-03-19T06:36:33.805Z",
+        "components": 0
+      },
+      {
+        "id": "1081240265425174650",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@344360533090238475>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-03-03T15:42:47.750Z",
+        "components": 0
+      },
+      {
+        "id": "1068559324345016351",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@410911924872806412>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-27T15:53:15.796Z",
+        "components": 0
+      },
+      {
+        "id": "1066779645661429862",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@456226577798135808>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-22T18:01:27.333Z",
+        "components": 0
+      },
+      {
+        "id": "1064628009526628473",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@998683470194806884>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [
+          {
+            "emoji": "❤️",
+            "emojiName": "❤️",
+            "emojiId": null,
+            "count": 1
+          }
+        ],
+        "timestamp": "2023-01-16T19:31:37.303Z",
+        "components": 0
+      },
+      {
+        "id": "1064625794275614770",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1040315469778931812>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-16T19:22:49.146Z",
+        "components": 0
+      },
+      {
+        "id": "1064624640930095166",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1062440929501396992>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-16T19:18:14.167Z",
+        "components": 0
+      },
+      {
+        "id": "1063172758982373446",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@536625431051370536>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-12T19:08:58.536Z",
+        "components": 0
+      },
+      {
+        "id": "1062755743180275832",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@976586547476451328>, welcome to **CruciCafe Fam**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-11T15:31:54.221Z",
+        "components": 0
+      },
+      {
+        "id": "1061321329535627374",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@724588836994154509>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-07T16:32:03.358Z",
+        "components": 0
+      },
+      {
+        "id": "1060646129806622852",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@819702050496970824>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-05T19:49:03.198Z",
+        "components": 0
+      },
+      {
+        "id": "1060646103013392434",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@118436246585475078>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-05T19:48:56.810Z",
+        "components": 0
+      },
+      {
+        "id": "1060643275846996059",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@269199459609608204>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-05T19:37:42.761Z",
+        "components": 0
+      },
+      {
+        "id": "1060637967120617635",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@705062493176856607>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-05T19:16:37.062Z",
+        "components": 0
+      },
+      {
+        "id": "1060637470762487968",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@473582216627224576>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-05T19:14:38.721Z",
+        "components": 0
+      },
+      {
+        "id": "1060637232408580248",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@584686686353489950>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-05T19:13:41.893Z",
+        "components": 0
+      },
+      {
+        "id": "1060636795525668949",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@347030939030913034>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-05T19:11:57.732Z",
+        "components": 0
+      },
+      {
+        "id": "1059846978697166919",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@709725222051381259>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2023-01-03T14:53:30.726Z",
+        "components": 0
+      },
+      {
+        "id": "1056628998534336563",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1056626643365531719>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-12-25T17:46:24.468Z",
+        "components": 0
+      },
+      {
+        "id": "1055941397590573166",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@690431353535201330>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-12-23T20:14:07.628Z",
+        "components": 0
+      },
+      {
+        "id": "1054491908682022932",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@96799314713538560>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-12-19T20:14:22.542Z",
+        "components": 0
+      },
+      {
+        "id": "1054472422700630117",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@1046439353125195917>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-12-19T18:56:56.722Z",
+        "components": 0
+      },
+      {
+        "id": "1054457347797418016",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@914375254586065007>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-12-19T17:57:02.585Z",
+        "components": 0
+      },
+      {
+        "id": "1051591016773324831",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@928296674974138408>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-12-11T20:07:16.015Z",
+        "components": 0
+      },
+      {
+        "id": "1051588705913155674",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@378539358833082369>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-12-11T19:58:05.063Z",
+        "components": 0
+      },
+      {
+        "id": "1049826830565245079",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@692376678240092162>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-12-06T23:17:01.246Z",
+        "components": 0
+      },
+      {
+        "id": "1047244308937449553",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@456226577798135808>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-11-29T20:15:00.109Z",
+        "components": 0
+      },
+      {
+        "id": "1041037501378347168",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@985341296069713920>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-11-12T17:11:21.870Z",
+        "components": 0
+      },
+      {
+        "id": "1035985329057968268",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@456226577798135808>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [],
+        "timestamp": "2022-10-29T18:35:50.124Z",
+        "components": 0
+      },
+      {
+        "id": "1033561151696535632",
+        "author": {
+          "id": "159985870458322944",
+          "username": "MEE6",
+          "tag": "MEE6#4876",
+          "bot": true,
+          "identifiedAs": "MEE6"
+        },
+        "content": "Hey <@939973417929670756>, welcome to **CruciCafe & Mrs_Kink's Discord Server**!",
+        "embeds": [],
+        "reactions": [
+          {
+            "emoji": "❤️",
+            "emojiName": "❤️",
+            "emojiId": null,
+            "count": 1
+          }
+        ],
+        "timestamp": "2022-10-23T02:03:01.202Z",
+        "components": 0
+      }
+    ]
+  },
+  "additionalChannels": {
+    "rules": {
+      "channelName": "📄┊rules",
+      "channelId": "877254515244552232",
+      "totalMessages": 1,
+      "knownBotMessages": 1,
+      "botMessages": [
+        {
+          "id": "929809153944334406",
+          "author": {
+            "id": "155149108183695360",
+            "username": "Dyno",
+            "tag": "Dyno#3861",
+            "bot": true,
+            "identifiedAs": "Dyno"
+          },
+          "content": null,
+          "embeds": [
+            {
+              "title": "Community Rules:",
+              "description": "These rules have been set in place to make sure everything within the server is completely safe and out of harms way. You will be punished if these rules are broken.\n1. NSFW IS NOT PERMITTED\n\n• Not safe for work content is not allowed within this server whatsoever. This includes but is not limited to: Images, usernames, profile pictures, messages, and so on. Keep in mind that this also includes gore.\n\nFailing to follow this rule will lead to a ban.\n\n2. NO SLURS OR HATE SPEECH\n\n• It’s unacceptabl",
+              "color": null,
+              "author": null,
+              "footer": null,
+              "fields": [],
+              "image": null,
+              "thumbnail": null
+            }
+          ],
+          "reactions": [
+            {
+              "emoji": "👍",
+              "emojiName": "👍",
+              "emojiId": null,
+              "count": 30
+            }
+          ],
+          "timestamp": "2022-01-09T18:49:37.319Z",
+          "components": 0
+        }
+      ],
+      "otherBotEmbeds": []
+    },
+    "announcements": {
+      "channelName": "📢┊announcements",
+      "channelId": "877254930585518161",
+      "totalMessages": 50,
+      "knownBotMessages": 0,
+      "botMessages": [],
+      "otherBotEmbeds": []
+    },
+    "cruciIsLive": {
+      "channelName": "cruci-is-live",
+      "channelId": "1249719945286385746",
+      "totalMessages": 3,
+      "knownBotMessages": 0,
+      "botMessages": [],
+      "otherBotEmbeds": []
+    },
+    "leveling": {
+      "channelName": "🏆┊leveling",
+      "channelId": "919349483874181190",
+      "totalMessages": 50,
+      "knownBotMessages": 50,
+      "botMessages": [
+        {
+          "id": "1335956283194474581",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@96799314713538560>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2025-02-03T12:53:18.781Z",
+          "components": 0
+        },
+        {
+          "id": "1284473910028402749",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@705062493176856607>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2024-09-14T11:20:44.522Z",
+          "components": 0
+        },
+        {
+          "id": "1257363692375506945",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@584686686353489950>, you just advanced to level 3!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2024-07-01T15:54:24.950Z",
+          "components": 0
+        },
+        {
+          "id": "1252641208594075720",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@584686686353489950>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2024-06-18T15:08:57.077Z",
+          "components": 0
+        },
+        {
+          "id": "1244861849225269269",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@131872200822095872>, you just advanced to level 3!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2024-05-28T03:56:33.270Z",
+          "components": 0
+        },
+        {
+          "id": "1238486469929341051",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@925747884010373152>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2024-05-10T13:43:04.397Z",
+          "components": 0
+        },
+        {
+          "id": "1134213868596502598",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@599904715521916948>, you just advanced to level 8!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-07-27T20:00:58.948Z",
+          "components": 0
+        },
+        {
+          "id": "1090965935361359894",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@728279878272679957>, you just advanced to level 4!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-03-30T11:49:08.157Z",
+          "components": 0
+        },
+        {
+          "id": "1090020322427797595",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@456226577798135808>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-03-27T21:11:36.465Z",
+          "components": 0
+        },
+        {
+          "id": "1086980131584741468",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@331964585055748106>, you just advanced to level 8!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-03-19T11:50:58.484Z",
+          "components": 0
+        },
+        {
+          "id": "1085878460095942669",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@777171743487950849>, you just advanced to level 20!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-03-16T10:53:19.533Z",
+          "components": 0
+        },
+        {
+          "id": "1076625012913606666",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@866369507848355860>, you just advanced to level 7!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-02-18T22:03:25.804Z",
+          "components": 0
+        },
+        {
+          "id": "1076261211768901752",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@808017557591818280>, you just advanced to level 7!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-02-17T21:57:48.852Z",
+          "components": 0
+        },
+        {
+          "id": "1071159483767722004",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@361712829251715072>, you just advanced to level 3!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-02-03T20:05:22.111Z",
+          "components": 0
+        },
+        {
+          "id": "1070314457550573620",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@473582216627224576>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-02-01T12:07:32.161Z",
+          "components": 0
+        },
+        {
+          "id": "1069973488674279444",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@819702050496970824>, you just advanced to level 3!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-01-31T13:32:38.846Z",
+          "components": 0
+        },
+        {
+          "id": "1069406721191182406",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@456226577798135808>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-01-30T00:00:30.948Z",
+          "components": 0
+        },
+        {
+          "id": "1066804034348003370",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@819702050496970824>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-01-22T19:38:22.049Z",
+          "components": 0
+        },
+        {
+          "id": "1066735305585082388",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@584686686353489950>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-01-22T15:05:15.835Z",
+          "components": 0
+        },
+        {
+          "id": "1065397522174050445",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@819702050496970824>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-01-18T22:29:23.415Z",
+          "components": 0
+        },
+        {
+          "id": "1062772477480145017",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@777171743487950849>, you just advanced to level 19!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-01-11T16:38:23.989Z",
+          "components": 0
+        },
+        {
+          "id": "1062014823476494367",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@456226577798135808>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-01-09T14:27:45.198Z",
+          "components": 0
+        },
+        {
+          "id": "1060971486954926120",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@690431353535201330>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2023-01-06T17:21:54.387Z",
+          "components": 0
+        },
+        {
+          "id": "1058463325454876754",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@886712178105790505>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-12-30T19:15:22.086Z",
+          "components": 0
+        },
+        {
+          "id": "1057870717384933487",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@378539358833082369>, you just advanced to level 3!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-12-29T04:00:33.312Z",
+          "components": 0
+        },
+        {
+          "id": "1056547151733338182",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@564225364646428682>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-12-25T12:21:10.670Z",
+          "components": 0
+        },
+        {
+          "id": "1055087867686297640",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@555600618321084427>, you just advanced to level 5!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-12-21T11:42:30.241Z",
+          "components": 0
+        },
+        {
+          "id": "1054529487854895104",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@378539358833082369>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-12-19T22:43:42.115Z",
+          "components": 0
+        },
+        {
+          "id": "1054212878149886063",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@728279878272679957>, you just advanced to level 3!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-12-19T01:45:36.479Z",
+          "components": 0
+        },
+        {
+          "id": "1053769863648264212",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@378539358833082369>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-12-17T20:25:13.591Z",
+          "components": 0
+        },
+        {
+          "id": "1053447952812752906",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@331964585055748106>, you just advanced to level 7!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-12-16T23:06:04.067Z",
+          "components": 0
+        },
+        {
+          "id": "1050501061514887218",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@761277363858178058>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-12-08T19:56:10.431Z",
+          "components": 0
+        },
+        {
+          "id": "1047248140442533908",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@456226577798135808>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-11-29T20:30:13.611Z",
+          "components": 0
+        },
+        {
+          "id": "1041481370481983519",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@174440550223577089>, you just advanced to level 3!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-11-13T22:35:08.511Z",
+          "components": 0
+        },
+        {
+          "id": "1041280146608496740",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@808017557591818280>, you just advanced to level 6!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-11-13T09:15:33.001Z",
+          "components": 0
+        },
+        {
+          "id": "1040071501468160102",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@899754473172377620>, you just advanced to level 6!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-11-10T01:12:49.544Z",
+          "components": 0
+        },
+        {
+          "id": "1039598386220896296",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@777171743487950849>, you just advanced to level 18!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-11-08T17:52:50.079Z",
+          "components": 0
+        },
+        {
+          "id": "1036975086483284000",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@361712829251715072>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-11-01T12:08:46.683Z",
+          "components": 0
+        },
+        {
+          "id": "1034218533715976303",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@555600618321084427>, you just advanced to level 4!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-24T21:35:13.289Z",
+          "components": 0
+        },
+        {
+          "id": "1031795824381919312",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@809711912685273148>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-18T05:08:14.372Z",
+          "components": 0
+        },
+        {
+          "id": "1030496850417045524",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@960277205542375454>, you just advanced to level 3!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-14T15:06:34.845Z",
+          "components": 0
+        },
+        {
+          "id": "1030154486678822993",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@555600618321084427>, you just advanced to level 3!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-13T16:26:08.969Z",
+          "components": 0
+        },
+        {
+          "id": "1030087392796880937",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@728279878272679957>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-13T11:59:32.541Z",
+          "components": 0
+        },
+        {
+          "id": "1029779209742200832",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@808017557591818280>, you just advanced to level 5!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-12T15:34:55.975Z",
+          "components": 0
+        },
+        {
+          "id": "1028100571690971246",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@841802680288673802>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-08T00:24:37.476Z",
+          "components": 0
+        },
+        {
+          "id": "1027253741155532800",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@899754473172377620>, you just advanced to level 5!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-05T16:19:37.343Z",
+          "components": 0
+        },
+        {
+          "id": "1027214819012661248",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@761277363858178058>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-05T13:44:57.581Z",
+          "components": 0
+        },
+        {
+          "id": "1027195549876760596",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@361712829251715072>, you just advanced to level 1!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-05T12:28:23.461Z",
+          "components": 0
+        },
+        {
+          "id": "1027191630689738782",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@555600618321084427>, you just advanced to level 2!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-05T12:12:49.054Z",
+          "components": 0
+        },
+        {
+          "id": "1026309153016250451",
+          "author": {
+            "id": "159985870458322944",
+            "username": "MEE6",
+            "tag": "MEE6#4876",
+            "bot": true,
+            "identifiedAs": "MEE6"
+          },
+          "content": "GG <@777171743487950849>, you just advanced to level 17!",
+          "embeds": [],
+          "reactions": [],
+          "timestamp": "2022-10-03T01:46:09.981Z",
+          "components": 0
+        }
+      ],
+      "otherBotEmbeds": []
+    }
+  }
+}

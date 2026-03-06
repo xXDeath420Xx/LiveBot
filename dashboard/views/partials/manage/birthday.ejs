@@ -1,0 +1,426 @@
+<style>
+/* Compact Birthday Page Styles */
+.birthday-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.birthday-stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s ease;
+}
+
+.birthday-stat-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.birthday-stat-icon {
+    width: 36px;
+    height: 36px;
+    background: rgba(167, 139, 250, 0.15);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.birthday-stat-icon i { font-size: 0.9rem; color: #a78bfa; }
+.birthday-stat-icon.pink { background: rgba(236, 72, 153, 0.15); }
+.birthday-stat-icon.pink i { color: #ec4899; }
+.birthday-stat-icon.green { background: rgba(34, 197, 94, 0.15); }
+.birthday-stat-icon.green i { color: #22c55e; }
+
+.birthday-stat-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.birthday-stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #a78bfa;
+}
+
+/* Section Cards */
+.birthday-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.birthday-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.birthday-section-header i {
+    font-size: 1rem;
+    color: #a78bfa;
+}
+
+.birthday-section-header.commands i { color: #60a5fa; }
+
+.birthday-section-header h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0;
+}
+
+.birthday-section-header p {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 2px 0 0 0;
+}
+
+.birthday-section-body {
+    padding: 18px;
+}
+
+/* Toggle Switch */
+.birthday-toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+}
+
+.birthday-toggle-wrapper:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.birthday-toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.birthday-toggle input { opacity: 0; width: 0; height: 0; }
+
+.birthday-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: 0.2s;
+    border-radius: 24px;
+}
+
+.birthday-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+.birthday-toggle input:checked + .birthday-toggle-slider {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    border-color: #a78bfa;
+}
+
+.birthday-toggle input:checked + .birthday-toggle-slider:before {
+    transform: translateX(20px);
+}
+
+.birthday-toggle-label {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 0.85rem;
+}
+
+.birthday-toggle-desc {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 2px;
+}
+
+/* Form Styles */
+.birthday-form-group {
+    margin-bottom: 16px;
+}
+
+.birthday-form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+
+.birthday-form-label i {
+    color: #a78bfa;
+    margin-right: 6px;
+}
+
+.birthday-form-input,
+.birthday-form-select,
+.birthday-form-textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.birthday-form-textarea {
+    min-height: 70px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.birthday-form-input:focus,
+.birthday-form-select:focus,
+.birthday-form-textarea:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+
+.birthday-form-select option {
+    background: #1a1d21;
+    color: #ffffff;
+}
+
+.birthday-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Placeholder Tag */
+.birthday-placeholder-tag {
+    padding: 2px 6px;
+    background: rgba(167, 139, 250, 0.15);
+    border-radius: 4px;
+    color: #a78bfa;
+    font-size: 0.7rem;
+    font-family: monospace;
+    font-weight: 600;
+}
+
+/* Save Button */
+.birthday-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.birthday-save-btn:hover {
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
+}
+
+/* Command Cards */
+.birthday-commands-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.birthday-command-card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.birthday-command-name {
+    display: inline-block;
+    padding: 4px 8px;
+    background: rgba(167, 139, 250, 0.15);
+    border-radius: 4px;
+    color: #a78bfa;
+    font-family: monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.birthday-command-desc {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 1200px) {
+    .birthday-stats-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .birthday-stats-grid { grid-template-columns: 1fr; }
+    .birthday-commands-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-birthday-cake"></i>
+                <span>Birthday System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Configure birthday tracking and announcements for your server
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <% if (birthdayStats) { %>
+        <div class="birthday-stats-grid">
+            <div class="birthday-stat-card">
+                <div class="birthday-stat-icon"><i class="fas fa-gift"></i></div>
+                <div>
+                    <div class="birthday-stat-label">Total</div>
+                    <div class="birthday-stat-value"><%= birthdayStats.total || 0 %></div>
+                </div>
+            </div>
+            <div class="birthday-stat-card">
+                <div class="birthday-stat-icon pink"><i class="fas fa-calendar-alt"></i></div>
+                <div>
+                    <div class="birthday-stat-label">This Month</div>
+                    <div class="birthday-stat-value"><%= birthdayStats.thisMonth || 0 %></div>
+                </div>
+            </div>
+            <div class="birthday-stat-card">
+                <div class="birthday-stat-icon green"><i class="fas fa-clock"></i></div>
+                <div>
+                    <div class="birthday-stat-label">Next 7 Days</div>
+                    <div class="birthday-stat-value"><%= birthdayStats.upcoming || 0 %></div>
+                </div>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Configuration Section -->
+    <div class="birthday-section-card">
+        <div class="birthday-section-header">
+            <i class="fas fa-cog"></i>
+            <div>
+                <h3>Birthday Announcements</h3>
+                <p>Configure how birthday messages are sent</p>
+            </div>
+        </div>
+        <div class="birthday-section-body">
+            <form action="/manage/<%= guild.id %>/birthday/config" method="POST">
+                <!-- Enable Toggle -->
+                <label class="birthday-toggle-wrapper">
+                    <div class="birthday-toggle">
+                        <input type="checkbox" id="birthdayEnabled" name="enabled" <%= (birthdayConfig && birthdayConfig.enabled) ? 'checked' : '' %>>
+                        <span class="birthday-toggle-slider"></span>
+                    </div>
+                    <div>
+                        <div class="birthday-toggle-label">Enable Birthday Announcements</div>
+                        <div class="birthday-toggle-desc">Post daily birthday messages for server members</div>
+                    </div>
+                </label>
+
+                <!-- Channel Select -->
+                <div class="birthday-form-group">
+                    <label class="birthday-form-label">
+                        <i class="fas fa-hashtag"></i>Announcement Channel
+                    </label>
+                    <select class="birthday-form-select" name="channelId" required>
+                        <option value="">Select channel...</option>
+                        <% (channels || []).filter(c => c.type === 0).forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= (birthdayConfig && birthdayConfig.announcement_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                    <span class="birthday-form-hint">Channel where birthday announcements will be posted daily</span>
+                </div>
+
+                <!-- Custom Message -->
+                <div class="birthday-form-group" style="margin-bottom: 0;">
+                    <label class="birthday-form-label">
+                        <i class="fas fa-comment-dots"></i>Custom Birthday Message (Optional)
+                    </label>
+                    <textarea class="birthday-form-textarea" name="messageTemplate" placeholder="Happy Birthday {user}! 🎉🎂"><%= (birthdayConfig && birthdayConfig.message_template) ? birthdayConfig.message_template : '' %></textarea>
+                    <span class="birthday-form-hint">
+                        Use <span class="birthday-placeholder-tag">{user}</span> as placeholder for the user mention. Leave empty for default message.
+                    </span>
+                </div>
+
+                <div style="margin-top: 24px;">
+                    <button type="submit" class="birthday-save-btn">
+                        <i class="fas fa-save"></i>
+                        Save Birthday Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- User Commands Section -->
+    <div class="birthday-section-card">
+        <div class="birthday-section-header commands">
+            <i class="fas fa-terminal"></i>
+            <div>
+                <h3>User Commands</h3>
+                <p>Commands available for your server members</p>
+            </div>
+        </div>
+        <div class="birthday-section-body">
+            <div class="birthday-commands-grid">
+                <div class="birthday-command-card">
+                    <div class="birthday-command-name">/birthday set</div>
+                    <div class="birthday-command-desc">Set their birthday date</div>
+                </div>
+                <div class="birthday-command-card">
+                    <div class="birthday-command-name">/birthday view</div>
+                    <div class="birthday-command-desc">View their saved birthday</div>
+                </div>
+                <div class="birthday-command-card">
+                    <div class="birthday-command-name">/birthday remove</div>
+                    <div class="birthday-command-desc">Remove their birthday from the system</div>
+                </div>
+                <div class="birthday-command-card">
+                    <div class="birthday-command-name">/birthday upcoming</div>
+                    <div class="birthday-command-desc">View upcoming birthdays in the server</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Home</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/channels" class="ember-nav-link active">Channels</a>
+                <a href="/tokes-bot/leaderboards" class="ember-nav-link">Leaderboards</a>
+            </div>
+
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Channels Content -->
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Header -->
+            <div class="ember-dashboard-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 class="ember-dashboard-title">Manage Channels</h1>
+                    <p class="ember-dashboard-subtitle">Add CertiFriedUtility to your Twitch or Kick channels</p>
+                </div>
+                <button class="ember-btn ember-btn-primary" onclick="openAddModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Add Channel
+                </button>
+            </div>
+
+            <!-- Connected Accounts Info -->
+            <div class="ember-card ember-mb-3">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Connected Accounts</h2>
+                </div>
+                <div class="ember-card-body">
+                    <p class="ember-text-muted ember-mb-2">
+                        The bot uses your connected accounts to send messages. You can add channels that match your connected platforms.
+                    </p>
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <% connections.forEach(conn => { %>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--ember-bg-elevated); border-radius: 8px;">
+                                <span class="ember-badge <%= conn.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>">
+                                    <%= conn.platform.toUpperCase() %>
+                                </span>
+                                <span><%= conn.platform_name %></span>
+                                <% if (conn.is_bot_account) { %>
+                                    <span class="ember-badge ember-badge-primary">Bot</span>
+                                <% } %>
+                            </div>
+                        <% }) %>
+                        <% if (connections.length < 2) { %>
+                            <a href="/tokes-bot/auth/<%= connections.length === 0 || connections[0].platform === 'kick' ? 'twitch' : 'kick' %>"
+                               class="ember-btn ember-btn-sm ember-btn-outline">
+                                + Connect <%= connections.length === 0 || connections[0].platform === 'kick' ? 'Twitch' : 'Kick' %>
+                            </a>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Channels List -->
+            <div class="ember-card">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Your Channels (<%= channels.length %>)</h2>
+                </div>
+                <div class="ember-card-body">
+                    <% if (channels.length === 0) { %>
+                        <div class="ember-text-center" style="padding: 3rem;">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="color: var(--ember-text-muted); margin-bottom: 1rem;">
+                                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                                <polyline points="17 2 12 7 7 2"/>
+                            </svg>
+                            <h3 style="margin-bottom: 0.5rem;">No channels yet</h3>
+                            <p class="ember-text-muted ember-mb-2">Add your first channel to get started with CertiFriedUtility</p>
+                            <button class="ember-btn ember-btn-primary" onclick="openAddModal()">Add Your First Channel</button>
+                        </div>
+                    <% } else { %>
+                        <table class="ember-table">
+                            <thead>
+                                <tr>
+                                    <th>Channel</th>
+                                    <th>Platform</th>
+                                    <th>Status</th>
+                                    <th style="text-align: right;">Members</th>
+                                    <th style="text-align: right;">Tokes</th>
+                                    <th style="text-align: right;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% channels.forEach(channel => { %>
+                                    <tr>
+                                        <td>
+                                            <strong><%= channel.channel_name %></strong>
+                                            <div style="font-size: 0.75rem; color: var(--ember-text-muted);">
+                                                via <%= channel.connection_name %>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="ember-badge <%= channel.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>">
+                                                <%= channel.platform.toUpperCase() %>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <% if (channel.is_enabled) { %>
+                                                <span class="ember-badge ember-badge-success">Active</span>
+                                            <% } else { %>
+                                                <span class="ember-badge ember-badge-warning">Paused</span>
+                                            <% } %>
+                                        </td>
+                                        <td style="text-align: right;"><%= (channel.member_count || 0).toLocaleString() %></td>
+                                        <td style="text-align: right; color: var(--ember-primary); font-weight: 600;">
+                                            <%= (channel.total_tokes || 0).toLocaleString() %>
+                                        </td>
+                                        <td style="text-align: right;">
+                                            <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                                                <a href="/tokes-bot/channels/<%= channel.id %>" class="ember-btn ember-btn-sm ember-btn-ghost">
+                                                    Settings
+                                                </a>
+                                                <button class="ember-btn ember-btn-sm ember-btn-ghost" style="color: var(--ember-error);"
+                                                        onclick="confirmDelete(<%= channel.id %>, '<%= channel.channel_name %>')">
+                                                    Remove
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Add Channel Modal -->
+    <div id="add-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; align-items: center; justify-content: center;">
+        <div class="ember-card" style="max-width: 500px; width: 90%;">
+            <div class="ember-card-header">
+                <h2 class="ember-card-title">Add Channel</h2>
+                <button class="ember-btn ember-btn-ghost" onclick="closeAddModal()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="ember-card-body">
+                <form id="add-channel-form">
+                    <div class="ember-mb-2">
+                        <label class="ember-label">Platform Connection</label>
+                        <select id="connection-select" class="ember-input" required>
+                            <option value="">Select a connection...</option>
+                            <% connections.forEach(conn => { %>
+                                <option value="<%= conn.id %>" data-platform="<%= conn.platform %>" data-name="<%= conn.platform_name %>" data-id="<%= conn.platform_id %>">
+                                    <%= conn.platform.toUpperCase() %>: <%= conn.platform_name %>
+                                </option>
+                            <% }) %>
+                        </select>
+                    </div>
+
+                    <div class="ember-mb-2">
+                        <label class="ember-label">Channel Name</label>
+                        <input type="text" id="channel-name" class="ember-input" placeholder="Your channel name" required>
+                        <small class="ember-text-muted">Usually your username or channel URL name</small>
+                    </div>
+
+                    <div class="ember-mb-3">
+                        <label class="ember-label">Channel ID (Optional)</label>
+                        <input type="text" id="channel-id" class="ember-input" placeholder="Will auto-detect if left empty">
+                        <small class="ember-text-muted">Leave blank to use the connection's ID</small>
+                    </div>
+
+                    <div id="add-error" class="ember-alert ember-alert-error" style="display: none;"></div>
+
+                    <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                        <button type="button" class="ember-btn ember-btn-ghost" onclick="closeAddModal()">Cancel</button>
+                        <button type="submit" class="ember-btn ember-btn-primary">Add Channel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function openAddModal() {
+            document.getElementById('add-modal').style.display = 'flex';
+        }
+
+        function closeAddModal() {
+            document.getElementById('add-modal').style.display = 'none';
+            document.getElementById('add-channel-form').reset();
+            document.getElementById('add-error').style.display = 'none';
+        }
+
+        document.getElementById('add-channel-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const connectionSelect = document.getElementById('connection-select');
+            const selectedOption = connectionSelect.options[connectionSelect.selectedIndex];
+
+            const data = {
+                connectionId: connectionSelect.value,
+                platform: selectedOption.dataset.platform,
+                channelName: document.getElementById('channel-name').value.trim(),
+                channelId: document.getElementById('channel-id').value.trim() || selectedOption.dataset.id
+            };
+
+            try {
+                const response = await fetch('/tokes-bot/api/channels', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    document.getElementById('add-error').textContent = result.error || 'Failed to add channel';
+                    document.getElementById('add-error').style.display = 'block';
+                }
+            } catch (err) {
+                document.getElementById('add-error').textContent = 'Network error. Please try again.';
+                document.getElementById('add-error').style.display = 'block';
+            }
+        });
+
+        async function confirmDelete(channelId, channelName) {
+            if (!confirm(`Are you sure you want to remove "${channelName}" from CertiFriedUtility?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/tokes-bot/api/channels/${channelId}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    alert(result.error || 'Failed to remove channel');
+                }
+            } catch (err) {
+                alert('Network error. Please try again.');
+            }
+        }
+
+        // Close modal on outside click
+        document.getElementById('add-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'add-modal') {
+                closeAddModal();
+            }
+        });
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

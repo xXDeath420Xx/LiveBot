@@ -1,0 +1,279 @@
+<%# Modmail System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Threads',
+            value: locals.modmailStats?.total_threads || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Threads',
+            value: locals.modmailStats?.active_threads || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Avg Response',
+            value: locals.modmailStats?.avg_response_time || '0m',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Avg Resolution',
+            value: locals.modmailStats?.avg_resolution_time || '0h',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Modmail Configuration</h3>
+                    <p class="text-sm text-gray-400">Configure modmail settings and staff team</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'modmail_enabled',
+                id: 'modmail_enabled',
+                checked: locals.modmailConfig?.enabled || false,
+                label: 'Enable Modmail',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="modmail-form" action="/api/guilds/<%= guildId %>/modmail/config" method="PUT">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-group">
+                    <label class="form-label">Modmail Category</label>
+                    <select name="category_id" class="form-input w-full">
+                        <option value="">Select a category</option>
+                        <% (locals.categories || []).forEach(category => { %>
+                            <option value="<%= category.id %>" <%= locals.modmailConfig?.category_id === category.id ? 'selected' : '' %>><%= category.name %></option>
+                        <% }) %>
+                    </select>
+                    <p class="form-hint">Thread channels will be created here</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Staff Role</label>
+                    <%- include('../../components/forms/roleSelect', {
+                        name: 'staff_role_id',
+                        roles: Array.from(roles.values()),
+                        selected: locals.modmailConfig?.staff_role_id,
+                        placeholder: 'Select a role'
+                    }) %>
+                    <p class="form-hint">Staff with this role can view and respond</p>
+                </div>
+            </div>
+
+            <div class="form-group mt-4">
+                <label class="form-label">Auto-Response Message</label>
+                <textarea name="greeting_message" class="form-input w-full h-20 resize-none" placeholder="Thank you for contacting our staff team..."><%= locals.modmailConfig?.greeting_message || '' %></textarea>
+                <p class="form-hint">Automatic message sent when users open a new thread</p>
+            </div>
+
+            <div class="form-group mt-4">
+                <label class="form-label">Thread Close Message</label>
+                <textarea name="close_message" class="form-input w-full h-16 resize-none" placeholder="This modmail thread has been closed..."><%= locals.modmailConfig?.close_message || '' %></textarea>
+                <p class="form-hint">Message sent to users when their thread is closed</p>
+            </div>
+
+            <% if (locals.modmailConfig?.enabled && locals.modmailConfig?.category_id && locals.modmailConfig?.staff_role_id) { %>
+                <div class="p-3 bg-accent-green/10 border border-accent-green/30 rounded-lg mt-4">
+                    <div class="flex items-center gap-2 text-accent-green text-sm">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Modmail system is fully configured and active
+                    </div>
+                </div>
+            <% } %>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Configuration
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Active Threads -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-white">Active Threads</h3>
+            <div class="relative">
+                <input type="text" id="threadSearch" class="form-input pl-10 w-64" placeholder="Search threads...">
+                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </div>
+        </div>
+
+        <% if (locals.modmailThreads && modmailThreads.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">User</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Thread ID</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Messages</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% modmailThreads.forEach(thread => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-full bg-dark-500 border-2 border-primary-500 flex items-center justify-center">
+                                            <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <div class="font-medium text-white"><%= thread.user_tag || 'Unknown' %></div>
+                                            <div class="text-xs text-gray-500"><%= thread.user_id %></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <code class="text-xs bg-dark-500 px-2 py-1 rounded text-blue-400">#<%= thread.id %></code>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (thread.status === 'open') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-green/20 text-accent-green">Open</span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-dark-400 text-gray-400"><%= thread.status %></span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-primary-500/20 text-primary-400"><%= thread.message_count || 0 %></span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <div class="flex items-center justify-end gap-2">
+                                        <button onclick="viewThread('<%= thread.id %>')" class="p-2 text-gray-400 hover:text-primary-400 hover:bg-dark-700 rounded-lg transition-colors" title="View">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                        </button>
+                                        <button onclick="closeThread('<%= thread.id %>')" class="p-2 text-gray-400 hover:text-accent-red hover:bg-dark-700 rounded-lg transition-colors" title="Close">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Active Threads</h4>
+                <p class="text-gray-400">No open modmail threads at the moment</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-primary-500/10 to-blue-500/10 border-primary-500/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How Modmail Works</h4>
+                <ul class="text-sm text-gray-300 space-y-1.5">
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">1.</span>
+                        Users send a direct message to the bot
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">2.</span>
+                        Bot creates a private thread channel in the configured category
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">3.</span>
+                        Staff members can view and respond through the thread channel
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">4.</span>
+                        All messages are relayed between user's DM and thread
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">5.</span>
+                        Staff can close threads when the issue is resolved
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('modmail-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        enabled: document.getElementById('modmail_enabled').checked,
+        category_id: formData.get('category_id') || null,
+        staff_role_id: formData.get('staff_role_id') || null,
+        greeting_message: formData.get('greeting_message') || null,
+        close_message: formData.get('close_message') || null
+    };
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Modmail configuration saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save configuration'); }
+});
+
+document.getElementById('threadSearch')?.addEventListener('input', function(e) {
+    const query = e.target.value.toLowerCase();
+    // Filter logic
+});
+
+async function viewThread(id) {
+    showToast('info', 'View thread ' + id);
+    // Implement view modal
+}
+
+async function closeThread(id) {
+    if (!confirm('Close this thread?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/modmail/threads/${id}/close`, { method: 'POST' });
+        if (response.ok) { showToast('success', 'Thread closed'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to close thread'); }
+}
+</script>

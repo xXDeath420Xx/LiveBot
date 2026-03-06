@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css?v=1769510480">
+    <style>
+        .session-card {
+            background: var(--ember-bg-card);
+            border: 1px solid var(--ember-border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        .session-card.admin-session {
+            border-left: 3px solid var(--ember-warning);
+        }
+        .session-card.idle-warning {
+            border-left: 3px solid var(--ember-error);
+        }
+        .session-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.5rem;
+        }
+        .session-user {
+            font-weight: 600;
+            color: var(--ember-text-primary);
+        }
+        .session-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--ember-text-muted);
+        }
+        .session-meta span {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .log-entry {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--ember-border);
+        }
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        .log-type {
+            padding: 0.125rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .log-type.login { background: var(--ember-success-dim); color: var(--ember-success); }
+        .log-type.logout { background: var(--ember-bg-elevated); color: var(--ember-text-muted); }
+        .log-type.timeout { background: var(--ember-warning-dim); color: var(--ember-warning); }
+        .log-type.force_logout { background: var(--ember-error-dim); color: var(--ember-error); }
+        .log-type.suspicious { background: var(--ember-error-dim); color: var(--ember-error); }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+                <span class="ember-badge ember-badge-error">Admin</span>
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Public Site</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/admin" class="ember-nav-link">Overview</a>
+                <a href="/tokes-bot/admin/users" class="ember-nav-link">Users</a>
+                <a href="/tokes-bot/admin/moderation" class="ember-nav-link">Moderation</a>
+                <a href="/tokes-bot/admin/analytics" class="ember-nav-link">Analytics</a>
+                <a href="/tokes-bot/admin/health" class="ember-nav-link">Health</a>
+                <a href="/tokes-bot/admin/commands" class="ember-nav-link">Commands</a>
+                <a href="/tokes-bot/admin/sessions" class="ember-nav-link active">Sessions</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Session Management</h1>
+                <p class="ember-dashboard-subtitle">Monitor and manage user sessions - Admin timeout: 30 min inactivity</p>
+            </div>
+
+            <!-- Stats -->
+            <div id="statsContainer" class="stat-grid">
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value" id="activeSessions">-</div>
+                    <div class="ember-stat-label">Active Sessions</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value" id="uniqueUsers">-</div>
+                    <div class="ember-stat-label">Unique Users</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value" id="adminSessions">-</div>
+                    <div class="ember-stat-label">Admin Sessions</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value" id="logins24h">-</div>
+                    <div class="ember-stat-label">Logins (24h)</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value" id="timeouts24h">-</div>
+                    <div class="ember-stat-label">Timeouts (24h)</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value" id="failedLogins24h">-</div>
+                    <div class="ember-stat-label">Failed Logins (24h)</div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="ember-card ember-mb-3">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Quick Actions</h2>
+                </div>
+                <div class="ember-card-body">
+                    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                        <button class="ember-btn ember-btn-outline" onclick="loadSessions()">
+                            Refresh Sessions
+                        </button>
+                        <button class="ember-btn ember-btn-outline" onclick="cleanupSessions()">
+                            Cleanup Expired
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Two Column Layout -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <!-- Active Sessions -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Active Sessions</h2>
+                    </div>
+                    <div class="ember-card-body" id="sessionsContainer" style="max-height: 600px; overflow-y: auto;">
+                        <p class="ember-text-muted ember-text-center">Loading sessions...</p>
+                    </div>
+                </div>
+
+                <!-- Session Logs -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Session Logs</h2>
+                        <select id="logTypeFilter" class="ember-select" style="width: auto; padding: 0.25rem 0.5rem; font-size: 0.85rem;">
+                            <option value="">All Events</option>
+                            <option value="login">Logins</option>
+                            <option value="logout">Logouts</option>
+                            <option value="timeout">Timeouts</option>
+                            <option value="force_logout">Forced Logouts</option>
+                        </select>
+                    </div>
+                    <div class="ember-card-body" id="logsContainer" style="max-height: 600px; overflow-y: auto;">
+                        <p class="ember-text-muted ember-text-center">Loading logs...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Suspicious Activity -->
+            <div class="ember-card ember-mt-3" id="suspiciousSection" style="display: none;">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title" style="color: var(--ember-error);">Suspicious Activity</h2>
+                </div>
+                <div class="ember-card-body" id="suspiciousContainer">
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/admin" class="ember-footer-link">Admin Home</a>
+                <a href="/tokes-bot/admin/health" class="ember-footer-link">Health Monitor</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Helper to escape HTML to prevent XSS
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Load stats
+        async function loadStats() {
+            try {
+                const response = await fetch('/tokes-bot/api/admin/sessions/stats');
+                const data = await response.json();
+
+                document.getElementById('activeSessions').textContent = data.stats.active_sessions || 0;
+                document.getElementById('uniqueUsers').textContent = data.stats.unique_users || 0;
+                document.getElementById('adminSessions').textContent = data.stats.admin_sessions || 0;
+                document.getElementById('logins24h').textContent = data.stats.logins_24h || 0;
+                document.getElementById('timeouts24h').textContent = data.stats.timeouts_24h || 0;
+                document.getElementById('failedLogins24h').textContent = data.stats.failed_logins_24h || 0;
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        // Render a single session card
+        function renderSessionCard(s) {
+            const card = document.createElement('div');
+            card.className = 'session-card';
+            if (s.is_admin) card.classList.add('admin-session');
+            if (s.idle_minutes > 25 && s.is_admin) card.classList.add('idle-warning');
+
+            const header = document.createElement('div');
+            header.className = 'session-header';
+
+            const userInfo = document.createElement('div');
+            const userName = document.createElement('span');
+            userName.className = 'session-user';
+            userName.textContent = s.primary_name || 'Anonymous';
+            userInfo.appendChild(userName);
+
+            if (s.is_admin) {
+                const adminBadge = document.createElement('span');
+                adminBadge.className = 'ember-badge ember-badge-warning';
+                adminBadge.style.cssText = 'margin-left: 0.5rem; font-size: 0.65rem;';
+                adminBadge.textContent = 'ADMIN';
+                userInfo.appendChild(adminBadge);
+            }
+
+            const terminateBtn = document.createElement('button');
+            terminateBtn.className = 'ember-btn ember-btn-ghost ember-btn-sm';
+            terminateBtn.title = 'Terminate Session';
+            terminateBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+            terminateBtn.onclick = () => terminateSession(s.session_id);
+
+            header.appendChild(userInfo);
+            header.appendChild(terminateBtn);
+
+            const meta = document.createElement('div');
+            meta.className = 'session-meta';
+
+            const spans = [
+                `IP: ${escapeHtml(s.ip_address) || 'Unknown'}`,
+                `Idle: ${s.idle_minutes}m`,
+                `Duration: ${s.session_duration_minutes}m`,
+                escapeHtml((s.user_agent || 'Unknown').substring(0, 30)) + '...'
+            ];
+
+            spans.forEach(text => {
+                const span = document.createElement('span');
+                span.textContent = text;
+                meta.appendChild(span);
+            });
+
+            card.appendChild(header);
+            card.appendChild(meta);
+            return card;
+        }
+
+        // Load sessions
+        async function loadSessions() {
+            try {
+                const response = await fetch('/tokes-bot/api/admin/sessions');
+                const data = await response.json();
+
+                const container = document.getElementById('sessionsContainer');
+                container.innerHTML = '';
+
+                if (data.sessions.length === 0) {
+                    const msg = document.createElement('p');
+                    msg.className = 'ember-text-muted ember-text-center';
+                    msg.textContent = 'No active sessions';
+                    container.appendChild(msg);
+                    return;
+                }
+
+                data.sessions.forEach(s => {
+                    container.appendChild(renderSessionCard(s));
+                });
+
+            } catch (error) {
+                console.error('Failed to load sessions:', error);
+                const container = document.getElementById('sessionsContainer');
+                container.innerHTML = '';
+                const msg = document.createElement('p');
+                msg.className = 'ember-text-muted ember-text-center';
+                msg.textContent = 'Failed to load sessions';
+                container.appendChild(msg);
+            }
+        }
+
+        // Render a single log entry
+        function renderLogEntry(log) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+
+            const left = document.createElement('div');
+
+            const typeSpan = document.createElement('span');
+            typeSpan.className = 'log-type ' + log.event_type;
+            typeSpan.textContent = log.event_type;
+            left.appendChild(typeSpan);
+
+            const nameSpan = document.createElement('span');
+            nameSpan.style.cssText = 'margin-left: 0.5rem; color: var(--ember-text-primary);';
+            nameSpan.textContent = log.primary_name || 'Unknown';
+            left.appendChild(nameSpan);
+
+            if (log.ip_address) {
+                const ipSpan = document.createElement('span');
+                ipSpan.style.cssText = 'margin-left: 0.5rem; font-size: 0.75rem; color: var(--ember-text-muted);';
+                ipSpan.textContent = log.ip_address;
+                left.appendChild(ipSpan);
+            }
+
+            const timeSpan = document.createElement('span');
+            timeSpan.style.cssText = 'font-size: 0.75rem; color: var(--ember-text-muted);';
+            timeSpan.textContent = new Date(log.created_at).toLocaleString();
+
+            entry.appendChild(left);
+            entry.appendChild(timeSpan);
+            return entry;
+        }
+
+        // Load logs
+        async function loadLogs(type) {
+            type = type || '';
+            try {
+                const url = type
+                    ? '/tokes-bot/api/admin/sessions/logs?type=' + encodeURIComponent(type) + '&limit=50'
+                    : '/tokes-bot/api/admin/sessions/logs?limit=50';
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                const container = document.getElementById('logsContainer');
+                container.innerHTML = '';
+
+                if (data.logs.length === 0) {
+                    const msg = document.createElement('p');
+                    msg.className = 'ember-text-muted ember-text-center';
+                    msg.textContent = 'No logs found';
+                    container.appendChild(msg);
+                    return;
+                }
+
+                data.logs.forEach(log => {
+                    container.appendChild(renderLogEntry(log));
+                });
+
+            } catch (error) {
+                console.error('Failed to load logs:', error);
+                const container = document.getElementById('logsContainer');
+                container.innerHTML = '';
+                const msg = document.createElement('p');
+                msg.className = 'ember-text-muted ember-text-center';
+                msg.textContent = 'Failed to load logs';
+                container.appendChild(msg);
+            }
+        }
+
+        // Load suspicious activity
+        async function loadSuspicious() {
+            try {
+                const response = await fetch('/tokes-bot/api/admin/security/login-attempts');
+                const data = await response.json();
+
+                if (data.suspiciousIps && data.suspiciousIps.length > 0) {
+                    document.getElementById('suspiciousSection').style.display = 'block';
+                    const container = document.getElementById('suspiciousContainer');
+                    container.innerHTML = '';
+
+                    const intro = document.createElement('p');
+                    intro.className = 'ember-text-muted ember-mb-2';
+                    intro.textContent = 'IPs with 5+ failed login attempts in the last hour:';
+                    container.appendChild(intro);
+
+                    const table = document.createElement('table');
+                    table.className = 'ember-table';
+
+                    const thead = document.createElement('thead');
+                    thead.innerHTML = '<tr><th>IP Address</th><th>Attempts</th><th>Last Attempt</th></tr>';
+                    table.appendChild(thead);
+
+                    const tbody = document.createElement('tbody');
+                    data.suspiciousIps.forEach(ip => {
+                        const tr = document.createElement('tr');
+
+                        const ipCell = document.createElement('td');
+                        ipCell.style.fontFamily = 'monospace';
+                        ipCell.textContent = ip.ip_address;
+                        tr.appendChild(ipCell);
+
+                        const countCell = document.createElement('td');
+                        countCell.style.cssText = 'color: var(--ember-error); font-weight: 600;';
+                        countCell.textContent = ip.attempt_count;
+                        tr.appendChild(countCell);
+
+                        const timeCell = document.createElement('td');
+                        timeCell.textContent = new Date(ip.last_attempt).toLocaleString();
+                        tr.appendChild(timeCell);
+
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+                    container.appendChild(table);
+                }
+            } catch (error) {
+                console.error('Failed to load suspicious activity:', error);
+            }
+        }
+
+        // Terminate session
+        async function terminateSession(sessionId) {
+            if (!confirm('Are you sure you want to terminate this session?')) return;
+
+            const reason = prompt('Reason for termination (optional):');
+
+            try {
+                const response = await fetch('/tokes-bot/api/admin/sessions/terminate/' + encodeURIComponent(sessionId), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: reason || '' })
+                });
+
+                if (response.ok) {
+                    loadSessions();
+                    loadStats();
+                    loadLogs();
+                } else {
+                    alert('Failed to terminate session');
+                }
+            } catch (error) {
+                console.error('Failed to terminate session:', error);
+                alert('Failed to terminate session');
+            }
+        }
+
+        // Cleanup expired sessions
+        async function cleanupSessions() {
+            try {
+                const response = await fetch('/tokes-bot/api/admin/sessions/cleanup', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                alert('Cleaned up ' + data.deleted + ' expired sessions');
+                loadSessions();
+                loadStats();
+            } catch (error) {
+                console.error('Failed to cleanup sessions:', error);
+                alert('Failed to cleanup sessions');
+            }
+        }
+
+        // Log type filter
+        document.getElementById('logTypeFilter').addEventListener('change', function() {
+            loadLogs(this.value);
+        });
+
+        // Initial load
+        loadStats();
+        loadSessions();
+        loadLogs();
+        loadSuspicious();
+
+        // Auto-refresh every 30 seconds
+        setInterval(function() {
+            loadStats();
+            loadSessions();
+        }, 30000);
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

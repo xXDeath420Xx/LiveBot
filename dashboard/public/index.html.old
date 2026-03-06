@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CertiFried Utility Dashboard</title>
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h1>CertiFried Utility</h1>
+            <button class="sidebar-toggle" id="sidebarToggle">☰</button>
+        </div>
+
+        <div class="user-info" id="userInfo">
+            <div class="user-avatar-skeleton"></div>
+            <div class="user-details-skeleton"></div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <a href="#" data-page="overview" class="nav-item active">
+                <span class="nav-icon">🏠</span>
+                <span class="nav-text">Overview</span>
+            </a>
+            <a href="#" data-page="servers" class="nav-item">
+                <span class="nav-icon">🖥️</span>
+                <span class="nav-text">My Servers</span>
+            </a>
+
+            <div class="nav-section">Server Management</div>
+            <a href="#" data-page="general" class="nav-item server-only">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-text">General</span>
+            </a>
+            <a href="#" data-page="moderation" class="nav-item server-only">
+                <span class="nav-icon">🛡️</span>
+                <span class="nav-text">Moderation</span>
+            </a>
+            <a href="#" data-page="automod" class="nav-item server-only">
+                <span class="nav-icon">🤖</span>
+                <span class="nav-text">AutoMod</span>
+            </a>
+            <a href="#" data-page="logging" class="nav-item server-only">
+                <span class="nav-icon">📝</span>
+                <span class="nav-text">Logging</span>
+            </a>
+
+            <div class="nav-section">Community</div>
+            <a href="#" data-page="welcome" class="nav-item server-only">
+                <span class="nav-icon">👋</span>
+                <span class="nav-text">Welcome</span>
+            </a>
+            <a href="#" data-page="leveling" class="nav-item server-only">
+                <span class="nav-icon">📊</span>
+                <span class="nav-text">Leveling</span>
+            </a>
+            <a href="#" data-page="economy" class="nav-item server-only">
+                <span class="nav-icon">💰</span>
+                <span class="nav-text">Economy</span>
+            </a>
+            <a href="#" data-page="reaction-roles" class="nav-item server-only">
+                <span class="nav-icon">🎭</span>
+                <span class="nav-text">Reaction Roles</span>
+            </a>
+
+            <div class="nav-section">Features</div>
+            <a href="#" data-page="tickets" class="nav-item server-only">
+                <span class="nav-icon">🎫</span>
+                <span class="nav-text">Tickets</span>
+            </a>
+            <a href="#" data-page="streaming" class="nav-item server-only">
+                <span class="nav-icon">📡</span>
+                <span class="nav-text">Streaming</span>
+            </a>
+            <a href="#" data-page="music" class="nav-item server-only">
+                <span class="nav-icon">🎵</span>
+                <span class="nav-text">Music</span>
+            </a>
+            <a href="#" data-page="starboard" class="nav-item server-only">
+                <span class="nav-icon">⭐</span>
+                <span class="nav-text">Starboard</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button class="logout-btn" id="logoutBtn">Logout</button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <header class="page-header">
+            <h2 class="page-title" id="pageTitle">Dashboard</h2>
+            <div class="header-actions">
+                <select class="server-select" id="serverSelect" style="display: none;">
+                    <option value="">Select a server...</option>
+                </select>
+            </div>
+        </header>
+
+        <div class="content-area" id="contentArea">
+            <!-- Landing Page -->
+            <div class="landing-page">
+                <div class="hero">
+                    <h1>Welcome to CertiFried Utility</h1>
+                    <p>Manage your Discord server with powerful tools and features</p>
+                    <button class="btn btn-primary btn-lg" id="loginBtn">Login with Discord</button>
+                </div>
+
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">🛡️</div>
+                        <h3>Moderation</h3>
+                        <p>Advanced moderation tools with AutoMod and logging</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">👋</div>
+                        <h3>Welcome System</h3>
+                        <p>Custom welcome messages and role assignments</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">💰</div>
+                        <h3>Economy</h3>
+                        <p>Complete economy system with shop and gambling</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📊</div>
+                        <h3>Leveling</h3>
+                        <p>XP system with custom rank cards</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🎫</div>
+                        <h3>Ticketing</h3>
+                        <p>Support ticket system with transcripts</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📡</div>
+                        <h3>Streaming</h3>
+                        <p>Multi-platform stream announcements</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Sliding Panel (Instead of Modals) -->
+    <div class="slide-panel" id="slidePanel">
+        <div class="slide-panel-header">
+            <h3 id="slidePanelTitle">Panel Title</h3>
+            <button class="slide-panel-close" id="slidePanelClose">×</button>
+        </div>
+        <div class="slide-panel-content" id="slidePanelContent">
+            <!-- Dynamic content loaded here -->
+        </div>
+    </div>
+
+    <div class="slide-panel-overlay" id="slidePanelOverlay"></div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>

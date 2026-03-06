@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css?v=1769510480">
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+                <span class="ember-badge ember-badge-error">Admin</span>
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Public Site</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/admin" class="ember-nav-link active">Overview</a>
+                <a href="/tokes-bot/admin/users" class="ember-nav-link">Users</a>
+                <a href="/tokes-bot/admin/moderation" class="ember-nav-link">Moderation</a>
+                <a href="/tokes-bot/admin/analytics" class="ember-nav-link">Analytics</a>
+                <a href="/tokes-bot/admin/health" class="ember-nav-link">Health</a>
+                <a href="/tokes-bot/admin/commands" class="ember-nav-link">Commands</a>
+                <a href="/tokes-bot/admin/sessions" class="ember-nav-link">Sessions</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Admin Dashboard</h1>
+                <p class="ember-dashboard-subtitle">System overview and management tools</p>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="ember-dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= (stats.total_users || 0).toLocaleString() %></div>
+                    <div class="ember-stat-label">Total Users</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= (stats.total_channels || 0).toLocaleString() %></div>
+                    <div class="ember-stat-label">Total Channels</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= (stats.active_channels || 0).toLocaleString() %></div>
+                    <div class="ember-stat-label">Active Channels</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= (stats.active_sessions || 0).toLocaleString() %></div>
+                    <div class="ember-stat-label">Active Sessions</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= (stats.total_tokes || 0).toLocaleString() %></div>
+                    <div class="ember-stat-label">Total Tokes</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= (stats.activity_24h || 0).toLocaleString() %></div>
+                    <div class="ember-stat-label">Activity (24h)</div>
+                </div>
+            </div>
+
+            <!-- Two Column Layout -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
+                <!-- Recent Channels -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Recent Channels</h2>
+                    </div>
+                    <div class="ember-card-body">
+                        <% if (recentChannels.length === 0) { %>
+                            <p class="ember-text-muted">No channels registered yet.</p>
+                        <% } else { %>
+                            <table class="ember-table">
+                                <thead>
+                                    <tr>
+                                        <th>Channel</th>
+                                        <th>Owner</th>
+                                        <th>Added</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% recentChannels.forEach(channel => { %>
+                                        <tr>
+                                            <td>
+                                                <span class="ember-badge <%= channel.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>" style="font-size: 0.6rem;">
+                                                    <%= channel.platform.toUpperCase() %>
+                                                </span>
+                                                <%= channel.channel_name %>
+                                            </td>
+                                            <td><%= channel.owner_name %></td>
+                                            <td style="font-size: 0.8rem; color: var(--ember-text-muted);">
+                                                <%= new Date(channel.added_at).toLocaleDateString() %>
+                                            </td>
+                                        </tr>
+                                    <% }) %>
+                                </tbody>
+                            </table>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Recent Errors -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Recent Errors</h2>
+                    </div>
+                    <div class="ember-card-body" style="max-height: 400px; overflow-y: auto;">
+                        <% if (recentErrors.length === 0) { %>
+                            <div class="ember-text-center" style="padding: 2rem;">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--ember-success)" stroke-width="2" style="margin-bottom: 1rem;">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                                    <polyline points="22 4 12 14.01 9 11.01"/>
+                                </svg>
+                                <p class="ember-text-muted">No recent errors</p>
+                            </div>
+                        <% } else { %>
+                            <% recentErrors.forEach(error => { %>
+                                <div style="padding: 0.75rem; margin-bottom: 0.5rem; background: var(--ember-error-dim); border-radius: 6px; border-left: 3px solid var(--ember-error);">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+                                        <span style="font-weight: 600; color: var(--ember-error);">Error</span>
+                                        <span style="font-size: 0.75rem; color: var(--ember-text-muted);">
+                                            <%= new Date(error.logged_at).toLocaleString() %>
+                                        </span>
+                                    </div>
+                                    <div style="font-size: 0.85rem; color: var(--ember-text-secondary);">
+                                        <%= error.details || 'No details' %>
+                                    </div>
+                                    <% if (error.actor) { %>
+                                        <div style="font-size: 0.75rem; color: var(--ember-text-muted); margin-top: 0.25rem;">
+                                            User: <%= error.actor %>
+                                        </div>
+                                    <% } %>
+                                </div>
+                            <% }) %>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin Quick Links -->
+            <div class="ember-card ember-mt-3">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Admin Tools</h2>
+                </div>
+                <div class="ember-card-body">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                        <a href="/tokes-bot/admin/analytics" class="ember-card" style="text-decoration: none; background: var(--ember-bg-elevated); padding: 1.5rem; text-align: center; transition: transform 0.2s, border-color 0.2s;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ember-primary)" stroke-width="2" style="margin-bottom: 0.75rem;">
+                                <line x1="18" y1="20" x2="18" y2="10"/>
+                                <line x1="12" y1="20" x2="12" y2="4"/>
+                                <line x1="6" y1="20" x2="6" y2="14"/>
+                            </svg>
+                            <div style="font-weight: 600; color: var(--ember-text-primary); margin-bottom: 0.25rem;">Analytics</div>
+                            <div style="font-size: 0.8rem; color: var(--ember-text-muted);">Real-time stats & charts</div>
+                        </a>
+                        <a href="/tokes-bot/admin/users" class="ember-card" style="text-decoration: none; background: var(--ember-bg-elevated); padding: 1.5rem; text-align: center; transition: transform 0.2s, border-color 0.2s;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ember-primary)" stroke-width="2" style="margin-bottom: 0.75rem;">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                            <div style="font-weight: 600; color: var(--ember-text-primary); margin-bottom: 0.25rem;">Users</div>
+                            <div style="font-size: 0.8rem; color: var(--ember-text-muted);">Manage user accounts</div>
+                        </a>
+                        <a href="/tokes-bot/admin/moderation" class="ember-card" style="text-decoration: none; background: var(--ember-bg-elevated); padding: 1.5rem; text-align: center; transition: transform 0.2s, border-color 0.2s;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ember-primary)" stroke-width="2" style="margin-bottom: 0.75rem;">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                            <div style="font-weight: 600; color: var(--ember-text-primary); margin-bottom: 0.25rem;">Moderation</div>
+                            <div style="font-size: 0.8rem; color: var(--ember-text-muted);">Thoughts, trivia, strains</div>
+                        </a>
+                        <a href="/tokes-bot/admin/sessions" class="ember-card" style="text-decoration: none; background: var(--ember-bg-elevated); padding: 1.5rem; text-align: center; transition: transform 0.2s, border-color 0.2s;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ember-primary)" stroke-width="2" style="margin-bottom: 0.75rem;">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <div style="font-weight: 600; color: var(--ember-text-primary); margin-bottom: 0.25rem;">Sessions</div>
+                            <div style="font-size: 0.8rem; color: var(--ember-text-muted);">Active user sessions</div>
+                        </a>
+                        <a href="/tokes-bot/admin/commands" class="ember-card" style="text-decoration: none; background: var(--ember-bg-elevated); padding: 1.5rem; text-align: center; transition: transform 0.2s, border-color 0.2s;">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--ember-primary)" stroke-width="2" style="margin-bottom: 0.75rem;">
+                                <polyline points="4 17 10 11 4 5"/>
+                                <line x1="12" y1="19" x2="20" y2="19"/>
+                            </svg>
+                            <div style="font-weight: 600; color: var(--ember-text-primary); margin-bottom: 0.25rem;">Commands</div>
+                            <div style="font-size: 0.8rem; color: var(--ember-text-muted);">Global command config</div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Admin API Panel -->
+            <div class="ember-card ember-mt-3">
+                <div class="ember-card-header" style="padding-bottom: 0;">
+                    <div style="display: flex; gap: 0; border-bottom: 1px solid var(--ember-border);">
+                        <button class="admin-tab active" data-tab="stats">Live Stats</button>
+                        <button class="admin-tab" data-tab="activity">Activity</button>
+                        <button class="admin-tab" data-tab="moderation">Ban / Unban</button>
+                        <button class="admin-tab" data-tab="api">API</button>
+                    </div>
+                </div>
+                <div class="ember-card-body">
+                    <!-- Stats Tab -->
+                    <div id="tab-stats" class="admin-tab-content active">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <span class="ember-text-muted" style="font-size: 0.8rem;">Last updated: <span id="stats-updated">--</span></span>
+                            <button class="ember-btn ember-btn-sm ember-btn-outline" id="stats-refresh-btn">Refresh</button>
+                        </div>
+                        <div class="ember-dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
+                            <div class="ember-stat-card"><div class="ember-stat-value" id="live-users">--</div><div class="ember-stat-label">Users</div></div>
+                            <div class="ember-stat-card"><div class="ember-stat-value" id="live-channels">--</div><div class="ember-stat-label">Active Channels</div></div>
+                            <div class="ember-stat-card"><div class="ember-stat-value" id="live-tokes">--</div><div class="ember-stat-label">Total Tokes</div></div>
+                            <div class="ember-stat-card"><div class="ember-stat-value" id="live-sessions">--</div><div class="ember-stat-label">Web Sessions</div></div>
+                        </div>
+                        <div id="stats-error" class="ember-alert ember-alert-error" style="display: none; margin-top: 1rem;"></div>
+                    </div>
+
+                    <!-- Activity Tab -->
+                    <div id="tab-activity" class="admin-tab-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 0.75rem; flex-wrap: wrap;">
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <select id="activity-limit" class="ember-input" style="width: auto; padding: 0.35rem 0.5rem; font-size: 0.8rem;">
+                                    <option value="10">10</option>
+                                    <option value="20" selected>20</option>
+                                    <option value="50">50</option>
+                                </select>
+                                <input type="text" id="activity-filter-channel" class="ember-input" placeholder="Filter channel..." style="width: 140px; padding: 0.35rem 0.5rem; font-size: 0.8rem;">
+                            </div>
+                            <button class="ember-btn ember-btn-sm ember-btn-outline" id="activity-refresh-btn">Refresh</button>
+                        </div>
+                        <div id="activity-feed" style="max-height: 420px; overflow-y: auto;"><p class="ember-text-muted">Click Refresh to load.</p></div>
+                        <div id="activity-error" class="ember-alert ember-alert-error" style="display: none; margin-top: 1rem;"></div>
+                    </div>
+
+                    <!-- Moderation Tab -->
+                    <div id="tab-moderation" class="admin-tab-content">
+                        <div class="admin-mod-grid">
+                            <!-- Ban Form -->
+                            <div style="background: var(--ember-bg-elevated); border-radius: 8px; padding: 1.25rem; border: 1px solid var(--ember-border);">
+                                <h3 style="margin: 0 0 1rem 0; font-size: 0.95rem; color: var(--ember-error);">Ban User</h3>
+                                <form id="ban-form">
+                                    <div style="margin-bottom: 0.75rem;">
+                                        <label style="display: block; font-size: 0.8rem; color: var(--ember-text-muted); margin-bottom: 0.25rem;">Username or ID</label>
+                                        <input type="text" id="ban-user" class="ember-input" placeholder="e.g. Death420 or 42" required style="width: 100%;">
+                                    </div>
+                                    <div style="margin-bottom: 0.75rem;">
+                                        <label style="display: block; font-size: 0.8rem; color: var(--ember-text-muted); margin-bottom: 0.25rem;">Reason</label>
+                                        <input type="text" id="ban-reason" class="ember-input" placeholder="Optional reason" style="width: 100%;">
+                                    </div>
+                                    <div style="margin-bottom: 1rem;">
+                                        <label style="display: block; font-size: 0.8rem; color: var(--ember-text-muted); margin-bottom: 0.25rem;">Duration (seconds, blank = permanent)</label>
+                                        <input type="number" id="ban-duration" class="ember-input" placeholder="e.g. 86400 for 24h" min="0" style="width: 100%;">
+                                    </div>
+                                    <button type="submit" class="ember-btn ember-btn-sm" style="background: var(--ember-error); color: #fff; width: 100%;" id="ban-submit-btn">Ban User</button>
+                                </form>
+                                <div id="ban-result" style="margin-top: 0.75rem; display: none;"></div>
+                            </div>
+                            <!-- Unban Form -->
+                            <div style="background: var(--ember-bg-elevated); border-radius: 8px; padding: 1.25rem; border: 1px solid var(--ember-border);">
+                                <h3 style="margin: 0 0 1rem 0; font-size: 0.95rem; color: var(--ember-success);">Unban User</h3>
+                                <form id="unban-form">
+                                    <div style="margin-bottom: 0.75rem;">
+                                        <label style="display: block; font-size: 0.8rem; color: var(--ember-text-muted); margin-bottom: 0.25rem;">Username or ID</label>
+                                        <input type="text" id="unban-user" class="ember-input" placeholder="e.g. Death420 or 42" required style="width: 100%;">
+                                    </div>
+                                    <div style="margin-bottom: 1rem;">
+                                        <label style="display: block; font-size: 0.8rem; color: var(--ember-text-muted); margin-bottom: 0.25rem;">Reason</label>
+                                        <input type="text" id="unban-reason" class="ember-input" placeholder="Optional reason" style="width: 100%;">
+                                    </div>
+                                    <button type="submit" class="ember-btn ember-btn-sm" style="background: var(--ember-success); color: #fff; width: 100%;" id="unban-submit-btn">Unban User</button>
+                                </form>
+                                <div id="unban-result" style="margin-top: 0.75rem; display: none;"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- API Reference Tab -->
+                    <div id="tab-api" class="admin-tab-content">
+                        <p class="ember-text-muted ember-mb-2" style="font-size: 0.85rem;">All admin endpoints require owner-level authentication.</p>
+                        <div style="font-family: monospace; font-size: 0.8rem; background: var(--ember-bg-elevated); padding: 1rem; border-radius: 6px; display: grid; gap: 0.6rem;">
+                            <div><span class="ember-badge ember-badge-success" style="font-size: 0.65rem; padding: 2px 6px;">GET</span> /tokes-bot/api/admin/stats</div>
+                            <div><span class="ember-badge ember-badge-success" style="font-size: 0.65rem; padding: 2px 6px;">GET</span> /tokes-bot/api/admin/activity <span style="color: var(--ember-text-muted);">?limit=20&amp;event_type=&amp;channel=</span></div>
+                            <div><span class="ember-badge ember-badge-warning" style="font-size: 0.65rem; padding: 2px 6px;">POST</span> /tokes-bot/api/admin/ban <span style="color: var(--ember-text-muted);">{ user, reason?, duration? }</span></div>
+                            <div><span class="ember-badge ember-badge-warning" style="font-size: 0.65rem; padding: 2px 6px;">POST</span> /tokes-bot/api/admin/unban <span style="color: var(--ember-text-muted);">{ user, reason? }</span></div>
+                        </div>
+                        <p class="ember-text-muted" style="font-size: 0.75rem; margin-top: 0.75rem;">The <code>user</code> field accepts a numeric ID, primary_name, or platform username.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <style>
+        .admin-tab { background:none; border:none; padding:0.7rem 1rem; font-size:0.8rem; font-weight:500; color:var(--ember-text-muted); cursor:pointer; border-bottom:2px solid transparent; transition:color 0.2s, border-color 0.2s; font-family:inherit; }
+        .admin-tab:hover { color:var(--ember-text-primary); }
+        .admin-tab.active { color:var(--ember-primary); border-bottom-color:var(--ember-primary); }
+        .admin-tab-content { display:none; }
+        .admin-tab-content.active { display:block; }
+        .activity-row { display:grid; grid-template-columns:auto 1fr auto; gap:0.75rem; padding:0.6rem 0; border-bottom:1px solid var(--ember-border); align-items:center; font-size:0.85rem; }
+        .activity-row:last-child { border-bottom:none; }
+        .activity-meta { font-size:0.75rem; color:var(--ember-text-muted); white-space:nowrap; }
+        .admin-mod-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; }
+        @media (max-width: 768px) { .admin-mod-grid { grid-template-columns:1fr; } }
+    </style>
+
+    <script>
+        (function() {
+            var CSRF_TOKEN = '<%= typeof csrfToken !== "undefined" ? csrfToken : "" %>';
+
+            // --- Tab switching ---
+            document.querySelectorAll('.admin-tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    var name = this.getAttribute('data-tab');
+                    document.querySelectorAll('.admin-tab').forEach(function(t){ t.classList.remove('active'); });
+                    document.querySelectorAll('.admin-tab-content').forEach(function(c){ c.classList.remove('active'); });
+                    this.classList.add('active');
+                    document.getElementById('tab-' + name).classList.add('active');
+                    if (name === 'stats') loadStats();
+                    if (name === 'activity') loadActivity();
+                });
+            });
+
+            // --- Refresh buttons ---
+            document.getElementById('stats-refresh-btn').addEventListener('click', function(){ loadStats(); });
+            document.getElementById('activity-refresh-btn').addEventListener('click', function(){ loadActivity(); });
+
+            // --- Forms ---
+            document.getElementById('ban-form').addEventListener('submit', handleBan);
+            document.getElementById('unban-form').addEventListener('submit', handleUnban);
+
+            // --- Helpers ---
+            function apiCall(url, opts) {
+                opts = opts || {};
+                var hdrs = {'Accept':'application/json','Content-Type':'application/json'};
+                if (opts.method && opts.method !== 'GET' && CSRF_TOKEN) hdrs['x-csrf-token'] = CSRF_TOKEN;
+                return fetch(url, { headers:hdrs, credentials:'same-origin', method:opts.method||'GET', body:opts.body||undefined })
+                    .then(function(res) {
+                        return res.json().then(function(data) {
+                            if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+                            return data;
+                        });
+                    });
+            }
+
+            function showResult(id, type, msg) {
+                var el = document.getElementById(id);
+                el.className = 'ember-alert ember-alert-' + type;
+                el.textContent = msg;
+                el.style.display = 'block';
+            }
+
+            // --- Stats ---
+            function loadStats() {
+                var btn = document.getElementById('stats-refresh-btn');
+                var err = document.getElementById('stats-error');
+                btn.disabled = true; btn.textContent = 'Loading...'; err.style.display = 'none';
+                apiCall('/tokes-bot/api/admin/stats').then(function(d) {
+                    document.getElementById('live-users').textContent = (d.totalUsers||0).toLocaleString();
+                    document.getElementById('live-channels').textContent = (d.activeChannels||0).toLocaleString();
+                    document.getElementById('live-tokes').textContent = (d.totalTokes||0).toLocaleString();
+                    document.getElementById('live-sessions').textContent = (d.activeSessions||0).toLocaleString();
+                    document.getElementById('stats-updated').textContent = new Date().toLocaleTimeString();
+                }).catch(function(e) { err.textContent = e.message; err.style.display = 'block'; })
+                .finally(function() { btn.disabled = false; btn.textContent = 'Refresh'; });
+            }
+
+            // --- Activity ---
+            function buildActivityRow(a) {
+                var row = document.createElement('div'); row.className = 'activity-row';
+                var c1 = document.createElement('div');
+                if (a.platform) {
+                    var b = document.createElement('span');
+                    b.className = 'ember-badge ' + (a.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick');
+                    b.style.fontSize = '0.6rem'; b.textContent = a.platform.toUpperCase(); c1.appendChild(b);
+                }
+                row.appendChild(c1);
+                var c2 = document.createElement('div');
+                var s = document.createElement('strong'); s.textContent = a.username || 'System'; c2.appendChild(s);
+                c2.appendChild(document.createTextNode(' '));
+                var ab = document.createElement('span'); ab.className = 'ember-badge ember-badge-primary'; ab.style.cssText = 'font-size:0.6rem;padding:1px 5px;'; ab.textContent = a.action; c2.appendChild(ab);
+                if (a.details) { var ds = document.createElement('span'); ds.style.color = 'var(--ember-text-secondary)'; ds.textContent = ' ' + a.details; c2.appendChild(ds); }
+                if (a.channel_name) { var cs = document.createElement('span'); cs.style.color = 'var(--ember-text-muted)'; cs.textContent = ' in #' + a.channel_name; c2.appendChild(cs); }
+                row.appendChild(c2);
+                var c3 = document.createElement('div'); c3.className = 'activity-meta'; c3.textContent = new Date(a.created_at).toLocaleString();
+                row.appendChild(c3);
+                return row;
+            }
+
+            function loadActivity() {
+                var btn = document.getElementById('activity-refresh-btn');
+                var feed = document.getElementById('activity-feed');
+                var err = document.getElementById('activity-error');
+                btn.disabled = true; btn.textContent = 'Loading...'; err.style.display = 'none';
+                var limit = document.getElementById('activity-limit').value;
+                var ch = document.getElementById('activity-filter-channel').value.trim();
+                var url = '/tokes-bot/api/admin/activity?limit=' + limit;
+                if (ch) url += '&channel=' + encodeURIComponent(ch);
+                apiCall(url).then(function(data) {
+                    while (feed.firstChild) feed.removeChild(feed.firstChild);
+                    if (!data.activity || !data.activity.length) {
+                        var p = document.createElement('p'); p.className = 'ember-text-muted'; p.style.cssText = 'text-align:center;padding:2rem;'; p.textContent = 'No activity found.'; feed.appendChild(p);
+                    } else {
+                        data.activity.forEach(function(a) { feed.appendChild(buildActivityRow(a)); });
+                    }
+                }).catch(function(e) { err.textContent = e.message; err.style.display = 'block'; })
+                .finally(function() { btn.disabled = false; btn.textContent = 'Refresh'; });
+            }
+
+            // --- Ban / Unban ---
+            function handleBan(e) {
+                e.preventDefault();
+                var btn = document.getElementById('ban-submit-btn');
+                btn.disabled = true; btn.textContent = 'Banning...';
+                document.getElementById('ban-result').style.display = 'none';
+                var payload = {
+                    user: document.getElementById('ban-user').value.trim(),
+                    reason: document.getElementById('ban-reason').value.trim() || undefined,
+                    duration: document.getElementById('ban-duration').value ? Number(document.getElementById('ban-duration').value) : undefined
+                };
+                apiCall('/tokes-bot/api/admin/ban', { method: 'POST', body: JSON.stringify(payload) }).then(function(data) {
+                    showResult('ban-result', 'success', data.message);
+                    document.getElementById('ban-form').reset();
+                }).catch(function(err) { showResult('ban-result', 'error', err.message); })
+                .finally(function() { btn.disabled = false; btn.textContent = 'Ban User'; });
+            }
+
+            function handleUnban(e) {
+                e.preventDefault();
+                var btn = document.getElementById('unban-submit-btn');
+                btn.disabled = true; btn.textContent = 'Unbanning...';
+                document.getElementById('unban-result').style.display = 'none';
+                var payload = {
+                    user: document.getElementById('unban-user').value.trim(),
+                    reason: document.getElementById('unban-reason').value.trim() || undefined
+                };
+                apiCall('/tokes-bot/api/admin/unban', { method: 'POST', body: JSON.stringify(payload) }).then(function(data) {
+                    showResult('unban-result', 'success', data.message);
+                    document.getElementById('unban-form').reset();
+                }).catch(function(err) { showResult('unban-result', 'error', err.message); })
+                .finally(function() { btn.disabled = false; btn.textContent = 'Unban User'; });
+            }
+
+            // Load stats on page load
+            loadStats();
+        })();
+    </script>
+</body>
+</html>

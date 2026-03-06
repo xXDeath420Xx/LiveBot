@@ -1,0 +1,62 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-cog"></i>
+                <span>Core Settings</span>
+            </div>
+            <div class="page-section-subtitle">
+                Configure essential bot settings for this server
+            </div>
+        </div>
+    </div>
+
+    <form id="core-settings-form" action="/manage/<%= guild.id %>/update-core-settings" method="POST">
+        <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-6);">
+            <div>
+                <label class="form-label">Timezone</label>
+                <select class="form-select" name="timezone">
+                    <% const timezones = ["UTC-12", "UTC-11", "UTC-10", "UTC-9", "UTC-8", "UTC-7", "UTC-6", "UTC-5", "UTC-4", "UTC-3", "UTC-2", "UTC-1", "UTC+0", "UTC+1", "UTC+2", "UTC+3", "UTC+4", "UTC+5", "UTC+6", "UTC+7", "UTC+8", "UTC+9", "UTC+10", "UTC+11", "UTC+12"]; %>
+                    <% timezones.forEach(tz => { %>
+                        <option value="<%= tz %>" <%= (settings && settings.timezone === tz) ? 'selected' : '' %>><%= tz %></option>
+                    <% }); %>
+                </select>
+                <div class="form-help">Select timezone for scheduled announcements</div>
+            </div>
+
+            <div>
+                <label class="form-label">Live Role</label>
+                <select class="form-select" name="live_role_id">
+                    <option value="">None</option>
+                    <% if (typeof roles !== 'undefined') { %>
+                        <% roles.forEach(role => { %>
+                            <option value="<%= role.id %>" <%= (settings && settings.live_role_id === role.id) ? 'selected' : '' %>>@<%= role.name %></option>
+                        <% }); %>
+                    <% } %>
+                </select>
+                <div class="form-help">Role given to members when they go live</div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save"></i>
+            <span>Save Settings</span>
+        </button>
+    </form>
+</div>
+
+<style>
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+</style>

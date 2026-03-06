@@ -1,0 +1,10 @@
+[
+  { "name": "midnight", "label": "Midnight", "file": "midnight.png" },
+  { "name": "sunset", "label": "Sunset", "file": "sunset.png" },
+  { "name": "forest", "label": "Forest", "file": "forest.png" },
+  { "name": "ocean", "label": "Ocean", "file": "ocean.png" },
+  { "name": "fire", "label": "Fire", "file": "fire.png" },
+  { "name": "neon", "label": "Neon", "file": "neon.png" },
+  { "name": "sakura", "label": "Sakura", "file": "sakura.png" },
+  { "name": "void", "label": "Void", "file": "void.png" }
+]

@@ -1,0 +1,640 @@
+{
+  "channelId": "1142508311594410086",
+  "totalMessages": 57,
+  "messagesWithIds": 45,
+  "uniqueIdCount": 47,
+  "uniqueIds": [
+    "1044280778697220129",
+    "1044649603707981847",
+    "1044968528421335060",
+    "1073369122588606567",
+    "1082549950707142676",
+    "1097247047444336690",
+    "1101966335312937123",
+    "1105102707657814027",
+    "1117531421335113878",
+    "1136552927234900010",
+    "1138935700763443341",
+    "1141390706863251477",
+    "1142474546818076782",
+    "1142922479640268920",
+    "1143212062013661316",
+    "1143272360930193459",
+    "1144763607003975700",
+    "1146184430776492082",
+    "1146221212968689735",
+    "1147311552752517290",
+    "1149075460152639508",
+    "1151179060429459549",
+    "1151491236293775410",
+    "1151601012759597177",
+    "1156344298074275952",
+    "1162518712126013521",
+    "1163125895276544101",
+    "1174151126757675053",
+    "1177675573087191162",
+    "1185323984141697189",
+    "1185336499592507412",
+    "1190676523011805285",
+    "1208519101719511123",
+    "1216868783063302206",
+    "1242882486577664101",
+    "1401842785245728818",
+    "494932877902086155",
+    "534127122827051028",
+    "546279841712832512",
+    "555126192500637716",
+    "768808435310788628",
+    "794896310238445579",
+    "889550752123613194",
+    "899865437267963924",
+    "950063302560591872",
+    "964751249746579476",
+    "996737648284676117"
+  ],
+  "messages": [
+    {
+      "messageId": "1442859239638040637",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2025-11-25T12:47:29.758000+00:00",
+      "content": "Discord ID: 1401842785245728818",
+      "extractedIds": [
+        "1401842785245728818"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1442859239168147639/image.png?ex=69a97b61&is=69a829e1&hm=07092e95d26f2043c8b0c006de054d8c32157463d3c384fa812743c8e01cef3c&"
+      ]
+    },
+    {
+      "messageId": "1370327346158243840",
+      "author": "emeribd (662890344681177098)",
+      "timestamp": "2025-05-09T09:11:38.775000+00:00",
+      "content": "1143212062013661316",
+      "extractedIds": [
+        "1143212062013661316"
+      ],
+      "hasImages": false,
+      "imageUrls": []
+    },
+    {
+      "messageId": "1265086195700990073",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-07-22T23:20:53.220000+00:00",
+      "content": "`1185323984141697189`",
+      "extractedIds": [
+        "1185323984141697189"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1265086195470172232/image.png?ex=69a96715&is=69a81595&hm=52e10ad327b20e5d172844a820f4ab0865ccb7f78d86eccfcba321e59cacc041&"
+      ]
+    },
+    {
+      "messageId": "1257763397101948978",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-07-02T18:22:41.983000+00:00",
+      "content": "`1044968528421335060`\nThese things need a better script",
+      "extractedIds": [
+        "1044968528421335060"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1257763396787638332/image.png?ex=69a9c9f1&is=69a87871&hm=ae7bf4ba807af5bd22feb4b6ecbd93617421fe416b6002525fbc49e8d88a812d&"
+      ]
+    },
+    {
+      "messageId": "1250189336549527552",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2024-06-11T20:46:05.228000+00:00",
+      "content": "Discord ID: 1044280778697220129",
+      "extractedIds": [
+        "1044280778697220129"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1250189336238882836/Screenshot_20240611_214125_Discord.jpg?ex=69a9eb8d&is=69a89a0d&hm=31d5a892c087abcfc70b780c72aead5cd283d44a618d2c5c62c422457acf1c57&"
+      ]
+    },
+    {
+      "messageId": "1247662173073702914",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-06-04T21:24:02.503000+00:00",
+      "content": "`1242882486577664101`",
+      "extractedIds": [
+        "1242882486577664101"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1247662173325496320/image.png?ex=69a9f472&is=69a8a2f2&hm=eb467d2a755b80e80ba7cc33b358aed52d957d39ab77268ad2e7c80c44952122&"
+      ]
+    },
+    {
+      "messageId": "1242971432015892552",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2024-05-22T22:44:42.685000+00:00",
+      "content": "Discord ID: 1208519101719511123",
+      "extractedIds": [
+        "1208519101719511123"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1242971431738806272/image.png?ex=69a95e9a&is=69a80d1a&hm=7b99eeab23d87f276187e9962807728ebf65a458a0b6883e86bdf182b824b4d8&"
+      ]
+    },
+    {
+      "messageId": "1242224746003959879",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-05-20T21:17:38.867000+00:00",
+      "content": "`1146221212968689735`",
+      "extractedIds": [
+        "1146221212968689735"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1242224745806565386/image.png?ex=69a9f2f2&is=69a8a172&hm=006f615db0db630766ffe08b2a6fd03f10b625cd1ee690134f1504fc521d19fe&"
+      ]
+    },
+    {
+      "messageId": "1242174110872899604",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-05-20T17:56:26.511000+00:00",
+      "content": "`1216868783063302206`",
+      "extractedIds": [
+        "1216868783063302206"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1242174110637752401/image.png?ex=69a9c3ca&is=69a8724a&hm=8d949e641b2de245debb5e668071bf329194e24ef50130fe5e6ab83777fd2357&"
+      ]
+    },
+    {
+      "messageId": "1234296411298992259",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2024-04-29T00:13:16.572000+00:00",
+      "content": "Discord ID: 950063302560591872",
+      "extractedIds": [
+        "950063302560591872"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1234296410992803851/image-146.png?ex=69a9735c&is=69a821dc&hm=b6e27a212c5faa37a187b8851d3d46e006c9e6b6141307a895dc6006c70e68e5&"
+      ]
+    },
+    {
+      "messageId": "1233960761617940521",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-04-28T01:59:31.452000+00:00",
+      "content": "`768808435310788628`",
+      "extractedIds": [
+        "768808435310788628"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1233960761509023824/image.png?ex=69a98c43&is=69a83ac3&hm=dfb74154d5c9ed3c1c9eef4bece118669b9abbadc088e17a7a93b27c967f4f1e&"
+      ]
+    },
+    {
+      "messageId": "1233063298690322473",
+      "author": "mineycart (534127122827051028)",
+      "timestamp": "2024-04-25T14:33:19.616000+00:00",
+      "content": "Let this one slide back in the day because they left me be (idk why tbh xd) but then they come back again and nah ... sorry bud you're out\n`1082549950707142676`",
+      "extractedIds": [
+        "1082549950707142676"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1233063298518483005/image.png?ex=69a9942f&is=69a842af&hm=929fd7152b2afa238c470fd51474bfcfed176b8dc39400cd8208cc6a810ba676&"
+      ]
+    },
+    {
+      "messageId": "1230214773975547935",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-04-17T17:54:18.401000+00:00",
+      "content": "Discord ID: `1105102707657814027`",
+      "extractedIds": [
+        "1105102707657814027"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1230214773770293391/image.png?ex=69a9c34a&is=69a871ca&hm=c10461d7a0de5a5ff96094e7564b98326e182b0ec395d5f20cd20cf2c47e66e7&"
+      ]
+    },
+    {
+      "messageId": "1230194049965752420",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-04-17T16:31:57.412000+00:00",
+      "content": "Discord ID: `964751249746579476`",
+      "extractedIds": [
+        "964751249746579476"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1230194049781076020/image.png?ex=69a9affd&is=69a85e7d&hm=1d7a61733119a3f44741c956abc99a4cafaf3ac1c5adf2d76aeb573e4ff4e9b6&"
+      ]
+    },
+    {
+      "messageId": "1220100534149583069",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2024-03-20T20:03:55.713000+00:00",
+      "content": "Discord ID: 1101966335312937123\n\nThey can't spell their own name!",
+      "extractedIds": [
+        "1101966335312937123"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1220100533856108676/image.png?ex=69a9e1ab&is=69a8902b&hm=b58d9fbf540c5e539437d24a0a10bbb26d11b00aabae1bea473df5e71debc118&"
+      ]
+    },
+    {
+      "messageId": "1217961441626296432",
+      "author": "mineycart (534127122827051028)",
+      "timestamp": "2024-03-14T22:23:56.313000+00:00",
+      "content": "Why oh why do these people message mods ...\n`1151491236293775410`",
+      "extractedIds": [
+        "1151491236293775410"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1217961441345409104/image.png?ex=69a959bc&is=69a8083c&hm=2b27f7745b819b627857c17b369f4512da215f7e2882590a288ff9d9071197fc&"
+      ]
+    },
+    {
+      "messageId": "1215013418692649091",
+      "author": "vpsdata (322722087070466048)",
+      "timestamp": "2024-03-06T19:09:32.874000+00:00",
+      "content": "1185336499592507412\nartist abusing LGBQ+ community 😦 i now feel sad for that community as they get abused again",
+      "extractedIds": [
+        "1185336499592507412"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1215013418445316197/image.png?ex=69a9d4ec&is=69a8836c&hm=34d18fdeae51da92367da9353544bc71ab5071f3b55411fb47cd82ea80de1b94&"
+      ]
+    },
+    {
+      "messageId": "1212873815118446663",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-02-29T21:27:31.630000+00:00",
+      "content": "`555126192500637716`",
+      "extractedIds": [
+        "555126192500637716"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1212873814946353232/image.png?ex=69a9f543&is=69a8a3c3&hm=e72ea61aa33bef9557b79113f158adb4e2e9b51b4b181e552a6279c3fa3af538&"
+      ]
+    },
+    {
+      "messageId": "1210683726401507348",
+      "author": "seelenmorder (462315941045469211)",
+      "timestamp": "2024-02-23T20:24:53.790000+00:00",
+      "content": "Discord ID: 1190676523011805285",
+      "extractedIds": [
+        "1190676523011805285"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1210683726225477773/Screenshot_20240223-151909_Discord.jpg?ex=69a9e695&is=69a89515&hm=26fa77946fcc8727e7e163904eb6c06253423582c3c1ea5627c0cbed4ab92aa9&"
+      ]
+    },
+    {
+      "messageId": "1196611423040720946",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2024-01-16T00:26:35.218000+00:00",
+      "content": "Discord ID: 494932877902086155",
+      "extractedIds": [
+        "494932877902086155"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1196611422789042176/Screenshot_20240116_002314_Discord.jpg?ex=69a9767b&is=69a824fb&hm=4240a3622ec0f2229c1d71b68e11a7c6df802747695c1fd280904ff7ee486db5&"
+      ]
+    },
+    {
+      "messageId": "1195243513466601512",
+      "author": "vpsdata (322722087070466048)",
+      "timestamp": "2024-01-12T05:51:00.161000+00:00",
+      "content": "vtuber  @ 1073369122588606567",
+      "extractedIds": [
+        "1073369122588606567"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1195243513198149712/image.png?ex=69a9c284&is=69a87104&hm=7c8ced94e1a097ef6b11a9d8ca6ac605445040848e39dc4e7503ab376159a37b&"
+      ]
+    },
+    {
+      "messageId": "1194723963683754035",
+      "author": "vpsdata (322722087070466048)",
+      "timestamp": "2024-01-10T19:26:29.840000+00:00",
+      "content": "1142922479640268920\n\nno i am not a graphical designer but i design graphics ... 🤔",
+      "extractedIds": [
+        "1142922479640268920"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1194723963381751848/image.png?ex=69a9d8e5&is=69a88765&hm=b1cadadf1bd3028fb9047fb5c8ef05be3b3ca4ad046a1b925ac7604c50627a76&"
+      ]
+    },
+    {
+      "messageId": "1194016210489196654",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2024-01-08T20:34:08.329000+00:00",
+      "content": "Discord ID: 996737648284676117",
+      "extractedIds": [
+        "996737648284676117"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1194016210241724416/image.png?ex=69a9e8c0&is=69a89740&hm=1ae74b5f3567d186b1faa8637b51fcae8d468d6428d4ba81c506a40a491b056f&"
+      ]
+    },
+    {
+      "messageId": "1193524331087667240",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2024-01-07T11:59:35.141000+00:00",
+      "content": "Discord ID: `1163125895276544101`",
+      "extractedIds": [
+        "1163125895276544101"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1193524330831822908/image.png?ex=69a97027&is=69a81ea7&hm=af31d91245bec410af90c2ea0e73dd6965d0e35f799c0ced3947179187faf463&"
+      ]
+    },
+    {
+      "messageId": "1191411730685907004",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2024-01-01T16:04:51.955000+00:00",
+      "content": "Discord ID: 1190676523011805285",
+      "extractedIds": [
+        "1190676523011805285"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1191411730367131758/image-48.png?ex=69a9a9a3&is=69a85823&hm=95cfd8a392e841f50008576ab89c172e23d2c11a2a0bf7da7651fabfec54efb8&"
+      ]
+    },
+    {
+      "messageId": "1189652129305088111",
+      "author": "mineycart (534127122827051028)",
+      "timestamp": "2023-12-27T19:32:50.294000+00:00",
+      "content": "`1151601012759597177`\nLe sigh, unsolicitied friend request followed by advertising",
+      "extractedIds": [
+        "1151601012759597177"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1189652129036636301/image.png?ex=69a9da62&is=69a888e2&hm=8aec63a5d6df06d667e8cc54ee90248721882b2e023686f2366d63c31092e2bc&"
+      ]
+    },
+    {
+      "messageId": "1186866958415708261",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2023-12-20T03:05:33.808000+00:00",
+      "content": "`1136552927234900010`\nLe sigh",
+      "extractedIds": [
+        "1136552927234900010"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1186866958205984870/image.png?ex=69a99bbd&is=69a84a3d&hm=25e07c44b759bf418c9b06f7d45862753b162ddbe41a2014adc7f93833ddb9bc&"
+      ]
+    },
+    {
+      "messageId": "1184226789527146536",
+      "author": "mineycart (534127122827051028)",
+      "timestamp": "2023-12-12T20:14:28.493000+00:00",
+      "content": "`1162518712126013521` Graphic artist\ntook a while but we got there",
+      "extractedIds": [
+        "1162518712126013521"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1184226789309030491/image.png?ex=69a9e424&is=69a892a4&hm=982bf0bfbc980d84b6b09960764da38bf730aee646315e83c192a7153968c7e7&"
+      ]
+    },
+    {
+      "messageId": "1182694283103457340",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2023-12-08T14:44:50.489000+00:00",
+      "content": "Another pesky artist! 1177675573087191162",
+      "extractedIds": [
+        "1177675573087191162"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1182694282876960830/Screenshot_20231208_143858_Discord.jpg?ex=69a996e2&is=69a84562&hm=3266f064b2dfebab6d8080368b81a1dcf1e890120deb7e38062a3b8b196ff9ed&"
+      ]
+    },
+    {
+      "messageId": "1175595203009183895",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2023-11-19T00:35:37.900000+00:00",
+      "content": "Discord ID: 1174151126757675053",
+      "extractedIds": [
+        "1174151126757675053"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1175595198940717066/image.png?ex=69a97898&is=69a82718&hm=ac966f9f31a6a2075a48990189d8efc9f56be2fe02e3d989190374bfc4d051dc&"
+      ]
+    },
+    {
+      "messageId": "1175215573920129024",
+      "author": "seelenmorder (462315941045469211)",
+      "timestamp": "2023-11-17T23:27:07.272000+00:00",
+      "content": "1141390706863251477\nfriend request, mentions they are an artist...yadda yadda yadda...",
+      "extractedIds": [
+        "1141390706863251477"
+      ],
+      "hasImages": false,
+      "imageUrls": []
+    },
+    {
+      "messageId": "1174075000731471942",
+      "author": "mineycart (534127122827051028)",
+      "timestamp": "2023-11-14T19:54:53.433000+00:00",
+      "content": "Why do these ppl keep dming mods i swear?\n`794896310238445579`",
+      "extractedIds": [
+        "794896310238445579"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1174075000312045738/image.png?ex=69a9df8d&is=69a88e0d&hm=942c8f8b692c175b07638e5eabb848ec9752f9e681fc5834e0e42899834b1be4&"
+      ]
+    },
+    {
+      "messageId": "1173973654439198832",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2023-11-14T13:12:10.594000+00:00",
+      "content": "User ID: `1044649603707981847`",
+      "extractedIds": [
+        "1044649603707981847"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1173973654229487717/image.png?ex=69a9812a&is=69a82faa&hm=a5eef9df59ebd61c1c522e5fd2fabf8960d59b962c5ec61cb0f27d0535927825&"
+      ]
+    },
+    {
+      "messageId": "1172354341760405535",
+      "author": "emeribd (662890344681177098)",
+      "timestamp": "2023-11-10T01:57:36.366000+00:00",
+      "content": "User ID: 1156344298074275952",
+      "extractedIds": [
+        "1156344298074275952"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1172354341559095396/image.png?ex=69a98bd0&is=69a83a50&hm=4d5978b02b6ca420222932e802b9b06fb3ae4e2af928213ee02ee38aef84023c&"
+      ]
+    },
+    {
+      "messageId": "1171895574124040202",
+      "author": "mineycart (534127122827051028)",
+      "timestamp": "2023-11-08T19:34:37.638000+00:00",
+      "content": "`1149075460152639508`\nFun times ...",
+      "extractedIds": [
+        "1149075460152639508"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1171895573952086047/image.png?ex=69a9dacd&is=69a8894d&hm=a8e7af916d521fcc3a25832bcae41c32c88d8071ce61b813c6ec5bc5e836269c&"
+      ]
+    },
+    {
+      "messageId": "1171575074105610341",
+      "author": "mineycart (534127122827051028)",
+      "timestamp": "2023-11-07T22:21:04.479000+00:00",
+      "content": "Cut straight to the chase this one\n`1147311552752517290`",
+      "extractedIds": [
+        "1147311552752517290"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1171575073912664084/image.png?ex=69aa01d0&is=69a8b050&hm=74f43bc605ff3eb10f69fb0298628af7847d01386952eeaf8af894479d5518ac&"
+      ]
+    },
+    {
+      "messageId": "1170285452511682661",
+      "author": "emeribd (662890344681177098)",
+      "timestamp": "2023-11-04T08:56:34.731000+00:00",
+      "content": "User ID: 1117531421335113878",
+      "extractedIds": [
+        "1117531421335113878"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1170285452285202452/image.png?ex=69a9ee02&is=69a89c82&hm=23e370ec29b4fdfd8bbd2420d418a6dc152bd93562f5ce3f6685113a652b3fa6&"
+      ]
+    },
+    {
+      "messageId": "1168654298666770482",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2023-10-30T20:54:57.349000+00:00",
+      "content": "UserID: `1142474546818076782` <@1142474546818076782>",
+      "extractedIds": [
+        "1142474546818076782",
+        "1142474546818076782"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1168654298226372740/image.png?ex=69a9eda1&is=69a89c21&hm=3c00f754070f68d7ca69bee1a94d13ecd2dfbe316e3696ce9aae80bc5c5d91b8&"
+      ]
+    },
+    {
+      "messageId": "1167885799841333338",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2023-10-28T18:01:12.951000+00:00",
+      "content": "`1143272360930193459`",
+      "extractedIds": [
+        "1143272360930193459"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1167885799660998706/image.png?ex=69a9c4e8&is=69a87368&hm=fe6ff34f5a95df135407942de6e98bb78f82496b265edd407f040b6e6ae91dbe&"
+      ]
+    },
+    {
+      "messageId": "1154556555560226909",
+      "author": "joehew (174920468309082113)",
+      "timestamp": "2023-09-21T23:15:33.469000+00:00",
+      "content": "1151179060429459549\nAnother art spammer!",
+      "extractedIds": [
+        "1151179060429459549"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1154556555690246194/image.png?ex=69a965d5&is=69a81455&hm=8fd1a77be2b6e6096357d93dca5c3e4d0bdd8373f63cf8f655a24c83a4120d94&"
+      ]
+    },
+    {
+      "messageId": "1154555119208243231",
+      "author": "seelenmorder (462315941045469211)",
+      "timestamp": "2023-09-21T23:09:51.016000+00:00",
+      "content": "1144763607003975700\nYour typical art spammer.",
+      "extractedIds": [
+        "1144763607003975700"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1154555119053049917/Screenshot_20230921-190241_Discord.jpg?ex=69a9647e&is=69a812fe&hm=6a1504024967f8a60b96fc62be460e31b3243e5e35f6b77823aa7c9cd1c4b3da&"
+      ]
+    },
+    {
+      "messageId": "1146190145251442798",
+      "author": "death420 (365905620060340224)",
+      "timestamp": "2023-08-29T21:10:25.811000+00:00",
+      "content": "https://discord.com/channels/889550752123613194/899865437267963924/1146184430776492082 \nFor the sake of one <@534127122827051028>",
+      "extractedIds": [
+        "889550752123613194",
+        "899865437267963924",
+        "1146184430776492082",
+        "534127122827051028"
+      ],
+      "hasImages": false,
+      "imageUrls": []
+    },
+    {
+      "messageId": "1145418133629325392",
+      "author": "mineycart (534127122827051028)",
+      "timestamp": "2023-08-27T18:02:43.897000+00:00",
+      "content": "`546279841712832512`",
+      "extractedIds": [
+        "546279841712832512"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1145418133448958012/image.png?ex=69a9c543&is=69a873c3&hm=82bca6d5090f1c40644b960d33c4cae09bdae9bbdee57dbf073631d689a5b124&"
+      ]
+    },
+    {
+      "messageId": "1143688176121172058",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2023-08-22T23:28:29.886000+00:00",
+      "content": "`1138935700763443341`",
+      "extractedIds": [
+        "1138935700763443341"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1143688175924023347/image.png?ex=69a968dd&is=69a8175d&hm=29c6e983c6218f9d69ac8b05bc40bb2e1e07d97ae28234bef83582c20f6a35fd&"
+      ]
+    },
+    {
+      "messageId": "1142508864877641828",
+      "author": "orsokuma (685127470625980501)",
+      "timestamp": "2023-08-19T17:22:20.175000+00:00",
+      "content": "`1097247047444336690`\n\n(This is Discord. It's just my reskinned Discord. It's **not** Steam)",
+      "extractedIds": [
+        "1097247047444336690"
+      ],
+      "hasImages": true,
+      "imageUrls": [
+        "https://cdn.discordapp.com/attachments/1142508311594410086/1142508864634368081/image.png?ex=69a9bbcc&is=69a86a4c&hm=82f1e5e2de368b5a32df5d7d399326ac707b7ce1e96c5e7554382b0f47af93e4&"
+      ]
+    }
+  ]
+}

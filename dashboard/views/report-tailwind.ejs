@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Report a user to the CertiFried global ban system.">
+    <meta name="theme-color" content="#a78bfa">
+    <meta property="og:title" content="Report User - CertiFried MultiTool">
+    <meta property="og:description" content="Report a Discord user for review by our moderation team.">
+    <meta property="og:image" content="/images/CertiFried.png">
+    <meta name="robots" content="noindex">
+    <title>Report User - CertiFried MultiTool</title>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-blue: #60a5fa;
+            --accent-cyan: #22d3ee;
+            --accent-green: #34d399;
+            --accent-red: #f87171;
+            --accent-amber: #fbbf24;
+        }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; line-height: 1.6; }
+        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; animation: float 20s ease-in-out infinite; }
+        .orb-1 { width: clamp(300px, 40vw, 500px); height: clamp(300px, 40vw, 500px); background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -10%; right: -10%; }
+        .orb-2 { width: clamp(250px, 35vw, 450px); height: clamp(250px, 35vw, 450px); background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: 10%; left: -10%; animation-delay: -10s; }
+        @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(20px, 20px) scale(1.02); } }
+        .container { width: 100%; max-width: 700px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
+        .navbar-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
+        .navbar-logo { width: 36px; height: 36px; aspect-ratio: 1/1; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover, .navbar-links a.active { color: var(--text-primary); }
+        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; text-decoration: none; transition: all 0.2s; }
+        .user-menu:hover { border-color: var(--accent-purple); }
+        .user-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+        .user-name { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+        main { position: relative; z-index: 1; padding: 100px 0 4rem; min-height: 100vh; }
+        .page-header { margin-bottom: 2rem; text-align: center; }
+        .page-header h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-amber)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem; }
+        .page-header p { color: var(--text-secondary); font-size: 0.95rem; }
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 20px; padding: 2rem; margin-bottom: 1.5rem; backdrop-filter: blur(10px); }
+        .card-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .card-text { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 10px; font-size: 0.9rem; font-weight: 600; text-decoration: none; transition: all 0.2s; border: none; cursor: pointer; font-family: inherit; }
+        .btn svg { width: 18px; height: 18px; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(167, 139, 250, 0.3); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .icon-shield { display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 16px; margin: 0 auto 1.5rem; }
+        .icon-shield.amber { background: rgba(251, 191, 36, 0.15); color: var(--accent-amber); }
+        .icon-shield.blue { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); }
+        .icon-shield.green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+        .icon-shield svg { width: 32px; height: 32px; }
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; }
+        .form-textarea { width: 100%; min-height: 120px; padding: 0.875rem; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; line-height: 1.5; resize: vertical; transition: border-color 0.2s; }
+        .form-textarea:focus { outline: none; border-color: var(--accent-purple); }
+        .form-textarea::placeholder { color: var(--text-muted); }
+        .form-input { width: 100%; padding: 0.75rem; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; transition: border-color 0.2s; }
+        .form-input:focus { outline: none; border-color: var(--accent-purple); }
+        .form-input::placeholder { color: var(--text-muted); }
+        .form-select { width: 100%; padding: 0.75rem; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; transition: border-color 0.2s; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.5)' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; }
+        .form-select:focus { outline: none; border-color: var(--accent-purple); }
+        .form-select option { background: #1a1e23; color: var(--text-primary); }
+        .form-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem; }
+        .char-count { font-size: 0.75rem; color: var(--text-muted); text-align: right; margin-top: 0.25rem; }
+        .char-count.warn { color: var(--accent-amber); }
+        .char-count.ok { color: var(--accent-green); }
+        .alert { padding: 1rem 1.25rem; border-radius: 12px; font-size: 0.9rem; margin-bottom: 1.5rem; display: none; }
+        .alert-success { background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); color: var(--accent-green); }
+        .alert-error { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--accent-red); }
+        .alert.show { display: block; }
+        .spinner { width: 32px; height: 32px; border: 3px solid var(--border-color); border-top-color: var(--accent-purple); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .mobile-menu-btn { display: none; background: transparent; border: none; color: var(--text-primary); font-size: 1.25rem; cursor: pointer; padding: 0.5rem; z-index: 1001; }
+        .mobile-menu-btn svg { width: 24px; height: 24px; }
+        .mobile-menu { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(11, 15, 17, 0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 999; padding-top: 80px; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
+        .mobile-menu.active { display: block; opacity: 1; visibility: visible; }
+        .mobile-menu-inner { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; padding: 2rem; }
+        .mobile-menu-link { color: var(--text-primary); text-decoration: none; font-size: 1.25rem; font-weight: 600; padding: 0.75rem 1.5rem; transition: color 0.3s ease; }
+        .mobile-menu-link:hover { color: var(--accent-purple); }
+        .mobile-menu-divider { width: 60%; max-width: 200px; height: 1px; background: var(--border-color); margin: 0.5rem 0; }
+        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 2rem; }
+        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
+        .footer-link:hover { color: var(--accent-purple); }
+        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
+        @media (max-width: 768px) {
+            .navbar-links { display: none; }
+            .mobile-menu-btn { display: block; }
+            .footer-links { flex-direction: column; gap: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-content">
+                <a href="/" class="navbar-brand">
+                    <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                    <span>CertiFried</span>
+                </a>
+                <div class="navbar-links">
+                    <a href="/">Home</a>
+                    <a href="/commands">Commands</a>
+                    <a href="/status">Status</a>
+                    <% if (user) { %>
+                    <a href="/dashboard">Dashboard</a>
+                    <% } %>
+                </div>
+                <% if (user) { %>
+                <a href="/profile" class="user-menu">
+                    <img src="<%= user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="" class="user-avatar">
+                    <span class="user-name"><%= user.username %></span>
+                </a>
+                <% } else { %>
+                <a href="/auth/discord?returnTo=/report" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Login</a>
+                <% } %>
+                <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle mobile menu" aria-expanded="false">
+                    <svg id="menuIconBars" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    <svg id="menuIconClose" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: none;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="mobile-menu-inner">
+            <a href="/" class="mobile-menu-link">Home</a>
+            <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/status" class="mobile-menu-link">Status</a>
+            <% if (user) { %>
+            <a href="/dashboard" class="mobile-menu-link">Dashboard</a>
+            <div class="mobile-menu-divider"></div>
+            <a href="/profile" class="mobile-menu-link">Profile</a>
+            <a href="/logout" class="btn" style="background: rgba(248, 113, 113, 0.15); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--accent-red);">Logout</a>
+            <% } else { %>
+            <div class="mobile-menu-divider"></div>
+            <a href="/auth/discord?returnTo=/report" class="btn btn-primary">Login with Discord</a>
+            <% } %>
+        </div>
+    </div>
+
+    <main>
+        <div class="container">
+            <div class="page-header">
+                <h1>Report a User</h1>
+                <p>Submit a report for review by our global moderation team</p>
+            </div>
+
+            <% if (!user) { %>
+            <!-- State: Not logged in -->
+            <div class="card" style="text-align: center;">
+                <div class="icon-shield blue">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <h2 class="card-title">Login Required</h2>
+                <p class="card-text">To submit a report, you need to log in with your Discord account. This helps us verify your identity and prevent abuse.</p>
+                <a href="/auth/discord?returnTo=/report" class="btn btn-primary" style="margin-top: 0.5rem;">
+                    <svg viewBox="0 0 24 24" fill="currentColor" style="width: 18px; height: 18px;"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
+                    Login with Discord
+                </a>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title" style="font-size: 1rem;">What happens after reporting?</h3>
+                <p class="card-text">Reports are reviewed by our super-admin team. If approved, the user will be added to the global ban list and banned across all participating servers.</p>
+            </div>
+
+            <% } else { %>
+            <!-- State: Logged in -->
+            <div id="alertBox" class="alert"></div>
+
+            <!-- Report Form -->
+            <div id="formState">
+                <div class="card">
+                    <div class="icon-shield amber">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                    </div>
+                    <h2 class="card-title" style="text-align: center;">Submit a Report</h2>
+                    <p class="card-text" style="text-align: center;">Provide details about the user you'd like to report. All reports are reviewed by our moderation team.</p>
+
+                    <form id="reportForm">
+                        <div class="form-group">
+                            <label class="form-label" for="targetUserId">Target Discord User ID *</label>
+                            <input class="form-input" id="targetUserId" name="target_user_id" type="text" placeholder="e.g. 123456789012345678" pattern="\d{17,20}" required>
+                            <p class="form-hint">Right-click the user in Discord and select "Copy User ID" (enable Developer Mode in Discord settings).</p>
+                        </div>
+
+                        <div style="display: flex; gap: 1rem;">
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label" for="category">Category *</label>
+                                <select class="form-select" id="category" name="category" required>
+                                    <option value="scam">Scam</option>
+                                    <option value="phishing">Phishing</option>
+                                    <option value="spam">Spam</option>
+                                    <option value="raid">Raid</option>
+                                    <option value="harassment">Harassment</option>
+                                    <option value="selfbot">Selfbot</option>
+                                    <option value="mass_dm">Mass DM</option>
+                                    <option value="impersonation">Impersonation</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label" for="severity">Severity</label>
+                                <select class="form-select" id="severity" name="severity">
+                                    <option value="low">Low</option>
+                                    <option value="medium" selected>Medium</option>
+                                    <option value="high">High</option>
+                                    <option value="critical">Critical</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="reason">Reason *</label>
+                            <textarea class="form-textarea" id="reason" name="reason" placeholder="Describe what this user did and why they should be globally banned. Be specific..." minlength="20" maxlength="2000" required></textarea>
+                            <div class="char-count" id="reasonCount">0 / 2000 (minimum 20)</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="evidence">Evidence (optional)</label>
+                            <input class="form-input" id="evidence" name="evidence" type="text" placeholder="Links to screenshots, messages, or other proof...">
+                            <p class="form-hint">Provide any links or references that support your report.</p>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                            Submit Report
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Submitted State -->
+            <div id="submittedState" style="display: none;">
+                <div class="card" style="text-align: center;">
+                    <div class="icon-shield green">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <h2 class="card-title">Report Submitted</h2>
+                    <p class="card-text">Your report <strong id="reportIdDisplay"></strong> has been submitted and will be reviewed by our moderation team.</p>
+                    <button class="btn btn-primary" onclick="resetForm()">Submit Another Report</button>
+                </div>
+            </div>
+
+            <% } %>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container" style="max-width: 1400px;">
+            <div class="footer-links">
+                <a href="/commands" class="footer-link">Commands</a>
+                <a href="/status" class="footer-link">Status</a>
+                <a href="/docs" class="footer-link">Documentation</a>
+                <a href="/terms" class="footer-link">Terms</a>
+                <a href="/privacy" class="footer-link">Privacy</a>
+            </div>
+            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const menuIconBars = document.getElementById('menuIconBars');
+        const menuIconClose = document.getElementById('menuIconClose');
+
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', () => {
+                const isOpen = mobileMenu.classList.toggle('active');
+                mobileMenuBtn.setAttribute('aria-expanded', isOpen);
+                menuIconBars.style.display = isOpen ? 'none' : 'block';
+                menuIconClose.style.display = isOpen ? 'block' : 'none';
+                document.body.style.overflow = isOpen ? 'hidden' : '';
+            });
+        }
+
+        <% if (user) { %>
+        const alertBox = document.getElementById('alertBox');
+
+        function showAlert(message, type) {
+            alertBox.className = `alert alert-${type} show`;
+            alertBox.textContent = message;
+            alertBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function hideAlert() {
+            alertBox.className = 'alert';
+        }
+
+        // Character counter
+        const reasonField = document.getElementById('reason');
+        const reasonCount = document.getElementById('reasonCount');
+        if (reasonField) {
+            reasonField.addEventListener('input', () => {
+                const len = reasonField.value.length;
+                reasonCount.textContent = `${len} / 2000 (minimum 20)`;
+                reasonCount.className = 'char-count' + (len < 20 ? ' warn' : ' ok');
+            });
+        }
+
+        // Form submission
+        const reportForm = document.getElementById('reportForm');
+        if (reportForm) {
+            reportForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                hideAlert();
+
+                const target_user_id = document.getElementById('targetUserId').value.trim();
+                const category = document.getElementById('category').value;
+                const severity = document.getElementById('severity').value;
+                const reason = document.getElementById('reason').value.trim();
+                const evidence = document.getElementById('evidence').value.trim() || null;
+
+                if (!/^\d{17,20}$/.test(target_user_id)) {
+                    showAlert('Please enter a valid Discord User ID (17-20 digits).', 'error');
+                    return;
+                }
+
+                if (reason.length < 20) {
+                    showAlert('Your reason must be at least 20 characters.', 'error');
+                    return;
+                }
+
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<div class="spinner" style="width: 18px; height: 18px; margin: 0;"></div> Submitting...';
+
+                try {
+                    const res = await fetch('/api/report', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ target_user_id, category, severity, reason, evidence })
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        document.getElementById('formState').style.display = 'none';
+                        document.getElementById('submittedState').style.display = 'block';
+                        document.getElementById('reportIdDisplay').textContent = `#${data.reportId}`;
+                    } else {
+                        showAlert(data.message || 'Failed to submit report.', 'error');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg> Submit Report';
+                    }
+                } catch (err) {
+                    showAlert('Network error. Please try again.', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg> Submit Report';
+                }
+            });
+        }
+
+        function resetForm() {
+            document.getElementById('formState').style.display = 'block';
+            document.getElementById('submittedState').style.display = 'none';
+            document.getElementById('reportForm').reset();
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg> Submit Report';
+            document.getElementById('reasonCount').textContent = '0 / 2000 (minimum 20)';
+            document.getElementById('reasonCount').className = 'char-count';
+            hideAlert();
+        }
+        <% } %>
+    </script>
+</body>
+</html>

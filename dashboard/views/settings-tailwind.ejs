@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CertiFried MultiTool settings. Manage your bot preferences and account.">
+    <meta name="theme-color" content="#a78bfa">
+    <meta property="og:title" content="Settings - CertiFried MultiTool">
+    <meta property="og:description" content="Manage your CertiFried MultiTool settings.">
+    <meta property="og:image" content="/images/CertiFried.png">
+    <meta name="robots" content="noindex">
+    <title>Settings - CertiFried MultiTool</title>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-blue: #60a5fa;
+            --accent-green: #34d399;
+            --accent-yellow: #fbbf24;
+            --accent-cyan: #22d3ee;
+            --accent-red: #f87171;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background Effects */
+        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4; animation: float 20s ease-in-out infinite; }
+        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -15%; right: -10%; }
+        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: -10%; left: -10%; animation-delay: -10s; }
+        @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, 30px) scale(1.05); } }
+
+        /* Navbar */
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
+        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover { color: var(--text-primary); }
+        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50px; text-decoration: none; transition: all 0.2s; }
+        .user-menu:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
+        .user-avatar { width: 28px; height: 28px; border-radius: 50%; }
+        .user-name { color: var(--text-primary); font-size: 0.875rem; font-weight: 500; }
+
+        /* Main Content */
+        main { position: relative; z-index: 1; padding: 100px 1.5rem 4rem; max-width: 900px; margin: 0 auto; }
+
+        /* Page Header */
+        .page-header { margin-bottom: 2.5rem; }
+        .page-title { font-size: clamp(1.75rem, 4vw, 2.25rem); font-weight: 800; margin-bottom: 0.5rem; background: linear-gradient(135deg, var(--text-primary), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .page-subtitle { color: var(--text-secondary); font-size: 1rem; }
+
+        /* Settings Section */
+        .settings-section { margin-bottom: 2rem; }
+        .section-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+        .section-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+        .section-icon svg { width: 20px; height: 20px; }
+        .section-icon.purple { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
+        .section-icon.yellow { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); }
+        .section-icon.green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+        .section-icon.blue { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); }
+        .section-icon.cyan { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); }
+        .section-title { font-size: 1.25rem; font-weight: 700; }
+
+        /* Settings Card */
+        .settings-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+
+        /* Theme Options */
+        .theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; padding: 1.25rem; }
+        .theme-option { cursor: pointer; padding: 1rem; background: rgba(255, 255, 255, 0.02); border: 2px solid var(--border-color); border-radius: 12px; transition: all 0.2s; }
+        .theme-option:hover { background: var(--bg-card-hover); }
+        .theme-option.active { border-color: var(--accent-purple); background: rgba(167, 139, 250, 0.1); }
+        .theme-option-content { display: flex; align-items: center; gap: 0.75rem; }
+        .theme-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+        .theme-icon svg { width: 22px; height: 22px; }
+        .theme-icon.dark { background: rgba(167, 139, 250, 0.2); color: var(--accent-purple); }
+        .theme-icon.light { background: rgba(251, 191, 36, 0.2); color: var(--accent-yellow); }
+        .theme-info { flex: 1; }
+        .theme-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.125rem; }
+        .theme-status { font-size: 0.75rem; color: var(--text-muted); }
+        .theme-check { width: 22px; height: 22px; color: var(--accent-purple); opacity: 0; transition: opacity 0.2s; }
+        .theme-option.active .theme-check { opacity: 1; }
+        .theme-option.active .theme-status { color: var(--accent-purple); }
+
+        /* Setting Row */
+        .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); transition: background 0.2s; }
+        .setting-row:last-child { border-bottom: none; }
+        .setting-row:hover { background: rgba(255, 255, 255, 0.02); }
+        .setting-info { flex: 1; }
+        .setting-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.25rem; }
+        .setting-desc { font-size: 0.8rem; color: var(--text-muted); }
+
+        /* Toggle Switch */
+        .toggle { position: relative; width: 48px; height: 26px; cursor: pointer; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.1); border-radius: 26px; transition: all 0.3s; }
+        .toggle-slider::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: transform 0.3s; }
+        .toggle input:checked + .toggle-slider { background: var(--accent-purple); }
+        .toggle input:checked + .toggle-slider::before { transform: translateX(22px); }
+        .toggle:hover .toggle-slider { background: rgba(255, 255, 255, 0.15); }
+        .toggle input:checked + .toggle-slider:hover { background: #9478e6; }
+
+        /* Account Section */
+        .account-box { padding: 1.25rem; }
+        .account-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1rem; }
+        .account-info h4 { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.25rem; }
+        .account-info p { font-size: 0.8rem; color: var(--text-muted); }
+        .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; background: rgba(52, 211, 153, 0.15); border-radius: 50px; font-size: 0.75rem; font-weight: 500; color: var(--accent-green); }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); }
+
+        /* Buttons */
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.625rem 1rem; border-radius: 10px; font-size: 0.875rem; font-weight: 600; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none; font-family: inherit; }
+        .btn svg { width: 16px; height: 16px; }
+        .btn-ghost { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); }
+        .btn-ghost:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
+        .btn-logout { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--accent-red); }
+        .btn-logout:hover { background: rgba(248, 113, 113, 0.2); border-color: var(--accent-red); }
+
+        /* About Section */
+        .about-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; padding: 1.25rem; border-bottom: 1px solid var(--border-color); }
+        .about-item { padding: 0.875rem; background: rgba(255, 255, 255, 0.02); border-radius: 10px; }
+        .about-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; }
+        .about-value { font-weight: 700; font-size: 1rem; }
+        .about-links { display: flex; gap: 0.75rem; padding: 1.25rem; }
+        .about-links .btn { flex: 1; justify-content: center; }
+
+        /* Toast */
+        .toast { position: fixed; bottom: 2rem; right: 2rem; padding: 0.875rem 1.25rem; background: var(--accent-purple); color: white; border-radius: 12px; font-weight: 500; font-size: 0.875rem; box-shadow: 0 10px 30px rgba(167, 139, 250, 0.3); transform: translateY(100px); opacity: 0; transition: all 0.3s ease; z-index: 9999; }
+        .toast.show { transform: translateY(0); opacity: 1; }
+
+        /* Footer */
+        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
+        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
+        .footer-link:hover { color: var(--accent-purple); }
+        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
+
+        /* Mobile Menu Button */
+        .mobile-menu-btn {
+            display: none;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            z-index: 1001;
+        }
+
+        .mobile-menu-btn svg {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* Mobile Menu Dropdown */
+        .mobile-menu {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(11, 15, 17, 0.98);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 999;
+            padding-top: 80px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .mobile-menu.active {
+            display: block;
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .mobile-menu-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+            padding: 2rem;
+        }
+
+        .mobile-menu-link {
+            color: var(--text-primary);
+            text-decoration: none;
+            font-size: 1.25rem;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            transition: color 0.3s ease;
+        }
+
+        .mobile-menu-link:hover {
+            color: var(--accent-purple);
+        }
+
+        .mobile-menu-divider {
+            width: 60%;
+            max-width: 200px;
+            height: 1px;
+            background: var(--border-color);
+            margin: 0.5rem 0;
+        }
+
+        .mobile-menu .btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .navbar-links { display: none; }
+            .mobile-menu-btn { display: block; }
+            main { padding: 90px 1rem 3rem; }
+            .theme-grid { grid-template-columns: 1fr; }
+            .about-grid { grid-template-columns: 1fr; }
+            .about-links { flex-direction: column; }
+            .setting-row { flex-wrap: wrap; gap: 1rem; }
+            .account-header { flex-direction: column; gap: 0.75rem; }
+            .footer-links { flex-direction: column; gap: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/" class="navbar-brand">
+                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                <span>CertiFried</span>
+            </a>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/servers">Servers</a>
+                <a href="/commands">Commands</a>
+                <a href="/status">Status</a>
+            </div>
+            <% if (user) { %>
+                <a href="/profile" class="user-menu">
+                    <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="Avatar" class="user-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                    <span class="user-name"><%= user.username %></span>
+                </a>
+            <% } else { %>
+                <a href="/login" class="user-menu">
+                    <span class="user-name">Login</span>
+                </a>
+            <% } %>
+            <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle mobile menu" aria-expanded="false">
+                <svg id="menuIconOpen" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <svg id="menuIconClose" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: none;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="mobile-menu-inner">
+            <a href="/" class="mobile-menu-link">Home</a>
+            <a href="/servers" class="mobile-menu-link">Servers</a>
+            <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/status" class="mobile-menu-link">Status</a>
+            <div class="mobile-menu-divider"></div>
+            <% if (user) { %>
+                <a href="/profile" class="mobile-menu-link">Profile</a>
+                <a href="/logout" class="btn btn-logout">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    Logout
+                </a>
+            <% } else { %>
+                <a href="/login" class="btn btn-ghost">Login</a>
+            <% } %>
+        </div>
+    </div>
+
+    <main>
+        <div class="page-header">
+            <h1 class="page-title">Settings</h1>
+            <p class="page-subtitle">Manage your dashboard preferences and account</p>
+        </div>
+
+        <!-- Appearance Settings -->
+        <section class="settings-section">
+            <div class="section-header">
+                <div class="section-icon purple">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+                </div>
+                <h2 class="section-title">Appearance</h2>
+            </div>
+            <div class="settings-card">
+                <div class="theme-grid">
+                    <div class="theme-option active" data-theme="dark">
+                        <div class="theme-option-content">
+                            <div class="theme-icon dark">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                            </div>
+                            <div class="theme-info">
+                                <div class="theme-name">Dark Mode</div>
+                                <div class="theme-status">Currently active</div>
+                            </div>
+                            <svg class="theme-check" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                        </div>
+                    </div>
+                    <div class="theme-option" data-theme="light">
+                        <div class="theme-option-content">
+                            <div class="theme-icon light">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                            </div>
+                            <div class="theme-info">
+                                <div class="theme-name">Light Mode</div>
+                                <div class="theme-status">Click to activate</div>
+                            </div>
+                            <svg class="theme-check" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-name">Compact Mode</div>
+                        <div class="setting-desc">Reduce spacing for a denser layout</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="compactMode">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <!-- Notification Settings -->
+        <section class="settings-section">
+            <div class="section-header">
+                <div class="section-icon yellow">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                </div>
+                <h2 class="section-title">Notifications</h2>
+            </div>
+            <div class="settings-card">
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-name">Browser Notifications</div>
+                        <div class="setting-desc">Receive notifications for important events</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="browserNotifications">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-name">Stream Alerts</div>
+                        <div class="setting-desc">Get notified when streamers go live</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="streamAlerts" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-name">Update Notifications</div>
+                        <div class="setting-desc">Stay informed about new features</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="updateNotifications" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <!-- Privacy Settings -->
+        <section class="settings-section">
+            <div class="section-header">
+                <div class="section-icon green">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                </div>
+                <h2 class="section-title">Privacy & Security</h2>
+            </div>
+            <div class="settings-card">
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-name">Show Online Status</div>
+                        <div class="setting-desc">Display your status to other users</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="showOnlineStatus" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-name">Analytics</div>
+                        <div class="setting-desc">Help improve with anonymous usage data</div>
+                    </div>
+                    <label class="toggle">
+                        <input type="checkbox" id="analytics" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <!-- Account Settings -->
+        <section class="settings-section">
+            <div class="section-header">
+                <div class="section-icon blue">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                </div>
+                <h2 class="section-title">Account</h2>
+            </div>
+            <div class="settings-card">
+                <div class="account-box">
+                    <div class="account-header">
+                        <div class="account-info">
+                            <h4>Discord Account</h4>
+                            <p>Connected as <%= user.username %><% if (user.discriminator && user.discriminator !== '0') { %>#<%= user.discriminator %><% } %></p>
+                        </div>
+                        <span class="status-badge">
+                            <span class="status-dot"></span>
+                            Connected
+                        </span>
+                    </div>
+                    <a href="/profile" class="btn btn-ghost">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                        View Profile
+                    </a>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-info">
+                        <div class="setting-name">Session Management</div>
+                        <div class="setting-desc">Sign out from all devices</div>
+                    </div>
+                    <a href="/logout" class="btn btn-logout">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                        Logout
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- About Section -->
+        <section class="settings-section">
+            <div class="section-header">
+                <div class="section-icon cyan">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                <h2 class="section-title">About</h2>
+            </div>
+            <div class="settings-card">
+                <div class="about-grid">
+                    <div class="about-item">
+                        <div class="about-label">Dashboard Version</div>
+                        <div class="about-value">v2.0.0</div>
+                    </div>
+                    <div class="about-item">
+                        <div class="about-label">Bot Version</div>
+                        <div class="about-value">v3.1.0</div>
+                    </div>
+                </div>
+                <div class="about-links">
+                    <a href="/commands" class="btn btn-ghost">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        Commands
+                    </a>
+                    <a href="/status" class="btn btn-ghost">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        Status
+                    </a>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="footer">
+        <div class="container" style="max-width: 900px; margin: 0 auto; padding: 0 1.5rem;">
+            <div class="footer-links">
+                <a href="/commands" class="footer-link">Commands</a>
+                <a href="/status" class="footer-link">Status</a>
+                <a href="/docs" class="footer-link">Documentation</a>
+                <a href="/terms" class="footer-link">Terms</a>
+                <a href="/privacy" class="footer-link">Privacy</a>
+            </div>
+            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const toast = document.getElementById('toast');
+
+        function showToast(message) {
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2500);
+        }
+
+        // Mobile menu toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const menuIconOpen = document.getElementById('menuIconOpen');
+        const menuIconClose = document.getElementById('menuIconClose');
+
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', () => {
+                const isOpen = mobileMenu.classList.toggle('active');
+                mobileMenuBtn.setAttribute('aria-expanded', isOpen);
+                menuIconOpen.style.display = isOpen ? 'none' : 'block';
+                menuIconClose.style.display = isOpen ? 'block' : 'none';
+                document.body.style.overflow = isOpen ? 'hidden' : '';
+            });
+
+            // Close menu when clicking a link
+            mobileMenu.querySelectorAll('a').forEach(link => {
+                link.addEventListener('click', () => {
+                    mobileMenu.classList.remove('active');
+                    mobileMenuBtn.setAttribute('aria-expanded', 'false');
+                    menuIconOpen.style.display = 'block';
+                    menuIconClose.style.display = 'none';
+                    document.body.style.overflow = '';
+                });
+            });
+        }
+
+        // Theme selection
+        document.querySelectorAll('.theme-option').forEach(option => {
+            option.addEventListener('click', function() {
+                const theme = this.dataset.theme;
+
+                document.querySelectorAll('.theme-option').forEach(opt => {
+                    opt.classList.remove('active');
+                    opt.querySelector('.theme-status').textContent = 'Click to activate';
+                });
+
+                this.classList.add('active');
+                this.querySelector('.theme-status').textContent = 'Currently active';
+
+                localStorage.setItem('theme', theme);
+                showToast(`Switched to ${theme} mode`);
+            });
+        });
+
+        // Toggle handlers
+        ['compactMode', 'browserNotifications', 'streamAlerts', 'updateNotifications', 'showOnlineStatus', 'analytics'].forEach(id => {
+            const toggle = document.getElementById(id);
+            if (toggle) {
+                toggle.addEventListener('change', function() {
+                    showToast('Setting updated');
+                });
+            }
+        });
+    });
+    </script>
+</body>
+</html>

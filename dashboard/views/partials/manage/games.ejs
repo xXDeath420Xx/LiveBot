@@ -1,0 +1,430 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-gamepad"></i>
+                <span>Games System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Manage trivia questions, hangman words, counting channels, and game statistics
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Trivia Questions</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= triviaQuestions?.length || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Hangman Words</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= hangmanWords?.length || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Games Played</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= gameStats?.total_games || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Players</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);"><%= gameStats?.total_players || 0 %></div>
+        </div>
+    </div>
+
+    <!-- Trivia Questions Management -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0;">
+                <i class="fas fa-question-circle"></i> Trivia Questions
+            </h3>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTriviaModal">
+                <i class="fas fa-plus"></i>
+                <span>Add Question</span>
+            </button>
+        </div>
+
+        <% if (triviaQuestions && triviaQuestions.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Difficulty</th>
+                            <th>Question</th>
+                            <th>Correct Answer</th>
+                            <th>Points</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% triviaQuestions.forEach(q => {
+                            const difficultyColors = {
+                                easy: 'var(--color-success)',
+                                medium: 'var(--color-warning)',
+                                hard: 'var(--color-danger)'
+                            };
+                            const diffColor = difficultyColors[q.difficulty] || 'var(--color-text-muted)';
+                        %>
+                            <tr>
+                                <td>
+                                    <span class="badge badge-primary" style="text-transform: capitalize;"><%= q.category %></span>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background: <%= diffColor %>; text-transform: capitalize;"><%= q.difficulty %></span>
+                                </td>
+                                <td>
+                                    <div style="max-width: 400px; color: var(--color-text-primary);"><%= q.question %></div>
+                                </td>
+                                <td>
+                                    <strong style="color: var(--color-success);"><%= q.correct_answer %></strong>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background: var(--color-accent-purple);"><%= q.points_value %> pts</span>
+                                </td>
+                                <td class="text-end">
+                                    <form action="/manage/<%= guild.id %>/games/trivia/delete" method="POST" style="display: inline;">
+                                        <input type="hidden" name="question_id" value="<%= q.question_id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this question?')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-question-circle"></i>
+                </div>
+                <div class="empty-state-title">No Trivia Questions</div>
+                <div class="empty-state-description">
+                    Add your first trivia question to start playing
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTriviaModal">
+                    <i class="fas fa-plus"></i>
+                    <span>Add First Question</span>
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Hangman Words Management -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0;">
+                <i class="fas fa-font"></i> Hangman Words
+            </h3>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addHangmanModal">
+                <i class="fas fa-plus"></i>
+                <span>Add Word</span>
+            </button>
+        </div>
+
+        <% if (hangmanWords && hangmanWords.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Word</th>
+                            <th>Difficulty</th>
+                            <th>Category</th>
+                            <th>Hint</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% hangmanWords.forEach(w => {
+                            const difficultyColors = {
+                                easy: 'var(--color-success)',
+                                medium: 'var(--color-warning)',
+                                hard: 'var(--color-danger)'
+                            };
+                            const diffColor = difficultyColors[w.difficulty] || 'var(--color-text-muted)';
+                        %>
+                            <tr>
+                                <td>
+                                    <strong style="color: var(--color-text-primary); font-size: var(--font-size-base); letter-spacing: 0.05em;"><%= w.word %></strong>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background: <%= diffColor %>; text-transform: capitalize;"><%= w.difficulty %></span>
+                                </td>
+                                <td>
+                                    <span class="badge badge-secondary" style="text-transform: capitalize;"><%= w.category %></span>
+                                </td>
+                                <td>
+                                    <div style="max-width: 300px; color: var(--color-text-secondary);"><%= w.hint || '-' %></div>
+                                </td>
+                                <td class="text-end">
+                                    <form action="/manage/<%= guild.id %>/games/hangman/delete" method="POST" style="display: inline;">
+                                        <input type="hidden" name="word_id" value="<%= w.word_id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this word?')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-font"></i>
+                </div>
+                <div class="empty-state-title">No Hangman Words</div>
+                <div class="empty-state-description">
+                    Add your first hangman word to start playing
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addHangmanModal">
+                    <i class="fas fa-plus"></i>
+                    <span>Add First Word</span>
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Counting Game Configuration -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-sort-numeric-up"></i> Counting Game Channels
+        </h3>
+
+        <% if (countingChannels && countingChannels.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Channel</th>
+                            <th>Current Number</th>
+                            <th>Highest Number</th>
+                            <th>Last User</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% countingChannels.forEach(c => { %>
+                            <tr>
+                                <td>
+                                    <code style="color: var(--color-primary-400);">#<%= c.channel_id %></code>
+                                </td>
+                                <td>
+                                    <strong style="color: var(--color-text-primary); font-size: var(--font-size-lg);"><%= c.current_count %></strong>
+                                </td>
+                                <td>
+                                    <span class="badge badge-success" style="font-size: var(--font-size-sm);"><%= c.highest_count %></span>
+                                </td>
+                                <td>
+                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= c.last_user_id || 'None' %></code>
+                                </td>
+                                <td class="text-end">
+                                    <form action="/manage/<%= guild.id %>/games/counting/reset" method="POST" style="display: inline;">
+                                        <input type="hidden" name="channel_id" value="<%= c.channel_id %>">
+                                        <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Reset counting for this channel?')">
+                                            <i class="fas fa-redo"></i>
+                                            <span>Reset</span>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
+                <div style="font-size: var(--font-size-base); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                    No counting channels configured
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                    Use <code style="background: var(--color-dark-600); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">/fun counting setup</code> to set up counting in a channel
+                </div>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Add Trivia Question Modal -->
+<div class="modal fade" id="addTriviaModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Trivia Question</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/games/trivia/add" method="POST">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Question *</label>
+                        <textarea class="form-control" name="question" rows="2" required placeholder="What is the capital of France?"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Category *</label>
+                            <input type="text" class="form-control" name="category" placeholder="e.g., science, history, general" required>
+                        </div>
+                        <div>
+                            <label class="form-label">Difficulty *</label>
+                            <select class="form-select" name="difficulty" required>
+                                <option value="easy">Easy</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="hard">Hard</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Correct Answer *</label>
+                        <input type="text" class="form-control" name="correct_answer" required placeholder="Paris">
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Incorrect Answers (comma-separated) *</label>
+                        <input type="text" class="form-control" name="incorrect_answers" placeholder="London, Berlin, Madrid" required>
+                        <div class="form-help">Enter 3 incorrect answers separated by commas</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Points Value</label>
+                        <input type="number" class="form-control" name="points_value" value="10" min="1">
+                        <div class="form-help">Points awarded for correct answer</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Question</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Hangman Word Modal -->
+<div class="modal fade" id="addHangmanModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Hangman Word</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/games/hangman/add" method="POST">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Word *</label>
+                        <input type="text" class="form-control" id="hangmanWordInput" name="word" style="text-transform: uppercase; letter-spacing: 0.1em;" required placeholder="ELEPHANT">
+                        <div class="form-help">Letters only, will be converted to uppercase</div>
+                    </div>
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Difficulty *</label>
+                            <select class="form-select" name="difficulty" required>
+                                <option value="easy">Easy (3-5 letters)</option>
+                                <option value="medium" selected>Medium (6-8 letters)</option>
+                                <option value="hard">Hard (9+ letters)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="form-label">Category *</label>
+                            <input type="text" class="form-control" name="category" placeholder="e.g., animals, movies" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label">Hint (optional)</label>
+                        <input type="text" class="form-control" name="hint" placeholder="A large mammal with a trunk">
+                        <div class="form-help">Optional hint for players</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Word</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    color: var(--color-text-secondary);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+.text-end {
+    text-align: right;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Auto-uppercase hangman word input
+    const hangmanInput = document.getElementById('hangmanWordInput');
+    if (hangmanInput) {
+        hangmanInput.addEventListener('input', function(e) {
+            this.value = this.value.toUpperCase();
+        });
+    }
+});
+</script>

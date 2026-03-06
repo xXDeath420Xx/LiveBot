@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Manage <%= guild.name %> with CertiFried MultiTool">
+    <meta name="theme-color" content="#a78bfa">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title>Manage <%= guild.name %> - CertiFried MultiTool</title>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-secondary: #0f1316;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-blue: #60a5fa;
+            --accent-green: #23f56b;
+            --accent-cyan: #22d3ee;
+            --accent-yellow: #fbbf24;
+            --accent-red: #f87171;
+            --accent-orange: #fb923c;
+            --accent-pink: #f472b6;
+
+            /* Extended color palette for partials */
+            --color-dark-400: rgba(255, 255, 255, 0.1);
+            --color-dark-500: #1a1d21;
+            --color-dark-600: #14171a;
+            --color-dark-700: #0f1214;
+            --color-dark-800: #0b0d0f;
+            --color-text-primary: #ffffff;
+            --color-text-secondary: rgba(255, 255, 255, 0.7);
+            --color-text-muted: rgba(255, 255, 255, 0.5);
+            --color-primary-400: #a78bfa;
+            --color-primary-500: #8b5cf6;
+            --color-accent-purple: #a78bfa;
+            --color-accent-green: #23f56b;
+            --color-success: #23f56b;
+            --color-danger: #f87171;
+            --color-warning: #fbbf24;
+
+            /* Spacing */
+            --spacing-1: 0.25rem;
+            --spacing-2: 0.5rem;
+            --spacing-3: 0.75rem;
+            --spacing-4: 1rem;
+            --spacing-5: 1.25rem;
+            --spacing-6: 1.5rem;
+            --spacing-8: 2rem;
+            --spacing-10: 2.5rem;
+            --spacing-12: 3rem;
+
+            /* Typography */
+            --font-size-xs: 0.75rem;
+            --font-size-sm: 0.875rem;
+            --font-size-base: 1rem;
+            --font-size-lg: 1.125rem;
+            --font-size-xl: 1.25rem;
+            --font-size-2xl: 1.5rem;
+            --font-weight-normal: 400;
+            --font-weight-medium: 500;
+            --font-weight-semibold: 600;
+            --font-weight-bold: 700;
+
+            /* Border radius */
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+            --radius-xl: 18px;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* Background Effects */
+        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.2; animation: float 25s ease-in-out infinite; }
+        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -15%; right: -10%; }
+        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: -15%; left: -10%; animation-delay: -12s; }
+        @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, 30px) scale(1.05); } }
+
+        .container { width: 100%; max-width: 1400px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
+
+        /* Navbar */
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; font-size: 1.1rem; }
+        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover, .navbar-links a.active { color: var(--text-primary); }
+        .user-menu-container { position: relative; }
+        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50px; cursor: pointer; transition: all 0.2s; }
+        .user-menu:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
+        .user-avatar { width: 28px; height: 28px; border-radius: 50%; }
+        .user-name { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+        .user-menu-chevron { font-size: 0.7rem; color: var(--text-muted); transition: transform 0.2s; }
+        .user-menu-container.open .user-menu-chevron { transform: rotate(180deg); }
+
+        /* User Dropdown */
+        .user-dropdown { position: absolute; top: calc(100% + 8px); right: 0; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s ease; z-index: 1001; overflow: hidden; }
+        .user-menu-container.open .user-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+        .dropdown-header { padding: 1rem; border-bottom: 1px solid var(--border-color); }
+        .dropdown-user-info { font-size: 0.8rem; color: var(--text-muted); }
+        .dropdown-divider { height: 1px; background: var(--border-color); margin: 0.5rem 0; }
+        .dropdown-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: all 0.15s; }
+        .dropdown-item:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+        .dropdown-item i { width: 18px; text-align: center; }
+        .dropdown-item.text-warning { color: var(--accent-yellow); }
+        .dropdown-item.text-warning:hover { background: rgba(251, 191, 36, 0.1); }
+        .dropdown-item.text-danger { color: var(--accent-red); }
+        .dropdown-item.text-danger:hover { background: rgba(248, 113, 113, 0.1); }
+
+        /* Main Content */
+        main { position: relative; z-index: 1; padding: 100px 0 4rem; min-height: 100vh; }
+
+        /* Server Header */
+        .server-header { display: flex; flex-wrap: wrap; align-items: center; gap: 1.5rem; margin-bottom: 2.5rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border-color); }
+        .server-icon-wrap { position: relative; }
+        .server-icon { width: 72px; height: 72px; border-radius: 16px; object-fit: cover; border: 3px solid var(--border-color); transition: border-color 0.3s; }
+        .server-icon:hover { border-color: var(--accent-purple); }
+        .server-status { position: absolute; bottom: -4px; right: -4px; width: 22px; height: 22px; background: var(--accent-green); border-radius: 50%; border: 3px solid var(--bg-primary); }
+        .server-info { flex: 1; min-width: 200px; }
+        .server-name { font-size: 1.75rem; font-weight: 800; margin-bottom: 0.25rem; }
+        .server-meta { display: flex; flex-wrap: wrap; gap: 1.5rem; color: var(--text-secondary); font-size: 0.9rem; }
+        .server-meta-item { display: flex; align-items: center; gap: 0.5rem; }
+        .server-meta-item i { color: var(--accent-purple); width: 16px; }
+        .server-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .btn-back { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; }
+        .btn-back:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); color: var(--text-primary); }
+        .btn-back i { font-size: 0.85rem; }
+
+        /* Breadcrumb */
+        .breadcrumb-nav { margin-bottom: 2rem; }
+        .breadcrumb { display: flex; align-items: center; gap: 0.5rem; list-style: none; padding: 0; margin: 0; }
+        .breadcrumb-item { display: flex; align-items: center; gap: 0.5rem; }
+        .breadcrumb-item a { color: var(--text-muted); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+        .breadcrumb-item a:hover { color: var(--accent-purple); }
+        .breadcrumb-item.active { color: var(--text-primary); font-weight: 600; font-size: 0.9rem; }
+        .breadcrumb-sep { color: var(--text-muted); }
+
+        /* Module Grid */
+        .modules-section { margin-bottom: 3rem; }
+        .section-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
+        .section-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; }
+        .section-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+        .module-card { display: block; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; text-decoration: none; transition: all 0.3s; backdrop-filter: blur(10px); }
+        .module-card:hover { border-color: var(--card-accent, var(--accent-purple)); transform: translateY(-4px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3); }
+        .module-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 0.75rem; }
+        .module-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+        .module-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem; }
+        .module-desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
+        .module-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.625rem; background: rgba(35, 245, 107, 0.15); color: var(--accent-green); border-radius: 50px; font-size: 0.7rem; font-weight: 600; margin-top: 0.75rem; }
+        .module-badge i { font-size: 0.6rem; }
+
+        /* Color classes for modules */
+        .purple { --card-accent: var(--accent-purple); }
+        .purple .module-icon, .purple .section-icon { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
+        .blue { --card-accent: var(--accent-blue); }
+        .blue .module-icon, .blue .section-icon { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); }
+        .green { --card-accent: var(--accent-green); }
+        .green .module-icon, .green .section-icon { background: rgba(35, 245, 107, 0.15); color: var(--accent-green); }
+        .cyan { --card-accent: var(--accent-cyan); }
+        .cyan .module-icon, .cyan .section-icon { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); }
+        .yellow { --card-accent: var(--accent-yellow); }
+        .yellow .module-icon, .yellow .section-icon { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); }
+        .red { --card-accent: var(--accent-red); }
+        .red .module-icon, .red .section-icon { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+        .orange { --card-accent: var(--accent-orange); }
+        .orange .module-icon, .orange .section-icon { background: rgba(251, 146, 60, 0.15); color: var(--accent-orange); }
+        .pink { --card-accent: var(--accent-pink); }
+        .pink .module-icon, .pink .section-icon { background: rgba(244, 114, 182, 0.15); color: var(--accent-pink); }
+
+        /* Quick Stats */
+        .quick-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem; display: flex; align-items: center; gap: 1rem; transition: all 0.3s; }
+        .stat-card:hover { border-color: var(--stat-accent, var(--accent-purple)); transform: translateY(-2px); }
+        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+        .stat-value { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        .stat-purple { --stat-accent: var(--accent-purple); }
+        .stat-purple .stat-icon { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
+        .stat-cyan { --stat-accent: var(--accent-cyan); }
+        .stat-cyan .stat-icon { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); }
+        .stat-green { --stat-accent: var(--accent-green); }
+        .stat-green .stat-icon { background: rgba(35, 245, 107, 0.15); color: var(--accent-green); }
+        .stat-red { --stat-accent: var(--accent-red); }
+        .stat-red .stat-icon { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+
+        /* Card Components for Partials */
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; backdrop-filter: blur(10px); }
+        .card-hover { transition: all 0.3s; }
+        .card-hover:hover { border-color: var(--accent-purple); transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); }
+        .card-body { padding: 1.5rem; }
+        .card-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); }
+        .card-footer { padding: 1.25rem 1.5rem; border-top: 1px solid var(--border-color); }
+
+        /* Grid System */
+        .grid { display: grid; }
+        .grid-cols-1 { grid-template-columns: repeat(1, 1fr); }
+        .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-cols-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+        @media (max-width: 768px) {
+            .grid-cols-2, .grid-cols-3, .grid-cols-4 { grid-template-columns: 1fr; }
+        }
+
+        /* Page Section Styles */
+        .page-section { margin-bottom: 2rem; }
+        .page-section-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
+        .page-section-title { display: flex; align-items: center; gap: 0.75rem; font-size: 1.25rem; font-weight: 700; color: var(--text-primary); }
+        .page-section-title i { color: var(--accent-purple); }
+        .page-section-subtitle { font-size: 0.9rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+        /* Stat Cards for Partials */
+        .stat-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card-item { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; text-align: center; }
+        .stat-card-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+        .stat-card-value { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); }
+        .stat-card-value.primary { color: var(--accent-purple); }
+        .stat-card-value.purple { color: var(--accent-purple); }
+        .stat-card-value.success { color: var(--accent-green); }
+        .stat-card-value.danger { color: var(--accent-red); }
+
+        /* Table Styles */
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th { background: var(--bg-secondary); padding: 1rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color); }
+        .data-table td { padding: 1rem; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); }
+        .data-table tr:hover td { background: rgba(255, 255, 255, 0.02); }
+        .data-table tr:last-child td { border-bottom: none; }
+
+        /* Page Content Area */
+        .page-content { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 20px; padding: 2rem; }
+
+        /* Form styles */
+        .manage-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; margin-bottom: 1.5rem; backdrop-filter: blur(10px); }
+        .manage-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+        .manage-card-title { font-size: 1.125rem; font-weight: 700; }
+
+        .form-label { font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; display: block; }
+        .form-control, .form-select { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 10px; padding: 0.625rem 0.875rem; font-size: 0.875rem; transition: all 0.2s; }
+        .form-control:focus, .form-select:focus { background: rgba(255, 255, 255, 0.08); border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1); outline: none; }
+        .form-control::placeholder { color: var(--text-muted); }
+        .form-select option { background: var(--bg-primary); color: var(--text-primary); }
+        .form-check-input { background-color: rgba(255, 255, 255, 0.1); border-color: var(--border-color); }
+        .form-check-input:checked { background-color: var(--accent-purple); border-color: var(--accent-purple); }
+
+        /* Button styles */
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.625rem 1.25rem; border-radius: 10px; font-size: 0.875rem; font-weight: 600; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none; font-family: inherit; }
+        .btn i { font-size: 0.85rem; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(167, 139, 250, 0.3); color: white; }
+        .btn-secondary { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); }
+        .btn-secondary:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); color: var(--text-primary); }
+        .btn-danger { background: rgba(248, 113, 113, 0.15); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--accent-red); }
+        .btn-danger:hover { background: rgba(248, 113, 113, 0.25); }
+        .btn-success { background: rgba(35, 245, 107, 0.15); border: 1px solid rgba(35, 245, 107, 0.3); color: var(--accent-green); }
+        .btn-success:hover { background: rgba(35, 245, 107, 0.25); }
+
+        /* Table styles */
+        .table { --bs-table-bg: transparent; --bs-table-color: var(--text-primary); --bs-table-border-color: var(--border-color); }
+        .table th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom-width: 1px; }
+        .table td { font-size: 0.875rem; vertical-align: middle; border-bottom: 1px solid var(--border-color); }
+        .table-hover tbody tr:hover { background: var(--bg-card-hover); }
+
+        /* Badge styles */
+        .badge { font-weight: 500; padding: 0.375rem 0.625rem; border-radius: 6px; font-size: 0.75rem; }
+        .badge.bg-primary { background: rgba(167, 139, 250, 0.2) !important; color: var(--accent-purple); }
+        .badge.bg-success { background: rgba(35, 245, 107, 0.2) !important; color: var(--accent-green); }
+        .badge.bg-warning { background: rgba(251, 191, 36, 0.2) !important; color: var(--accent-yellow); }
+        .badge.bg-danger { background: rgba(248, 113, 113, 0.2) !important; color: var(--accent-red); }
+        .badge.bg-secondary { background: var(--bg-card) !important; color: var(--text-secondary); }
+
+        /* Modal styles - Fixed z-index and visibility */
+        /* Force modals to break out of stacking context created by backdrop-filter */
+        .modal {
+            z-index: 9999 !important;
+            position: fixed !important;
+        }
+        .modal-backdrop {
+            z-index: 9998 !important;
+            background-color: rgba(0, 0, 0, 0.8) !important;
+            position: fixed !important;
+        }
+        .modal.show .modal-dialog {
+            display: flex !important;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0 auto;
+        }
+        .modal-dialog {
+            z-index: 9999 !important;
+            position: relative;
+            max-width: 500px;
+            width: 100%;
+            margin: 1.75rem auto;
+        }
+        .modal-dialog.modal-lg { max-width: 800px; }
+        .modal-dialog.modal-xl { max-width: 1140px; }
+        .modal-content {
+            background: #0f1316 !important;
+            border: 1px solid rgba(167, 139, 250, 0.3) !important;
+            border-radius: 16px;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.8);
+            color: var(--text-primary);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+        }
+        .modal-header {
+            border-bottom: 1px solid rgba(167, 139, 250, 0.2);
+            padding: 1.25rem 1.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px 16px 0 0;
+        }
+        .modal-title { font-weight: 700; color: #ffffff !important; }
+        .modal-body {
+            padding: 1.5rem;
+            color: var(--text-primary) !important;
+            flex: 1 1 auto;
+        }
+        .modal-body label { color: rgba(255, 255, 255, 0.9) !important; }
+        .modal-footer {
+            border-top: 1px solid rgba(167, 139, 250, 0.2);
+            padding: 1rem 1.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 0 0 16px 16px;
+        }
+        .btn-close { filter: invert(1); opacity: 0.6; }
+        .btn-close:hover { opacity: 1; }
+
+        /* Fix for modals inside backdrop-filter containers */
+        .modal.show { display: block !important; opacity: 1 !important; }
+
+        /* Global dark theme text colors */
+        h1, h2, h3, h4, h5, h6 { color: var(--text-primary); }
+        p, span, div, label { color: inherit; }
+        td, th { color: var(--text-secondary); }
+
+        /* Ensure all text in page-content is readable */
+        .page-content, .page-content * { color: var(--text-primary); }
+        .page-content .text-muted, .page-content small { color: var(--text-muted) !important; }
+        .page-content .text-secondary { color: var(--text-secondary) !important; }
+
+        /* Alert styles */
+        .alert { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); }
+        .alert-success { background: rgba(35, 245, 107, 0.1); border-color: rgba(35, 245, 107, 0.3); }
+        .alert-warning { background: rgba(251, 191, 36, 0.1); border-color: rgba(251, 191, 36, 0.3); }
+        .alert-danger { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.3); }
+        .alert-info { background: rgba(96, 165, 250, 0.1); border-color: rgba(96, 165, 250, 0.3); }
+
+        /* Toggle switch */
+        .toggle-switch { position: relative; width: 44px; height: 24px; cursor: pointer; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.1); border-radius: 24px; transition: all 0.3s; }
+        .toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: transform 0.3s; }
+        .toggle-switch input:checked + .toggle-slider { background: var(--accent-purple); }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+        /* Empty state */
+        .empty-state { text-align: center; padding: 3rem 1.5rem; color: var(--text-muted); }
+        .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
+        .empty-state h3 { font-size: 1.125rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
+        .empty-state p { font-size: 0.875rem; }
+
+        /* Footer */
+        .footer { padding: 2.5rem 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
+        .footer-links { display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.25rem; }
+        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s; }
+        .footer-link:hover { color: var(--accent-purple); }
+        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
+
+        /* Mobile Menu */
+        .mobile-menu-btn { display: none; background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 0.5rem; }
+        .mobile-menu { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(11, 15, 17, 0.98); backdrop-filter: blur(20px); z-index: 999; padding-top: 80px; opacity: 0; visibility: hidden; transition: all 0.3s; }
+        .mobile-menu.active { opacity: 1; visibility: visible; }
+        .mobile-menu-inner { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; padding: 2rem; }
+        .mobile-menu-link { color: var(--text-primary); text-decoration: none; font-size: 1.25rem; font-weight: 600; }
+        .mobile-menu-link:hover { color: var(--accent-purple); }
+
+        @media (max-width: 768px) {
+            .mobile-menu-btn { display: block; }
+            .navbar-links { display: none; }
+            .mobile-menu.active { display: block; }
+            .server-header { flex-direction: column; align-items: flex-start; text-align: left; }
+            .server-name { font-size: 1.5rem; }
+            .quick-stats { grid-template-columns: repeat(2, 1fr); }
+            .module-grid { grid-template-columns: 1fr; }
+            .footer-links { flex-direction: column; gap: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <%
+    // Define default values for all variables to prevent ReferenceErrors
+    const consolidatedStreamers = locals.consolidatedStreamers || [];
+    const teamSubscriptions = locals.teamSubscriptions || [];
+    const settings = locals.settings || {};
+    const welcomeSettings = locals.welcomeSettings || {};
+    const reactionRolePanels = locals.reactionRolePanels || [];
+    const starboardConfig = locals.starboardConfig || {};
+    const roleRewards = locals.roleRewards || [];
+    const giveaways = locals.giveaways || [];
+    const polls = locals.polls || [];
+    const suggestions = locals.suggestions || [];
+    const suggestionConfig = locals.suggestionConfig || {};
+    const suggestionStats = locals.suggestionStats || {};
+    const suggestionTags = locals.suggestionTags || [];
+    const musicConfig = locals.musicConfig || {};
+    const voiceChannels = locals.voiceChannels || [];
+    const birthdayUsers = locals.birthdayUsers || [];
+    const birthdayStats = locals.birthdayStats || {};
+    const weatherStats = locals.weatherStats || {};
+    const weatherConfig = locals.weatherConfig || {};
+    const economyConfig = locals.economyConfig || {};
+    const shopItems = locals.shopItems || [];
+    const economyStats = locals.economyStats || {};
+    const topUsers = locals.topUsers || [];
+    const triviaQuestions = locals.triviaQuestions || [];
+    const hangmanWords = locals.hangmanWords || [];
+    const countingChannels = locals.countingChannels || [];
+    const gameStats = locals.gameStats || {};
+    const gamblingConfig = locals.gamblingConfig || {};
+    const gamblingHistory = locals.gamblingHistory || [];
+    const gamblingStats = locals.gamblingStats || {};
+    const topGamblers = locals.topGamblers || [];
+    const activeTrades = locals.activeTrades || [];
+    const tradeHistory = locals.tradeHistory || [];
+    const tradeStats = locals.tradeStats || {};
+    const rpgStats = locals.rpgStats || {};
+    const rpgCharacters = locals.rpgCharacters || [];
+    const moderationConfig = locals.moderationConfig || {};
+    const recentInfractions = locals.recentInfractions || [];
+    const escalationRules = locals.escalationRules || [];
+    const automodRules = locals.automodRules || [];
+    const heatConfig = locals.heatConfig || {};
+    const joinGateConfig = locals.joinGateConfig || {};
+    const antiRaidConfig = locals.antiRaidConfig || {};
+    const antiNukeConfig = locals.antiNukeConfig || {};
+    const quarantineConfig = locals.quarantineConfig || {};
+    const statroleConfigs = locals.statroleConfigs || [];
+    const logConfig = locals.logConfig || {};
+    const actionLogs = locals.actionLogs || [];
+    const channelSettingsMap = locals.channelSettingsMap || new Map();
+    const analyticsData = locals.analyticsData || {};
+    const redditFeeds = locals.redditFeeds || [];
+    const youtubeFeeds = locals.youtubeFeeds || [];
+    const twitterFeeds = locals.twitterFeeds || [];
+    const twitchScheduleSyncs = locals.twitchScheduleSyncs || [];
+    const autoPublisherConfig = locals.autoPublisherConfig || {};
+    const autorolesConfig = locals.autorolesConfig || {};
+    const tempChannelConfig = locals.tempChannelConfig || {};
+    const tempChannels = tempChannelConfig;
+    const customCommands = locals.customCommands || [];
+    const commandSettings = locals.commandSettings || [];
+    const forms = locals.forms || [];
+    const ticketConfig = locals.ticketConfig || {};
+    const ticketFormsList = locals.ticketFormsList || [];
+    const backups = locals.backups || [];
+    const permissionOverrides = locals.permissionOverrides || [];
+    const reminders = locals.reminders || [];
+    const tags = locals.tags || [];
+    const roles = locals.roles || [];
+    const channels = locals.channels || [];
+    const categories = locals.categories || [];
+
+    // Stats
+    const memberCount = guild.memberCount || 0;
+    const liveCount = consolidatedStreamers.filter(s => s.is_live).length;
+    const streamerCount = consolidatedStreamers.length;
+
+    // Page titles for breadcrumb
+    const pageTitles = {
+        'overview': 'Overview',
+        'streamers': 'Streamers',
+        'teams': 'Teams',
+        'appearance': 'Appearance',
+        'core': 'Core Settings',
+        'welcome': 'Welcome',
+        'reaction-roles': 'Reaction Roles',
+        'starboard': 'Starboard',
+        'leveling': 'Leveling',
+        'giveaways': 'Giveaways',
+        'polls': 'Polls',
+        'suggestions': 'Suggestions',
+        'music': 'Music',
+        'schedule': 'Schedule',
+        'birthday': 'Birthdays',
+        'weather': 'Weather',
+        'confessions': 'Confessions',
+        'timecapsules': 'Time Capsules',
+        'economy': 'Economy',
+        'games': 'Games',
+        'gambling': 'Gambling',
+        'trading': 'Trading',
+        'rpg': 'RPG',
+        'achievements': 'Achievements',
+        'moderation': 'Moderation',
+        'automod': 'AutoMod',
+        'security': 'Security',
+        'advanced-protection': 'Advanced Protection',
+        'quarantine': 'Quarantine',
+        'mass': 'Mass Actions',
+        'stat-roles': 'Stat Roles',
+        'logging': 'Logging',
+        'action-log': 'Action Log',
+        'analytics': 'Analytics',
+        'serverstats': 'Server Stats',
+        'emojistats': 'Emoji Stats',
+        'feeds': 'Social Feeds',
+        'twitch-schedules': 'Twitch Schedules',
+        'announcements': 'Announcements',
+        'automemes': 'Auto-Memes',
+        'utilities': 'Utilities',
+        'custom-commands': 'Custom Commands',
+        'commands': 'Commands',
+        'forms': 'Forms',
+        'tickets': 'Tickets',
+        'backups': 'Backups',
+        'permissions': 'Permissions',
+        'reminders': 'Reminders',
+        'tags': 'Tags',
+        'csv': 'CSV Import/Export',
+        'sticky': 'Sticky Messages',
+        'self-promo': 'Self-Promo',
+        'community-support': 'Community Support',
+        'stream-ended': 'Stream-Ended Behavior',
+        'auto-track': 'Auto-Track'
+    };
+    %>
+
+    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-content">
+                <a href="/" class="navbar-brand">
+                    <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                    <span>CertiFried</span>
+                </a>
+                <div class="navbar-links">
+                    <a href="/">Home</a>
+                    <a href="/commands">Commands</a>
+                    <a href="/status">Status</a>
+                    <a href="/dashboard" class="active">Dashboard</a>
+                    <a href="/lb/<%= guild.id %>">Leaderboard</a>
+                    <a href="/supporters/<%= guild.id %>">Supporters</a>
+                </div>
+                <% if (user) { %>
+                <div class="user-menu-container" id="userMenuContainer">
+                    <div class="user-menu" id="userMenuBtn">
+                        <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="" class="user-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                        <span class="user-name"><%= user.username %></span>
+                        <i class="fas fa-chevron-down user-menu-chevron"></i>
+                    </div>
+                    <div class="user-dropdown">
+                        <div class="dropdown-header">
+                            <div class="dropdown-user-info">Signed in as <strong><%= user.username %></strong></div>
+                        </div>
+                        <a href="/profile" class="dropdown-item">
+                            <i class="fas fa-user"></i>
+                            <span>Profile</span>
+                        </a>
+                        <a href="/servers" class="dropdown-item">
+                            <i class="fas fa-server"></i>
+                            <span>My Servers</span>
+                        </a>
+                        <% if (user.isSuperAdmin || user.canCreateBots) { %>
+                        <div class="dropdown-divider"></div>
+                        <% } %>
+                        <% if (user.canCreateBots || user.isSuperAdmin) { %>
+                        <a href="/bot-management" class="dropdown-item text-warning">
+                            <i class="fas fa-robot"></i>
+                            <span>Bot Management</span>
+                        </a>
+                        <% } %>
+                        <% if (user.isSuperAdmin) { %>
+                        <a href="/super-admin" class="dropdown-item text-warning">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Super Admin</span>
+                        </a>
+                        <% } %>
+                        <div class="dropdown-divider"></div>
+                        <a href="/logout" class="dropdown-item text-danger">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span>Log Out</span>
+                        </a>
+                    </div>
+                </div>
+                <% } else { %>
+                <a href="/auth/discord" class="user-menu">
+                    <i class="fab fa-discord"></i>
+                    <span class="user-name">Login</span>
+                </a>
+                <% } %>
+                <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Menu">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="mobile-menu-inner">
+            <a href="/" class="mobile-menu-link">Home</a>
+            <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/status" class="mobile-menu-link">Status</a>
+            <a href="/dashboard" class="mobile-menu-link">Dashboard</a>
+            <a href="/lb/<%= guild.id %>" class="mobile-menu-link">Leaderboard</a>
+            <a href="/supporters/<%= guild.id %>" class="mobile-menu-link">Supporters</a>
+        </div>
+    </div>
+
+    <main>
+        <div class="container">
+            <!-- Server Header -->
+            <div class="server-header">
+                <div class="server-icon-wrap">
+                    <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" class="server-icon" alt="<%= guild.name %>">
+                    <div class="server-status"></div>
+                </div>
+                <div class="server-info">
+                    <h1 class="server-name"><%= guild.name %></h1>
+                    <div class="server-meta">
+                        <span class="server-meta-item"><i class="fas fa-users"></i> <%= memberCount.toLocaleString() %> members</span>
+                        <span class="server-meta-item"><i class="fas fa-video"></i> <%= streamerCount %> streamers</span>
+                        <% if (liveCount > 0) { %>
+                        <span class="server-meta-item" style="color: var(--accent-green);"><i class="fas fa-circle" style="font-size: 0.5rem;"></i> <%= liveCount %> live now</span>
+                        <% } %>
+                    </div>
+                </div>
+                <div class="server-actions">
+                    <a href="/dashboard" class="btn-back">
+                        <i class="fas fa-arrow-left"></i>
+                        All Servers
+                    </a>
+                </div>
+            </div>
+
+            <% if (page && page !== 'overview') { %>
+            <!-- Breadcrumb for sub-pages -->
+            <nav class="breadcrumb-nav">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/manage/<%= guild.id %>">Dashboard</a></li>
+                    <li class="breadcrumb-sep"><i class="fas fa-chevron-right" style="font-size: 0.7rem; color: var(--text-muted);"></i></li>
+                    <li class="breadcrumb-item active"><%= pageTitles[page] || page %></li>
+                </ol>
+            </nav>
+
+            <!-- Page Content -->
+            <div class="page-content">
+                <%
+                const pageMap = {
+                    'streamers': { partial: 'streamers', data: { guild, consolidatedStreamers, roles, channels, settings } },
+                    'teams': { partial: 'teams', data: { guild, teamSubscriptions, roles, channels } },
+                    'appearance': { partial: 'appearance', data: { guild, settings } },
+                    'core': { partial: 'core', data: { guild, settings, roles } },
+                    'welcome': { partial: 'welcome', data: { guild, settings: welcomeSettings, channels } },
+                    'reaction-roles': { partial: 'reaction-roles', data: { guild, panels: reactionRolePanels, roles, channels } },
+                    'starboard': { partial: 'starboard', data: { guild, settings: starboardConfig, channels } },
+                    'leveling': { partial: 'leveling', data: { guild, settings, rewards: roleRewards, roles, channels } },
+                    'giveaways': { partial: 'giveaways', data: { guild, giveaways, channels } },
+                    'polls': { partial: 'polls', data: { guild, polls, channels } },
+                    'suggestions': { partial: 'suggestions', data: { guild, suggestions, suggestionConfig, suggestionStats, suggestionTags, channels, roles } },
+                    'music': { partial: 'music', data: { guild, musicConfig: typeof musicConfig !== 'undefined' ? musicConfig : {}, availableDJVoices: typeof availableDJVoices !== 'undefined' ? availableDJVoices : [], roles, channels, voiceChannels } },
+                    'birthday': { partial: 'birthday', data: { guild, birthdays: typeof birthdayUsers !== 'undefined' ? birthdayUsers : [], birthdayStats: typeof birthdayStats !== 'undefined' ? birthdayStats : {}, birthdayConfig: typeof birthdayConfig !== 'undefined' ? birthdayConfig : {}, channels } },
+                    'weather': { partial: 'weather', data: { guild, weatherStats, weatherConfig: typeof weatherConfig !== 'undefined' ? weatherConfig : {}, channels } },
+                    'economy': { partial: 'economy', data: { guild, economyConfig, shopItems, economyStats, topUsers } },
+                    'games': { partial: 'games', data: { guild, triviaQuestions, hangmanWords, countingChannels, gameStats } },
+                    'gambling': { partial: 'gambling', data: { guild, gamblingConfig, gamblingHistory, gamblingStats, topGamblers } },
+                    'trading': { partial: 'trading', data: { guild, activeTrades, tradeHistory, tradeStats } },
+                    'rpg': { partial: 'rpg', data: { guild, rpgStats, characters: rpgCharacters || [], quests: [] } },
+                    'moderation': { partial: 'moderation', data: { guild, settings: moderationConfig, infractions: recentInfractions, escalationRules: escalationRules, channels, roles } },
+                    'automod': { partial: 'automod', data: { guild, automodRules: automodRules, heatConfig } },
+                    'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles } },
+                    'advanced-protection': { partial: 'advanced-protection', data: { guild, raidConfig: typeof raidConfig !== 'undefined' ? raidConfig : null, selfbotConfig: typeof selfbotConfig !== 'undefined' ? selfbotConfig : null, adaptiveSpamConfig: typeof adaptiveSpamConfig !== 'undefined' ? adaptiveSpamConfig : null, raidIncidents: typeof raidIncidents !== 'undefined' ? raidIncidents : [], selfbotDetections: typeof selfbotDetections !== 'undefined' ? selfbotDetections : [], channels, roles } },
+                    'quarantine': { partial: 'quarantine', data: { guild, quarantineConfig, roles } },
+                    'mass': { partial: 'mass', data: { guild, roles, channels } },
+                    'stat-roles': { partial: 'stat-roles', data: { guild, statroles: statroleConfigs, roles } },
+                    'logging': { partial: 'logging', data: { guild, settings: logConfig, auditLogs: typeof auditLogs !== 'undefined' ? auditLogs : [], channels, channelSettingsMap: typeof channelSettingsMap !== 'undefined' ? channelSettingsMap : new Map() } },
+                    'action-log': { partial: 'action-log', data: { guild, actionLogs: typeof actionLogs !== 'undefined' ? actionLogs : [] } },
+                    'analytics': { partial: 'analytics', data: { guild, serverStats: typeof serverStats !== 'undefined' ? serverStats : [] } },
+                    'feeds': { partial: 'feeds', data: { guild, redditFeeds, youtubeFeeds, twitterFeeds, channels } },
+                    'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
+                    'announcements': { partial: 'announcements', data: { guild, settings, channels, roles } },
+                    'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
+                    'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
+                    'commands': { partial: 'commands', data: { guild, commands: typeof commandSettings !== 'undefined' ? commandSettings : [] } },
+                    'forms': { partial: 'forms', data: { guild, forms: typeof forms !== 'undefined' ? forms : [], channels } },
+                    'tickets': { partial: 'tickets', data: { guild, ticketConfig, forms: typeof ticketFormsList !== 'undefined' ? ticketFormsList : [], categories, roles } },
+                    'backups': { partial: 'backups', data: { guild, backups: typeof backups !== 'undefined' ? backups : [] } },
+                    'permissions': { partial: 'permissions', data: { guild, permissionOverrides: typeof permissionOverrides !== 'undefined' ? permissionOverrides : [], roles, channels } },
+                    'reminders': { partial: 'reminders', data: { guild, reminders: typeof reminders !== 'undefined' ? reminders : [], channels } },
+                    'tags': { partial: 'tags', data: { guild, tags: typeof tags !== 'undefined' ? tags : [] } },
+                    'csv': { partial: 'csv', data: { guild } },
+                    'achievements': { partial: 'achievements', data: { guild } },
+                    'serverstats': { partial: 'serverstats', data: { guild } },
+                    'emojistats': { partial: 'emojistats', data: { guild } },
+                    'confessions': { partial: 'confessions', data: { guild, channels } },
+                    'timecapsules': { partial: 'timecapsules', data: { guild } },
+                    'automemes': { partial: 'automemes', data: { guild, channels } },
+                    'sticky': { partial: 'sticky', data: { guild, channels } },
+                    'schedule': { partial: 'schedule', data: { guild, channels } },
+                    'self-promo': { partial: 'self-promo', data: { guild, selfPromoConfig: typeof selfPromoConfig !== 'undefined' ? selfPromoConfig : {}, channels } },
+                    'community-support': { partial: 'community-support', data: { guild, communitySupportConfig: typeof communitySupportConfig !== 'undefined' ? communitySupportConfig : {}, channels } },
+                    'stream-ended': { partial: 'stream-ended', data: { guild, streamEndedSubs: typeof streamEndedSubs !== 'undefined' ? streamEndedSubs : [], channels } },
+                    'auto-track': { partial: 'auto-track', data: { guild, autoTrackConfigs: typeof autoTrackConfigs !== 'undefined' ? autoTrackConfigs : [], channels, roles: typeof roles !== 'undefined' ? roles : [] } },
+                    'global-ban': { partial: 'global-ban', data: { guild, globalBanConfig: typeof globalBanConfig !== 'undefined' ? globalBanConfig : {}, channels } }
+                };
+                const activePage = pageMap[page];
+                if (activePage) {
+                %>
+                    <%- include(`partials/manage/${activePage.partial}`, activePage.data) %>
+                <% } %>
+            </div>
+
+            <% } else { %>
+            <!-- Overview Dashboard with Module Grid -->
+
+            <!-- Quick Stats -->
+            <div class="quick-stats">
+                <div class="stat-card stat-purple">
+                    <div class="stat-icon"><i class="fas fa-video"></i></div>
+                    <div>
+                        <div class="stat-value"><%= streamerCount %></div>
+                        <div class="stat-label">Streamers</div>
+                    </div>
+                </div>
+                <div class="stat-card stat-green">
+                    <div class="stat-icon"><i class="fas fa-circle"></i></div>
+                    <div>
+                        <div class="stat-value"><%= liveCount %></div>
+                        <div class="stat-label">Live Now</div>
+                    </div>
+                </div>
+                <div class="stat-card stat-cyan">
+                    <div class="stat-icon"><i class="fas fa-users"></i></div>
+                    <div>
+                        <div class="stat-value"><%= memberCount.toLocaleString() %></div>
+                        <div class="stat-label">Members</div>
+                    </div>
+                </div>
+                <div class="stat-card stat-red">
+                    <div class="stat-icon"><i class="fas fa-user-friends"></i></div>
+                    <div>
+                        <div class="stat-value"><%= teamSubscriptions.length %></div>
+                        <div class="stat-label">Teams</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Core Modules -->
+            <section class="modules-section">
+                <div class="section-header purple">
+                    <div class="section-icon"><i class="fas fa-cog"></i></div>
+                    <h2 class="section-title">Core</h2>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=streamers" class="module-card purple">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-video"></i></div>
+                            <div>
+                                <div class="module-title">Streamers</div>
+                                <div class="module-desc">Manage tracked streamers and go-live notifications</div>
+                            </div>
+                        </div>
+                        <% if (liveCount > 0) { %>
+                        <div class="module-badge"><i class="fas fa-circle"></i> <%= liveCount %> Live</div>
+                        <% } %>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=teams" class="module-card purple">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-user-friends"></i></div>
+                            <div>
+                                <div class="module-title">Teams</div>
+                                <div class="module-desc">Subscribe to Twitch teams for automatic notifications</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=appearance" class="module-card purple">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-paint-brush"></i></div>
+                            <div>
+                                <div class="module-title">Appearance</div>
+                                <div class="module-desc">Customize embed colors and notification styles</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=core" class="module-card purple">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-sliders-h"></i></div>
+                            <div>
+                                <div class="module-title">Core Settings</div>
+                                <div class="module-desc">Bot prefix, language, and general settings</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=stream-ended" class="module-card purple">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-edit"></i></div>
+                            <div>
+                                <div class="module-title">Stream-Ended</div>
+                                <div class="module-desc">Edit or delete announcements when streams end</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Community Modules -->
+            <section class="modules-section">
+                <div class="section-header cyan">
+                    <div class="section-icon"><i class="fas fa-heart"></i></div>
+                    <h2 class="section-title">Community</h2>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=welcome" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-hand-sparkles"></i></div>
+                            <div>
+                                <div class="module-title">Welcome</div>
+                                <div class="module-desc">Welcome messages and join/leave announcements</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=reaction-roles" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-smile-beam"></i></div>
+                            <div>
+                                <div class="module-title">Reaction Roles</div>
+                                <div class="module-desc">Self-assignable roles via reactions</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=starboard" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-star"></i></div>
+                            <div>
+                                <div class="module-title">Starboard</div>
+                                <div class="module-desc">Highlight popular messages with reactions</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=leveling" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-trophy"></i></div>
+                            <div>
+                                <div class="module-title">Leveling</div>
+                                <div class="module-desc">XP system and level-based role rewards</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=giveaways" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-gift"></i></div>
+                            <div>
+                                <div class="module-title">Giveaways</div>
+                                <div class="module-desc">Create and manage server giveaways</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=polls" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-poll"></i></div>
+                            <div>
+                                <div class="module-title">Polls</div>
+                                <div class="module-desc">Create polls and gather community feedback</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=suggestions" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-lightbulb"></i></div>
+                            <div>
+                                <div class="module-title">Suggestions</div>
+                                <div class="module-desc">Member suggestions and voting system</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=music" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-music"></i></div>
+                            <div>
+                                <div class="module-title">Music</div>
+                                <div class="module-desc">Music player and DJ role settings</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=birthday" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-birthday-cake"></i></div>
+                            <div>
+                                <div class="module-title">Birthdays</div>
+                                <div class="module-desc">Birthday announcements and celebrations</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=self-promo" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-bullhorn"></i></div>
+                            <div>
+                                <div class="module-title">Self-Promo</div>
+                                <div class="module-desc">Auto-track streamers from self-promo channel</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=community-support" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-hands-helping"></i></div>
+                            <div>
+                                <div class="module-title">Community Support</div>
+                                <div class="module-desc">Track raids and reward top supporters</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=auto-track" class="module-card cyan">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-satellite-dish"></i></div>
+                            <div>
+                                <div class="module-title">Auto-Track</div>
+                                <div class="module-desc">Auto-detect streamers by presence (fallback)</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Economy & Games -->
+            <section class="modules-section">
+                <div class="section-header yellow">
+                    <div class="section-icon"><i class="fas fa-coins"></i></div>
+                    <h2 class="section-title">Economy & Games</h2>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=economy" class="module-card yellow">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-coins"></i></div>
+                            <div>
+                                <div class="module-title">Economy</div>
+                                <div class="module-desc">Currency system, shop, and transactions</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=games" class="module-card yellow">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-gamepad"></i></div>
+                            <div>
+                                <div class="module-title">Games</div>
+                                <div class="module-desc">Trivia, hangman, and mini-games</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=gambling" class="module-card yellow">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-dice"></i></div>
+                            <div>
+                                <div class="module-title">Gambling</div>
+                                <div class="module-desc">Casino games and betting settings</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=rpg" class="module-card yellow">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-dragon"></i></div>
+                            <div>
+                                <div class="module-title">RPG</div>
+                                <div class="module-desc">Character system, quests, and battles</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=achievements" class="module-card yellow">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-medal"></i></div>
+                            <div>
+                                <div class="module-title">Achievements</div>
+                                <div class="module-desc">Member achievements and badges</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Moderation -->
+            <section class="modules-section">
+                <div class="section-header red">
+                    <div class="section-icon"><i class="fas fa-shield-alt"></i></div>
+                    <h2 class="section-title">Moderation</h2>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=moderation" class="module-card red">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-gavel"></i></div>
+                            <div>
+                                <div class="module-title">Moderation</div>
+                                <div class="module-desc">Mod settings, infractions, and escalation</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=automod" class="module-card red">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-robot"></i></div>
+                            <div>
+                                <div class="module-title">AutoMod</div>
+                                <div class="module-desc">Automatic moderation rules and filters</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=security" class="module-card red">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-lock"></i></div>
+                            <div>
+                                <div class="module-title">Security</div>
+                                <div class="module-desc">Join gate, anti-raid, and anti-nuke</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=advanced-protection" class="module-card red">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-shield-virus"></i></div>
+                            <div>
+                                <div class="module-title">Advanced Protection</div>
+                                <div class="module-desc">Raid detection and selfbot protection</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=quarantine" class="module-card red">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-user-shield"></i></div>
+                            <div>
+                                <div class="module-title">Quarantine</div>
+                                <div class="module-desc">Quarantine suspicious accounts</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=mass" class="module-card red">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-users-cog"></i></div>
+                            <div>
+                                <div class="module-title">Mass Actions</div>
+                                <div class="module-desc">Bulk role and channel management</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=global-ban" class="module-card red">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-globe"></i></div>
+                            <div>
+                                <div class="module-title">Global Ban</div>
+                                <div class="module-desc">Cross-server ban database and protection</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Analytics -->
+            <section class="modules-section">
+                <div class="section-header blue">
+                    <div class="section-icon"><i class="fas fa-chart-bar"></i></div>
+                    <h2 class="section-title">Analytics & Logging</h2>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=analytics" class="module-card blue">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-chart-line"></i></div>
+                            <div>
+                                <div class="module-title">Analytics</div>
+                                <div class="module-desc">Server statistics and insights</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=logging" class="module-card blue">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-file-alt"></i></div>
+                            <div>
+                                <div class="module-title">Logging</div>
+                                <div class="module-desc">Event logging and audit trails</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=action-log" class="module-card blue">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-history"></i></div>
+                            <div>
+                                <div class="module-title">Action Log</div>
+                                <div class="module-desc">Bot action history and changes</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=stat-roles" class="module-card blue">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-chart-pie"></i></div>
+                            <div>
+                                <div class="module-title">Stat Roles</div>
+                                <div class="module-desc">Dynamic roles based on stats</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=serverstats" class="module-card blue">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-server"></i></div>
+                            <div>
+                                <div class="module-title">Server Stats</div>
+                                <div class="module-desc">Stat channels for member counts</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Feeds -->
+            <section class="modules-section">
+                <div class="section-header orange">
+                    <div class="section-icon"><i class="fas fa-rss"></i></div>
+                    <h2 class="section-title">Social Feeds</h2>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=feeds" class="module-card orange">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-rss"></i></div>
+                            <div>
+                                <div class="module-title">Social Feeds</div>
+                                <div class="module-desc">Reddit, YouTube, and Twitter feeds</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=twitch-schedules" class="module-card orange">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fab fa-twitch"></i></div>
+                            <div>
+                                <div class="module-title">Twitch Schedules</div>
+                                <div class="module-desc">Sync Twitch schedules to Discord events</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=announcements" class="module-card orange">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-bullhorn"></i></div>
+                            <div>
+                                <div class="module-title">Announcements</div>
+                                <div class="module-desc">Auto-publish to announcement channels</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=automemes" class="module-card orange">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-laugh-squint"></i></div>
+                            <div>
+                                <div class="module-title">Auto-Memes</div>
+                                <div class="module-desc">Automatic meme posting</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Utility -->
+            <section class="modules-section">
+                <div class="section-header green">
+                    <div class="section-icon"><i class="fas fa-wrench"></i></div>
+                    <h2 class="section-title">Utility</h2>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=utilities" class="module-card green">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-toolbox"></i></div>
+                            <div>
+                                <div class="module-title">Utilities</div>
+                                <div class="module-desc">Auto-roles, temp channels, and more</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=custom-commands" class="module-card green">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-terminal"></i></div>
+                            <div>
+                                <div class="module-title">Custom Commands</div>
+                                <div class="module-desc">Create your own commands</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=commands" class="module-card green">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-code"></i></div>
+                            <div>
+                                <div class="module-title">Commands</div>
+                                <div class="module-desc">Enable/disable bot commands</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=tickets" class="module-card green">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-ticket-alt"></i></div>
+                            <div>
+                                <div class="module-title">Tickets</div>
+                                <div class="module-desc">Support ticket system</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=forms" class="module-card green">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-file-alt"></i></div>
+                            <div>
+                                <div class="module-title">Forms</div>
+                                <div class="module-desc">Application and survey forms</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=backups" class="module-card green">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-save"></i></div>
+                            <div>
+                                <div class="module-title">Backups</div>
+                                <div class="module-desc">Server backup and restore</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=permissions" class="module-card green">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-user-lock"></i></div>
+                            <div>
+                                <div class="module-title">Permissions</div>
+                                <div class="module-desc">Bot permission overrides</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=tags" class="module-card green">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-tag"></i></div>
+                            <div>
+                                <div class="module-title">Tags</div>
+                                <div class="module-desc">Quick response tags</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+            <% } %>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-links">
+                <a href="/commands" class="footer-link">Commands</a>
+                <a href="/status" class="footer-link">Status</a>
+                <a href="/docs" class="footer-link">Documentation</a>
+                <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" class="footer-link">Support</a>
+                <a href="https://fivem.certifriedmultitool.com" target="_blank" class="footer-link">FiveM Server</a>
+                <a href="/terms" class="footer-link">Terms</a>
+                <a href="/privacy" class="footer-link">Privacy</a>
+            </div>
+            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Mobile menu toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', () => {
+                mobileMenu.classList.toggle('active');
+                const isOpen = mobileMenu.classList.contains('active');
+                mobileMenuBtn.innerHTML = isOpen
+                    ? '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
+                    : '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>';
+            });
+
+            mobileMenu.querySelectorAll('.mobile-menu-link').forEach(link => {
+                link.addEventListener('click', () => {
+                    mobileMenu.classList.remove('active');
+                    mobileMenuBtn.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>';
+                });
+            });
+        }
+
+        // User menu dropdown toggle
+        const userMenuContainer = document.getElementById('userMenuContainer');
+        const userMenuBtn = document.getElementById('userMenuBtn');
+
+        if (userMenuBtn && userMenuContainer) {
+            userMenuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                userMenuContainer.classList.toggle('open');
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!userMenuContainer.contains(e.target)) {
+                    userMenuContainer.classList.remove('open');
+                }
+            });
+
+            // Close dropdown on escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    userMenuContainer.classList.remove('open');
+                }
+            });
+        }
+    });
+
+    // Fix modals - move them to body and reinitialize
+    document.addEventListener('DOMContentLoaded', function() {
+        // Move all modals to body to fix stacking context issues
+        document.querySelectorAll('.modal').forEach(function(modal) {
+            if (modal.parentElement !== document.body) {
+                document.body.appendChild(modal);
+            }
+        });
+
+        // Reinitialize Bootstrap modals
+        if (typeof bootstrap !== 'undefined') {
+            document.querySelectorAll('.modal').forEach(function(modalEl) {
+                new bootstrap.Modal(modalEl);
+            });
+        }
+    });
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

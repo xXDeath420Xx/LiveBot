@@ -1,0 +1,632 @@
+<%# Schedule Manager - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Events',
+            value: 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+            color: 'primary',
+            id: 'stat-events'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Events',
+            value: 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success',
+            id: 'stat-active'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Schedules',
+            value: 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>',
+            color: 'info',
+            id: 'stat-schedules'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Runs',
+            value: 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>',
+            color: 'warning',
+            id: 'stat-runs'
+        }) %>
+    </div>
+
+    <!-- Breadcrumb Navigation -->
+    <nav id="schedule-breadcrumb" class="hidden">
+        <div class="flex items-center gap-2 text-sm">
+            <a href="#" onclick="loadEvents(); return false;" class="text-primary-400 hover:text-primary-300 transition-colors">
+                <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+                </svg>
+                Events
+            </a>
+            <span id="breadcrumb-event" class="text-gray-500"></span>
+            <span id="breadcrumb-schedule" class="text-gray-500"></span>
+        </div>
+    </nav>
+
+    <!-- Header with Create Button -->
+    <div class="card">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Schedule Manager</h3>
+                    <p class="text-sm text-gray-400">Create and manage event schedules for speedrun marathons</p>
+                </div>
+            </div>
+            <button onclick="showCreateEventModal()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Event
+            </button>
+        </div>
+    </div>
+
+    <!-- Events View (default) -->
+    <div id="events-view">
+        <div id="events-list" class="card text-center py-12">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+            </div>
+            <h4 class="text-lg font-semibold text-white mb-2">Loading Events...</h4>
+            <p class="text-gray-400">Please wait while we fetch your events</p>
+        </div>
+    </div>
+
+    <!-- Schedules View -->
+    <div id="schedules-view" class="hidden"></div>
+
+    <!-- Items/Runs View -->
+    <div id="items-view" class="hidden"></div>
+</div>
+
+<!-- Create Event Modal -->
+<div id="create-event-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Create Event</h3>
+            <button onclick="closeModal('create-event-modal')" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="create-event-form">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Event Name</label>
+                    <input type="text" name="name" class="form-input w-full" required placeholder="Summer Speedathon 2025">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Slug (URL identifier)</label>
+                    <input type="text" name="slug" class="form-input w-full" required placeholder="summer-speedathon-2025" pattern="[a-z0-9-]+">
+                    <p class="form-hint">Lowercase letters, numbers, and hyphens only</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-input w-full h-20 resize-y" placeholder="A weekend marathon featuring the best speedruns"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Twitch Channel (optional)</label>
+                    <input type="text" name="twitchChannel" class="form-input w-full" placeholder="twitchchannel">
+                    <p class="form-hint">Twitch channel name for stream integration</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('create-event-modal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Event</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Create Schedule Modal -->
+<div id="create-schedule-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Create Schedule</h3>
+            <button onclick="closeModal('create-schedule-modal')" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="create-schedule-form">
+            <input type="hidden" name="eventId" id="scheduleEventId">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Schedule Name</label>
+                    <input type="text" name="name" class="form-input w-full" required placeholder="Day 1 - Saturday">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Slug</label>
+                    <input type="text" name="slug" class="form-input w-full" required placeholder="day-1" pattern="[a-z0-9-]+">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="description" class="form-input w-full h-16 resize-y" placeholder="First day of the marathon"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Start Time</label>
+                    <input type="datetime-local" name="startTime" class="form-input w-full">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('create-schedule-modal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Schedule</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Add Run Modal -->
+<div id="add-run-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-2xl">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Add Run</h3>
+            <button onclick="closeModal('add-run-modal')" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="add-run-form">
+            <input type="hidden" name="scheduleId" id="runScheduleId">
+            <div class="modal-body space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label">Game Name</label>
+                        <input type="text" name="gameName" class="form-input w-full" required placeholder="Super Mario 64">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <input type="text" name="category" class="form-input w-full" placeholder="120 Star">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Runner(s)</label>
+                    <input type="text" name="runners" class="form-input w-full" placeholder="Runner1, Runner2">
+                    <p class="form-hint">Comma-separated list of runners</p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label">Estimate</label>
+                        <input type="text" name="estimate" class="form-input w-full" placeholder="1:45:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                        <p class="form-hint">Format: HH:MM:SS</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Setup Time</label>
+                        <input type="text" name="setup" class="form-input w-full" placeholder="0:10:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                        <p class="form-hint">Format: HH:MM:SS</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-input w-full h-16 resize-y" placeholder="Any additional notes"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('add-run-modal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Run</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const guildId = '<%= guildId %>';
+let currentEventId = null;
+let currentScheduleId = null;
+let currentEventData = null;
+let currentScheduleData = null;
+
+function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+}
+
+function showCreateEventModal() {
+    document.getElementById('create-event-form').reset();
+    document.getElementById('create-event-modal').classList.remove('hidden');
+}
+
+function showCreateScheduleModal(eventId) {
+    document.getElementById('create-schedule-form').reset();
+    document.getElementById('scheduleEventId').value = eventId;
+    document.getElementById('create-schedule-modal').classList.remove('hidden');
+}
+
+function showAddRunModal(scheduleId) {
+    document.getElementById('add-run-form').reset();
+    document.getElementById('runScheduleId').value = scheduleId;
+    document.getElementById('add-run-modal').classList.remove('hidden');
+}
+
+function formatSeconds(seconds) {
+    if (!seconds) return '0:00:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function parseTimeToSeconds(timeStr) {
+    if (!timeStr) return 0;
+    const parts = timeStr.split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    return 0;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+document.addEventListener('DOMContentLoaded', () => loadEvents());
+
+async function loadEvents() {
+    currentEventId = null;
+    currentScheduleId = null;
+    document.getElementById('schedule-breadcrumb').classList.add('hidden');
+    document.getElementById('events-view').classList.remove('hidden');
+    document.getElementById('schedules-view').classList.add('hidden');
+    document.getElementById('items-view').classList.add('hidden');
+
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/events`);
+        const data = await response.json();
+
+        if (data.events && data.events.length > 0) {
+            let html = '<div class="grid gap-4">';
+            data.events.forEach(event => {
+                html += `
+                    <div class="card hover:border-primary-500/50 transition-colors cursor-pointer" onclick="loadSchedules(${event.id}, '${escapeHtml(event.name)}')">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-3 mb-2">
+                                    <h4 class="text-lg font-semibold text-white">${escapeHtml(event.name)}</h4>
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full ${event.is_active ? 'bg-accent-green/20 text-accent-green' : 'bg-dark-400 text-gray-400'}">
+                                        ${event.is_active ? 'Active' : 'Inactive'}
+                                    </span>
+                                </div>
+                                <div class="text-sm text-gray-400 mb-2">${escapeHtml(event.description) || 'No description'}</div>
+                                <div class="flex items-center gap-4 text-xs text-gray-500">
+                                    <span><code class="text-primary-400">${event.slug}</code></span>
+                                    ${event.twitch_channel ? `<span class="text-purple-400"><svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 24 24"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg> ${event.twitch_channel}</span>` : ''}
+                                </div>
+                            </div>
+                            <div class="flex gap-2" onclick="event.stopPropagation()">
+                                <button onclick="toggleEventStatus(${event.id}, ${!event.is_active})" class="btn btn-secondary btn-sm">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${event.is_active ? 'M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z' : 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z'}"/>
+                                    </svg>
+                                </button>
+                                <button onclick="deleteEvent(${event.id})" class="btn btn-danger btn-sm">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            document.getElementById('events-list').innerHTML = html;
+        } else {
+            document.getElementById('events-list').innerHTML = `
+                <div class="card text-center py-12">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    <h4 class="text-lg font-semibold text-white mb-2">No Events Yet</h4>
+                    <p class="text-gray-400 mb-4">Create your first event to start building schedules</p>
+                    <button onclick="showCreateEventModal()" class="btn btn-primary">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Create First Event
+                    </button>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading events:', error);
+        showToast('error', 'Failed to load events');
+    }
+}
+
+async function loadSchedules(eventId, eventName) {
+    currentEventId = eventId;
+    currentEventData = { id: eventId, name: eventName };
+    document.getElementById('schedule-breadcrumb').classList.remove('hidden');
+    document.getElementById('breadcrumb-event').innerHTML = `<svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg> ${escapeHtml(eventName)}`;
+    document.getElementById('breadcrumb-schedule').innerHTML = '';
+    document.getElementById('events-view').classList.add('hidden');
+    document.getElementById('schedules-view').classList.remove('hidden');
+    document.getElementById('items-view').classList.add('hidden');
+
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/events/${eventId}/schedules`);
+        const data = await response.json();
+
+        let html = `
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold text-white">Schedules for ${escapeHtml(eventName)}</h3>
+                <button onclick="showCreateScheduleModal(${eventId})" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Schedule
+                </button>
+            </div>
+        `;
+
+        if (data.schedules && data.schedules.length > 0) {
+            html += '<div class="grid gap-4">';
+            data.schedules.forEach(schedule => {
+                html += `
+                    <div class="card hover:border-primary-500/50 transition-colors cursor-pointer" onclick="loadItems(${schedule.id}, '${escapeHtml(schedule.name)}')">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h4 class="text-lg font-semibold text-white mb-1">${escapeHtml(schedule.name)}</h4>
+                                <div class="text-sm text-gray-400 mb-2">${escapeHtml(schedule.description) || 'No description'}</div>
+                                <div class="text-xs text-gray-500">
+                                    ${schedule.start_time ? `<svg class="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> ${new Date(schedule.start_time).toLocaleString()}` : 'No start time set'}
+                                </div>
+                            </div>
+                            <button onclick="event.stopPropagation(); deleteSchedule(${schedule.id})" class="btn btn-danger btn-sm">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        } else {
+            html += `
+                <div class="card text-center py-12">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                        </svg>
+                    </div>
+                    <h4 class="text-lg font-semibold text-white mb-2">No Schedules Yet</h4>
+                    <p class="text-gray-400 mb-4">Add schedules to organize runs by day or category</p>
+                    <button onclick="showCreateScheduleModal(${eventId})" class="btn btn-primary">Add First Schedule</button>
+                </div>
+            `;
+        }
+
+        document.getElementById('schedules-view').innerHTML = html;
+    } catch (error) {
+        console.error('Error loading schedules:', error);
+        showToast('error', 'Failed to load schedules');
+    }
+}
+
+async function loadItems(scheduleId, scheduleName) {
+    currentScheduleId = scheduleId;
+    currentScheduleData = { id: scheduleId, name: scheduleName };
+    document.getElementById('breadcrumb-schedule').innerHTML = `<svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg> ${escapeHtml(scheduleName)}`;
+    document.getElementById('schedules-view').classList.add('hidden');
+    document.getElementById('items-view').classList.remove('hidden');
+
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/schedules/${scheduleId}/items`);
+        const data = await response.json();
+
+        let html = `
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-semibold text-white">Runs in ${escapeHtml(scheduleName)}</h3>
+                <button onclick="showAddRunModal(${scheduleId})" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Run
+                </button>
+            </div>
+        `;
+
+        if (data.items && data.items.length > 0) {
+            html += `
+                <div class="card overflow-hidden">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-dark-400">
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 w-12">#</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400">Game</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400">Category</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400">Runner(s)</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400">Estimate</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400">Status</th>
+                                <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-dark-400">
+            `;
+
+            data.items.forEach((item, index) => {
+                const statusClass = item.status === 'running' ? 'bg-accent-green/20 text-accent-green' :
+                                   item.status === 'completed' ? 'bg-primary-500/20 text-primary-400' : 'bg-dark-400 text-gray-400';
+                html += `
+                    <tr class="hover:bg-dark-600 transition-colors ${item.status === 'running' ? 'bg-accent-green/5' : ''}">
+                        <td class="py-3 px-4 text-gray-500 font-bold">${index + 1}</td>
+                        <td class="py-3 px-4 font-semibold text-white">${escapeHtml(item.game_name)}</td>
+                        <td class="py-3 px-4 text-gray-400">${escapeHtml(item.category) || '-'}</td>
+                        <td class="py-3 px-4 text-gray-400">${escapeHtml(item.runners) || '-'}</td>
+                        <td class="py-3 px-4 font-mono text-sm text-gray-400">${formatSeconds(item.estimate_seconds)}</td>
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-1 text-xs font-medium rounded-full ${statusClass}">${item.status || 'pending'}</span>
+                        </td>
+                        <td class="py-3 px-4 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                ${item.status !== 'running' && item.status !== 'completed' ? `
+                                    <button onclick="setRunStatus(${item.id}, 'running')" class="btn btn-success btn-sm" title="Start">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
+                                    </button>
+                                ` : ''}
+                                ${item.status === 'running' ? `
+                                    <button onclick="setRunStatus(${item.id}, 'completed')" class="btn btn-primary btn-sm" title="Complete">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                    </button>
+                                ` : ''}
+                                <button onclick="deleteRun(${item.id})" class="btn btn-danger btn-sm">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table></div>';
+        } else {
+            html += `
+                <div class="card text-center py-12">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <h4 class="text-lg font-semibold text-white mb-2">No Runs Yet</h4>
+                    <p class="text-gray-400 mb-4">Add runs to build your schedule</p>
+                    <button onclick="showAddRunModal(${scheduleId})" class="btn btn-primary">Add First Run</button>
+                </div>
+            `;
+        }
+
+        document.getElementById('items-view').innerHTML = html;
+    } catch (error) {
+        console.error('Error loading items:', error);
+        showToast('error', 'Failed to load runs');
+    }
+}
+
+// Form submissions
+document.getElementById('create-event-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        if (response.ok) {
+            showToast('success', 'Event created');
+            closeModal('create-event-modal');
+            loadEvents();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to create event'); }
+});
+
+document.getElementById('create-schedule-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const eventId = formData.get('eventId');
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/events/${eventId}/schedules`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        if (response.ok) {
+            showToast('success', 'Schedule created');
+            closeModal('create-schedule-modal');
+            loadSchedules(eventId, currentEventData.name);
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to create schedule'); }
+});
+
+document.getElementById('add-run-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const scheduleId = formData.get('scheduleId');
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/schedules/${scheduleId}/items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                gameName: formData.get('gameName'),
+                category: formData.get('category'),
+                runners: formData.get('runners'),
+                estimateSeconds: parseTimeToSeconds(formData.get('estimate')),
+                setupSeconds: parseTimeToSeconds(formData.get('setup')),
+                notes: formData.get('notes')
+            })
+        });
+        if (response.ok) {
+            showToast('success', 'Run added');
+            closeModal('add-run-modal');
+            loadItems(scheduleId, currentScheduleData.name);
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to add run'); }
+});
+
+async function deleteEvent(eventId) {
+    if (!confirm('Delete this event and all its schedules?')) return;
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/events/${eventId}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Event deleted'); loadEvents(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete event'); }
+}
+
+async function deleteSchedule(scheduleId) {
+    if (!confirm('Delete this schedule and all its runs?')) return;
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/schedules/${scheduleId}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Schedule deleted'); loadSchedules(currentEventId, currentEventData.name); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete schedule'); }
+}
+
+async function deleteRun(itemId) {
+    if (!confirm('Delete this run?')) return;
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/items/${itemId}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Run deleted'); loadItems(currentScheduleId, currentScheduleData.name); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete run'); }
+}
+
+async function toggleEventStatus(eventId, isActive) {
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/events/${eventId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isActive })
+        });
+        if (response.ok) { showToast('success', `Event ${isActive ? 'activated' : 'deactivated'}`); loadEvents(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to update event'); }
+}
+
+async function setRunStatus(itemId, status) {
+    try {
+        const response = await fetch(`/api/guilds/${guildId}/schedule/items/${itemId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+        if (response.ok) { showToast('success', `Run ${status}`); loadItems(currentScheduleId, currentScheduleData.name); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to update status'); }
+}
+</script>

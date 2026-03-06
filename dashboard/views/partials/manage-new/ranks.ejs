@@ -1,0 +1,317 @@
+<%# Self-Assignable Roles (Ranks) - Tailwind Version %>
+
+<%
+const config = data?.rankConfig || { enabled: false, max_roles_per_user: 0, min_level: 0 };
+const selfAssignableRoles = data?.selfAssignableRoles || [];
+const roleCategories = data?.roleCategories || [];
+const roleAssignments = data?.roleAssignments || [];
+
+const totalRoles = selfAssignableRoles.length;
+const totalCategories = roleCategories.length;
+const totalAssignments = roleAssignments.length;
+
+const roleAssignmentCounts = {};
+roleAssignments.forEach(assignment => {
+    roleAssignmentCounts[assignment.role_id] = (roleAssignmentCounts[assignment.role_id] || 0) + 1;
+});
+const mostPopularRoleId = Object.keys(roleAssignmentCounts).reduce((a, b) =>
+    roleAssignmentCounts[a] > roleAssignmentCounts[b] ? a : b, null);
+const mostPopularRole = selfAssignableRoles.find(r => r.role_id === mostPopularRoleId);
+
+const uniqueUsers = new Set(roleAssignments.map(a => a.user_id)).size;
+const avgRolesPerUser = uniqueUsers > 0 ? (totalAssignments / uniqueUsers).toFixed(1) : 0;
+%>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Roles',
+            value: totalRoles,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Assignments',
+            value: totalAssignments,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Most Popular',
+            value: mostPopularRole ? (roles.find(r => r.id === mostPopularRole.role_id)?.name || 'N/A') : 'N/A',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Avg Per User',
+            value: avgRolesPerUser,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            System Configuration
+        </h3>
+
+        <form id="rank-config-form" class="space-y-4">
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" name="rank_enabled" class="form-checkbox" <%= config.enabled ? 'checked' : '' %>>
+                    <span class="text-white font-medium">Enable Self-Assignable Ranks System</span>
+                </label>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Max Roles Per User</label>
+                    <input type="number" name="max_roles_per_user" class="form-input w-full" value="<%= config.max_roles_per_user || 0 %>" min="0" max="50">
+                    <p class="form-hint">Maximum self-assignable roles a user can have (0 = unlimited)</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Minimum Level Required</label>
+                    <input type="number" name="min_level" class="form-input w-full" value="<%= config.min_level || 0 %>" min="0" max="100">
+                    <p class="form-hint">Base level requirement for using ranks (0 = no requirement)</p>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Configuration
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Self-Assignable Roles -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                </svg>
+                Self-Assignable Roles
+            </h3>
+            <button onclick="openAddRoleModal()" class="btn btn-primary btn-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Role
+            </button>
+        </div>
+
+        <!-- Search -->
+        <div class="mb-4">
+            <input type="text" id="roleSearchInput" class="form-input w-full" placeholder="Search roles by name...">
+        </div>
+
+        <% if (selfAssignableRoles.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Role</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Category</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Level Req</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Assignments</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% selfAssignableRoles.forEach(selfRole => {
+                            const role = roles.find(r => r.id === selfRole.role_id);
+                            const category = roleCategories.find(c => c.category_id === selfRole.category_id);
+                            const assignments = roleAssignments.filter(a => a.role_id === selfRole.role_id).length;
+                            const roleColor = role && role.color ? '#' + role.color.toString(16).padStart(6, '0') : '#99AAB5';
+                        %>
+                            <tr class="hover:bg-dark-600 transition-colors role-row" data-role-name="<%= role ? role.name.toLowerCase() : '' %>">
+                                <td class="py-3 px-4">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-3 h-3 rounded-full" style="background-color: <%= roleColor %>;"></div>
+                                        <span class="font-semibold text-white"><%= role ? role.name : 'Unknown Role' %></span>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (category) { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-primary-500/20 text-primary-400"><%= category.name %></span>
+                                    <% } else { %>
+                                        <span class="text-gray-500 text-sm">Uncategorized</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (selfRole.min_level && selfRole.min_level > 0) { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-yellow/20 text-accent-yellow">Level <%= selfRole.min_level %></span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-green/20 text-accent-green">None</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-primary-400 font-semibold"><%= assignments %> users</span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deleteRole('<%= selfRole.id %>')" class="btn btn-danger btn-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Self-Assignable Roles</h4>
+                <p class="text-gray-400 mb-4">Add roles that members can assign to themselves using the /rank command</p>
+                <button onclick="openAddRoleModal()" class="btn btn-primary">Add First Role</button>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Add Role Modal -->
+<div id="add-role-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Add Self-Assignable Role</h3>
+            <button onclick="closeAddRoleModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="add-role-form">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Role</label>
+                    <%- include('../../components/forms/roleSelect', {
+                        name: 'role_id',
+                        roles: roles,
+                        selected: null,
+                        placeholder: 'Select a role...'
+                    }) %>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description (Optional)</label>
+                    <textarea name="description" class="form-input w-full h-20 resize-y" placeholder="What does this role represent?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Minimum Level Required</label>
+                    <input type="number" name="min_level" class="form-input w-full" value="0" min="0" max="100">
+                    <p class="form-hint">0 = no requirement</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeAddRoleModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Role</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddRoleModal() {
+    document.getElementById('add-role-form').reset();
+    document.getElementById('add-role-modal').classList.remove('hidden');
+}
+
+function closeAddRoleModal() {
+    document.getElementById('add-role-modal').classList.add('hidden');
+}
+
+document.getElementById('roleSearchInput')?.addEventListener('input', function(e) {
+    const query = e.target.value.toLowerCase();
+    document.querySelectorAll('.role-row').forEach(row => {
+        const name = row.dataset.roleName || '';
+        row.style.display = name.includes(query) ? '' : 'none';
+    });
+});
+
+document.getElementById('rank-config-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/ranks/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enabled: formData.get('rank_enabled') === 'on',
+                max_roles_per_user: parseInt(formData.get('max_roles_per_user')),
+                min_level: parseInt(formData.get('min_level'))
+            })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Configuration saved');
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save configuration');
+    }
+});
+
+document.getElementById('add-role-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/ranks/roles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                role_id: formData.get('role_id'),
+                description: formData.get('description'),
+                min_level: parseInt(formData.get('min_level'))
+            })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Role added');
+            closeAddRoleModal();
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to add role');
+    }
+});
+
+async function deleteRole(roleId) {
+    if (!confirm('Remove this self-assignable role?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/ranks/roles/${roleId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast('success', 'Role removed');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to remove role');
+    }
+}
+</script>

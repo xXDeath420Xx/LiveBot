@@ -1,0 +1,262 @@
+<%# Starboard Settings - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Starboard Configuration Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Starboard</h3>
+                <p class="text-sm text-gray-400">Highlight the best messages when they get enough reactions</p>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'starboard_enabled',
+                id: 'starboard_enabled',
+                checked: locals.starboardConfig?.enabled || false,
+                label: 'Enable Starboard',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="starboard-form" action="/api/guilds/<%= guildId %>/starboard/config" method="PUT" data-track-changes>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Basic Settings -->
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label class="form-label">Starboard Channel</label>
+                        <%- include('../../components/forms/channelSelect', {
+                            name: 'channel_id',
+                            channels: Array.from(channels.values()),
+                            selected: locals.starboardConfig?.channel_id,
+                            placeholder: 'Select starboard channel'
+                        }) %>
+                        <p class="form-hint">Starred messages will be posted here</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Star Threshold</label>
+                        <input
+                            type="number"
+                            name="threshold"
+                            class="form-input w-full"
+                            value="<%= locals.starboardConfig?.threshold || 5 %>"
+                            min="1"
+                            max="50"
+                        >
+                        <p class="form-hint">Number of reactions needed to post (1-50)</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Star Emoji</label>
+                        <input
+                            type="text"
+                            name="emoji"
+                            class="form-input w-full"
+                            value="<%= locals.starboardConfig?.emoji || '⭐' %>"
+                            placeholder="⭐"
+                        >
+                        <p class="form-hint">The reaction emoji that counts as a star</p>
+                    </div>
+                </div>
+
+                <!-- Advanced Settings -->
+                <div class="space-y-4">
+                    <%- include('../../components/forms/colorPicker', {
+                        name: 'embed_color',
+                        label: 'Embed Color',
+                        value: locals.starboardConfig?.embed_color || '#FFD700'
+                    }) %>
+
+                    <div class="form-group">
+                        <label class="form-label">Ignored Channels</label>
+                        <%- include('../../components/forms/channelSelect', {
+                            name: 'ignored_channels',
+                            channels: Array.from(channels.values()),
+                            selected: locals.starboardConfig?.ignored_channels || [],
+                            multiple: true,
+                            placeholder: 'Select channels to ignore'
+                        }) %>
+                        <p class="form-hint">Messages in these channels can't be starred</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Options -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div class="flex items-center justify-between p-4 bg-dark-700 rounded-lg">
+                    <div>
+                        <p class="font-medium text-white">Self-Star</p>
+                        <p class="text-xs text-gray-500">Allow users to star their own messages</p>
+                    </div>
+                    <%- include('../../components/forms/toggle', {
+                        name: 'self_star',
+                        checked: locals.starboardConfig?.self_star || false,
+                        size: 'sm'
+                    }) %>
+                </div>
+
+                <div class="flex items-center justify-between p-4 bg-dark-700 rounded-lg">
+                    <div>
+                        <p class="font-medium text-white">NSFW Channels</p>
+                        <p class="text-xs text-gray-500">Allow starring NSFW content</p>
+                    </div>
+                    <%- include('../../components/forms/toggle', {
+                        name: 'nsfw_allowed',
+                        checked: locals.starboardConfig?.nsfw_allowed || false,
+                        size: 'sm'
+                    }) %>
+                </div>
+
+                <div class="flex items-center justify-between p-4 bg-dark-700 rounded-lg">
+                    <div>
+                        <p class="font-medium text-white">Bot Messages</p>
+                        <p class="text-xs text-gray-500">Allow starring bot messages</p>
+                    </div>
+                    <%- include('../../components/forms/toggle', {
+                        name: 'bot_messages',
+                        checked: locals.starboardConfig?.bot_messages || false,
+                        size: 'sm'
+                    }) %>
+                </div>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-accent-yellow/10 to-primary-500/10 border-accent-yellow/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-accent-yellow/20 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-accent-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How Starboard Works</h4>
+                <ul class="text-sm text-gray-300 space-y-1.5">
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">1.</span>
+                        Users react with the star emoji to messages they like
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">2.</span>
+                        When threshold is reached, message is posted to starboard channel
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">3.</span>
+                        Original message link and author are preserved
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">4.</span>
+                        Star count updates automatically in the starboard post
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Stars -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Recent Stars</h3>
+                <p class="text-sm text-gray-400">Messages that made it to the starboard</p>
+            </div>
+            <span class="badge badge-primary"><%= locals.starboardStats?.total || 0 %> total</span>
+        </div>
+
+        <% if (locals.recentStars && locals.recentStars.length > 0) { %>
+            <div class="space-y-3">
+                <% locals.recentStars.slice(0, 5).forEach(star => { %>
+                    <div class="p-4 bg-dark-700 rounded-lg border-l-4 border-accent-yellow">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <img
+                                        src="<%= star.author_avatar || 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
+                                        alt=""
+                                        class="w-6 h-6 rounded-full"
+                                    >
+                                    <span class="font-medium text-white"><%= star.author_name || 'Unknown' %></span>
+                                    <span class="text-xs text-gray-500"><%= new Date(star.created_at).toLocaleDateString() %></span>
+                                </div>
+                                <p class="text-sm text-gray-300 line-clamp-2">
+                                    <%= star.content ? (star.content.substring(0, 200) + (star.content.length > 200 ? '...' : '')) : '[Media/Embed]' %>
+                                </p>
+                            </div>
+                            <div class="flex items-center gap-1 text-accent-yellow">
+                                <span class="text-lg">⭐</span>
+                                <span class="font-bold"><%= star.star_count %></span>
+                            </div>
+                        </div>
+                    </div>
+                <% }); %>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <svg class="empty-state-icon mx-auto text-accent-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+                </svg>
+                <p class="empty-state-title">No Starred Messages Yet</p>
+                <p class="empty-state-text">Messages that reach the star threshold will appear here</p>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<script>
+// Form submission handler
+document.getElementById('starboard-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = {};
+
+    formData.forEach((value, key) => {
+        if (value === 'on') data[key] = true;
+        else if (!isNaN(value) && value !== '' && key !== 'emoji') data[key] = Number(value);
+        else data[key] = value;
+    });
+
+    // Handle unchecked toggles
+    ['self_star', 'nsfw_allowed', 'bot_messages'].forEach(key => {
+        if (!data[key]) data[key] = false;
+    });
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Starboard settings saved');
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save settings');
+    }
+});
+
+// Toggle visibility based on enabled state
+document.querySelector('[name="starboard_enabled"]')?.addEventListener('change', function() {
+    const form = document.getElementById('starboard-form');
+    if (form) {
+        form.querySelectorAll('input:not([name="starboard_enabled"]), select').forEach(el => {
+            el.disabled = !this.checked;
+            el.closest('.form-group')?.classList.toggle('opacity-50', !this.checked);
+        });
+    }
+});
+</script>

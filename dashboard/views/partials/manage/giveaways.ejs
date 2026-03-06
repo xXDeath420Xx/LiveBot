@@ -1,0 +1,552 @@
+<style>
+/* Compact Giveaways Page Styles */
+.giveaways-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.giveaway-stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.2s;
+}
+
+.giveaway-stat-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.giveaway-stat-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.giveaway-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.giveaway-stat-value.success { color: #22c55e; }
+.giveaway-stat-value.default { color: #a78bfa; }
+.giveaway-stat-value.warning { color: #fbbf24; }
+
+/* Giveaways Table */
+.giveaways-table-wrapper {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.giveaways-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.giveaways-table thead { background: rgba(167, 139, 250, 0.08); }
+
+.giveaways-table thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+}
+
+.giveaways-table tbody tr {
+    transition: all 0.2s;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.08);
+}
+
+.giveaways-table tbody tr:last-child { border-bottom: none; }
+.giveaways-table tbody tr:hover { background: rgba(167, 139, 250, 0.05); }
+
+.giveaways-table tbody td {
+    padding: 12px 14px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.85rem;
+}
+
+.prize-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.prize-icon {
+    width: 32px;
+    height: 32px;
+    background: rgba(251, 191, 36, 0.15);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.prize-icon i { font-size: 0.85rem; color: #fbbf24; }
+.prize-name { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
+
+.channel-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.25);
+    border-radius: 6px;
+    color: #a78bfa;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.time-display { color: rgba(255, 255, 255, 0.7); font-size: 0.8rem; }
+
+.winner-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 6px;
+    color: #fbbf24;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge-active {
+    padding: 4px 10px;
+    background: rgba(35, 245, 107, 0.15);
+    border: 1px solid rgba(35, 245, 107, 0.3);
+    border-radius: 6px;
+    color: #23f56b;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge-ended {
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.btn-action {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn-action-secondary {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(167, 139, 250, 0.3);
+    color: #a78bfa;
+}
+
+.btn-action-secondary:hover {
+    background: rgba(167, 139, 250, 0.15);
+    border-color: rgba(167, 139, 250, 0.5);
+}
+
+.btn-action-primary {
+    background: rgba(167, 139, 250, 0.15);
+    border-color: rgba(167, 139, 250, 0.3);
+    color: #a78bfa;
+}
+
+.btn-action-primary:hover {
+    background: rgba(167, 139, 250, 0.25);
+    border-color: rgba(167, 139, 250, 0.5);
+}
+
+.btn-action-danger {
+    background: rgba(248, 113, 113, 0.1);
+    border-color: rgba(248, 113, 113, 0.3);
+    color: #f87171;
+}
+
+.btn-action-danger:hover {
+    background: rgba(248, 113, 113, 0.2);
+    border-color: rgba(248, 113, 113, 0.5);
+}
+
+/* Empty State */
+.giveaways-empty-state {
+    text-align: center;
+    padding: 40px 24px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+}
+
+.giveaways-empty-icon { font-size: 2.5rem; color: rgba(251, 191, 36, 0.4); margin-bottom: 16px; }
+.giveaways-empty-title { font-size: 1.1rem; font-weight: 600; color: rgba(255, 255, 255, 0.9); margin-bottom: 8px; }
+.giveaways-empty-description { font-size: 0.85rem; color: rgba(255, 255, 255, 0.5); margin-bottom: 20px; max-width: 350px; margin-left: auto; margin-right: auto; }
+
+/* Modal Form Styles */
+.modal-form-group { margin-bottom: 14px; }
+.modal-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255, 255, 255, 0.9); margin-bottom: 6px; }
+.modal-form-help { font-size: 0.7rem; color: rgba(255, 255, 255, 0.45); margin-top: 4px; }
+.modal-form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+
+/* Dark mode form input overrides */
+#createGiveawayModal .form-control,
+#createGiveawayModal .form-select,
+#createGiveawayModal textarea {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: #ffffff !important;
+    border-color: rgba(167, 139, 250, 0.25) !important;
+}
+#createGiveawayModal .form-control:focus,
+#createGiveawayModal .form-select:focus,
+#createGiveawayModal textarea:focus {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
+    border-color: rgba(167, 139, 250, 0.5) !important;
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1);
+}
+#createGiveawayModal .form-control::placeholder,
+#createGiveawayModal textarea::placeholder {
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+#createGiveawayModal .form-select option {
+    background-color: #1a1a2e;
+    color: #ffffff;
+}
+#createGiveawayModal .modal-content {
+    background-color: #1e1e30;
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    color: #ffffff;
+}
+#createGiveawayModal .modal-header {
+    border-bottom-color: rgba(167, 139, 250, 0.15);
+}
+#createGiveawayModal .modal-footer {
+    border-top-color: rgba(167, 139, 250, 0.15);
+}
+
+@media (max-width: 768px) {
+    .giveaways-stats-grid { grid-template-columns: 1fr; }
+    .modal-form-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-gift"></i>
+                <span>Giveaways</span>
+            </div>
+            <div class="page-section-subtitle">
+                Create and manage giveaways to reward your community members
+            </div>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createGiveawayModal">
+            <i class="fas fa-plus"></i>
+            <span>Create Giveaway</span>
+        </button>
+    </div>
+
+    <!-- Stats Overview -->
+    <%
+    const activeCount = giveaways?.filter(g => g.is_active).length || 0;
+    const endedCount = giveaways?.filter(g => !g.is_active).length || 0;
+    const totalWinners = giveaways?.reduce((sum, g) => sum + (g.winner_count || 1), 0) || 0;
+    %>
+    <div class="giveaways-stats-grid">
+        <div class="giveaway-stat-card">
+            <div class="giveaway-stat-label">Active Giveaways</div>
+            <div class="giveaway-stat-value success"><%= activeCount %></div>
+        </div>
+        <div class="giveaway-stat-card">
+            <div class="giveaway-stat-label">Ended Giveaways</div>
+            <div class="giveaway-stat-value default"><%= endedCount %></div>
+        </div>
+        <div class="giveaway-stat-card">
+            <div class="giveaway-stat-label">Total Winners</div>
+            <div class="giveaway-stat-value warning"><%= totalWinners %></div>
+        </div>
+    </div>
+
+    <!-- Giveaways Table -->
+    <% if (giveaways && giveaways.length > 0) { %>
+        <div class="giveaways-table-wrapper">
+            <table class="giveaways-table">
+                <thead>
+                    <tr>
+                        <th>Prize</th>
+                        <th>Channel</th>
+                        <th>Ends At</th>
+                        <th>Winners</th>
+                        <th>Status</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% giveaways.forEach(giveaway => { %>
+                        <tr>
+                            <td>
+                                <div class="prize-cell">
+                                    <div class="prize-icon">
+                                        <i class="fas fa-gift"></i>
+                                    </div>
+                                    <span class="prize-name"><%= giveaway.prize %></span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="channel-badge">
+                                    <i class="fas fa-hashtag"></i>
+                                    <%= channels.find(c => c.id === giveaway.channel_id)?.name || 'Unknown' %>
+                                </span>
+                            </td>
+                            <td>
+                                <span class="time-display">
+                                    <%= new Date(giveaway.ends_at).toLocaleString() %>
+                                </span>
+                            </td>
+                            <td>
+                                <span class="winner-badge">
+                                    <i class="fas fa-trophy"></i>
+                                    <%= giveaway.winner_count || 1 %>
+                                </span>
+                            </td>
+                            <td>
+                                <% if (giveaway.is_active) { %>
+                                    <span class="status-badge-active">Active</span>
+                                <% } else { %>
+                                    <span class="status-badge-ended">Ended</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <% if (giveaway.is_active) { %>
+                                        <button type="button" class="btn-action btn-action-secondary" onclick="endGiveaway(<%= giveaway.id %>)">
+                                            <i class="fas fa-stop"></i>
+                                            <span>End</span>
+                                        </button>
+                                    <% } else { %>
+                                        <button type="button" class="btn-action btn-action-primary" onclick="rerollGiveaway(<%= giveaway.id %>)">
+                                            <i class="fas fa-redo"></i>
+                                            <span>Reroll</span>
+                                        </button>
+                                    <% } %>
+                                    <button type="button" class="btn-action btn-action-danger" onclick="deleteGiveaway(<%= giveaway.id %>)">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div class="giveaways-empty-state">
+            <div class="giveaways-empty-icon">
+                <i class="fas fa-gift"></i>
+            </div>
+            <div class="giveaways-empty-title">No Giveaways Yet</div>
+            <div class="giveaways-empty-description">
+                Create your first giveaway to reward your community members with exciting prizes
+            </div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createGiveawayModal">
+                <i class="fas fa-plus"></i>
+                <span>Create First Giveaway</span>
+            </button>
+        </div>
+    <% } %>
+</div>
+
+<!-- Create Giveaway Modal -->
+<div class="modal fade" id="createGiveawayModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-gift" style="color: #fbbf24; margin-right: 10px;"></i>
+                    Create Giveaway
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createGiveawayForm">
+                <div class="modal-body">
+                    <div class="modal-form-group">
+                        <label class="modal-form-label">Prize</label>
+                        <input type="text" class="form-control" name="prize" required placeholder="Discord Nitro, Game Key, etc.">
+                        <div class="modal-form-help">What are you giving away?</div>
+                    </div>
+
+                    <div class="modal-form-group">
+                        <label class="modal-form-label">Number of Winners</label>
+                        <input type="number" class="form-control" name="winner_count" value="1" min="1" required style="max-width: 120px;">
+                    </div>
+
+                    <div class="modal-form-group">
+                        <label class="modal-form-label">Duration</label>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                            <div>
+                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.45); display: block; margin-bottom: 4px;">Months</label>
+                                <input type="number" class="form-control" name="dur_months" value="0" min="0" max="12">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.45); display: block; margin-bottom: 4px;">Weeks</label>
+                                <input type="number" class="form-control" name="dur_weeks" value="0" min="0" max="52">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.45); display: block; margin-bottom: 4px;">Days</label>
+                                <input type="number" class="form-control" name="dur_days" value="0" min="0" max="365">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.45); display: block; margin-bottom: 4px;">Hours</label>
+                                <input type="number" class="form-control" name="dur_hours" value="0" min="0" max="23">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.45); display: block; margin-bottom: 4px;">Minutes</label>
+                                <input type="number" class="form-control" name="dur_minutes" value="0" min="0" max="59">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.45); display: block; margin-bottom: 4px;">Seconds</label>
+                                <input type="number" class="form-control" name="dur_seconds" value="0" min="0" max="59">
+                            </div>
+                        </div>
+                        <div class="modal-form-help">Set any combination — all fields add up to the total duration</div>
+                    </div>
+
+                    <div class="modal-form-group">
+                        <label class="modal-form-label">Description (Optional)</label>
+                        <textarea class="form-control" name="description" rows="2" placeholder="Additional details about the giveaway..."></textarea>
+                    </div>
+
+                    <div class="modal-form-group">
+                        <label class="modal-form-label">Announcement Channel</label>
+                        <select class="form-select" name="channel_id" required>
+                            <option value="">Select channel...</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                            <% }); %>
+                        </select>
+                        <div class="modal-form-help">Where the giveaway message will be posted</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-gift"></i>
+                        <span>Start Giveaway</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+const GUILD_ID = '<%= guild.id %>';
+
+document.getElementById('createGiveawayForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = this;
+    const formData = new FormData(form);
+
+    const durationSeconds =
+        (parseInt(formData.get('dur_months')) || 0) * 2592000 +
+        (parseInt(formData.get('dur_weeks')) || 0) * 604800 +
+        (parseInt(formData.get('dur_days')) || 0) * 86400 +
+        (parseInt(formData.get('dur_hours')) || 0) * 3600 +
+        (parseInt(formData.get('dur_minutes')) || 0) * 60 +
+        (parseInt(formData.get('dur_seconds')) || 0);
+
+    if (durationSeconds < 10) {
+        alert('Duration must be at least 10 seconds');
+        return;
+    }
+
+    const data = {
+        prize: formData.get('prize'),
+        channel_id: formData.get('channel_id'),
+        duration_seconds: durationSeconds,
+        winner_count: parseInt(formData.get('winner_count')) || 1,
+        description: formData.get('description') || null
+    };
+
+    if (!data.prize || !data.channel_id) {
+        alert('Please fill in required fields');
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/guilds/${GUILD_ID}/giveaways`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (res.ok) {
+            location.reload();
+        } else {
+            alert(result.error || 'Failed to create giveaway');
+        }
+    } catch (err) {
+        alert('Failed to create giveaway');
+    }
+});
+
+async function endGiveaway(id) {
+    if (!confirm('End this giveaway now and pick winners?')) return;
+    try {
+        const res = await fetch(`/api/guilds/${GUILD_ID}/giveaways/${id}/end`, { method: 'POST' });
+        const data = await res.json().catch(() => null);
+        if (res.ok) location.reload();
+        else alert(data?.error || 'Failed to end giveaway');
+    } catch (err) { alert('Network error — failed to end giveaway'); }
+}
+
+async function rerollGiveaway(id) {
+    if (!confirm('Reroll winners for this giveaway?')) return;
+    try {
+        const res = await fetch(`/api/guilds/${GUILD_ID}/giveaways/${id}/reroll`, { method: 'POST' });
+        const data = await res.json().catch(() => null);
+        if (res.ok) location.reload();
+        else alert(data?.error || 'Failed to reroll');
+    } catch (err) { alert('Network error — failed to reroll'); }
+}
+
+async function deleteGiveaway(id) {
+    if (!confirm('Delete this giveaway? This cannot be undone.')) return;
+    try {
+        const res = await fetch(`/api/guilds/${GUILD_ID}/giveaways/${id}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => null);
+        if (res.ok) location.reload();
+        else alert(data?.error || 'Failed to delete giveaway');
+    } catch (err) { alert('Network error — failed to delete giveaway'); }
+}
+</script>

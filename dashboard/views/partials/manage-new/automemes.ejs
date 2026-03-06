@@ -1,0 +1,226 @@
+<%# Auto-Memes - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="card">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-accent-yellow/10 rounded-lg">
+                <svg class="w-5 h-5 text-accent-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Auto-Memes</h3>
+                <p class="text-sm text-gray-400">Automatically post memes from Reddit to your server</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div id="automeme-stats" class="grid grid-cols-3 gap-4 hidden">
+        <div class="card text-center py-4">
+            <div id="stat-status" class="text-2xl font-bold text-accent-green mb-1">ACTIVE</div>
+            <div class="text-sm text-gray-400">Status</div>
+        </div>
+        <div class="card text-center py-4">
+            <div id="stat-interval" class="text-2xl font-bold text-primary-400 mb-1">24h</div>
+            <div class="text-sm text-gray-400">Post Interval</div>
+        </div>
+        <div class="card text-center py-4">
+            <div id="stat-subreddits" class="text-2xl font-bold text-purple-400 mb-1">0</div>
+            <div class="text-sm text-gray-400">Subreddits</div>
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            Configuration
+        </h3>
+
+        <form id="automeme-config-form" class="space-y-4">
+            <div class="form-group">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" id="automeme-enabled" name="enabled" class="form-checkbox">
+                    <span class="text-white font-medium">Enable Auto-Memes</span>
+                </label>
+                <p class="form-hint mt-1">Automatically post memes from Reddit at set intervals</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Meme Channel</label>
+                <%- include('../../components/forms/channelSelect', {
+                    name: 'channel_id',
+                    id: 'meme-channel',
+                    channels: Array.from(channels.values()).filter(c => c.type === 0),
+                    selected: null,
+                    placeholder: 'Select a channel...'
+                }) %>
+                <p class="form-hint">Where memes will be posted</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Post Interval (hours)</label>
+                <input type="number" id="post-interval" name="post_interval_hours" class="form-input w-full" min="1" max="168" value="24" required>
+                <p class="form-hint">How often to post memes (1-168 hours)</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Subreddits</label>
+                <input type="text" id="subreddits" name="subreddits" class="form-input w-full" placeholder="memes,dankmemes,wholesomememes" required>
+                <p class="form-hint">Comma-separated list of subreddit names (without r/ prefix)</p>
+            </div>
+
+            <!-- Popular Subreddits -->
+            <div class="p-4 bg-primary-500/10 rounded-lg border border-primary-500/30">
+                <div class="flex items-start gap-3">
+                    <svg class="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <div>
+                        <p class="font-semibold text-white mb-2">Popular Subreddits</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" onclick="addSubreddit('memes')" class="px-2 py-1 text-xs font-medium rounded bg-dark-600 text-gray-300 hover:bg-dark-500 transition-colors">memes</button>
+                            <button type="button" onclick="addSubreddit('dankmemes')" class="px-2 py-1 text-xs font-medium rounded bg-dark-600 text-gray-300 hover:bg-dark-500 transition-colors">dankmemes</button>
+                            <button type="button" onclick="addSubreddit('wholesomememes')" class="px-2 py-1 text-xs font-medium rounded bg-dark-600 text-gray-300 hover:bg-dark-500 transition-colors">wholesomememes</button>
+                            <button type="button" onclick="addSubreddit('me_irl')" class="px-2 py-1 text-xs font-medium rounded bg-dark-600 text-gray-300 hover:bg-dark-500 transition-colors">me_irl</button>
+                            <button type="button" onclick="addSubreddit('ProgrammerHumor')" class="px-2 py-1 text-xs font-medium rounded bg-dark-600 text-gray-300 hover:bg-dark-500 transition-colors">ProgrammerHumor</button>
+                            <button type="button" onclick="addSubreddit('AdviceAnimals')" class="px-2 py-1 text-xs font-medium rounded bg-dark-600 text-gray-300 hover:bg-dark-500 transition-colors">AdviceAnimals</button>
+                        </div>
+                        <p class="font-semibold text-white mt-3 mb-2">Poker Subreddits</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" onclick="addSubreddit('poker')" class="px-2 py-1 text-xs font-medium rounded bg-accent-green/20 text-accent-green hover:bg-accent-green/30 transition-colors">poker</button>
+                            <button type="button" onclick="addSubreddit('pokermemes')" class="px-2 py-1 text-xs font-medium rounded bg-accent-green/20 text-accent-green hover:bg-accent-green/30 transition-colors">pokermemes</button>
+                            <button type="button" onclick="addSubreddit('ChipPorn')" class="px-2 py-1 text-xs font-medium rounded bg-accent-green/20 text-accent-green hover:bg-accent-green/30 transition-colors">ChipPorn</button>
+                            <button type="button" onclick="addSubreddit('pokervideos')" class="px-2 py-1 text-xs font-medium rounded bg-accent-green/20 text-accent-green hover:bg-accent-green/30 transition-colors">pokervideos</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-accent-yellow/10 to-accent-yellow/5 border-accent-yellow/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-accent-yellow/20 flex items-center justify-center text-2xl">
+                    :)
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How It Works</h4>
+                <ul class="text-sm text-gray-300 space-y-1.5">
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">1.</span>
+                        The bot fetches top memes from your selected subreddits
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">2.</span>
+                        Memes are posted at the interval you specify
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">3.</span>
+                        Only image posts from Reddit are fetched
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">4.</span>
+                        NSFW content is automatically filtered out
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">5.</span>
+                        Each post includes the title and a link to the original
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function addSubreddit(name) {
+    const input = document.getElementById('subreddits');
+    const current = input.value.trim();
+    const subreddits = current ? current.split(',').map(s => s.trim()) : [];
+
+    if (!subreddits.includes(name)) {
+        subreddits.push(name);
+        input.value = subreddits.join(',');
+    }
+}
+
+async function loadAutoMemeConfig() {
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/automeme');
+        const data = await response.json();
+
+        if (data.config) {
+            document.getElementById('automeme-enabled').checked = data.config.enabled || false;
+
+            const channelSelect = document.querySelector('select[name="channel_id"]');
+            if (channelSelect) channelSelect.value = data.config.channel_id || '';
+
+            document.getElementById('post-interval').value = data.config.post_interval_hours || 24;
+            document.getElementById('subreddits').value = data.config.subreddits || 'memes,dankmemes';
+
+            // Show stats if enabled
+            if (data.config.enabled) {
+                document.getElementById('automeme-stats').classList.remove('hidden');
+                document.getElementById('stat-status').textContent = 'ACTIVE';
+                document.getElementById('stat-status').className = 'text-2xl font-bold text-accent-green mb-1';
+                document.getElementById('stat-interval').textContent = data.config.post_interval_hours + 'h';
+                document.getElementById('stat-subreddits').textContent = (data.config.subreddits || '').split(',').length;
+            } else {
+                document.getElementById('automeme-stats').classList.remove('hidden');
+                document.getElementById('stat-status').textContent = 'DISABLED';
+                document.getElementById('stat-status').className = 'text-2xl font-bold text-gray-500 mb-1';
+            }
+        }
+    } catch (error) {
+        console.error('Error loading auto-meme config:', error);
+    }
+}
+
+document.getElementById('automeme-config-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const config = {
+        enabled: document.getElementById('automeme-enabled').checked,
+        channel_id: document.querySelector('select[name="channel_id"]').value,
+        post_interval_hours: parseInt(document.getElementById('post-interval').value),
+        subreddits: document.getElementById('subreddits').value.trim()
+    };
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/automeme', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Auto-meme settings saved');
+            loadAutoMemeConfig();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save settings');
+    }
+});
+
+loadAutoMemeConfig();
+</script>

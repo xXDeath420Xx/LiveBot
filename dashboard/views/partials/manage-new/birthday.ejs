@@ -1,0 +1,130 @@
+<%# Birthday System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Birthdays',
+            value: locals.birthdayStats?.total || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0A1.5 1.5 0 003 16.5v-6A1.5 1.5 0 014.5 9h.5l.5-2h9l.5 2h.5a1.5 1.5 0 011.5 1.5v6c0 .343-.11.66-.3.928"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'This Month',
+            value: locals.birthdayStats?.thisMonth || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Next 7 Days',
+            value: locals.birthdayStats?.upcoming || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Birthday Announcements</h3>
+                <p class="text-sm text-gray-400">Configure birthday tracking and celebrations</p>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'birthday_enabled',
+                id: 'birthday_enabled',
+                checked: locals.birthdayConfig?.enabled || false,
+                label: 'Enable Birthdays',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="birthday-form" action="/api/guilds/<%= guildId %>/birthday/config" method="PUT">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-group">
+                    <label class="form-label">Announcement Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'announcement_channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: locals.birthdayConfig?.announcement_channel_id,
+                        placeholder: 'Select announcement channel'
+                    }) %>
+                    <p class="form-hint">Daily birthday announcements will be posted here</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Birthday Role (Optional)</label>
+                    <%- include('../../components/forms/roleSelect', {
+                        name: 'birthday_role_id',
+                        roles: Array.from(roles.values()),
+                        selected: locals.birthdayConfig?.birthday_role_id,
+                        placeholder: 'No birthday role'
+                    }) %>
+                    <p class="form-hint">Temporary role given on birthdays</p>
+                </div>
+            </div>
+
+            <div class="form-group mt-4">
+                <label class="form-label">Custom Birthday Message</label>
+                <textarea name="message_template" class="form-input w-full h-24 resize-none" placeholder="Happy Birthday {user}! 🎉🎂"><%= locals.birthdayConfig?.message_template || '' %></textarea>
+                <p class="form-hint">Use {user} for mention, {age} for age if provided</p>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- User Commands -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">User Commands</h3>
+        <p class="text-sm text-gray-400 mb-4">Users can manage their birthdays with these commands:</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="p-3 bg-dark-700 rounded-lg">
+                <code class="text-primary-400">/birthday set</code>
+                <p class="text-xs text-gray-500 mt-1">Set their birthday date</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg">
+                <code class="text-primary-400">/birthday view</code>
+                <p class="text-xs text-gray-500 mt-1">View saved birthday</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg">
+                <code class="text-primary-400">/birthday remove</code>
+                <p class="text-xs text-gray-500 mt-1">Remove their birthday</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg">
+                <code class="text-primary-400">/birthday upcoming</code>
+                <p class="text-xs text-gray-500 mt-1">View upcoming birthdays</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('birthday-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        enabled: document.getElementById('birthday_enabled').checked,
+        announcement_channel_id: formData.get('announcement_channel_id'),
+        birthday_role_id: formData.get('birthday_role_id') || null,
+        message_template: formData.get('message_template') || null
+    };
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Birthday settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save settings'); }
+});
+</script>

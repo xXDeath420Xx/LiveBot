@@ -1,0 +1,738 @@
+<%
+// Data processing
+const config = data.rankConfig || { enabled: false, max_roles_per_user: 0, min_level: 0 };
+const selfAssignableRoles = data.selfAssignableRoles || [];
+const roleCategories = data.roleCategories || [];
+const rankStats = data.rankStats || {
+    totalRoles: 0,
+    totalAssignments: 0,
+    mostPopularRole: null,
+    avgRolesPerUser: 0
+};
+const roleAssignments = data.roleAssignments || [];
+
+// Calculate stats
+const totalRoles = selfAssignableRoles.length;
+const totalCategories = roleCategories.length;
+const totalAssignments = roleAssignments.length;
+
+// Find most popular role
+const roleAssignmentCounts = {};
+roleAssignments.forEach(assignment => {
+    roleAssignmentCounts[assignment.role_id] = (roleAssignmentCounts[assignment.role_id] || 0) + 1;
+});
+const mostPopularRoleId = Object.keys(roleAssignmentCounts).reduce((a, b) =>
+    roleAssignmentCounts[a] > roleAssignmentCounts[b] ? a : b, null);
+const mostPopularRole = selfAssignableRoles.find(r => r.role_id === mostPopularRoleId);
+
+// Calculate average roles per user
+const uniqueUsers = new Set(roleAssignments.map(a => a.user_id)).size;
+const avgRolesPerUser = uniqueUsers > 0 ? (totalAssignments / uniqueUsers).toFixed(1) : 0;
+%>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-id-badge"></i>
+                <span>Self-Assignable Roles</span>
+            </div>
+            <div class="page-section-subtitle">
+                Let members choose their own roles from a curated list
+            </div>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRoleModal">
+            <i class="fas fa-plus"></i>
+            <span>Add Role</span>
+        </button>
+    </div>
+
+    <!-- Configuration Card -->
+    <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-cog" style="color: var(--color-primary-400);"></i>
+            System Configuration
+        </h3>
+        <form action="/manage/<%= guild.id %>/update-rank-config" method="POST">
+            <div class="form-check" style="margin-bottom: var(--spacing-4);">
+                <input class="form-check-input" type="checkbox" id="rank_enabled" name="rank_enabled" <%= config.enabled ? 'checked' : '' %>>
+                <label class="form-check-label" for="rank_enabled">
+                    Enable Self-Assignable Ranks System
+                </label>
+            </div>
+
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Max Roles Per User</label>
+                    <input type="number" class="form-control" name="max_roles_per_user" value="<%= config.max_roles_per_user || 0 %>" min="0" max="50">
+                    <div class="form-help">Maximum self-assignable roles a user can have (0 = unlimited)</div>
+                </div>
+
+                <div>
+                    <label class="form-label">Minimum Level Required</label>
+                    <input type="number" class="form-control" name="min_level" value="<%= config.min_level || 0 %>" min="0" max="100">
+                    <div class="form-help">Base level requirement for using ranks (0 = no requirement)</div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Configuration</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Analytics Card -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Roles</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= totalRoles %></div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
+                In <%= totalCategories %> categories
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Assignments</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= totalAssignments %></div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
+                Roles given out
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Most Popular</div>
+            <div style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <% if (mostPopularRole) {
+                    const role = roles.find(r => r.id === mostPopularRole.role_id);
+                %>
+                    <%= role ? role.name : 'N/A' %>
+                <% } else { %>
+                    N/A
+                <% } %>
+            </div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
+                <%= mostPopularRoleId ? roleAssignmentCounts[mostPopularRoleId] : 0 %> users
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Avg Per User</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= avgRolesPerUser %></div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
+                Roles per member
+            </div>
+        </div>
+    </div>
+
+    <!-- Role Categories Management -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0;">
+                <i class="fas fa-folder" style="color: var(--color-warning);"></i>
+                Role Categories
+            </h3>
+            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+                <i class="fas fa-plus"></i>
+                <span>Add Category</span>
+            </button>
+        </div>
+
+        <% if (roleCategories.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Category Name</th>
+                            <th>Description</th>
+                            <th>Roles</th>
+                            <th>Max Per User</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% roleCategories.forEach(category => {
+                            const categoryRoles = selfAssignableRoles.filter(r => r.category_id === category.category_id);
+                        %>
+                            <tr>
+                                <td>
+                                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                        <i class="fas fa-folder-open" style="color: var(--color-warning); margin-right: var(--spacing-2);"></i>
+                                        <%= category.name %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                                        <%= category.description || 'No description' %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-primary"><%= categoryRoles.length %> roles</span>
+                                </td>
+                                <td>
+                                    <span class="badge" style="background: var(--color-dark-500); color: var(--color-text-secondary);">
+                                        <%= category.max_per_user || 'Unlimited' %>
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-secondary" onclick="editCategory('<%= category.category_id %>', '<%= category.name %>', '<%= category.description || '' %>', <%= category.max_per_user || 0 %>)">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <form action="/manage/<%= guild.id %>/delete-role-category" method="POST" class="d-inline">
+                                        <input type="hidden" name="categoryId" value="<%= category.category_id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this category? Roles will be uncategorized.');">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); text-align: center;">
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                    <i class="fas fa-folder"></i>
+                    No categories created yet
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Self-Assignable Roles Section -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-id-badge" style="color: var(--color-primary-400);"></i>
+            Self-Assignable Roles
+        </h3>
+
+        <!-- Search and Filter -->
+        <div class="grid grid-cols-2" style="gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+            <div>
+                <input type="text" id="roleSearchInput" class="form-control" placeholder="Search roles by name...">
+            </div>
+            <div>
+                <select id="categoryFilter" class="form-select">
+                    <option value="">All Categories</option>
+                    <% roleCategories.forEach(category => { %>
+                        <option value="<%= category.category_id %>"><%= category.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+        </div>
+
+        <% if (selfAssignableRoles.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table" id="rolesTable">
+                    <thead>
+                        <tr>
+                            <th>Role</th>
+                            <th>Category</th>
+                            <th>Description</th>
+                            <th>Level Required</th>
+                            <th>Assignments</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% selfAssignableRoles.forEach(selfRole => {
+                            const role = roles.find(r => r.id === selfRole.role_id);
+                            const category = roleCategories.find(c => c.category_id === selfRole.category_id);
+                            const assignments = roleAssignments.filter(a => a.role_id === selfRole.role_id).length;
+                            const roleColor = role && role.color ? '#' + role.color.toString(16).padStart(6, '0') : '#99AAB5';
+                        %>
+                            <tr class="role-row" data-category="<%= selfRole.category_id || '' %>" data-role-name="<%= role ? role.name.toLowerCase() : '' %>">
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                        <div style="width: 12px; height: 12px; border-radius: 50%; background-color: <%= roleColor %>; flex-shrink: 0;"></div>
+                                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                            <%= role ? role.name : 'Unknown Role' %>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <% if (category) { %>
+                                        <span class="badge badge-primary">
+                                            <i class="fas fa-folder" style="margin-right: 4px;"></i>
+                                            <%= category.name %>
+                                        </span>
+                                    <% } else { %>
+                                        <span class="badge" style="background: var(--color-dark-500); color: var(--color-text-muted);">
+                                            Uncategorized
+                                        </span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div style="color: var(--color-text-secondary); font-size: var(--font-size-sm); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        <%= selfRole.description || 'No description' %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <% if (selfRole.min_level && selfRole.min_level > 0) { %>
+                                        <span class="badge badge-warning">
+                                            <i class="fas fa-level-up-alt"></i>
+                                            Level <%= selfRole.min_level %>
+                                        </span>
+                                    <% } else { %>
+                                        <span class="badge badge-success">
+                                            <i class="fas fa-check"></i>
+                                            No requirement
+                                        </span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-primary-400);">
+                                        <%= assignments %> users
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-secondary" onclick="editRole('<%= selfRole.id %>', '<%= selfRole.role_id %>', '<%= selfRole.category_id || '' %>', '<%= (selfRole.description || '').replace(/'/g, "\\'") %>', <%= selfRole.min_level || 0 %>)">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <form action="/manage/<%= guild.id %>/remove-self-assignable-role" method="POST" class="d-inline">
+                                        <input type="hidden" name="roleId" value="<%= selfRole.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Remove this self-assignable role?');">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-id-badge"></i>
+                </div>
+                <div class="empty-state-title">No Self-Assignable Roles</div>
+                <div class="empty-state-description">
+                    Add roles that members can assign to themselves using the /rank command
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRoleModal">
+                    <i class="fas fa-plus"></i>
+                    <span>Add First Role</span>
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Role Assignment Statistics -->
+    <% if (roleAssignments.length > 0) { %>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
+            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                <i class="fas fa-chart-bar" style="color: var(--color-primary-400);"></i>
+                Recent Activity
+            </h3>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Role</th>
+                            <th>Assigned</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% roleAssignments.slice(-10).reverse().forEach(assignment => {
+                            const role = roles.find(r => r.id === assignment.role_id);
+                            const assignedDate = new Date(assignment.assigned_at);
+                        %>
+                            <tr>
+                                <td>
+                                    <div style="font-weight: var(--font-weight-medium); color: var(--color-text-primary);">
+                                        <i class="fas fa-user" style="color: var(--color-text-muted); margin-right: var(--spacing-2);"></i>
+                                        <%= assignment.user_id %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="color: var(--color-text-secondary);">
+                                        <%= role ? role.name : 'Unknown Role' %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                        <%= assignedDate.toLocaleDateString() %> <%= assignedDate.toLocaleTimeString() %>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<!-- Add Role Modal -->
+<div class="modal fade" id="addRoleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Self-Assignable Role</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/add-self-assignable-role" method="POST">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Role</label>
+                        <select name="role_id" class="form-select" required>
+                            <option value="">Select role...</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"><%= role.name %></option>
+                            <% }) %>
+                        </select>
+                        <div class="form-help">The role users can self-assign</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Category</label>
+                        <select name="category_id" class="form-select">
+                            <option value="">No category</option>
+                            <% roleCategories.forEach(category => { %>
+                                <option value="<%= category.category_id %>"><%= category.name %></option>
+                            <% }) %>
+                        </select>
+                        <div class="form-help">Optional: Organize this role into a category</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="3" placeholder="What does this role represent?"></textarea>
+                        <div class="form-help">Help users understand what this role is for</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Minimum Level Required</label>
+                        <input type="number" name="min_level" class="form-control" value="0" min="0" max="100">
+                        <div class="form-help">Users must reach this level to assign this role (0 = no requirement)</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>
+                        <span>Add Role</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Role Modal -->
+<div class="modal fade" id="editRoleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Self-Assignable Role</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/edit-self-assignable-role" method="POST">
+                <input type="hidden" name="roleId" id="edit_role_id">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Role</label>
+                        <select name="discord_role_id" id="edit_discord_role_id" class="form-select" required disabled>
+                            <option value="">Select role...</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"><%= role.name %></option>
+                            <% }) %>
+                        </select>
+                        <div class="form-help">The Discord role (cannot be changed)</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Category</label>
+                        <select name="category_id" id="edit_category_id" class="form-select">
+                            <option value="">No category</option>
+                            <% roleCategories.forEach(category => { %>
+                                <option value="<%= category.category_id %>"><%= category.name %></option>
+                            <% }) %>
+                        </select>
+                        <div class="form-help">Optional: Organize this role into a category</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" id="edit_description" class="form-control" rows="3" placeholder="What does this role represent?"></textarea>
+                        <div class="form-help">Help users understand what this role is for</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Minimum Level Required</label>
+                        <input type="number" name="min_level" id="edit_min_level" class="form-control" value="0" min="0" max="100">
+                        <div class="form-help">Users must reach this level to assign this role (0 = no requirement)</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        <span>Save Changes</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Category Modal -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Role Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/add-role-category" method="POST">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Category Name</label>
+                        <input type="text" name="name" class="form-control" required placeholder="e.g., Game Roles">
+                        <div class="form-help">A descriptive name for this category</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="2" placeholder="What kind of roles belong here?"></textarea>
+                        <div class="form-help">Optional description for this category</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Max Roles Per User</label>
+                        <input type="number" name="max_per_user" class="form-control" value="0" min="0" max="20">
+                        <div class="form-help">Limit how many roles from this category a user can have (0 = unlimited)</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>
+                        <span>Add Category</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Category Modal -->
+<div class="modal fade" id="editCategoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Role Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/edit-role-category" method="POST">
+                <input type="hidden" name="categoryId" id="edit_category_category_id">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Category Name</label>
+                        <input type="text" name="name" id="edit_category_name" class="form-control" required placeholder="e.g., Game Roles">
+                        <div class="form-help">A descriptive name for this category</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" id="edit_category_description" class="form-control" rows="2" placeholder="What kind of roles belong here?"></textarea>
+                        <div class="form-help">Optional description for this category</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Max Roles Per User</label>
+                        <input type="number" name="max_per_user" id="edit_category_max_per_user" class="form-control" value="0" min="0" max="20">
+                        <div class="form-help">Limit how many roles from this category a user can have (0 = unlimited)</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        <span>Save Changes</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.form-check-input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.form-check-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.text-end {
+    text-align: right;
+}
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1;
+}
+
+.badge-primary {
+    background: var(--color-primary-400);
+    color: white;
+}
+
+.badge-success {
+    background: var(--color-success);
+    color: white;
+}
+
+.badge-warning {
+    background: var(--color-warning);
+    color: var(--color-dark-900);
+}
+</style>
+
+<script>
+// Search functionality
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('roleSearchInput');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const roleRows = document.querySelectorAll('.role-row');
+
+    function filterRoles() {
+        const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+        const categoryId = categoryFilter ? categoryFilter.value : '';
+
+        roleRows.forEach(row => {
+            const roleName = row.getAttribute('data-role-name') || '';
+            const rowCategory = row.getAttribute('data-category') || '';
+
+            const matchesSearch = roleName.includes(searchTerm);
+            const matchesCategory = !categoryId || rowCategory === categoryId;
+
+            if (matchesSearch && matchesCategory) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener('input', filterRoles);
+    }
+
+    if (categoryFilter) {
+        categoryFilter.addEventListener('change', filterRoles);
+    }
+});
+
+// Edit role function
+function editRole(roleId, discordRoleId, categoryId, description, minLevel) {
+    document.getElementById('edit_role_id').value = roleId;
+    document.getElementById('edit_discord_role_id').value = discordRoleId;
+    document.getElementById('edit_category_id').value = categoryId || '';
+    document.getElementById('edit_description').value = description;
+    document.getElementById('edit_min_level').value = minLevel;
+
+    const modal = new bootstrap.Modal(document.getElementById('editRoleModal'));
+    modal.show();
+}
+
+// Edit category function
+function editCategory(categoryId, name, description, maxPerUser) {
+    document.getElementById('edit_category_category_id').value = categoryId;
+    document.getElementById('edit_category_name').value = name;
+    document.getElementById('edit_category_description').value = description;
+    document.getElementById('edit_category_max_per_user').value = maxPerUser;
+
+    const modal = new bootstrap.Modal(document.getElementById('editCategoryModal'));
+    modal.show();
+}
+</script>

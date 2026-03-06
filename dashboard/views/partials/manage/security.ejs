@@ -1,0 +1,285 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-shield-halved"></i>
+                <span>Security</span>
+            </div>
+            <div class="page-section-subtitle">
+                Protect your server from raids, malicious users, and coordinated attacks
+            </div>
+        </div>
+    </div>
+
+    <!-- Security Status Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Anti-Raid</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= antiRaidConfig && antiRaidConfig.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
+                <%= antiRaidConfig && antiRaidConfig.enabled ? 'Active' : 'Disabled' %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Anti-Nuke</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= antiNukeConfig && antiNukeConfig.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
+                <%= antiNukeConfig && antiNukeConfig.enabled ? 'Active' : 'Disabled' %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Join Gate</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= joinGateConfig && joinGateConfig.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
+                <%= joinGateConfig && joinGateConfig.enabled ? 'Active' : 'Disabled' %>
+            </div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Security Score</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">
+                <%
+                    const securityScore = ((antiRaidConfig && antiRaidConfig.enabled ? 1 : 0) +
+                                          (antiNukeConfig && antiNukeConfig.enabled ? 1 : 0) +
+                                          (joinGateConfig && joinGateConfig.enabled ? 1 : 0));
+                    const scoreText = securityScore === 3 ? 'High' : securityScore >= 1 ? 'Medium' : 'Low';
+                %>
+                <%= scoreText %>
+            </div>
+        </div>
+    </div>
+
+    <!-- Anti-Raid Configuration -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-users-slash" style="color: var(--color-danger); margin-right: var(--spacing-2);"></i>
+            Anti-Raid Protection
+        </h3>
+        <form action="/manage/<%= guild.id %>/security/antiraid" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <div style="margin-bottom: var(--spacing-4);">
+                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <input class="form-check-input" type="checkbox" role="switch" id="antiRaidEnabled" name="enabled" <%= antiRaidConfig && antiRaidConfig.enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
+                    <label class="form-check-label" for="antiRaidEnabled" style="cursor: pointer; flex: 1;">
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Anti-Raid</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Automatically detect and take action against potential raid attempts</div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">
+                        <i class="fas fa-hashtag" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
+                        Join Threshold
+                    </label>
+                    <input type="number" class="form-control" id="antiRaidThreshold" name="threshold" value="<%= antiRaidConfig ? antiRaidConfig.threshold : '10' %>" min="3" max="50" required>
+                    <div class="form-help">Number of joins to trigger anti-raid</div>
+                </div>
+                <div>
+                    <label class="form-label">
+                        <i class="fas fa-stopwatch" style="margin-right: var(--spacing-1); color: var(--color-accent-orange);"></i>
+                        Time Period (seconds)
+                    </label>
+                    <input type="number" class="form-control" id="antiRaidTimePeriod" name="timePeriod" value="<%= antiRaidConfig ? antiRaidConfig.time_period : '10' %>" min="5" max="300" required>
+                    <div class="form-help">Time frame to count joins</div>
+                </div>
+                <div>
+                    <label class="form-label">
+                        <i class="fas fa-hammer" style="margin-right: var(--spacing-1); color: var(--color-accent-purple);"></i>
+                        Action
+                    </label>
+                    <select class="form-select" name="action" required>
+                        <option value="kick" <%= antiRaidConfig && antiRaidConfig.action === 'kick' ? 'selected' : '' %>>Kick Members</option>
+                        <option value="ban" <%= antiRaidConfig && antiRaidConfig.action === 'ban' ? 'selected' : '' %>>Ban Members</option>
+                    </select>
+                    <div class="form-help">Action to take on raiders</div>
+                </div>
+            </div>
+
+            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-primary-400); padding: var(--spacing-4); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4);">
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    <i class="fas fa-info-circle" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
+                    <strong>Example:</strong> If threshold is 10 and time period is 10 seconds, anti-raid will trigger when 10 users join within 10 seconds.
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Anti-Raid Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Anti-Nuke Configuration -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-radiation" style="color: var(--color-danger); margin-right: var(--spacing-2);"></i>
+            Anti-Nuke Protection
+        </h3>
+        <form action="/manage/<%= guild.id %>/security/antinuke" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <div style="margin-bottom: var(--spacing-4);">
+                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <input class="form-check-input" type="checkbox" role="switch" id="antiNukeEnabled" name="enabled" <%= antiNukeConfig && antiNukeConfig.enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
+                    <label class="form-check-label" for="antiNukeEnabled" style="cursor: pointer; flex: 1;">
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Anti-Nuke</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Protect against rapid channel/role deletions and mass bans</div>
+                    </label>
+                </div>
+            </div>
+
+            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-danger); padding: var(--spacing-4); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4);">
+                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                    <i class="fas fa-shield-alt" style="margin-right: var(--spacing-2);"></i>
+                    Protected Actions:
+                </div>
+                <ul style="margin: 0; padding-left: var(--spacing-6); color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                    <li style="margin-bottom: var(--spacing-1);">Channel deletions (more than 3 in 10 seconds)</li>
+                    <li style="margin-bottom: var(--spacing-1);">Role deletions (more than 3 in 10 seconds)</li>
+                    <li style="margin-bottom: var(--spacing-1);">Mass bans (more than 5 in 10 seconds)</li>
+                    <li style="margin-bottom: var(--spacing-1);">Webhook spam (more than 5 created in 10 seconds)</li>
+                </ul>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Anti-Nuke Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Join Gate Configuration -->
+    <div>
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-door-open" style="color: var(--color-success); margin-right: var(--spacing-2);"></i>
+            Join Gate
+        </h3>
+        <form action="/manage/<%= guild.id %>/security/joingate" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <div style="margin-bottom: var(--spacing-4);">
+                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <input class="form-check-input" type="checkbox" role="switch" id="joinGateEnabled" name="enabled" <%= joinGateConfig && joinGateConfig.enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
+                    <label class="form-check-label" for="joinGateEnabled" style="cursor: pointer; flex: 1;">
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Join Gate</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Require new members to pass verification before accessing the server</div>
+                    </label>
+                </div>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">
+                    <i class="fas fa-user-check" style="margin-right: var(--spacing-1); color: var(--color-success);"></i>
+                    Verification Role
+                </label>
+                <select class="form-select" id="joinGateRole" name="roleId">
+                    <option value="">Select a role to grant after verification</option>
+                    <% roles.forEach(role => { %>
+                        <option value="<%= role.id %>" <%= joinGateConfig && joinGateConfig.role_id === role.id ? 'selected' : '' %>>
+                            <%= role.name %>
+                        </option>
+                    <% }) %>
+                </select>
+                <div class="form-help">This role will be granted to members who complete verification</div>
+            </div>
+
+            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-success); padding: var(--spacing-4); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4);">
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    <i class="fas fa-lightbulb" style="color: var(--color-warning); margin-right: var(--spacing-2);"></i>
+                    <strong>Tip:</strong> Use Join Gate with Discord's built-in verification system or custom verification channels for maximum protection.
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Join Gate Settings</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<style>
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-control, .form-select {
+    width: 100%;
+    padding: var(--spacing-3);
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    transition: all var(--transition-base);
+}
+
+.form-control:focus, .form-select:focus {
+    outline: none;
+    border-color: var(--color-primary-500);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.form-check-input {
+    appearance: none;
+    background-color: var(--color-dark-500);
+    border: 2px solid var(--color-dark-400);
+    border-radius: 12px;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.form-check-input:checked {
+    background-color: var(--color-success);
+    border-color: var(--color-success);
+}
+
+.form-check-input::before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    top: 1px;
+    left: 1px;
+    transition: transform 0.3s ease;
+}
+
+.form-check-input:checked::before {
+    transform: translateX(24px);
+}
+
+.form-check-label {
+    margin: 0;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Add interactive feedback for switches
+    const switches = document.querySelectorAll('.form-check-input[type="checkbox"][role="switch"]');
+
+    switches.forEach(switchEl => {
+        switchEl.addEventListener('change', function() {
+            const label = this.closest('.form-check').querySelector('.form-check-label > div:first-child');
+            if (label) {
+                if (this.checked) {
+                    label.style.color = 'var(--color-success)';
+                } else {
+                    label.style.color = 'var(--color-text-primary)';
+                }
+            }
+        });
+
+        // Initialize state
+        const label = switchEl.closest('.form-check').querySelector('.form-check-label > div:first-child');
+        if (label && switchEl.checked) {
+            label.style.color = 'var(--color-success)';
+        }
+    });
+});
+</script>

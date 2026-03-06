@@ -1,0 +1,510 @@
+<%# Forms Management - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <% if (forms && forms.length > 0) { %>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <%- include('../../components/cards/statCard', {
+                title: 'Total Forms',
+                value: forms.length,
+                icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
+                color: 'primary'
+            }) %>
+            <%- include('../../components/cards/statCard', {
+                title: 'Total Questions',
+                value: forms.reduce((sum, f) => sum + (f.question_count || 0), 0),
+                icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+                color: 'info'
+            }) %>
+            <%- include('../../components/cards/statCard', {
+                title: 'Total Responses',
+                value: forms.reduce((sum, f) => sum + (f.submission_count || 0), 0),
+                icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>',
+                color: 'success'
+            }) %>
+            <%- include('../../components/cards/statCard', {
+                title: 'Active Forms',
+                value: forms.length,
+                icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+                color: 'warning'
+            }) %>
+        </div>
+    <% } %>
+
+    <!-- Header -->
+    <div class="card">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Forms Management</h3>
+                    <p class="text-sm text-gray-400">Create custom forms with questions and collect user responses</p>
+                </div>
+            </div>
+            <button onclick="openCreateFormModal()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Form
+            </button>
+        </div>
+    </div>
+
+    <!-- Forms Table -->
+    <% if (forms && forms.length > 0) { %>
+        <div class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">All Forms</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Form</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Stats</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Submit Channel</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% forms.forEach(form => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <div class="font-semibold text-white"><%= form.form_name %></div>
+                                    <div class="text-sm text-gray-500"><%= form.form_description || 'No description' %></div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <div class="flex gap-2 flex-wrap">
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-primary-500/20 text-primary-400"><%= form.question_count || 0 %> questions</span>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-green/20 text-accent-green"><%= form.submission_count || 0 %> responses</span>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (form.submit_channel_id) { %>
+                                        <% const channel = channels.find(c => c.id === form.submit_channel_id); %>
+                                        <span class="text-gray-400">#<%= channel ? channel.name : 'Unknown' %></span>
+                                    <% } else { %>
+                                        <span class="text-gray-500 text-sm">None</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <div class="flex items-center justify-end gap-2">
+                                        <button onclick="editForm(<%= form.form_id %>, '<%= form.form_name.replace(/'/g, "\\'") %>', '<%= (form.form_description || '').replace(/'/g, "\\'") %>', '<%= form.submit_channel_id || '' %>')" class="btn btn-secondary btn-sm" title="Edit">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                            </svg>
+                                        </button>
+                                        <button onclick="viewQuestions(<%= form.form_id %>)" class="btn btn-secondary btn-sm" title="Questions">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                                            </svg>
+                                        </button>
+                                        <button onclick="createPanel(<%= form.form_id %>, '<%= form.form_name.replace(/'/g, "\\'") %>')" class="btn btn-secondary btn-sm" title="Create Panel">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                                            </svg>
+                                        </button>
+                                        <button onclick="viewSubmissions(<%= form.form_id %>)" class="btn btn-secondary btn-sm" title="Submissions">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                                            </svg>
+                                        </button>
+                                        <button onclick="deleteForm(<%= form.form_id %>)" class="btn btn-danger btn-sm" title="Delete">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <% } else { %>
+        <div class="card text-center py-12">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+            </div>
+            <h4 class="text-lg font-semibold text-white mb-2">No Forms Created</h4>
+            <p class="text-gray-400 mb-4">Create your first form to start collecting user responses</p>
+            <button onclick="openCreateFormModal()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create First Form
+            </button>
+        </div>
+    <% } %>
+</div>
+
+<!-- Create Form Modal -->
+<div id="create-form-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Create New Form</h3>
+            <button onclick="closeModal('create-form-modal')" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="create-form-form">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Form Name <span class="text-accent-red">*</span></label>
+                    <input type="text" name="form_name" class="form-input w-full" required placeholder="Application Form">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="form_description" class="form-input w-full h-20 resize-y" placeholder="Describe what this form is for..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Submit to Channel (optional)</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'submit_channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: null,
+                        placeholder: 'None'
+                    }) %>
+                    <p class="form-hint">When someone submits this form, send a message to this channel</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('create-form-modal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Form</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Form Modal -->
+<div id="edit-form-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Edit Form</h3>
+            <button onclick="closeModal('edit-form-modal')" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="edit-form-form">
+            <input type="hidden" name="form_id" id="edit-form-id">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Form Name <span class="text-accent-red">*</span></label>
+                    <input type="text" name="form_name" id="edit-form-name" class="form-input w-full" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea name="form_description" id="edit-form-description" class="form-input w-full h-20 resize-y"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Submit to Channel (optional)</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'submit_channel_id',
+                        id: 'edit-submit-channel',
+                        channels: Array.from(channels.values()),
+                        selected: null,
+                        placeholder: 'None'
+                    }) %>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('edit-form-modal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Questions Modal -->
+<div id="questions-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-2xl">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Form Questions</h3>
+            <button onclick="closeModal('questions-modal')" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="questions-list" class="text-center py-8 text-gray-400">
+                Loading questions...
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" onclick="closeModal('questions-modal')" class="btn btn-secondary">Close</button>
+            <button type="button" onclick="addQuestion()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Question
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Submissions Modal -->
+<div id="submissions-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-4xl">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Form Submissions</h3>
+            <button onclick="closeModal('submissions-modal')" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body max-h-[60vh] overflow-y-auto">
+            <div id="submissions-list" class="text-center py-8 text-gray-400">
+                Loading submissions...
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Panel Modal -->
+<div id="create-panel-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Create Form Panel: <span id="panel-form-title"></span></h3>
+            <button onclick="closeModal('create-panel-modal')" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="create-panel-form">
+            <input type="hidden" name="form_id" id="panel-form-id">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Channel <span class="text-accent-red">*</span></label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'channel_id',
+                        id: 'panel-channel',
+                        channels: Array.from(channels.values()),
+                        selected: null,
+                        placeholder: 'Select a channel...'
+                    }) %>
+                    <p class="form-hint">The channel where the form panel button will be posted</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Panel Title</label>
+                    <input type="text" name="panel_title" class="form-input w-full" placeholder="Click to fill out this form">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Panel Description</label>
+                    <textarea name="panel_description" class="form-input w-full h-16 resize-y" placeholder="Fill out this form to..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Button Text</label>
+                    <input type="text" name="button_text" class="form-input w-full" placeholder="Open Form">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeModal('create-panel-modal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Panel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let currentFormId = null;
+
+function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+}
+
+function openCreateFormModal() {
+    document.getElementById('create-form-form').reset();
+    document.getElementById('create-form-modal').classList.remove('hidden');
+}
+
+function editForm(formId, formName, formDescription, submitChannelId) {
+    document.getElementById('edit-form-id').value = formId;
+    document.getElementById('edit-form-name').value = formName;
+    document.getElementById('edit-form-description').value = formDescription || '';
+    document.getElementById('edit-submit-channel').value = submitChannelId || '';
+    document.getElementById('edit-form-modal').classList.remove('hidden');
+}
+
+async function viewQuestions(formId) {
+    currentFormId = formId;
+    document.getElementById('questions-modal').classList.remove('hidden');
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/forms/${formId}/questions`);
+        const questions = await response.json();
+        const listEl = document.getElementById('questions-list');
+
+        if (questions.length === 0) {
+            listEl.innerHTML = '<div class="text-center text-gray-400 py-8">No questions yet. Add some!</div>';
+            return;
+        }
+
+        listEl.innerHTML = questions.map((q, idx) => `
+            <div class="p-4 bg-dark-700 border border-dark-400 rounded-lg mb-3">
+                <div class="flex items-start justify-between">
+                    <div class="flex-1">
+                        <h6 class="text-white font-medium mb-2">${idx + 1}. ${escapeHtml(q.question_text)}</h6>
+                        <div class="flex gap-2 flex-wrap">
+                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-dark-500 text-gray-300">${q.question_type}</span>
+                            ${q.is_required ? '<span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-red/20 text-accent-red">Required</span>' : ''}
+                        </div>
+                    </div>
+                    <button onclick="deleteQuestion(${q.question_id})" class="btn btn-danger btn-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        document.getElementById('questions-list').innerHTML = '<div class="p-4 bg-accent-red/10 border border-accent-red/30 rounded-lg text-accent-red">Failed to load questions.</div>';
+    }
+}
+
+async function viewSubmissions(formId) {
+    document.getElementById('submissions-modal').classList.remove('hidden');
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/forms/${formId}/submissions`);
+        const submissions = await response.json();
+        const listEl = document.getElementById('submissions-list');
+
+        if (submissions.length === 0) {
+            listEl.innerHTML = '<div class="text-center text-gray-400 py-8">No submissions yet.</div>';
+            return;
+        }
+
+        listEl.innerHTML = submissions.map(sub => {
+            const data = JSON.parse(sub.submission_data);
+            const dataHtml = Object.entries(data).map(([q, a]) => `
+                <div class="mb-3 pb-3 border-b border-dark-500 last:border-0">
+                    <strong class="text-white block mb-1">${escapeHtml(q)}:</strong>
+                    <span class="text-gray-400">${a ? escapeHtml(a) : '<em>No answer</em>'}</span>
+                </div>
+            `).join('');
+
+            return `
+                <div class="bg-dark-700 border border-dark-400 rounded-lg mb-4 overflow-hidden">
+                    <div class="bg-dark-600 px-4 py-2 border-b border-dark-400">
+                        <strong class="text-white">User ID:</strong> <span class="text-gray-400">${sub.user_id}</span> &nbsp;|&nbsp;
+                        <strong class="text-white">Submitted:</strong> <span class="text-gray-400">${new Date(sub.submitted_at).toLocaleString()}</span>
+                    </div>
+                    <div class="p-4">${dataHtml}</div>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        document.getElementById('submissions-list').innerHTML = '<div class="p-4 bg-accent-red/10 border border-accent-red/30 rounded-lg text-accent-red">Failed to load submissions.</div>';
+    }
+}
+
+function addQuestion() {
+    if (!currentFormId) return;
+    window.location.href = `/manage/<%= guildId %>/forms/${currentFormId}/add-question`;
+}
+
+function createPanel(formId, formName) {
+    document.getElementById('panel-form-id').value = formId;
+    document.getElementById('panel-form-title').textContent = formName;
+    document.getElementById('create-panel-form').reset();
+    document.getElementById('panel-form-id').value = formId;
+    document.getElementById('create-panel-modal').classList.remove('hidden');
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Form submissions
+document.getElementById('create-form-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/forms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        if (response.ok) {
+            showToast('success', 'Form created');
+            closeModal('create-form-modal');
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to create form'); }
+});
+
+document.getElementById('edit-form-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const formId = formData.get('form_id');
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/forms/${formId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        if (response.ok) {
+            showToast('success', 'Form updated');
+            closeModal('edit-form-modal');
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to update form'); }
+});
+
+document.getElementById('create-panel-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/forms/panels', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+        if (response.ok) {
+            showToast('success', 'Panel created');
+            closeModal('create-panel-modal');
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to create panel'); }
+});
+
+async function deleteForm(formId) {
+    if (!confirm('Are you sure you want to delete this form and all its submissions?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/forms/${formId}`, { method: 'DELETE' });
+        if (response.ok) {
+            showToast('success', 'Form deleted');
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete form'); }
+}
+
+async function deleteQuestion(questionId) {
+    if (!confirm('Delete this question?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/forms/questions/${questionId}`, { method: 'DELETE' });
+        if (response.ok) {
+            showToast('success', 'Question deleted');
+            viewQuestions(currentFormId);
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete question'); }
+}
+</script>

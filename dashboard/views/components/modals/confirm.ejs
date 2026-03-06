@@ -1,0 +1,74 @@
+<%# Confirm Modal Component
+    Props:
+    - id: string (required) - Modal ID
+    - title: string - Modal title
+    - message: string - Confirmation message
+    - confirmText: string - Confirm button text
+    - cancelText: string - Cancel button text
+    - confirmColor: string - Confirm button color (danger, warning, success, primary)
+    - icon: string - SVG icon HTML
+    - formAction: string - Form action URL for submit
+    - formMethod: string - Form method (default: POST)
+    - hiddenInputs: Object - Hidden form inputs { name: value }
+%>
+<%
+const buttonColors = {
+    danger: 'btn-danger',
+    warning: 'bg-accent-yellow text-dark-900 hover:bg-accent-yellow/80',
+    success: 'btn-success',
+    primary: 'btn-primary'
+};
+const btnClass = buttonColors[locals.confirmColor] || buttonColors.primary;
+%>
+
+<div id="<%= locals.id %>" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="<%= locals.id %>-title">
+    <div class="modal max-w-md">
+        <% if (locals.formAction) { %>
+        <form action="<%= locals.formAction %>" method="<%= locals.formMethod || 'POST' %>">
+        <% } %>
+
+            <div class="modal-header">
+                <div class="flex items-center gap-3">
+                    <% if (locals.icon) { %>
+                        <div class="<%= locals.confirmColor === 'danger' ? 'bg-accent-red/10 text-accent-red' : 'bg-primary-500/10 text-primary-400' %> p-2 rounded-lg">
+                            <%- locals.icon %>
+                        </div>
+                    <% } %>
+                    <h3 id="<%= locals.id %>-title" class="text-lg font-semibold text-white">
+                        <%= locals.title || 'Confirm Action' %>
+                    </h3>
+                </div>
+
+                <button type="button" data-modal-close class="text-gray-400 hover:text-white p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body">
+                <p class="text-gray-300">
+                    <%= locals.message || 'Are you sure you want to proceed? This action cannot be undone.' %>
+                </p>
+
+                <% if (locals.hiddenInputs) { %>
+                    <% Object.entries(locals.hiddenInputs).forEach(([name, value]) => { %>
+                        <input type="hidden" name="<%= name %>" value="<%= value %>">
+                    <% }); %>
+                <% } %>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" data-modal-close class="btn btn-secondary">
+                    <%= locals.cancelText || 'Cancel' %>
+                </button>
+                <button type="<%= locals.formAction ? 'submit' : 'button' %>" class="btn <%= btnClass %>">
+                    <%= locals.confirmText || 'Confirm' %>
+                </button>
+            </div>
+
+        <% if (locals.formAction) { %>
+        </form>
+        <% } %>
+    </div>
+</div>

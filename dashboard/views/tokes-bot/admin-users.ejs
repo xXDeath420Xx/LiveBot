@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css?v=1769510480">
+    <style>
+        .user-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .user-table th, .user-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--ember-border);
+        }
+        .user-table th {
+            font-weight: 600;
+            color: var(--ember-text-muted);
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .user-table th:hover {
+            color: var(--ember-primary);
+        }
+        .user-table tr:hover {
+            background: var(--ember-bg-elevated);
+        }
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        .user-row {
+            cursor: pointer;
+        }
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-content {
+            background: var(--ember-bg-card);
+            border-radius: 12px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--ember-border);
+        }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--ember-text-muted);
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+        .user-detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .detail-item {
+            background: var(--ember-bg-elevated);
+            padding: 0.75rem;
+            border-radius: 6px;
+        }
+        .detail-label {
+            font-size: 0.75rem;
+            color: var(--ember-text-muted);
+            margin-bottom: 0.25rem;
+        }
+        .detail-value {
+            font-weight: 600;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+                <span class="ember-badge ember-badge-error">Admin</span>
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Public Site</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/admin" class="ember-nav-link">Overview</a>
+                <a href="/tokes-bot/admin/users" class="ember-nav-link active">Users</a>
+                <a href="/tokes-bot/admin/moderation" class="ember-nav-link">Moderation</a>
+                <a href="/tokes-bot/admin/analytics" class="ember-nav-link">Analytics</a>
+                <a href="/tokes-bot/admin/health" class="ember-nav-link">Health</a>
+                <a href="/tokes-bot/admin/commands" class="ember-nav-link">Commands</a>
+                <a href="/tokes-bot/admin/sessions" class="ember-nav-link">Sessions</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">User Management</h1>
+                <p class="ember-dashboard-subtitle">Search, view, and moderate users by platform</p>
+            </div>
+
+            <!-- Platform Stats -->
+            <div class="ember-dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 1.5rem;">
+                <div class="ember-stat-card" onclick="filterPlatform('')" style="cursor: pointer;">
+                    <div class="ember-stat-value" id="totalUsers">-</div>
+                    <div class="ember-stat-label">Total Users</div>
+                </div>
+                <div class="ember-stat-card" onclick="filterPlatform('twitch')" style="cursor: pointer; border-left: 3px solid #9146ff;">
+                    <div class="ember-stat-value" id="twitchUsers">-</div>
+                    <div class="ember-stat-label">Twitch Users</div>
+                </div>
+                <div class="ember-stat-card" onclick="filterPlatform('kick')" style="cursor: pointer; border-left: 3px solid #53fc18;">
+                    <div class="ember-stat-value" id="kickUsers">-</div>
+                    <div class="ember-stat-label">Kick Users</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value" id="linkedBoth">-</div>
+                    <div class="ember-stat-label">Linked Both</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value" id="newUsers7d">-</div>
+                    <div class="ember-stat-label">New (7 days)</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value" id="active24h">-</div>
+                    <div class="ember-stat-label">Active (24h)</div>
+                </div>
+            </div>
+
+            <!-- Top Users by Platform -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="ember-card">
+                    <div class="ember-card-header" style="border-left: 3px solid #9146ff;">
+                        <h3 class="ember-card-title">Top Twitch Users</h3>
+                    </div>
+                    <div class="ember-card-body" id="topTwitchUsers">
+                        <p class="ember-text-muted">Loading...</p>
+                    </div>
+                </div>
+                <div class="ember-card">
+                    <div class="ember-card-header" style="border-left: 3px solid #53fc18;">
+                        <h3 class="ember-card-title">Top Kick Users</h3>
+                    </div>
+                    <div class="ember-card-body" id="topKickUsers">
+                        <p class="ember-text-muted">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search and Filters -->
+            <div class="ember-card ember-mb-3">
+                <div class="ember-card-body" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                    <input type="text" id="searchInput" class="ember-input" style="flex: 1; min-width: 200px;" placeholder="Search by username...">
+                    <select id="platformFilter" class="ember-input" style="width: auto;">
+                        <option value="">All Platforms</option>
+                        <option value="twitch">Twitch Only</option>
+                        <option value="kick">Kick Only</option>
+                    </select>
+                    <select id="sortBy" class="ember-input" style="width: auto;">
+                        <option value="created_at">Join Date</option>
+                        <option value="last_seen">Last Active</option>
+                        <option value="lifetime_tokes">Tokes</option>
+                        <option value="level">Level</option>
+                        <option value="primary_name">Name</option>
+                    </select>
+                    <select id="sortOrder" class="ember-input" style="width: auto;">
+                        <option value="DESC">Descending</option>
+                        <option value="ASC">Ascending</option>
+                    </select>
+                    <button onclick="loadUsers()" class="ember-btn ember-btn-primary">Search</button>
+                </div>
+            </div>
+
+            <!-- Users Table -->
+            <div class="ember-card">
+                <div class="ember-card-body" style="overflow-x: auto;">
+                    <table class="user-table">
+                        <thead>
+                            <tr>
+                                <th onclick="sortBy('primary_name')">User</th>
+                                <th>Platforms</th>
+                                <th onclick="sortBy('lifetime_tokes')">Tokes</th>
+                                <th onclick="sortBy('level')">Level</th>
+                                <th onclick="sortBy('current_streak')">Streak</th>
+                                <th onclick="sortBy('created_at')">Joined</th>
+                                <th onclick="sortBy('last_seen')">Last Active</th>
+                                <th>Role</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr><td colspan="8" class="ember-text-muted ember-text-center">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination" id="pagination">
+                    <button class="ember-btn ember-btn-sm ember-btn-ghost" onclick="prevPage()">Previous</button>
+                    <span id="pageInfo">Page 1</span>
+                    <button class="ember-btn ember-btn-sm ember-btn-ghost" onclick="nextPage()">Next</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- User Detail Modal -->
+    <div class="modal-overlay" id="userModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalUserName">User Details</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="modalContent">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot" class="ember-footer-link">Public Site</a>
+                <a href="/tokes-bot/dashboard" class="ember-footer-link">User Dashboard</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        let currentPage = 0;
+        const pageSize = 50;
+        let totalUsers = 0;
+
+        // Load platform stats on page load
+        async function loadPlatformStats() {
+            try {
+                const response = await fetch('/tokes-bot/api/admin/users/stats');
+                const data = await response.json();
+
+                if (data.stats) {
+                    document.getElementById('totalUsers').textContent = (data.stats.total_users || 0).toLocaleString();
+                    document.getElementById('twitchUsers').textContent = (data.stats.twitch_users || 0).toLocaleString();
+                    document.getElementById('kickUsers').textContent = (data.stats.kick_users || 0).toLocaleString();
+                    document.getElementById('linkedBoth').textContent = (data.stats.linked_both || 0).toLocaleString();
+                    document.getElementById('newUsers7d').textContent = (data.stats.new_users_7d || 0).toLocaleString();
+                    document.getElementById('active24h').textContent = (data.stats.active_24h || 0).toLocaleString();
+                }
+
+                // Render top users
+                renderTopUsers('topTwitchUsers', data.topTwitchUsers || [], 'twitch');
+                renderTopUsers('topKickUsers', data.topKickUsers || [], 'kick');
+
+            } catch (error) {
+                console.error('Failed to load platform stats:', error);
+            }
+        }
+
+        function renderTopUsers(containerId, users, platform) {
+            const container = document.getElementById(containerId);
+            if (!users.length) {
+                container.innerHTML = '<p class="ember-text-muted">No users found</p>';
+                return;
+            }
+
+            container.innerHTML = users.map((user, index) => `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; ${index < users.length - 1 ? 'border-bottom: 1px solid var(--ember-border);' : ''}">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="color: var(--ember-text-muted); width: 20px;">#${index + 1}</span>
+                        ${user.platform_avatar ? `<img src="${escapeHtml(user.platform_avatar)}" style="width: 24px; height: 24px; border-radius: 50%;">` : ''}
+                        <span style="cursor: pointer;" onclick="viewUser(${user.id})">${escapeHtml(user.primary_name || 'Unknown')}</span>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight: 600;">${(user.lifetime_tokes || 0).toLocaleString()} tokes</div>
+                        <div style="font-size: 0.75rem; color: var(--ember-text-muted);">Level ${user.level || 1}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function filterPlatform(platform) {
+            document.getElementById('platformFilter').value = platform;
+            currentPage = 0;
+            loadUsers();
+        }
+
+        async function loadUsers() {
+            const search = document.getElementById('searchInput').value;
+            const platform = document.getElementById('platformFilter').value;
+            const sort = document.getElementById('sortBy').value;
+            const order = document.getElementById('sortOrder').value;
+
+            try {
+                const response = await fetch(`/tokes-bot/api/admin/users?search=${encodeURIComponent(search)}&platform=${platform}&sort=${sort}&order=${order}&limit=${pageSize}&offset=${currentPage * pageSize}`);
+                const data = await response.json();
+
+                totalUsers = data.total;
+                const tbody = document.getElementById('usersTableBody');
+
+                if (!data.users || !data.users.length) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="ember-text-muted ember-text-center">No users found</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.users.map(user => {
+                    // Get first platform avatar for display
+                    const firstPlatform = user.platforms && user.platforms.length > 0 ? user.platforms[0] : null;
+                    const avatarUrl = firstPlatform?.platform_avatar;
+
+                    // Build platform badges - platforms are already sanitized server-side
+                    const platformBadges = user.platforms && user.platforms.length > 0
+                        ? user.platforms.map(p => `<span class="ember-badge ${p.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick'}" style="margin-right: 0.25rem;">${escapeHtml(p.platform || '')}</span>`).join('')
+                        : '<span class="ember-badge">N/A</span>';
+
+                    return `
+                    <tr class="user-row" onclick="viewUser(${user.id})">
+                        <td>
+                            <div style="display: flex; align-items: center;">
+                                ${avatarUrl ? `<img src="${escapeHtml(avatarUrl)}" class="user-avatar">` : ''}
+                                <span>${escapeHtml(user.primary_name || 'Unknown')}</span>
+                            </div>
+                        </td>
+                        <td>
+                            ${platformBadges}
+                        </td>
+                        <td>${(user.lifetime_tokes || 0).toLocaleString()}</td>
+                        <td>${user.level || 1}</td>
+                        <td>${user.current_streak || 0}</td>
+                        <td>${user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</td>
+                        <td>${user.last_seen ? new Date(user.last_seen).toLocaleDateString() : 'Never'}</td>
+                        <td>
+                            <span class="ember-badge ${user.role === 'owner' ? 'ember-badge-error' : user.role === 'admin' ? 'ember-badge-warning' : 'ember-badge-primary'}">
+                                ${user.role || 'user'}
+                            </span>
+                        </td>
+                    </tr>
+                `}).join('');
+
+                updatePagination();
+
+            } catch (error) {
+                console.error('Failed to load users:', error);
+            }
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(totalUsers / pageSize);
+            document.getElementById('pageInfo').textContent = `Page ${currentPage + 1} of ${totalPages} (${totalUsers} users)`;
+        }
+
+        function prevPage() {
+            if (currentPage > 0) {
+                currentPage--;
+                loadUsers();
+            }
+        }
+
+        function nextPage() {
+            if ((currentPage + 1) * pageSize < totalUsers) {
+                currentPage++;
+                loadUsers();
+            }
+        }
+
+        function sortBy(column) {
+            document.getElementById('sortBy').value = column;
+            loadUsers();
+        }
+
+        async function viewUser(userId) {
+            document.getElementById('userModal').classList.add('active');
+            document.getElementById('modalContent').innerHTML = '<p class="ember-text-muted">Loading...</p>';
+
+            try {
+                const response = await fetch(`/tokes-bot/api/admin/users/${userId}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    document.getElementById('modalContent').innerHTML = `<p class="ember-text-muted">${data.error}</p>`;
+                    return;
+                }
+
+                const user = data.user;
+                document.getElementById('modalUserName').textContent = user.primary_name || 'Unknown User';
+
+                document.getElementById('modalContent').innerHTML = `
+                    <div class="user-detail-grid">
+                        <div class="detail-item">
+                            <div class="detail-label">User ID</div>
+                            <div class="detail-value">${user.id}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Role</div>
+                            <div class="detail-value">${user.role || 'user'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Lifetime Tokes</div>
+                            <div class="detail-value">${(user.lifetime_tokes || 0).toLocaleString()}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Level</div>
+                            <div class="detail-value">${user.level || 1}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">XP</div>
+                            <div class="detail-value">${(user.xp || 0).toLocaleString()}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Current Streak</div>
+                            <div class="detail-value">${user.current_streak || 0} days</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Best Streak</div>
+                            <div class="detail-value">${user.best_streak || 0} days</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Joined</div>
+                            <div class="detail-value">${user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}</div>
+                        </div>
+                    </div>
+
+                    <h3 style="margin-bottom: 0.75rem;">Connected Platforms</h3>
+                    <div style="margin-bottom: 1.5rem;">
+                        ${data.connections.map(c => `
+                            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; background: var(--ember-bg-elevated); border-radius: 6px; margin-bottom: 0.5rem;">
+                                ${c.platform_avatar ? `<img src="${c.platform_avatar}" style="width: 24px; height: 24px; border-radius: 50%;">` : ''}
+                                <span>${c.platform_name}</span>
+                                <span class="ember-badge ${c.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick'}">${c.platform}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+
+                    <h3 style="margin-bottom: 0.75rem;">Owned Channels (${data.channels.length})</h3>
+                    <div style="margin-bottom: 1.5rem;">
+                        ${data.channels.length ? data.channels.map(c => `
+                            <div style="padding: 0.5rem; background: var(--ember-bg-elevated); border-radius: 6px; margin-bottom: 0.5rem;">
+                                ${c.channel_name} (${c.platform}) - ${c.is_enabled ? 'Active' : 'Disabled'}
+                            </div>
+                        `).join('') : '<p class="ember-text-muted">No channels</p>'}
+                    </div>
+
+                    <h3 style="margin-bottom: 0.75rem;">Moderation History</h3>
+                    <div style="margin-bottom: 1.5rem;">
+                        ${data.moderationHistory.length ? data.moderationHistory.map(m => `
+                            <div style="padding: 0.5rem; background: var(--ember-bg-elevated); border-radius: 6px; margin-bottom: 0.5rem;">
+                                <span class="ember-badge ember-badge-${m.action_type === 'ban' ? 'error' : m.action_type === 'warning' ? 'warning' : 'primary'}">${m.action_type}</span>
+                                <span class="ember-text-muted" style="margin-left: 0.5rem;">${new Date(m.issued_at).toLocaleString()}</span>
+                                ${m.reason ? `<div style="margin-top: 0.25rem; font-size: 0.85rem;">${escapeHtml(m.reason)}</div>` : ''}
+                            </div>
+                        `).join('') : '<p class="ember-text-muted">No moderation history</p>'}
+                    </div>
+
+                    <h3 style="margin-bottom: 0.75rem;">Moderation Actions</h3>
+                    <div class="action-buttons">
+                        <button onclick="userAction(${user.id}, 'warning')" class="ember-btn ember-btn-sm ember-btn-warning">Issue Warning</button>
+                        <button onclick="userAction(${user.id}, 'stat_reset')" class="ember-btn ember-btn-sm ember-btn-outline">Reset Stats</button>
+                        ${user.role !== 'banned' ?
+                            `<button onclick="userAction(${user.id}, 'ban')" class="ember-btn ember-btn-sm ember-btn-error">Ban User</button>` :
+                            `<button onclick="userAction(${user.id}, 'unban')" class="ember-btn ember-btn-sm ember-btn-success">Unban User</button>`
+                        }
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('Failed to load user:', error);
+                document.getElementById('modalContent').innerHTML = '<p class="ember-text-muted">Failed to load user details</p>';
+            }
+        }
+
+        async function userAction(userId, action) {
+            let reason = '';
+            if (['warning', 'ban', 'stat_reset'].includes(action)) {
+                reason = prompt(`Enter reason for ${action}:`);
+                if (reason === null) return;
+            }
+
+            if (action === 'stat_reset' && !confirm('Are you sure you want to reset this user\'s stats? This cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/tokes-bot/api/admin/users/${userId}/action`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, reason })
+                });
+
+                if (response.ok) {
+                    alert(`Action "${action}" completed successfully`);
+                    viewUser(userId); // Refresh modal
+                    loadUsers(); // Refresh list
+                } else {
+                    const err = await response.json();
+                    alert(err.error || 'Failed to perform action');
+                }
+            } catch (error) {
+                console.error('Failed to perform action:', error);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('userModal').classList.remove('active');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Close modal on overlay click
+        document.getElementById('userModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeModal();
+        });
+
+        // Search on Enter
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadUsers();
+        });
+
+        // Platform filter change
+        document.getElementById('platformFilter').addEventListener('change', () => {
+            currentPage = 0;
+            loadUsers();
+        });
+
+        // Initial load
+        loadPlatformStats();
+        loadUsers();
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

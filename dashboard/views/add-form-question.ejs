@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Question - <%= form.form_name %></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/unified-dark-theme.css">
+</head>
+<body>
+<%- include('partials/header') %>
+
+<main class="page-container">
+    <div class="page-header">
+        <h1><i class="fas fa-question-circle me-2"></i>Add Question to <%= form.form_name %></h1>
+        <p class="text-muted">Create a new question for this form</p>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="content-card">
+                <form action="/manage/<%= guild.id %>/forms/<%= form.form_id %>/add-question" method="POST">
+                    <div class="mb-4">
+                        <label class="form-label">Question Text <span class="text-danger">*</span></label>
+                        <input type="text" name="question_text" class="form-control" placeholder="What would you like to ask?" required>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">Question Type <span class="text-danger">*</span></label>
+                        <select name="question_type" id="question-type" class="form-select" required onchange="toggleOptions()">
+                            <option value="short_text">Short Text (Single line)</option>
+                            <option value="long_text">Long Text (Paragraph)</option>
+                            <option value="number">Number</option>
+                            <option value="select">Multiple Choice (Select)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-4" id="options-container" style="display: none;">
+                        <label class="form-label">Options (one per line)</label>
+                        <textarea name="question_options" id="question-options" class="form-control" rows="5" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
+                        <small class="text-muted">Enter each option on a new line</small>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="is-required" name="is_required" checked>
+                            <label class="form-check-label" for="is-required">
+                                This question is required
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">Question Order</label>
+                        <input type="number" name="question_order" class="form-control" value="0" min="0">
+                        <small class="text-muted">Lower numbers appear first (0 = first)</small>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>Add Question
+                        </button>
+                        <a href="/manage/<%= guild.id %>#forms" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-2"></i>Back to Forms
+                        </a>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Preview Card -->
+            <div class="content-card mt-4">
+                <h5 class="mb-3"><i class="fas fa-eye me-2"></i>Existing Questions</h5>
+                <% if (existingQuestions && existingQuestions.length > 0) { %>
+                    <div class="list-group">
+                        <% existingQuestions.forEach((q, idx) => { %>
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6><%= idx + 1 %>. <%= q.question_text %></h6>
+                                        <span class="badge bg-secondary"><%= q.question_type %></span>
+                                        <% if (q.is_required) { %>
+                                            <span class="badge bg-danger">Required</span>
+                                        <% } %>
+                                        <% if (q.question_options) { %>
+                                            <div class="text-muted small mt-1">Options: <%= q.question_options %></div>
+                                        <% } %>
+                                    </div>
+                                </div>
+                            </div>
+                        <% }); %>
+                    </div>
+                <% } else { %>
+                    <p class="text-muted">No questions yet. This will be the first one!</p>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+function toggleOptions() {
+    const type = document.getElementById('question-type').value;
+    const optionsContainer = document.getElementById('options-container');
+    const optionsTextarea = document.getElementById('question-options');
+
+    if (type === 'select') {
+        optionsContainer.style.display = 'block';
+        optionsTextarea.required = true;
+    } else {
+        optionsContainer.style.display = 'none';
+        optionsTextarea.required = false;
+    }
+}
+</script>
+
+<%- include('partials/footer') %>
+</body>
+</html>

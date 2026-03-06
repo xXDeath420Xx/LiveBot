@@ -1,0 +1,296 @@
+<%# Server Reminders - Tailwind Version %>
+
+<%
+const activeReminders = (reminders || []).filter(r => r.is_active && !r.is_dm);
+const completedReminders = (reminders || []).filter(r => !r.is_active);
+const dueToday = activeReminders.filter(r => {
+    const now = new Date();
+    const reminderDate = new Date(r.remind_at);
+    return reminderDate.getFullYear() === now.getFullYear() &&
+           reminderDate.getMonth() === now.getMonth() &&
+           reminderDate.getDate() === now.getDate();
+});
+const upcomingWeek = activeReminders.filter(r => {
+    const now = new Date();
+    const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const reminderDate = new Date(r.remind_at);
+    return reminderDate <= weekFromNow && reminderDate >= now;
+});
+%>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Reminders',
+            value: activeReminders.length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Completed',
+            value: completedReminders.length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Due Today',
+            value: dueToday.length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Upcoming Week',
+            value: upcomingWeek.length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+            color: 'info'
+        }) %>
+    </div>
+
+    <!-- Create Reminder -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-gradient-to-br from-primary-500 to-primary-600 rounded-lg">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Create Reminder</h3>
+                    <p class="text-sm text-gray-400">Schedule a reminder for your server</p>
+                </div>
+            </div>
+            <button onclick="openCreateReminderModal()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Reminder
+            </button>
+        </div>
+
+        <div class="p-3 bg-gradient-to-r from-primary-500/10 to-primary-500/5 border border-primary-500/30 rounded-lg">
+            <div class="flex gap-3">
+                <svg class="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="text-sm text-gray-300">Reminders will be posted to the selected channel at the specified time. Personal DM reminders are managed by users with <code class="bg-dark-700 px-1.5 py-0.5 rounded text-primary-400">/remind</code></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Reminders -->
+    <% if (activeReminders.length > 0) { %>
+        <div class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">Active Reminders</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Message</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Remind At</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Channel</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% activeReminders.forEach(reminder => {
+                            const reminderDate = new Date(reminder.remind_at);
+                            const channel = channels.find(c => c.id === reminder.channel_id);
+                        %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <div class="max-w-md truncate text-white font-medium"><%= reminder.message %></div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <div class="text-sm text-gray-400"><%= reminderDate.toLocaleDateString() %></div>
+                                    <div class="text-xs text-gray-500"><%= reminderDate.toLocaleTimeString() %></div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (channel) { %>
+                                        <span class="text-gray-400">#<%= channel.name %></span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-red/20 text-accent-red">Deleted</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deleteReminder('<%= reminder.id %>')" class="btn btn-danger btn-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <% } else { %>
+        <div class="card text-center py-12">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                </svg>
+            </div>
+            <h4 class="text-lg font-semibold text-white mb-2">No Active Reminders</h4>
+            <p class="text-gray-400 mb-4">Create a channel reminder to notify your server members at a specific time</p>
+            <button onclick="openCreateReminderModal()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create First Reminder
+            </button>
+        </div>
+    <% } %>
+</div>
+
+<!-- Create Reminder Modal -->
+<div id="create-reminder-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Create Channel Reminder</h3>
+            <button onclick="closeCreateReminderModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="create-reminder-form">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Reminder Message</label>
+                    <textarea name="message" class="form-input w-full h-24 resize-y" required placeholder="Don't forget about the team meeting!"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">When to Remind</label>
+                    <input type="text" name="when" id="reminder-when" class="form-input w-full" required placeholder="e.g., 30m, 2h, 1d, 1w">
+                    <p class="form-hint">Use: <code class="text-primary-400">30m</code> (minutes), <code class="text-primary-400">2h</code> (hours), <code class="text-primary-400">1d</code> (days), <code class="text-primary-400">1w</code> (weeks)</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Target Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'channel_id',
+                        channels: Array.from(channels.values()).filter(c => c.type === 0 || c.type === 5),
+                        selected: null,
+                        placeholder: 'Select a channel...'
+                    }) %>
+                </div>
+
+                <div id="reminder-preview" class="p-3 bg-dark-700 border border-dark-400 rounded-lg">
+                    <div class="text-xs font-semibold text-gray-500 mb-1">PREVIEW</div>
+                    <div class="text-sm text-gray-400">Enter a time to see when the reminder will trigger</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeCreateReminderModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                    Create Reminder
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openCreateReminderModal() {
+    document.getElementById('create-reminder-modal').classList.remove('hidden');
+}
+
+function closeCreateReminderModal() {
+    document.getElementById('create-reminder-modal').classList.add('hidden');
+}
+
+function parseTimeInput(timeStr) {
+    const match = timeStr.match(/^(\d+)(s|m|h|d|w)$/);
+    if (!match) return null;
+    const value = parseInt(match[1]);
+    const unit = match[2];
+    let seconds = 0;
+    switch (unit) {
+        case 's': seconds = value; break;
+        case 'm': seconds = value * 60; break;
+        case 'h': seconds = value * 60 * 60; break;
+        case 'd': seconds = value * 24 * 60 * 60; break;
+        case 'w': seconds = value * 7 * 24 * 60 * 60; break;
+    }
+    return new Date(Date.now() + seconds * 1000);
+}
+
+document.getElementById('reminder-when')?.addEventListener('input', function(e) {
+    const preview = document.getElementById('reminder-preview');
+    const remindAt = parseTimeInput(e.target.value);
+    if (remindAt) {
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        preview.innerHTML = `
+            <div class="text-xs font-semibold text-gray-500 mb-1">PREVIEW</div>
+            <div class="flex items-center gap-2 text-sm text-accent-green">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Reminder will trigger on <strong class="text-white ml-1">${remindAt.toLocaleDateString('en-US', options)}</strong>
+            </div>
+        `;
+    } else if (e.target.value) {
+        preview.innerHTML = `
+            <div class="text-xs font-semibold text-gray-500 mb-1">PREVIEW</div>
+            <div class="flex items-center gap-2 text-sm text-accent-red">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                </svg>
+                Invalid format. Use: 30m, 2h, 1d, 1w
+            </div>
+        `;
+    } else {
+        preview.innerHTML = `
+            <div class="text-xs font-semibold text-gray-500 mb-1">PREVIEW</div>
+            <div class="text-sm text-gray-400">Enter a time to see when the reminder will trigger</div>
+        `;
+    }
+});
+
+document.getElementById('create-reminder-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const whenInput = formData.get('when');
+    const remindAt = parseTimeInput(whenInput);
+
+    if (!remindAt) {
+        showToast('error', 'Invalid time format. Use: 30m, 2h, 1d, 1w');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/reminders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: formData.get('message'),
+                channel_id: formData.get('channel_id'),
+                remind_at: remindAt.toISOString()
+            })
+        });
+        if (response.ok) {
+            showToast('success', 'Reminder created');
+            closeCreateReminderModal();
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to create reminder'); }
+});
+
+async function deleteReminder(id) {
+    if (!confirm('Delete this reminder?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/reminders/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+            showToast('success', 'Reminder deleted');
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete reminder'); }
+}
+</script>

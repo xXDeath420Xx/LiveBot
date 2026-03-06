@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - CertiFried MultiTool</title>
+    <meta name="description" content="Privacy Policy for CertiFried MultiTool Discord bot. Learn how we handle your data.">
+    <meta name="theme-color" content="#a78bfa">
+    <meta property="og:title" content="Privacy Policy - CertiFried MultiTool">
+    <meta property="og:description" content="Privacy Policy for CertiFried MultiTool Discord bot.">
+    <meta property="og:image" content="/images/CertiFried.png">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-blue: #60a5fa;
+            --accent-green: #34d399;
+        }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; line-height: 1.7; }
+        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; animation: float 20s ease-in-out infinite; }
+        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #10b981, #34d399); top: -10%; right: -10%; }
+        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #7c3aed, #a78bfa); bottom: 10%; left: -10%; animation-delay: -10s; }
+        @keyframes float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, 30px); } }
+        .container { width: 100%; max-width: 900px; margin: 0 auto; padding: 0 1.5rem; }
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
+        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover { color: var(--text-primary); }
+        .nav-cta { padding: 0.5rem 1rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white !important; border-radius: 8px; font-weight: 600; font-size: 0.85rem; }
+        main { position: relative; z-index: 1; padding: 120px 0 4rem; }
+        .page-header { text-align: center; margin-bottom: 3rem; }
+        .page-header h1 { font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.75rem; }
+        .page-header .updated { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem; }
+        .privacy-badge { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(52, 211, 153, 0.15); color: var(--accent-green); border-radius: 50px; font-size: 0.85rem; font-weight: 600; }
+        .notice-box { background: linear-gradient(135deg, rgba(52, 211, 153, 0.1), rgba(96, 165, 250, 0.1)); border: 1px solid rgba(52, 211, 153, 0.3); border-left: 4px solid var(--accent-green); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 2.5rem; display: flex; align-items: center; gap: 1rem; }
+        .notice-box svg { width: 24px; height: 24px; color: var(--accent-green); flex-shrink: 0; }
+        .notice-box p { color: var(--text-secondary); font-size: 0.95rem; }
+        .legal-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: border-color 0.3s; }
+        .legal-section:hover { border-color: rgba(52, 211, 153, 0.3); }
+        .legal-section h2 { font-size: 1.35rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; }
+        .legal-section h2 svg { width: 22px; height: 22px; color: var(--accent-green); }
+        .legal-section h3 { font-size: 1.1rem; font-weight: 600; margin: 1.5rem 0 0.75rem; color: var(--text-primary); }
+        .legal-section p { color: var(--text-secondary); margin-bottom: 1rem; }
+        .legal-section ul, .legal-section ol { margin-left: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); }
+        .legal-section li { margin-bottom: 0.5rem; }
+        .legal-section a { color: var(--accent-purple); text-decoration: none; }
+        .legal-section a:hover { text-decoration: underline; }
+        .data-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+        .data-table th { background: rgba(52, 211, 153, 0.1); color: var(--text-primary); padding: 0.75rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--accent-green); }
+        .data-table td { padding: 0.75rem; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); }
+        .data-table tr:last-child td { border-bottom: none; }
+        .highlight-box { background: rgba(52, 211, 153, 0.15); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0; display: flex; align-items: center; gap: 0.75rem; color: var(--accent-green); font-weight: 500; }
+        .highlight-box svg { width: 20px; height: 20px; flex-shrink: 0; }
+        .contact-box { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem; text-align: center; margin-top: 2rem; }
+        .contact-box h3 { font-size: 1.25rem; margin-bottom: 1rem; }
+        .contact-box p { color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .contact-links { display: flex; flex-direction: column; gap: 0.75rem; align-items: center; }
+        .contact-links a { color: var(--accent-purple); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+        .contact-links a:hover { text-decoration: underline; }
+        .contact-links svg { width: 18px; height: 18px; }
+        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
+        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
+        .footer-link:hover { color: var(--accent-purple); }
+        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
+        @media (max-width: 768px) { .navbar-links { display: none; } .legal-section { padding: 1.5rem; } .data-table { font-size: 0.85rem; } .data-table th, .data-table td { padding: 0.5rem; } .footer-links { flex-direction: column; gap: 0.75rem; } }
+        /* Mobile Menu Styles */
+        .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; padding: 0.5rem; z-index: 1001; }
+        .mobile-menu-btn svg { width: 24px; height: 24px; color: var(--text-primary); }
+        .mobile-menu { position: fixed; top: 0; right: -100%; width: 280px; height: 100vh; background: rgba(11, 15, 17, 0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 1000; transition: right 0.3s ease; padding: 5rem 1.5rem 2rem; border-left: 1px solid var(--border-color); }
+        .mobile-menu.active { right: 0; }
+        .mobile-menu-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 999; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
+        .mobile-menu-overlay.active { opacity: 1; visibility: visible; }
+        .mobile-menu-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+        .mobile-menu-close svg { width: 24px; height: 24px; color: var(--text-primary); }
+        .mobile-menu-links { display: flex; flex-direction: column; gap: 0.5rem; }
+        .mobile-menu-links a { color: var(--text-secondary); text-decoration: none; font-size: 1rem; font-weight: 500; padding: 0.75rem 1rem; border-radius: 8px; transition: all 0.2s; }
+        .mobile-menu-links a:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.05); }
+        .mobile-menu-links .nav-cta { display: inline-block; text-align: center; margin-top: 1rem; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white !important; border-radius: 8px; font-weight: 600; }
+        @media (max-width: 768px) { .mobile-menu-btn { display: block; } }
+    </style>
+</head>
+<body>
+    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/" class="navbar-brand">
+                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                <span>CertiFried</span>
+            </a>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/commands">Commands</a>
+                <a href="/status">Status</a>
+                <a href="/donate">Donate</a>
+                <a href="/auth/discord" class="nav-cta">Login</a>
+            </div>
+            <button class="mobile-menu-btn" aria-label="Open menu">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu-overlay"></div>
+    <div class="mobile-menu">
+        <button class="mobile-menu-close" aria-label="Close menu">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        <div class="mobile-menu-links">
+            <a href="/">Home</a>
+            <a href="/commands">Commands</a>
+            <a href="/status">Status</a>
+            <a href="/donate">Donate</a>
+            <a href="/auth/discord" class="nav-cta">Login</a>
+        </div>
+    </div>
+
+    <main>
+        <div class="container">
+            <div class="page-header">
+                <h1>Privacy Policy</h1>
+                <p class="updated">Last Updated: <%= new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></p>
+                <span class="privacy-badge">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    Your Privacy Matters
+                </span>
+            </div>
+
+            <div class="notice-box">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <p>This Privacy Policy explains how CertiFried MultiTool collects, uses, stores, and protects your information when you use our Discord bot and dashboard.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>1. Introduction</h2>
+                <p>At CertiFried MultiTool, we are committed to protecting your privacy. We only collect the minimum data necessary to provide our services and never sell your information to third parties.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>2. Information We Collect</h2>
+                <h3>Automatically Collected Data</h3>
+                <table class="data-table">
+                    <thead><tr><th>Data Type</th><th>Purpose</th><th>Retention</th></tr></thead>
+                    <tbody>
+                        <tr><td><strong>Discord User ID</strong></td><td>Identify users for features</td><td>Until deletion request</td></tr>
+                        <tr><td><strong>Discord Server ID</strong></td><td>Store server configurations</td><td>Until bot removal</td></tr>
+                        <tr><td><strong>Username</strong></td><td>Display in commands/leaderboards</td><td>Cached temporarily</td></tr>
+                        <tr><td><strong>Channel & Role IDs</strong></td><td>Configure features</td><td>Until changed</td></tr>
+                    </tbody>
+                </table>
+                <h3>User-Provided Data</h3>
+                <ul>
+                    <li>Streamer tracking preferences and platform usernames</li>
+                    <li>Custom command configurations</li>
+                    <li>Economy and leveling data</li>
+                    <li>Form responses and ticket messages</li>
+                    <li>Moderation logs and warnings</li>
+                </ul>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg>3. How We Use Your Information</h2>
+                <ul>
+                    <li>Deliver bot features and process commands</li>
+                    <li>Send stream notifications and announcements</li>
+                    <li>Manage economy, leveling, and game systems</li>
+                    <li>Provide moderation and security tools</li>
+                    <li>Analyze usage patterns to improve features</li>
+                    <li>Prevent abuse and enforce Terms of Service</li>
+                </ul>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>4. Information Sharing</h2>
+                <div class="highlight-box">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    We will NEVER sell, rent, or trade your personal information to third parties.
+                </div>
+                <p>We integrate with third-party APIs (Twitch, YouTube, Kick, Discord) to provide features. These services have their own privacy policies. We may disclose information if required by law.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>5. Data Security</h2>
+                <ul>
+                    <li><strong>Encryption:</strong> Data in transit uses TLS/SSL</li>
+                    <li><strong>Database Security:</strong> Password-protected with restricted access</li>
+                    <li><strong>Rate Limiting:</strong> Protection against abuse</li>
+                    <li><strong>Regular Updates:</strong> Security patches applied promptly</li>
+                </ul>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>6. Data Retention</h2>
+                <table class="data-table">
+                    <thead><tr><th>Data Category</th><th>Retention Period</th></tr></thead>
+                    <tbody>
+                        <tr><td>Server configurations</td><td>Until bot removal</td></tr>
+                        <tr><td>User economy/leveling</td><td>Until deletion request</td></tr>
+                        <tr><td>Moderation logs</td><td>90 days (configurable)</td></tr>
+                        <tr><td>Command statistics</td><td>30 days (anonymized)</td></tr>
+                        <tr><td>Error logs</td><td>14 days</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>7. Your Rights</h2>
+                <ul>
+                    <li><strong>Access:</strong> Request a copy of your data</li>
+                    <li><strong>Correction:</strong> Update inaccurate information</li>
+                    <li><strong>Deletion:</strong> Request removal of your data</li>
+                    <li><strong>Opt-out:</strong> Disable specific features to reduce data collection</li>
+                </ul>
+                <p>To exercise these rights, contact us through our Discord Support Server.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>8. Children's Privacy</h2>
+                <p>CertiFried MultiTool is not intended for users under age 13. Discord requires users to be at least 13 years old. If we become aware that we have collected data from a child under 13, we will delete it promptly.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>9. Changes to This Policy</h2>
+                <p>We may update this Privacy Policy from time to time. We will notify users of significant changes through the dashboard or Discord. Your continued use after changes constitutes acceptance.</p>
+            </div>
+
+            <div class="contact-box">
+                <h3>Contact Us About Privacy</h3>
+                <p>If you have questions or wish to exercise your data rights, please contact us:</p>
+                <div class="contact-links">
+                    <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank">
+                        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
+                        Discord Support Server
+                    </a>
+                    <a href="/terms">Terms of Service</a>
+                    <a href="/">Return to Home</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-links">
+                <a href="/commands" class="footer-link">Commands</a>
+                <a href="/status" class="footer-link">Status</a>
+                <a href="/docs" class="footer-link">Documentation</a>
+                <a href="/terms" class="footer-link">Terms</a>
+                <a href="/privacy" class="footer-link">Privacy</a>
+            </div>
+            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile Menu Functionality
+        const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+        const mobileMenuClose = document.querySelector('.mobile-menu-close');
+        const mobileMenu = document.querySelector('.mobile-menu');
+        const mobileMenuOverlay = document.querySelector('.mobile-menu-overlay');
+
+        function openMobileMenu() {
+            mobileMenu.classList.add('active');
+            mobileMenuOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileMenu() {
+            mobileMenu.classList.remove('active');
+            mobileMenuOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        mobileMenuBtn.addEventListener('click', openMobileMenu);
+        mobileMenuClose.addEventListener('click', closeMobileMenu);
+        mobileMenuOverlay.addEventListener('click', closeMobileMenu);
+
+        // Close menu on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && mobileMenu.classList.contains('active')) {
+                closeMobileMenu();
+            }
+        });
+
+        // Close menu when clicking on a link
+        document.querySelectorAll('.mobile-menu-links a').forEach(link => {
+            link.addEventListener('click', closeMobileMenu);
+        });
+    </script>
+</body>
+</html>

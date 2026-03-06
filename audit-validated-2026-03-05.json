@@ -1,0 +1,3537 @@
+{
+  "generated": "2026-03-05T04:37:49.674Z",
+  "stats": {
+    "validated": 176,
+    "flagged": 0,
+    "reasonSources": {
+      "image_review": 98,
+      "gfx_channel": 2,
+      "content_derived": 76
+    }
+  },
+  "entries": [
+    {
+      "user_id": "1334454587490439182",
+      "username": "the best cream",
+      "resolvedUsername": "thebestcream",
+      "reason": "GFX/engagement scam DM - sent unsolicited DM with engagement bait script ('If $3000 was deposited...')",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1478083925925695610\",\"https://cdn.discordapp.com/attachments/899865437267963924/1478083925673902280/image.png?ex=69a9bf6d&is=69a86ded&hm=81b4bf944c38c7eb3725ee79f3ea6fa2e29f0a9e0ccc4bb248dfeb71ff47d0ee&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "742274334785273974",
+      "username": "CherrySnipes",
+      "resolvedUsername": "cherrysnipes_1",
+      "reason": null,
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1473965775139242171\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "474780704907984906",
+      "username": "Emery",
+      "resolvedUsername": "emery_.24",
+      "reason": null,
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1461105766323851458\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1379615381572030516",
+      "username": "Vanzyn🙄",
+      "resolvedUsername": "vaneassarichardson_00488",
+      "reason": "Fake giveaway scam - posted fake MacBook Air giveaway with @everyone ping to bait DMs",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1450642219668078767\",\"https://cdn.discordapp.com/attachments/899865437267963924/1450642219689054390/image.png?ex=69aa1c58&is=69a8cad8&hm=22c60ead37c570fb25ce1a872ef206863f937f9a5b527b4c8ec9e0a2b3733fd3&\"]",
+      "reporter_id": "508695212554715177",
+      "reporter_name": "collectonian",
+      "reportCount": 1,
+      "reporters": [
+        "collectonian"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1230836294926733345",
+      "username": "𝐀𝐏𝐄𝐗 𝐅𝐔𝐒𝐈𝐎𝐍 𝐏𝐑𝐎𝐌𝐎",
+      "resolvedUsername": "apex_fusion",
+      "reason": "Unsolicited friend request + self-promotion spam with suspicious link (dub.sh)",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1443991201329184859\",\"https://cdn.discordapp.com/attachments/899865437267963924/1443991201257885878/image.png?ex=69aa4dda&is=69a8fc5a&hm=b8f5ea53d60ffa8a9a24975f96ae7332d2993992a36b586840f6c077d9a83112&\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "400202288028844032",
+      "username": "fatmanztv",
+      "resolvedUsername": "fatmanztv",
+      "reason": "Social engineering scam - fake 'I accidentally reported you' DM to extract personal info",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1439337084761411765\",\"https://cdn.discordapp.com/attachments/899865437267963924/1439337084388114534/image.png?ex=69a9da1e&is=69a8889e&hm=79efd2386c05fb61d2882314ec15e1fc758bc66daa564512105b49081160457c&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "999954938786488351",
+      "username": "Anne",
+      "resolvedUsername": "annesoler28_",
+      "reason": "Fake giveaway scam - posted fake MacBook Air 2020 giveaway with @everyone ping (same template as other giveaway scams)",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1436521183150604389\",\"https://cdn.discordapp.com/attachments/899865437267963924/1436521182613471394/image.png?ex=69aa279b&is=69a8d61b&hm=6d5774f4dd8a4efe10a253fc4f0a1ba949d3379e536984a5b413cf5bc4c85628&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "663325527586635797",
+      "username": "𝔉𝔬xy!",
+      "resolvedUsername": "foxyslyyy_",
+      "reason": "Unsolicited friend request with no prior server engagement",
+      "category": "other",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1396157987105538148\",\"https://cdn.discordapp.com/attachments/899865437267963924/1396157986736701493/Captura_de_pantalla_2025-07-19_125125.png?ex=69aa4fb3&is=69a8fe33&hm=7d311fe55b538be72d5e5807da57312c72a4f5e649ebaa89a0a6e3f903d30517&\"]",
+      "reporter_id": "742452227104571414",
+      "reporter_name": "foxvann",
+      "reportCount": 1,
+      "reporters": [
+        "foxvann"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1209828735587586132",
+      "username": "Brandon Larned",
+      "resolvedUsername": "aseagullow.",
+      "reason": null,
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1385366950779289681\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "337872932372086784",
+      "username": "Jokemern",
+      "resolvedUsername": "jokemern",
+      "reason": "Unsolicited indie game promotion/self-promotion - posted YouTube link and game project seeking playtesters in server",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1344093026343059457\",\"https://cdn.discordapp.com/attachments/899865437267963924/1344093026443591774/image.png?ex=69aa15ad&is=69a8c42d&hm=982a99a0ae755425816c5d6595e050989f43f006290a8d6e9b8a5329da9f3b1f&\"]",
+      "reporter_id": "805389643801034762",
+      "reporter_name": "wrench105",
+      "reportCount": 1,
+      "reporters": [
+        "wrench105"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1060061384651571250",
+      "username": "deleted_user_20ce59d5dd15",
+      "resolvedUsername": "deleted_user_20ce59d5dd15",
+      "reason": "Phishing/social engineering - 'accidentally reported you' scam DM, victim lost $970 via hacked payment link",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1329067142531907676\",\"https://cdn.discordapp.com/attachments/899865437267963924/1329067142468997181/image.png?ex=69aa21fb&is=69a8d07b&hm=5cdef4a12db44456f55b29af109f4f895f1d6bd2b24646e0a79e16623c7ee3a8&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1321942670117048362",
+      "username": "deleted_user_1bd133ef9612",
+      "resolvedUsername": "deleted_user_1bd133ef9612",
+      "reason": "Impersonation of a Twitch Partner / Phishing attempts Impersonation of a Twitch Partner / Phishing attempts",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1322680007910359050\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 2,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "838870528394788904",
+      "username": "deleted_user_8ca1b1e91081",
+      "resolvedUsername": "deleted_user_8ca1b1e91081",
+      "reason": "Phishing - fake 'accidentally reported you' story with forged Discord Trust & Safety email screenshot",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1291725789494116424\",\"https://cdn.discordapp.com/attachments/899865437267963924/1291725789280210997/Screenshot_20241004_123622_Discord.jpg?ex=69aa13a3&is=69a8c223&hm=173511ace10d4d69dfe961842b15c19f0723ab2d324fd8c919a5012cab024cb8&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1168964497680109710",
+      "username": "deleted_user_7bbb318d0e89",
+      "resolvedUsername": "deleted_user_7bbb318d0e89",
+      "reason": "Unsolicited spam DM - user 'Emmygreat' contacted by spam merchants (2 blocked messages), reported and blocked",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1262388118422552597\",\"https://cdn.discordapp.com/attachments/899865437267963924/1262388118196191353/image.png?ex=69aa224d&is=69a8d0cd&hm=b72064d9d71106ffa8f6a501ba9957ea38099f40f38a40282c16a8c1fd851de3&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "962489445259571300",
+      "username": "deleted_user_47a0384bbf8e",
+      "resolvedUsername": "deleted_user_47a0384bbf8e",
+      "reason": "NSFW/adult content spam - profile bio contains explicit OnlyFans link with sexual solicitation",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1260323422274326548\",\"https://cdn.discordapp.com/attachments/899865437267963924/1260323422098161706/Screenshot_20240709-215223.png?ex=69a9dfa7&is=69a88e27&hm=37fde7e84624cd1c5cb0c7c5563953435365b8987bc1d9ed22344240df14858c&\"]",
+      "reporter_id": "805389643801034762",
+      "reporter_name": "wrench105",
+      "reportCount": 1,
+      "reporters": [
+        "wrench105"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1252296565050179736",
+      "username": "deleted_user_2dc2ca99fca5",
+      "resolvedUsername": "deleted_user_2dc2ca99fca5",
+      "reason": "Fake Nitro scam bot - sent fake '$10 Nitro Gift' DM via 'Epic Giveaways' bot app with phishing link to steal account credentials",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1257515800928190485\",\"https://cdn.discordapp.com/attachments/899865437267963924/1257515800751898624/image.png?ex=69aa34da&is=69a8e35a&hm=f46a3bb7d8f59bd99824ee7e352148e197f9340b6d955286ae01844c68a56394&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "344360533090238475",
+      "username": "i420Guy",
+      "resolvedUsername": "i420guy",
+      "reason": "NSFW spam raid - mass-posted '18+ Teen Girls and onlyfans leaks' with discord.gg link and @everyone ping across multiple channels",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1256452609657667635\",\"https://cdn.discordapp.com/attachments/899865437267963924/1256452609485836318/image.png?ex=69aa4b2d&is=69a8f9ad&hm=2007f892870e440702a73b15b5f7e1d159e438c2c066716bfc54f2619b08e612&\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 2,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1176584054418702407",
+      "username": "Emma Bella",
+      "resolvedUsername": "emmabella.14",
+      "reason": "Unsolicited GFX spam DM - sent friend request and pitched graphic design/animation commissions to random users",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1242948105863827527\",\"https://cdn.discordapp.com/attachments/899865437267963924/1242948106035662938/Skjermbilde_2024-05-22_230606.png?ex=69a9f1a1&is=69a8a021&hm=dbd1a8a86c40805502a796ac06e368b48683df5ec7f1728713c1b93912777d95&\"]",
+      "reporter_id": "784142127171895306",
+      "reporter_name": "sheepwego",
+      "reportCount": 1,
+      "reporters": [
+        "sheepwego"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1234980523068100711",
+      "username": "Hazel Vtuber",
+      "resolvedUsername": "hazelvtuber0265",
+      "reason": null,
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1238247700294799420\"]",
+      "reporter_id": "508695212554715177",
+      "reporter_name": "collectonian",
+      "reportCount": 1,
+      "reporters": [
+        "collectonian"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "826176197095719032",
+      "username": "deleted_user_82c97d44e0e0",
+      "resolvedUsername": "deleted_user_82c97d44e0e0",
+      "reason": "NSFW spam raid - mass-posted '18+ Teen Girls and onlyfans leaks' with discord.gg link and @everyone ping across multiple channels (user 'kalipo__')",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1234480592796782622\",\"https://cdn.discordapp.com/attachments/899865437267963924/1234480592633069568/kalipo.png?ex=69aa1ee4&is=69a8cd64&hm=4f1c99c267ec06e926a8bb27cd298fdd6587782c8aa2d374e38a4a8b033b1e8c&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "494654464259653645",
+      "username": "deleted_user_30237338248e",
+      "resolvedUsername": "deleted_user_30237338248e",
+      "reason": "Social engineering/phishing - fake 'I accidentally reported you' scam with forged Discord support ticket claiming account suspension and IP block",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1230933291922882721\",\"https://cdn.discordapp.com/attachments/899865437267963924/1230933291700326591/Screenshot_20240419_182040_Discord.jpg?ex=69a9bd76&is=69a86bf6&hm=bf5b82f525b05a21d806279abeb8e7665a8d4784c3c68ef49c9ea21592622e9f&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1115591574479458421",
+      "username": "Garcia21",
+      "resolvedUsername": "garcia6544",
+      "reason": "AutoMod flagged unsolicited self-promotion of DND art commissions posted in fan-arts channel, triggered 'Block Custom' rule for commission spam",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1230211328120193104\",\"https://cdn.discordapp.com/attachments/899865437267963924/1230211327231000727/Screenshot_20240417-182559_Discord.jpg?ex=69a9c014&is=69a86e94&hm=2b6712ca399ec03159c2e58e94a730a60bf512300a652d1b4a9720e3905653f6&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1230211327574806649/Screenshot_20240417-182605_Discord.jpg?ex=69a9c014&is=69a86e94&hm=2962df1da0ce10fc247ea29329e18c15f4a6ddc98d75001d9208a032d70e50cf&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1230211327880986788/IMG_20240418_012835.jpg?ex=69a9c014&is=69a86e94&hm=ed8143c81b5426e7b1f148b65428b69655e95c240154ecae9752436f115d2544&\"]",
+      "reporter_id": "1049686866414280734",
+      "reporter_name": "yourwelshprincess",
+      "reportCount": 1,
+      "reporters": [
+        "yourwelshprincess"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "408995145657221140",
+      "username": "deleted_user_ad216b665105",
+      "resolvedUsername": "deleted_user_ad216b665105",
+      "reason": "Sent a fake Discord Trust & Safety phishing message claiming an 'Illegal Purchase' report, directing victim to contact a fraudulent email and Discord ID to resolve a fabricated account suspension",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1228745533154398308\",\"https://cdn.discordapp.com/attachments/899865437267963924/1228745532734705735/image.png?ex=69a9b0f3&is=69a85f73&hm=be1c665f3bcc9fe2d38b2a4a9a799ee4e44de53000861c4e37d05a954fe44890&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1228745532969844887/image.png?ex=69a9b0f4&is=69a85f74&hm=822f6a35c4f12537e11766514e2f51c6f52bbbba26a92df9b2778f37b6ea94f5&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1201129044121485384",
+      "username": "Vivian Grace",
+      "resolvedUsername": "viviangrace0607_01490",
+      "reason": "Unsolicited promotion spam DM - sent friend request and pitched fake YouTube channel promotion plan to content creators",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1227230327575941310\",\"https://cdn.discordapp.com/attachments/899865437267963924/1227230327345381456/image.png?ex=69aa1c8e&is=69a8cb0e&hm=e978f0e80972f131595cdccf63fe677301ade9fd48a1f97380097e6f0f24b4df&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "485930298412892180",
+      "username": "jisi",
+      "resolvedUsername": "jisii",
+      "reason": "Link spammer for virus infected adobe",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1224451637569913074\"]",
+      "reporter_id": "132995743177768961",
+      "reporter_name": "arturiafayth",
+      "reportCount": 1,
+      "reporters": [
+        "arturiafayth"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "489882016809091072",
+      "username": "jamie",
+      "resolvedUsername": "jades72",
+      "reason": "Phishing link spammer / hijacked account",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1224022272130547712\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1178783723181850654",
+      "username": "❈  🎀  𝒾𝓃𝒶𝓎𝒶𝒜𝓋𝒶  🎀  ❈",
+      "resolvedUsername": "inaya_ava3",
+      "reason": "Gfx artist / spammer",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1223487195021836328\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1146565855786836038",
+      "username": "⋆ strike ⋆",
+      "resolvedUsername": "inaya_ava10",
+      "reason": "Gfx artist / spammer",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1223487195021836328\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "825441611135713290",
+      "username": "nightwing123245",
+      "resolvedUsername": "nightwing123245",
+      "reason": "Discord bot spamming for $50 steam cards",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1222685218188562558\"]",
+      "reporter_id": "630887355414478878",
+      "reporter_name": "maple_sedai",
+      "reportCount": 1,
+      "reporters": [
+        "maple_sedai"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "181498520824578048",
+      "username": "deleted_user_b36eff2cf389",
+      "resolvedUsername": "deleted_user_b36eff2cf389",
+      "reason": "Compromised account - posted fake $50 Steam gift card scam with phishing link and @everyone ping in unrelated channel",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1205833703016628264\",\"https://cdn.discordapp.com/attachments/899865437267963924/1205833702660120586/Screenshot_20240210-061136_Discord.jpg?ex=69aa0de6&is=69a8bc66&hm=8366a7c35c431c923f69edcb86574f96b3007fb962b01b5a8f9920db91014ec8&\"]",
+      "reporter_id": "462315941045469211",
+      "reporter_name": "seelenmorder",
+      "reportCount": 1,
+      "reporters": [
+        "seelenmorder"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "901686554030903328",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "The Valhiem Video Game Discord got hacked through one their bots. Standard do not click on links applies. Likely only relevant to some people here but just in case",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1201590146231975936\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "306752459399888896",
+      "username": "Harrah",
+      "resolvedUsername": "harrascasinohotel",
+      "reason": "Discord This person keeps joining a friend's discord and posting porn stuff. They keep getting banned and he's had to lock his discord server down for 24 hours (twice now) to prevent new people fro...",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1200560161274728530\"]",
+      "reporter_id": "630887355414478878",
+      "reporter_name": "maple_sedai",
+      "reportCount": 1,
+      "reporters": [
+        "maple_sedai"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1168309521039499378",
+      "username": "JACK ✔",
+      "resolvedUsername": "jackey0_0",
+      "reason": "Unsolicited GFX spam DM - sent friend request to strangers and pitched art commissions with portfolio",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1199742815207440434\",\"https://cdn.discordapp.com/attachments/899865437267963924/1199742815027077150/Screenshot_20240124-153504_Discord.jpg?ex=69aa4ed1&is=69a8fd51&hm=16922c9bb4815cbd02bab88e8075caa00c36ae069d3a9422ded1aa93e6f48006&\"]",
+      "reporter_id": "1049686866414280734",
+      "reporter_name": "yourwelshprincess",
+      "reportCount": 1,
+      "reporters": [
+        "yourwelshprincess"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "492140129855733787",
+      "username": "ShaubyP",
+      "resolvedUsername": "shaubyp",
+      "reason": "UserID Posting links to spam/exploit Discords (another \"OnlyFans\" one) Wasn't able to grab a screenshot before another moderator deleted the spam message.",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1199351653778866206\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1009967945407012884",
+      "username": "Tizzy_ProExpert✅💛",
+      "resolvedUsername": "tizzy_proexpert",
+      "reason": "Twitch promotion scam DM - pitched fake 'Twitch Promotional Campaign' claiming to send channel info to 5000+ email addresses for growth",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1198936468526215250\",\"https://cdn.discordapp.com/attachments/899865437267963924/1198936468215844954/image.png?ex=69aa02d9&is=69a8b159&hm=20d773693a88b3fc8e44479c94e39d2a05e6e44dc7c1d22a8628329b1b34e3e1&\"]",
+      "reporter_id": "741558619547500615",
+      "reporter_name": "shelkie",
+      "reportCount": 1,
+      "reporters": [
+        "shelkie"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "792417931425218580",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "unless you give it away for a reason, there is no such thing as giving free stuff away on request, mainly not from random people",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1194146847099469824\"]",
+      "reporter_id": "322722087070466048",
+      "reporter_name": "vpsdata",
+      "reportCount": 1,
+      "reporters": [
+        "vpsdata"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1161458790051364875",
+      "username": "deleted_user_188d6d5e8250",
+      "resolvedUsername": "deleted_user_188d6d5e8250",
+      "reason": "Unsolicited GFX spam DM - sent friend request as 'Amelia' offering digital art commissions at 'fair prices' with portfolio link",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1193911890238251068\",\"https://cdn.discordapp.com/attachments/899865437267963924/1193911889437130864/IMG_4541.png?ex=69aa3058&is=69a8ded8&hm=f841ecdf0679719e4a1078a0ef09aaf241d75dcaace227b0f9ac8e725e63c14b&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1193911889948848178/IMG_4539.png?ex=69aa3058&is=69a8ded8&hm=e12759cfe456797a3aade3ff95031b86e630ceed4d3bac2f183de26c45fbf19c&\"]",
+      "reporter_id": "1049686866414280734",
+      "reporter_name": "yourwelshprincess",
+      "reportCount": 1,
+      "reporters": [
+        "yourwelshprincess"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1193495431733334098",
+      "username": "rona",
+      "resolvedUsername": "rona0620",
+      "reason": "Begging/soliciting - DMed asking for Xbox Game Pass code from Discord gifts, no deception involved",
+      "category": "other",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1193868470379610192\",\"https://cdn.discordapp.com/attachments/899865437267963924/1193868470199271495/image.png?ex=69aa07e8&is=69a8b668&hm=c12b9bd55d339c4407c81d2b449bd8626b04317fd13f3f4923a32c3ef8e4a63c&\"]",
+      "reporter_id": "322722087070466048",
+      "reporter_name": "vpsdata",
+      "reportCount": 1,
+      "reporters": [
+        "vpsdata"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1136633667490426960",
+      "username": "Leeshami",
+      "resolvedUsername": "leeshami",
+      "reason": "Twitch promotion scam DM - pitched fake channel promotion to affiliate within 10 days with follower/viewer growth claims",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1192903679297208340\",\"https://cdn.discordapp.com/attachments/899865437267963924/1192903679003594802/image.png?ex=69a9d120&is=69a87fa0&hm=be5a49b2e4669efb992ae146a4c53df14abf9ffdbb0f414240a80044c3248b8e&\"]",
+      "reporter_id": "322722087070466048",
+      "reporter_name": "vpsdata",
+      "reportCount": 1,
+      "reporters": [
+        "vpsdata"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1180498766403477559",
+      "username": "Mr dice",
+      "resolvedUsername": "mrdice0421",
+      "reason": "Financial scam - posted in general chat offering to 'help earn $40k within 84 hours' for 10% cut, with Telegram link (blocked by AutoMod)",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1184090813446230086\",\"https://cdn.discordapp.com/attachments/899865437267963924/1184090813031006258/IMG_20231212_072948.jpg?ex=69aa0e41&is=69a8bcc1&hm=5a619dcaa136cd549d69dfb718d6a5b448155108e9623143a2f054f4f7ea9504&\"]",
+      "reporter_id": "1049686866414280734",
+      "reporter_name": "yourwelshprincess",
+      "reportCount": 1,
+      "reporters": [
+        "yourwelshprincess"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1141822719604834466",
+      "username": "N4S",
+      "resolvedUsername": "n4sclan",
+      "reason": "Racial slur spam/raid - spammed the N-word repeatedly in chat after being told it was inappropriate",
+      "category": "harassment",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1182377057703972965\",\"https://cdn.discordapp.com/attachments/899865437267963924/1182377057498439780/image.png?ex=69a9c0f2&is=69a86f72&hm=1e78f64ef1479d96a18fbb01e0dfcc2dfc26a281fb1453efcd0d7127a0f45ca0&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "642864429943488515",
+      "username": "deleted_user_6bd6db41297b",
+      "resolvedUsername": "deleted_user_6bd6db41297b",
+      "reason": "Phishing/social engineering - fake 'I accidentally reported your profile for Scamming' DM with forged Discord support ticket email",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1181291098463817848\",\"https://cdn.discordapp.com/attachments/899865437267963924/1181291098195370034/image.png?ex=69a9c211&is=69a87091&hm=f9c5ec57d250c4d4f8c79a8d1fb3dfe3399a2260143fdfd6508b44139f4ecb81&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1180594549509328917",
+      "username": "deleted_user_04313d34aad7",
+      "resolvedUsername": "deleted_user_04313d34aad7",
+      "reason": "Your standard oops i reported your steam scammer",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1180612195470549023\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1133074560082788473",
+      "username": "Tracy Falcon",
+      "resolvedUsername": "tracyfalcon",
+      "reason": "Unsolicited GFX spam DM - sent friend request and pitched graphic art services (OC, PFP, banners, emotes, overlays, logos)",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1178136513243000973\",\"https://cdn.discordapp.com/attachments/899865437267963924/1178136513062653962/image.png?ex=69aa25a1&is=69a8d421&hm=188ada4326166c9c5cf1d674b4159cb83bf4875dc52e6400cce0de68e89cb2d2&\"]",
+      "reporter_id": "310550359233921035",
+      "reporter_name": "deathgirl1",
+      "reportCount": 1,
+      "reporters": [
+        "deathgirl1"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "965779061316149301",
+      "username": "deleted_user_1e189a012b6a",
+      "resolvedUsername": "deleted_user_1e189a012b6a",
+      "reason": "Unsolicited DM selling fraudulent 'Lifetime Spotify Premium' via sellpass.io link - legitimate lifetime subscriptions do not exist",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1175117712540844052\",\"https://cdn.discordapp.com/attachments/899865437267963924/1175117712284975254/image.png?ex=69a9b627&is=69a864a7&hm=b43a175e56b9b05d1642d56dc4a4762a04daef615dd13d660d16286fd4c55694&\"]",
+      "reporter_id": "310550359233921035",
+      "reporter_name": "deathgirl1",
+      "reportCount": 1,
+      "reporters": [
+        "deathgirl1"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "440108203741544459",
+      "username": "N77356S25471",
+      "resolvedUsername": "n77356s25471",
+      "reason": "Suspicious link spam DM - sent unsolicited DM asking to 'test a game' with blogspot link (potential malware/token grabber)",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1167855786559545485\",\"https://cdn.discordapp.com/attachments/899865437267963924/1167855786349826249/image.png?ex=69aa51b5&is=69a90035&hm=485cb6279687a6e3432e684de2270e94491a11b4c887992eeecf3b9520c6083f&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1155143893566881866",
+      "username": "Melissa_Rob.",
+      "resolvedUsername": "melissa_rob._94796",
+      "reason": "GFX spammer - profile identifies as freelance artist/graphic designer/animator with open commissions (reported for unsolicited outreach)",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1163907430095270059\",\"https://cdn.discordapp.com/attachments/899865437267963924/1163907429906522274/image.png?ex=69a9cc43&is=69a87ac3&hm=f559a891a6530a2db60cd9ed95fbfa6c829a89e7f877653d4a895d4241b48e6f&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1146935829156085822",
+      "username": "Stella Cox",
+      "resolvedUsername": "stellacox110",
+      "reason": "Unsolicited GFX spam DM - sent friend request to strangers and pitched graphic design services (logos, banners, overlays, emotes)",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1162500136832872538\",\"https://cdn.discordapp.com/attachments/899865437267963924/1162500133959766096/image.png?ex=69a9f39e&is=69a8a21e&hm=f7cc7725d612c93c3f901e19676d62d199688be729d3b5fd1cee04a4a8559b63&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "997363093795504130",
+      "username": "rockstargee20",
+      "resolvedUsername": "rockstargee20",
+      "reason": "Unsolicited GFX spam DM - sent friend request as 'Gilmore' and DMed asking about channel, pitching graphics/SEO services",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1159228945640718367\",\"https://cdn.discordapp.com/attachments/899865437267963924/1159228945376493578/image.png?ex=69a9ea96&is=69a89916&hm=b43208ad3b0b1dafbe56aa3759568c278bc17431312089ee17070403ee171c52&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "371673210917355522",
+      "username": "Elizia Olsen",
+      "resolvedUsername": "elisa_._.0_",
+      "reason": "Unsolicited GFX spam DM - messaged random users offering art commissions, claimed to need 'emergency commissions to pay home rent'",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1155321362282451034\",\"https://cdn.discordapp.com/attachments/899865437267963924/1155321361980477461/Screenshot_135.png?ex=69aa33dd&is=69a8e25d&hm=6be7659f0a875c5f5eb71d3b7c29d830249dae30a89c57875e45aa1d8065a9c3&\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "946102915322478602",
+      "username": "TheBladeBoy",
+      "resolvedUsername": "thebladeboy",
+      "reason": "Mass-sending friend requests, trolling to pressure acceptance, and DMing 'Blocked' to anyone who declines; reported across multiple servers",
+      "category": "harassment",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1146419530873180221\",\"https://cdn.discordapp.com/attachments/899865437267963924/1146419530306957332/IMG_20230830_200439.jpg?ex=69aa1e23&is=69a8cca3&hm=1ed1f1d3955a8f845b29cb9a5f6950f366c8b2247dc2e14ff6eab7750fdb0fcd&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1146419530596360305/IMG_20230830_200412.jpg?ex=69aa1e23&is=69a8cca3&hm=746873feaf7265697cff954634c69672d7bcd1f41234b91b9dffe1dd852584eb&\"]",
+      "reporter_id": "1049686866414280734",
+      "reporter_name": "yourwelshprincess",
+      "reportCount": 1,
+      "reporters": [
+        "yourwelshprincess"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1090348903276220418",
+      "username": "artist mary",
+      "resolvedUsername": "artistmary.",
+      "reason": "Artist spammer Artist spammer",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1146184430776492082\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 2,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "968207642227007508",
+      "username": "Deleted User 91c2ea71",
+      "resolvedUsername": "Deleted User 91c2ea71",
+      "reason": "Sent a fake Discord Nitro gift DM impersonating a 'Nitro' bot account, claiming the user won free Nitro with a fraudulent 'Claim' link",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1141818364738687016\",\"https://cdn.discordapp.com/attachments/899865437267963924/1141818364503793735/image.png?ex=69a9dbb8&is=69a88a38&hm=e685e64dbda05711bb541000d4978dea4040b148c7b110b0b8c7f7413d82c9bf&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "268480189065986059",
+      "username": "Draco",
+      "resolvedUsername": "dracostarscale",
+      "reason": "User profile screenshot documented for moderation record - no direct evidence of harassment visible in image",
+      "category": "other",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1139325045630578788\",\"https://cdn.discordapp.com/attachments/899865437267963924/1139325044745580564/image-2.png?ex=69aa0422&is=69a8b2a2&hm=46c5f9b6223c40a469bb1d5366abb9bdc1fb5d2ee5400db890750fe6b2de51a5&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1139325045047558234/Screenshot_20230810_111359_X.png?ex=69aa0422&is=69a8b2a2&hm=fe6d62c08ab69becf620b52e87fbd1b4786cae638dfbc87b6ca2ad53dc8ff4a1&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1139325045336985612/IMG_0282.png?ex=69aa0422&is=69a8b2a2&hm=31d673249696c6a74cc68acd39e9183ff677c3b3e3da90686bb26b0ee41b0553&\"]",
+      "reporter_id": "598218835870351405",
+      "reporter_name": "littgame83",
+      "reportCount": 1,
+      "reporters": [
+        "littgame83"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1136718796388827159",
+      "username": "emicakei125",
+      "resolvedUsername": "emicakei",
+      "reason": "soliciting art in DM after unsolicited friend request.",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1138560622229991474\"]",
+      "reporter_id": "462315941045469211",
+      "reporter_name": "seelenmorder",
+      "reportCount": 1,
+      "reporters": [
+        "seelenmorder"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1130778939606962206",
+      "username": "deleted_user_f09036e6dbfd",
+      "resolvedUsername": "deleted_user_f09036e6dbfd",
+      "reason": "Salony Discord ID: '' Steam scammer",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1134956777537020047\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1001440126171361382",
+      "username": "Nickey",
+      "resolvedUsername": "nickeyyt",
+      "reason": "DMed another member a malicious file disguised as a school assignment which turned out to be malware; reported across multiple servers",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1122232880823804075\",\"https://cdn.discordapp.com/attachments/899865437267963924/1122232880689582140/Screenshot_20230624_193046_Discord.jpg?ex=69a9cc50&is=69a87ad0&hm=89f2b40d4dc480a0ed51308d8ac5c920567595f355044ea75223ce849dd18d18&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "907417639209566248",
+      "username": "Onlion",
+      "resolvedUsername": "onlion.",
+      "reason": "No shared servers / no shared friends: Friend request out of the blue. Check out their profile: \"Artista y Productor\" appears on all pages Seeing as to me not sharing any servers / friends with thi...",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1120498180539305995\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1086295068442378291",
+      "username": "deleted_user_096bff3cd303",
+      "resolvedUsername": "deleted_user_096bff3cd303",
+      "reason": "Discord IDs: , Known doxxer and Twitch viewbotter. Their local authorities have been notified Discord IDs: , Known doxxer and Twitch viewbotter. Their local authorities have been notified",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1116409119130271754\",\"https://discord.com/channels/889550752123613194/899865437267963924/1110629416582787133\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 3,
+      "reporters": [
+        "orsokuma",
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "557876807144046596",
+      "username": "Isra84",
+      "resolvedUsername": "isra84_",
+      "reason": "Discord IDs: , Known doxxer and Twitch viewbotter. Their local authorities have been notified",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1116409119130271754\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "967023695589675039",
+      "username": "Subeta",
+      "resolvedUsername": "subeta9906",
+      "reason": "Used alts to share doxbin links and YouTube videos targeting community members, doxxing campaign",
+      "category": "harassment",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1111998224186748958\",\"https://cdn.discordapp.com/attachments/899865437267963924/1111998223255605278/IMG_20230527_201740.jpg?ex=69aa234c&is=69a8d1cc&hm=b740232e431ae0242d7178b82fdc92998dfba0537150a039aea15c6830154bf6&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1111998223540826175/IMG_20230527_201519.jpg?ex=69aa234c&is=69a8d1cc&hm=5464d82168f27fcf80f459957407c0da6951bedf9ef82a6c8e68e1793a563321&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1111998223767322684/IMG_20230527_140703.jpg?ex=69aa234c&is=69a8d1cc&hm=43560e41e1e77d20dd06af42673b57824561beb06105f0986c0d73d59c7e1441&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1111998223977025536/IMG_20230527_140749.jpg?ex=69aa234c&is=69a8d1cc&hm=be6a84d8127ede173a88d3d2a071391d3a70179927e5c63884ec4ecde01db4c4&\"]",
+      "reporter_id": "1049686866414280734",
+      "reporter_name": "yourwelshprincess",
+      "reportCount": 1,
+      "reporters": [
+        "yourwelshprincess"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "164909914374930434",
+      "username": "Sera",
+      "resolvedUsername": "yzrch",
+      "reason": "Used alt accounts to enter servers and share doxbin links and YouTube video targeting community members, claimed to 'work with law enforcement' while spreading doxxed personal information",
+      "category": "harassment",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1111998224186748958\",\"https://cdn.discordapp.com/attachments/899865437267963924/1111998223255605278/IMG_20230527_201740.jpg?ex=69aa234c&is=69a8d1cc&hm=b740232e431ae0242d7178b82fdc92998dfba0537150a039aea15c6830154bf6&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1111998223540826175/IMG_20230527_201519.jpg?ex=69aa234c&is=69a8d1cc&hm=5464d82168f27fcf80f459957407c0da6951bedf9ef82a6c8e68e1793a563321&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1111998223767322684/IMG_20230527_140703.jpg?ex=69aa234c&is=69a8d1cc&hm=43560e41e1e77d20dd06af42673b57824561beb06105f0986c0d73d59c7e1441&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1111998223977025536/IMG_20230527_140749.jpg?ex=69aa234c&is=69a8d1cc&hm=be6a84d8127ede173a88d3d2a071391d3a70179927e5c63884ec4ecde01db4c4&\"]",
+      "reporter_id": "1049686866414280734",
+      "reporter_name": "yourwelshprincess",
+      "reportCount": 1,
+      "reporters": [
+        "yourwelshprincess"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "649021681398054922",
+      "username": "Bogo",
+      "resolvedUsername": "mfbogo",
+      "reason": null,
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1110629416582787133\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "980719203176816662",
+      "username": "deleted_user_b1ad0c7c4b8c",
+      "resolvedUsername": "deleted_user_b1ad0c7c4b8c",
+      "reason": "randomly friended me, never heard or seen them before",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1110629416582787133\",\"https://discord.com/channels/889550752123613194/899865437267963924/1110627249276858508\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 2,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "459281050435059713",
+      "username": "everything is fake",
+      "resolvedUsername": "abitterpain",
+      "reason": null,
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1110629416582787133\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "229660076359680000",
+      "username": ".",
+      "resolvedUsername": "578437543903",
+      "reason": null,
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1110629416582787133\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "985306773529456641",
+      "username": "Lilly_Cooper",
+      "resolvedUsername": "originallillycooper",
+      "reason": "Trying to sell art to a mate of mine: Charlotte_charles#4128 , Lilly_Cooper#7144 ID's: ,",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1109260339457036319\"]",
+      "reporter_id": "784142127171895306",
+      "reporter_name": "sheepwego",
+      "reportCount": 1,
+      "reporters": [
+        "sheepwego"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1034587247468617759",
+      "username": "charlotte_charles",
+      "resolvedUsername": "charlotte_charles",
+      "reason": "Trying to sell art to a mate of mine: Charlotte_charles#4128 , Lilly_Cooper#7144 ID's: ,",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1109260339457036319\"]",
+      "reporter_id": "784142127171895306",
+      "reporter_name": "sheepwego",
+      "reportCount": 1,
+      "reporters": [
+        "sheepwego"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1048338889955364934",
+      "username": "avaadom",
+      "resolvedUsername": "avaadom",
+      "reason": null,
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1103832522787410001\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1094379004838019264",
+      "username": "Nicholas_48",
+      "resolvedUsername": "nicholas_48_",
+      "reason": "Spammed multiple channels with crypto scam messages promising $10,000+ in 72 hours from crypto market, with Telegram link; blocked by AutoMod",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1098986642800377917\",\"https://cdn.discordapp.com/attachments/899865437267963924/1098986642569703554/image.png?ex=69aa4351&is=69a8f1d1&hm=11e388577a92a79fdd1ff522fc5088800384be7f0b200acae9b8ba0d5c7dbd56&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "629291784861777920",
+      "username": "Wish Wonders (Ori)",
+      "resolvedUsername": "ori_boardwalk",
+      "reason": "Ori Boardwalk Main acct: Alt acct: -Creepy, stalker like behavior and continuously sending unsolicited DMs after multiple requests from admins/mods to cease and desist",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1098828266023960616\"]",
+      "reporter_id": "357266048770244628",
+      "reporter_name": "demoniarae",
+      "reportCount": 1,
+      "reporters": [
+        "demoniarae"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "857524119347134484",
+      "username": "deleted_user_ad3e78402ec5",
+      "resolvedUsername": "deleted_user_ad3e78402ec5",
+      "reason": "Ori Boardwalk Main acct: Alt acct: -Creepy, stalker like behavior and continuously sending unsolicited DMs after multiple requests from admins/mods to cease and desist",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1098828266023960616\"]",
+      "reporter_id": "357266048770244628",
+      "reporter_name": "demoniarae",
+      "reportCount": 1,
+      "reporters": [
+        "demoniarae"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "922762407124828202",
+      "username": "USER",
+      "resolvedUsername": "user9997979",
+      "reason": "DM conversation showing user initiating unsolicited contact, appears to be beginning of social engineering or scam approach",
+      "category": "other",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1098652492218236969\",\"https://cdn.discordapp.com/attachments/899865437267963924/1098652491521982544/Screenshot_20230420_174842_Discord.jpg?ex=69a9b4dd&is=69a8635d&hm=b6fda8fde6cc1c9500d06587589e15521de3bad4267c3b3df63c915ea7132b66&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1098652491777839236/Screenshot_20230420_174855_Discord.jpg?ex=69a9b4de&is=69a8635e&hm=5d777095058aa57e8fa27e4d0d3bb2aee1c7f9cc41a195bacd1b2b0833f22cab&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1098652492008538182/Screenshot_20230420_175039_Discord.jpg?ex=69a9b4de&is=69a8635e&hm=0869785c4060806eb46192215ff3c93b60837343d32e88628a8f1acd22dce345&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1015176914803105822",
+      "username": "clintonwaller",
+      "resolvedUsername": "clintonwaller",
+      "reason": "47-year-old adult sending unsolicited friend requests to multiple young server members with identical copy-pasted pickup messages, persistently pursuing personal relationships and asking for photos in predatory pattern",
+      "category": "harassment",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1098334558228848860\",\"https://cdn.discordapp.com/attachments/899865437267963924/1098334556706316398/IMG_4425.png?ex=69a9de44&is=69a88cc4&hm=af5594cf3184c4990cbf0d35f65a5b6e0a1037b120a1fc1da9e26ee97dbba9fc&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1098334556991533227/IMG_4426.png?ex=69a9de44&is=69a88cc4&hm=81eaab033cf93166bcbe2ae383692a8a7848c729768cfd084fbb1363c8dd650c&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1098334557255770202/IMG_4427.png?ex=69a9de44&is=69a88cc4&hm=4093ec3fbaab9ebc0de2efaedffb3645487096e109bc82829c4df6382d58a5d0&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1098334557574541373/IMG_4428.png?ex=69a9de44&is=69a88cc4&hm=07d8a713aaa8f565f5ac9a2262b7843b1431933b01c9909bef8b9120d1241dbc&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1098334557910077451/IMG_4429.png?ex=69a9de44&is=69a88cc4&hm=3fbc498efa99946930e50c59116d47b01c67164d1a8ffa40fcd08d30cbf98336&\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1044453580628824074",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "To everyone with Discord servers, they are rolling out with a new voice message feature. Just so you're aware, this can be a dangerous feature to grant to everyone if your server is public. It give...",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1096606411955380357\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1067259988445237300",
+      "username": "deleted_user_593b19498f87",
+      "resolvedUsername": "deleted_user_593b19498f87",
+      "reason": "\"big blue cat\" - hateful messages",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1094205083387969586\"]",
+      "reporter_id": "465585651232931871",
+      "reporter_name": "julesmm",
+      "reportCount": 1,
+      "reporters": [
+        "julesmm"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1037266257877147689",
+      "username": "Balea*~*studio",
+      "resolvedUsername": "balea_studio",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1065026021805531227",
+      "username": "Ashley_vtuber",
+      "resolvedUsername": "ashley_vtuber",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1053020017945481267",
+      "username": "Kelly_gfx",
+      "resolvedUsername": "kelly_gfx",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1064408375997247519",
+      "username": "amanda_james27",
+      "resolvedUsername": "amanda_james",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1047500214090612766",
+      "username": "minne7614",
+      "resolvedUsername": "minne7614",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1087795529234272442",
+      "username": "deleted_user_784c72aa5243",
+      "resolvedUsername": "deleted_user_784c72aa5243",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1086005061425041519",
+      "username": "deleted_user_ea7238491c20",
+      "resolvedUsername": "deleted_user_ea7238491c20",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "874711686429438012",
+      "username": "Artist.Layla",
+      "resolvedUsername": "artist.layla",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1071502505810345984",
+      "username": "deleted_user_c9f3c7422139",
+      "resolvedUsername": "deleted_user_c9f3c7422139",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "903022083599134761",
+      "username": "alice",
+      "resolvedUsername": "alice_daniel",
+      "reason": "Here are several Discord IDs of graphic artists that have made their way into my server.",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090827814028185650\"]",
+      "reporter_id": "687831251012681798",
+      "reporter_name": "axiiasto",
+      "reportCount": 1,
+      "reporters": [
+        "axiiasto"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1066025060407705681",
+      "username": "Eliza Harper",
+      "resolvedUsername": "elizaharper",
+      "reason": "graphic artist",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1090793584703316119\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "397212681985327104",
+      "username": "deleted_user_5e32321a53cd",
+      "resolvedUsername": "deleted_user_5e32321a53cd",
+      "reason": "Joined server and immediately solicited DMs asking members to use their Temu referral link in exchange for $20 PayPal/CashApp payment",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1088328240977936465\",\"https://cdn.discordapp.com/attachments/899865437267963924/1088328240738865152/Screenshot_20230323_050632_Discord.jpg?ex=69a9b868&is=69a866e8&hm=901680c551b9c660a748d5bdf168deeeac45b628c9a5022b87562f141389e236&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1075795021506285680",
+      "username": "destiny.",
+      "resolvedUsername": "destiny.1730",
+      "reason": "DMing 'Do you need money' and asking for Cash App or PayPal info, indicative of financial scam or money-flipping scheme",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1087765771335250001\",\"https://cdn.discordapp.com/attachments/899865437267963924/1087765770836136090/Screenshot_20230321_154549_Discord.jpg?ex=69aa4f91&is=69a8fe11&hm=54b657398082266d64599bf74505b3cb3d3b5e757221f93ad8761433a96ace25&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1087765771121336350/Screenshot_20230321_154847_Discord.jpg?ex=69aa4f91&is=69a8fe11&hm=f86f2488d22ac54dd8545a99ecff35eee513cf129ccb607ea25aa4b2af3b34f5&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1086348849741836348",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "Discord Id :",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1086349235827527780\"]",
+      "reporter_id": "484540877910573068",
+      "reporter_name": "queenofhearts710",
+      "reportCount": 1,
+      "reporters": [
+        "queenofhearts710"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "809476416654540810",
+      "username": "deleted_user_cc5dc236242a",
+      "resolvedUsername": "deleted_user_cc5dc236242a",
+      "reason": "Spamming sexually explicit content in GIF form",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1085294050741059626\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1079568091199053856",
+      "username": "deleted_user_8152d71eda68",
+      "resolvedUsername": "deleted_user_8152d71eda68",
+      "reason": "Impersonating Andrew Tate, being disruptive in chat, insulting community members, demanding personal information, promoting 'Hustlers University'",
+      "category": "harassment",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1079572218192875520\",\"https://cdn.discordapp.com/attachments/899865437267963924/1079572217987338240/image.png?ex=69aa2a7a&is=69a8d8fa&hm=e2ea43ff3e4cb459ad4c8afb5a8c5b776dcc4cacd28c291bdf8cc7b6f69fdf06&\"]",
+      "reporter_id": "753529965579862016",
+      "reporter_name": "drewbusi",
+      "reportCount": 1,
+      "reporters": [
+        "drewbusi"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "733731507151306824",
+      "username": "deleted_user_28f4c04e30f1",
+      "resolvedUsername": "deleted_user_28f4c04e30f1",
+      "reason": "- another \"pornographic\" discord link spammer - another \"pornographic\" discord link spammer",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1079380939853017149\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 2,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "645324611826876427",
+      "username": "deleted_user_b462648ed1f8",
+      "resolvedUsername": "deleted_user_b462648ed1f8",
+      "reason": "⁨Blue-raider⁩#7288 () posted links to pornographic materials",
+      "category": "raid",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1077929877682008104\"]",
+      "reporter_id": "169224065494679552",
+      "reporter_name": "fluffythewalrus",
+      "reportCount": 1,
+      "reporters": [
+        "fluffythewalrus"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1068408499073208410",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "id number :",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1068413387438047264\"]",
+      "reporter_id": "484540877910573068",
+      "reporter_name": "queenofhearts710",
+      "reportCount": 1,
+      "reporters": [
+        "queenofhearts710"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "798900523972820992",
+      "username": "deleted_user_bd033b25f4da",
+      "resolvedUsername": "deleted_user_bd033b25f4da",
+      "reason": "Nope#0009 () posted horrifying gory material in my Discord",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1067525814708600832\"]",
+      "reporter_id": "169224065494679552",
+      "reporter_name": "fluffythewalrus",
+      "reportCount": 1,
+      "reporters": [
+        "fluffythewalrus"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1064286880444711084",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": null,
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1064290471599419412\"]",
+      "reporter_id": "484540877910573068",
+      "reporter_name": "queenofhearts710",
+      "reportCount": 1,
+      "reporters": [
+        "queenofhearts710"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "484540877910573068",
+      "username": "👑𝓠𝓾𝓮𝓮𝓷𝓞𝓯𝓗𝓮𝓪𝓻𝓽𝓼710👑",
+      "resolvedUsername": "queenofhearts710",
+      "reason": ", could you please share their Discord ID? ^^^^",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1064288454717997176\",\"https://discord.com/channels/889550752123613194/899865437267963924/1011083895699157024\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 2,
+      "reporters": [
+        "joehew",
+        "vaping_whovian"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1063843587135127624",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "Steam scam profile",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1063850783352815626\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1036642802697777202",
+      "username": "Deleted User 1a902f9f",
+      "resolvedUsername": "Deleted User 1a902f9f",
+      "reason": "Evidence image file not found on disk; unable to review",
+      "category": "other",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1061269593815003247\",\"https://cdn.discordapp.com/attachments/899865437267963924/1061269593601089637/Screenshot_20230107_125419_Discord.jpg?ex=69aa2894&is=69a8d714&hm=53d3c4c8d0e58617f309ec6572bd2bb6cafcffa0390ec0ea6fe57b07995e8e4f&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "816741498581811255",
+      "username": "Tyrannos1993",
+      "resolvedUsername": "tyrannos1997",
+      "reason": "Unsolicited DMs asking for photos of appearance, persistently asking to call, predatory behavior toward younger users who expressed discomfort",
+      "category": "harassment",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1057020300455317534\",\"https://cdn.discordapp.com/attachments/899865437267963924/1057020298932793424/image0_2.png?ex=69a9dc5d&is=69a88add&hm=39abd2002ec31de37ee593bb21594eeaadb2e748ec8bb32405cde066a0ca17fa&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1057020299247358052/IMG_7687.png?ex=69a9dc5d&is=69a88add&hm=2f82ea891ea5e672f66af3bedfbc08dee28b01afe0d03aa88516c3057be6414a&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1057020299708743790/IMG_7688.png?ex=69a9dc5d&is=69a88add&hm=5508655590b8a41cf6a87f7d4677e628061f1cb4f01e0a5175322135bb8daacf&\",\"https://cdn.discordapp.com/attachments/899865437267963924/1057020300115587242/IMG_7693.png?ex=69a9dc5e&is=69a88ade&hm=8bac7cb7026105e873c7493f360b4c34c007699fadacc4e4e85f1bf4d833ccfa&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "927675033902530652",
+      "username": "kenneth51801",
+      "resolvedUsername": "kenneth51801",
+      "reason": "Twitch username: kenneth51801 Sexually harassing one of my underage female swords and asking impertinent questions. Also exhibited slightly stalkerish behaviour.",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1050537435282550906\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "547014366860410880",
+      "username": "BB",
+      "resolvedUsername": ".elcono",
+      "reason": "el cono Goobman N0odle Toxic people who harass people in discord after harassing on Twitch Be aware of these names/ID's",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1047127213348225024\"]",
+      "reporter_id": "181886583983702016",
+      "reporter_name": "mrfluffynl",
+      "reportCount": 1,
+      "reporters": [
+        "mrfluffynl"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "277621699510403084",
+      "username": "Goobman",
+      "resolvedUsername": ".goobman",
+      "reason": "el cono Goobman N0odle Toxic people who harass people in discord after harassing on Twitch Be aware of these names/ID's",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1047127213348225024\"]",
+      "reporter_id": "181886583983702016",
+      "reporter_name": "mrfluffynl",
+      "reportCount": 1,
+      "reporters": [
+        "mrfluffynl"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "277268519547043842",
+      "username": "N0odle",
+      "resolvedUsername": "n0odle_0000",
+      "reason": "el cono Goobman N0odle Toxic people who harass people in discord after harassing on Twitch Be aware of these names/ID's",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1047127213348225024\"]",
+      "reporter_id": "181886583983702016",
+      "reporter_name": "mrfluffynl",
+      "reportCount": 1,
+      "reporters": [
+        "mrfluffynl"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "747809055762022411",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "I’ve been told that there’s a scam going around in DMs at the moment that looks like this.",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1043063443462291478\"]",
+      "reporter_id": "598218835870351405",
+      "reporter_name": "littgame83",
+      "reportCount": 1,
+      "reporters": [
+        "littgame83"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1042949857888981022",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "I’ve been told that there’s a scam going around in DMs at the moment that looks like this.",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1043063443462291478\"]",
+      "reporter_id": "598218835870351405",
+      "reporter_name": "littgame83",
+      "reportCount": 1,
+      "reporters": [
+        "littgame83"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1023557005912330301",
+      "username": "Deleted User dfc3739a",
+      "resolvedUsername": "Deleted User dfc3739a",
+      "reason": "?ban Nitro scam bot",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1041791645823279174\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "894549713087500319",
+      "username": "Deleted User 1456a54d",
+      "resolvedUsername": "Deleted User 1456a54d",
+      "reason": "Discord spam / phishing bot - attempts to collect info by telling you \"discord has gifted you a free nitro boost\"",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1040039373929971752\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "348870586312818690",
+      "username": "Benji",
+      "resolvedUsername": "b.enji",
+      "reason": "2 horrible people who have targeted harassed people to a serious degree to the point where the police are getting involved",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1038979418862923787\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1034642414985555989",
+      "username": "Jalon",
+      "resolvedUsername": "jalon8480",
+      "reason": "2 horrible people who have targeted harassed people to a serious degree to the point where the police are getting involved",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1038979418862923787\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1023388803693559840",
+      "username": "Deleted User 1e7eb5ee",
+      "resolvedUsername": "Deleted User 1e7eb5ee",
+      "reason": "Fake 'Giveaway' bot DM sending a fraudulent Discord Nitro gift link with 'Accept' button, classic Nitro phishing scam",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1038638759966674965\",\"https://cdn.discordapp.com/attachments/899865437267963924/1038638759643721749/unknown.png?ex=69aa39b9&is=69a8e839&hm=3b6c138a7adae59e74d127d5379e023e3cbb580587ba9cc59cf2eeb613e18fb3&\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "751411247538372669",
+      "username": "febriyani",
+      "resolvedUsername": "febriyani0249",
+      "reason": "Spamming discord spam links",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1030449710374338580\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "887377465612312596",
+      "username": "Deleted User af8fd3cf",
+      "resolvedUsername": "Deleted User af8fd3cf",
+      "reason": "Sent fake Discord Nitro giveaway DM via 'Giveaways' bot claiming user won Nitro Game and Nitro Classic, requiring them to add a bot for fraudulent redeem code",
+      "category": "phishing",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1024051631173664809\",\"https://cdn.discordapp.com/attachments/899865437267963924/1024051630754246666/unknown.png?ex=69a9e466&is=69a892e6&hm=d79a0f5aaea7b30ca4814e88c0ff51615b86b6bf9fc9cf2a152c4abfc36f084a&\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "672863662922268684",
+      "username": "Vaping_Whovian",
+      "resolvedUsername": "vaping_whovian",
+      "reason": "I know I been spreading it around to warn as well",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1011086824292229220\"]",
+      "reporter_id": "484540877910573068",
+      "reporter_name": "queenofhearts710",
+      "reportCount": 1,
+      "reporters": [
+        "queenofhearts710"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "993243435391791194",
+      "username": "BLAZ3",
+      "resolvedUsername": "xblazzey",
+      "reason": "User profile captured as evidence for ban - profile screenshot preserved for reported violations",
+      "category": "other",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1004036103126397069\",\"https://cdn.discordapp.com/attachments/899865437267963924/1004036102379802745/unknown.png?ex=69aa3ebc&is=69a8ed3c&hm=13e697df9749c3ad3a4c8952ec50facb26b2572cfaa979743b06f6680aed7440&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "809120343239032863",
+      "username": "NOCAPBASIL",
+      "resolvedUsername": "nocapbasil5992",
+      "reason": "Soliciting illegal drug sales (codeine) in server chat",
+      "category": "other",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1001867294416326717\",\"https://cdn.discordapp.com/attachments/899865437267963924/1001867294043013281/unknown.png?ex=69aa43e0&is=69a8f260&hm=869b6f8c04b1193e306f4d895a34feb2c7de3c8afef9754434f3b6187394092e&\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "625865941065924619",
+      "username": "Chaotic",
+      "resolvedUsername": "damagedchaos.",
+      "reason": "Unsolicited harassing DM sending the message 'this is why mom never loved you'",
+      "category": "harassment",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/1000902129533341716\",\"https://cdn.discordapp.com/attachments/899865437267963924/1000902128702857286/Screenshot_20220724-224408_Discord.jpg?ex=69aa0cbf&is=69a8bb3f&hm=55c256a43a37a0e529ea276d59487d8731257b218fd1928f5bccc8514cf881ec&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "219203684188422144",
+      "username": "Clutch World",
+      "resolvedUsername": "clutchworld",
+      "reason": "Username: JaClutch#7714 - hacker, troll, doxxing - tried to publicly display my home address to a general channel after I kicked his main Username: Inthatt8am#4518 - troll, doxxing Username: Louu#3...",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/999066483218980925\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "384541554313920512",
+      "username": "Cant get me on the line",
+      "resolvedUsername": "ironsacc",
+      "reason": "Username: JaClutch#7714 - hacker, troll, doxxing - tried to publicly display my home address to a general channel after I kicked his main Username: Inthatt8am#4518 - troll, doxxing Username: Louu#3...",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/999066483218980925\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "406880348333539331",
+      "username": "Lou",
+      "resolvedUsername": "ghostlad777",
+      "reason": "Username: JaClutch#7714 - hacker, troll, doxxing - tried to publicly display my home address to a general channel after I kicked his main Username: Inthatt8am#4518 - troll, doxxing Username: Louu#3...",
+      "category": "harassment",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/999066483218980925\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "994176100831867006",
+      "username": "deleted_user_1608f410180b",
+      "resolvedUsername": "deleted_user_1608f410180b",
+      "reason": "Unsolicited DM running a Steam account impersonation scam, claiming to have been scammed by someone with same Steam profile to social engineer account details",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/994194413448331344\",\"https://cdn.discordapp.com/attachments/899865437267963924/994194412643029092/Screenshot_2022-07-06_114913.png?ex=69aa0973&is=69a8b7f3&hm=b3256429fc781d4718c143a0a4735c834ed54479a1747f72ecf60bd0e74bc70a&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "982468788349984768",
+      "username": "deleted_user_5cce095c41c8",
+      "resolvedUsername": "deleted_user_5cce095c41c8",
+      "reason": "Unsolicited DM spam promoting another Discord server (e-girl gaming center) with false promises of Nitro for active members",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/991467862051012660\",\"https://cdn.discordapp.com/attachments/899865437267963924/991467861375725568/unknown.png?ex=69aa0166&is=69a8afe6&hm=eba936e0929fe4089dee84aa841dbb0acb806d9f7aaeb7d8314856f3295f2057&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "978828019336634480",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "Here's a few for you - troublemaker (invited troll accounts in) [ACCOUNT DELETED] - invited more troll accounts in > - One of the troll accounts joined (see pic for bio) > - One of the troll accoun...",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/987120020263960636\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "394871587062677504",
+      "username": "tobee369",
+      "resolvedUsername": "tobeeisverycool369",
+      "reason": "Here's a few for you - troublemaker (invited troll accounts in) [ACCOUNT DELETED] - invited more troll accounts in > - One of the troll accounts joined (see pic for bio) > - One of the troll accoun...",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/987120020263960636\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "412282715149172736",
+      "username": "loud",
+      "resolvedUsername": "loud99",
+      "reason": "Here's a few for you - troublemaker (invited troll accounts in) [ACCOUNT DELETED] - invited more troll accounts in > - One of the troll accounts joined (see pic for bio) > - One of the troll accoun...",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/987120020263960636\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "818920746322755626",
+      "username": "Nixie",
+      "resolvedUsername": "nixie_the_lynxie",
+      "reason": "Here's a few for you - troublemaker (invited troll accounts in) [ACCOUNT DELETED] - invited more troll accounts in > - One of the troll accounts joined (see pic for bio) > - One of the troll accoun...",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/987120020263960636\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "663081167125217340",
+      "username": "deleted_user_c1e98f3e0e56",
+      "resolvedUsername": "deleted_user_c1e98f3e0e56",
+      "reason": "Here's a few for you - troublemaker (invited troll accounts in) [ACCOUNT DELETED] - invited more troll accounts in > - One of the troll accounts joined (see pic for bio) > - One of the troll accoun...",
+      "category": "spam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/987120020263960636\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "839763885657817128",
+      "username": "deleted_user_54e6db31b4e4",
+      "resolvedUsername": "deleted_user_54e6db31b4e4",
+      "reason": "Troll: Hopping into live streamer's vc channels in discords just to yell the N word repeatedly Username: posin3/5#6830 ID:",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/986836887647952916\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 1,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "804151021034536971",
+      "username": "deleted_user_09ff94727b8b",
+      "resolvedUsername": "deleted_user_09ff94727b8b",
+      "reason": "User profile screenshot documented for moderation record - insufficient context for specific violation",
+      "category": "other",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/978655449316458566\",\"https://cdn.discordapp.com/attachments/899865437267963924/978655448699908186/unknown.png?ex=69aa3229&is=69a8e0a9&hm=169893d95dfd19e60fabc9a08aa5976ef2e639783d1dc3d57f7a5e0af687d399&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "958749357388222554",
+      "username": "Kanachok",
+      "resolvedUsername": "kanachok7701",
+      "reason": "/ban Phishing attempts / Steam Scams are not permitted (/ban is a built-in command in discord) Another one for ya Display name: Kanachok#7701 /ban Phishing attempts / Steam Scams are not permitted ...",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/958766436904501298\"]",
+      "reporter_id": "365905620060340224",
+      "reporter_name": "death420",
+      "reportCount": 2,
+      "reporters": [
+        "death420"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "348496085381283852",
+      "username": "𝓤𝓻𝓼𝓾𝓼",
+      "resolvedUsername": "ursus_4455",
+      "reason": "Just had a compromised account spam us with phishing links; Display name: \"Ursus#0001\" (lul, nice pun there) For those of you running a Discord bot with a ban module; ?ban Phishing links are not pe...",
+      "category": "scam",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/956830972811304990\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 2,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "859802018197143622",
+      "username": "Deleted User",
+      "resolvedUsername": null,
+      "reason": "Stay safe all!",
+      "category": "other",
+      "reasonSource": "content_derived",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/899865437267963924/937118744126324777\"]",
+      "reporter_id": "141281787530706944",
+      "reporter_name": "blueishmeteor",
+      "reportCount": 1,
+      "reporters": [
+        "blueishmeteor"
+      ],
+      "channels": [
+        "899865437267963924"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1401842785245728818",
+      "username": "Tofusnuggles",
+      "resolvedUsername": "tufosnuggles.1",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be a college student needing commission work to cover expenses",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1442859239638040637\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1442859239168147639/image.png?ex=69aa2421&is=69a8d2a1&hm=efeaab2ddfad17b02e424393f376e8e8fafb9d3d90755f8dd3570d2cba930e78&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1143212062013661316",
+      "username": "Mellany",
+      "resolvedUsername": "mellany1105_",
+      "reason": "GFX spammer reported in dedicated spam channel",
+      "category": "spam",
+      "reasonSource": "gfx_channel",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1370327346158243840\"]",
+      "reporter_id": "662890344681177098",
+      "reporter_name": "emeribd",
+      "reportCount": 1,
+      "reporters": [
+        "emeribd"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1185323984141697189",
+      "username": "Elira Marine 🥀",
+      "resolvedUsername": "eliramarine08826",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be a college student graphic designer needing commissions to cover expenses",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1265086195700990073\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1265086195470172232/image.png?ex=69aa0fd5&is=69a8be55&hm=14f839005c7d71a35cc265a5e41fe35b5a2b567863aec0455b12d03c94d0eaa0&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1044968528421335060",
+      "username": "janifar",
+      "resolvedUsername": "janifar07",
+      "reason": "Unsolicited DM from mutual server soliciting graphics/art commissions",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1257763397101948978\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1257763396787638332/image.png?ex=69a9c9f1&is=69a87871&hm=ae7bf4ba807af5bd22feb4b6ecbd93617421fe416b6002525fbc49e8d88a812d&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1044280778697220129",
+      "username": "zenodi jones",
+      "resolvedUsername": "zenodi_jones2",
+      "reason": "Unsolicited DM spam advertising graphic design and animation commission services",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1250189336549527552\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1250189336238882836/Screenshot_20240611_214125_Discord.jpg?ex=69a9eb8d&is=69a89a0d&hm=31d5a892c087abcfc70b780c72aead5cd283d44a618d2c5c62c422457acf1c57&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1242882486577664101",
+      "username": "⋆ 🐯  🎀  𝒯𝑒𝓈𝓈𝒶  🎀  🐯 ⋆",
+      "resolvedUsername": "sandytessa_94931",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be a commission artist offering design services at reasonable prices",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1247662173073702914\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1247662173325496320/image.png?ex=69a9f472&is=69a8a2f2&hm=eb467d2a755b80e80ba7cc33b358aed52d957d39ab77268ad2e7c80c44952122&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1208519101719511123",
+      "username": "Kristi",
+      "resolvedUsername": "kristii_00",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be an artist who can do all kinds of artwork",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1242971432015892552\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1242971431738806272/image.png?ex=69aa075a&is=69a8b5da&hm=2081b24701c29e783ac1f0aca3f31ca30f6f187c6b07ec0e0aeaa60a886daa84&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1146221212968689735",
+      "username": "Maeve",
+      "resolvedUsername": "chloe77733",
+      "reason": "Unsolicited DM apologizing for being intrusive while soliciting art commissions at 'fair prices'",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1242224746003959879\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1242224745806565386/image.png?ex=69a9f2f2&is=69a8a172&hm=006f615db0db630766ffe08b2a6fd03f10b625cd1ee690134f1504fc521d19fe&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1216868783063302206",
+      "username": "Kat Sims",
+      "resolvedUsername": "katsims_946",
+      "reason": "Unsolicited DM promoting IT company offering software, website, PPC, and graphics work from mutual server",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1242174110872899604\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1242174110637752401/image.png?ex=69a9c3ca&is=69a8724a&hm=8d949e641b2de245debb5e668071bf329194e24ef50130fe5e6ab83777fd2357&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "950063302560591872",
+      "username": "deleted_user_3c48ad4b5a7c",
+      "resolvedUsername": "deleted_user_3c48ad4b5a7c",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be a paid character artist from mutual server",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1234296411298992259\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1234296410992803851/image-146.png?ex=69aa1c1c&is=69a8ca9c&hm=e676a6a21e07e3b19e02130a0ebaf661fb6af4432710d71c759f3a454f70cb18&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "768808435310788628",
+      "username": "FORGER",
+      "resolvedUsername": "loidforger79",
+      "reason": "Unsolicited DM soliciting design commissions, claiming to be designer affiliated with streamer station offering logos, overlays, banners, emotes",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1233960761617940521\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1233960761509023824/image.png?ex=69aa3503&is=69a8e383&hm=1893870559dae565dc3a1b98e35f41fdcfd8ae950b81735516522c4479c85af3&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1082549950707142676",
+      "username": "Mia_",
+      "resolvedUsername": "mia_cozbe",
+      "reason": "Unsolicited DM spam advertising GFX and stream art services with discount offers, repeated across multiple dates with identical scripted messages",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1233063298690322473\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1233063298518483005/image.png?ex=69aa3cef&is=69a8eb6f&hm=58cfbe644bbc1d5a3f51673ced3dde4a59f9fc9e37c10c96ac0486e0afc213c6&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1105102707657814027",
+      "username": "Artfinity",
+      "resolvedUsername": "eteator18e3",
+      "reason": "Unsolicited DM advertising GFX services (logos, banners, emotes, overlays, vtuber models, animations) with discount offer after cold friend request",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1230214773975547935\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1230214773770293391/image.png?ex=69a9c34a&is=69a871ca&hm=c10461d7a0de5a5ff96094e7564b98326e182b0ec395d5f20cd20cf2c47e66e7&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "964751249746579476",
+      "username": "Raw_Eviee <3",
+      "resolvedUsername": "eeve3_vivi",
+      "reason": "Unsolicited DM pitching ideas for recipient's channel after cold friend request from mutual server",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1230194049965752420\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1230194049781076020/image.png?ex=69aa58bd&is=69a9073d&hm=cef9902491a9b593689890e50c678fb094aedcf21d2a34ee3a74282168df7f1c&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1101966335312937123",
+      "username": "anjelinajospeh",
+      "resolvedUsername": "anjelinajospeh",
+      "reason": "Unsolicited DM using fabricated emergency sob story (pet injury, kicked out) to guilt-trip into purchasing GFX commissions",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1220100534149583069\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1220100533856108676/image.png?ex=69a9e1ab&is=69a8902b&hm=b58d9fbf540c5e539437d24a0a10bbb26d11b00aabae1bea473df5e71debc118&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1151491236293775410",
+      "username": "lillyrose",
+      "resolvedUsername": "lilly_.rose",
+      "reason": "Unsolicited DM advertising graphic design, animation, and streaming art services with 50% discount after cold-messaging from mutual server",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1217961441626296432\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1217961441345409104/image.png?ex=69aa027c&is=69a8b0fc&hm=d1a72feb305e24d77f0ff3e13f4417f55b903163c092d6220a2ae0a095551000&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1185336499592507412",
+      "username": "Alathir",
+      "resolvedUsername": "alathirk",
+      "reason": "Unsolicited DM using fabricated sob story (kicked out of home, lost job) to guilt-trip into purchasing GFX services",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1215013418692649091\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1215013418445316197/image.png?ex=69a9d4ec&is=69a8836c&hm=34d18fdeae51da92367da9353544bc71ab5071f3b55411fb47cd82ea80de1b94&\"]",
+      "reporter_id": "322722087070466048",
+      "reporter_name": "vpsdata",
+      "reportCount": 1,
+      "reporters": [
+        "vpsdata"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "555126192500637716",
+      "username": "Sakura sui",
+      "resolvedUsername": "sakura_sui54",
+      "reason": "Unsolicited DM advertising GFX design services (custom logos, overlays, banners, emotes) after cold friend request from mutual server",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1212873815118446663\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1212873814946353232/image.png?ex=69a9f543&is=69a8a3c3&hm=e72ea61aa33bef9557b79113f158adb4e2e9b51b4b181e552a6279c3fa3af538&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1190676523011805285",
+      "username": "Anna",
+      "resolvedUsername": "anna04845",
+      "reason": "Unsolicited DM spam advertising artwork commission services targeting streamers",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1210683726401507348\",\"https://discord.com/channels/889550752123613194/1142508311594410086/1191411730685907004\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1210683726225477773/Screenshot_20240223-151909_Discord.jpg?ex=69a9e695&is=69a89515&hm=26fa77946fcc8727e7e163904eb6c06253423582c3c1ea5627c0cbed4ab92aa9&\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1191411730367131758/image-48.png?ex=69aa5263&is=69a900e3&hm=2c6c9f09918fbda655ccb96100f3a9db191dc9af7b6841010bb411807b50b57d&\"]",
+      "reporter_id": "462315941045469211",
+      "reporter_name": "seelenmorder",
+      "reportCount": 2,
+      "reporters": [
+        "seelenmorder",
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "494932877902086155",
+      "username": "mickeymina",
+      "resolvedUsername": "mickey8416",
+      "reason": "Unsolicited DM spam advertising art commission services",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1196611423040720946\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1196611422789042176/Screenshot_20240116_002314_Discord.jpg?ex=69aa1f3b&is=69a8cdbb&hm=6851f5a926df6a608c971ffdbc1ac9945a512e1f2b67a81ac5ad9d5c3024cf60&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1073369122588606567",
+      "username": "Rozicaaa",
+      "resolvedUsername": "rozicaa",
+      "reason": "Unsolicited DM asking if recipient is a VTuber/streamer to pitch GFX services after cold friend request",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1195243513466601512\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1195243513198149712/image.png?ex=69a9c284&is=69a87104&hm=7c8ced94e1a097ef6b11a9d8ca6ac605445040848e39dc4e7503ab376159a37b&\"]",
+      "reporter_id": "322722087070466048",
+      "reporter_name": "vpsdata",
+      "reportCount": 1,
+      "reporters": [
+        "vpsdata"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1142922479640268920",
+      "username": "deleted_user_8cbfc9e46046",
+      "resolvedUsername": "deleted_user_8cbfc9e46046",
+      "reason": "Discord chat exchange involving discussion of scam/fraud-related activity",
+      "category": "scam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1194723963683754035\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1194723963381751848/image.png?ex=69a9d8e5&is=69a88765&hm=b1cadadf1bd3028fb9047fb5c8ef05be3b3ca4ad046a1b925ac7604c50627a76&\"]",
+      "reporter_id": "322722087070466048",
+      "reporter_name": "vpsdata",
+      "reportCount": 1,
+      "reporters": [
+        "vpsdata"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "996737648284676117",
+      "username": "Scarlet",
+      "resolvedUsername": "scarletdoesart_",
+      "reason": "Unsolicited DM advertising graphic art commissions at exclusive discounts (logos, banners, VTube models, emotes, PFPs, animations) after cold friend request",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1194016210489196654\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1194016210241724416/image.png?ex=69a9e8c0&is=69a89740&hm=1ae74b5f3567d186b1faa8637b51fcae8d468d6428d4ba81c506a40a491b056f&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1163125895276544101",
+      "username": "Brantly",
+      "resolvedUsername": "brantly0283",
+      "reason": "Unsolicited DM advertising GFX art services (logos, banners, overlays, emotes, badges, animations) after cold friend request from mutual server",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1193524331087667240\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1193524330831822908/image.png?ex=69aa18e7&is=69a8c767&hm=9269b1fc35c5da7378ace946256fecb27d712766fb732248006ae51af2399c1e&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1151601012759597177",
+      "username": "Emmavtuber",
+      "resolvedUsername": "emmavtuber0984",
+      "reason": "Unsolicited DM targeting streamers to advertise GFX design services (logos, banners, emotes, overlays, VTuber models) after cold approach",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1189652129305088111\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1189652129036636301/image.png?ex=69a9da62&is=69a888e2&hm=8aec63a5d6df06d667e8cc54ee90248721882b2e023686f2366d63c31092e2bc&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1136552927234900010",
+      "username": "Yoko Littner",
+      "resolvedUsername": "sethivan.",
+      "reason": "Unsolicited DM advertising GFX services after cold friend request from mutual server",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1186866958415708261\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1186866958205984870/image.png?ex=69aa447d&is=69a8f2fd&hm=2e62a1c633a06e1a159fde395985817b7360d51cfb639116a27754212e693132&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1162518712126013521",
+      "username": "𝒥𝓊𝓁𝒾𝒶 𝑀𝒶𝓇𝒾𝑒",
+      "resolvedUsername": "juliamarie0937",
+      "reason": "Unsolicited DM advertising digital art and GFX services (logos, emotes, overlays, VTuber models, animations, web dev) after cold-messaging about streaming",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1184226789527146536\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1184226789309030491/image.png?ex=69a9e424&is=69a892a4&hm=982bf0bfbc980d84b6b09960764da38bf730aee646315e83c192a7153968c7e7&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1177675573087191162",
+      "username": "Emily",
+      "resolvedUsername": "charilejack",
+      "reason": "Unsolicited DM spam advertising art commission services with 'Report Spam' flag visible",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1182694283103457340\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1182694282876960830/Screenshot_20231208_143858_Discord.jpg?ex=69aa3fa2&is=69a8ee22&hm=b4b9ea6941407d02705930b92376623de93fc55a94f1b1a892129cb1b3f27a3a&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1174151126757675053",
+      "username": "deleted_user_e9a56bea0c14",
+      "resolvedUsername": "deleted_user_e9a56bea0c14",
+      "reason": "Unsolicited DM advertising digital art commission services at 'reasonable prices' targeting server members",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1175595203009183895\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1175595198940717066/image.png?ex=69aa2158&is=69a8cfd8&hm=6553f8a122df1591464a6adafddfc217af037b35d911e26eafbba9125c46a55b&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1141390706863251477",
+      "username": "Madison_Web",
+      "resolvedUsername": "madison_.web",
+      "reason": "friend request, mentions they are an artist...yadda yadda yadda...",
+      "category": "spam",
+      "reasonSource": "gfx_channel",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1175215573920129024\"]",
+      "reporter_id": "462315941045469211",
+      "reporter_name": "seelenmorder",
+      "reportCount": 1,
+      "reporters": [
+        "seelenmorder"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "794896310238445579",
+      "username": "Anna Ashely",
+      "resolvedUsername": "annaashely",
+      "reason": "Unsolicited DM advertising professional graphic design services and influencer marketing to streamers",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1174075000731471942\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1174075000312045738/image.png?ex=69a9df8d&is=69a88e0d&hm=942c8f8b692c175b07638e5eabb848ec9752f9e681fc5834e0e42899834b1be4&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1044649603707981847",
+      "username": "YazVt",
+      "resolvedUsername": "yaz_vt1",
+      "reason": "Unsolicited DM advertising stream art services with Halloween discount offer, user was blocked",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1173973654439198832\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1173973654229487717/image.png?ex=69aa29ea&is=69a8d86a&hm=c2e7ce5c5d87411ee9160d10730c8825d4a6f8a997ddd4d64f04831e08045322&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1156344298074275952",
+      "username": "Juliana",
+      "resolvedUsername": "juliana_vt",
+      "reason": "User profile screenshot (shows 'oliva'/olivamariya) - documented for association with GFX spam DM campaign",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1172354341760405535\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1172354341559095396/image.png?ex=69aa3490&is=69a8e310&hm=4ee0b9f082687c3b001b1c7bd414922942491c87b1d420340bc61772225567fa&\"]",
+      "reporter_id": "662890344681177098",
+      "reporter_name": "emeribd",
+      "reportCount": 1,
+      "reporters": [
+        "emeribd"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1149075460152639508",
+      "username": "ezraabel792",
+      "resolvedUsername": "ezraabel",
+      "reason": "Unsolicited DM asking about streaming essentials then pitching GFX services (logos, banners, overlays, emotes, VTuber models)",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1171895574124040202\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1171895573952086047/image.png?ex=69a9dacd&is=69a8894d&hm=a8e7af916d521fcc3a25832bcae41c32c88d8071ce61b813c6ec5bc5e836269c&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1147311552752517290",
+      "username": "Esho",
+      "resolvedUsername": "esho0517",
+      "reason": "Unsolicited DM advertising professional GFX services specializing in 2D/3D character design with discount offers",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1171575074105610341\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1171575073912664084/image.png?ex=69aa01d0&is=69a8b050&hm=74f43bc605ff3eb10f69fb0298628af7847d01386952eeaf8af894479d5518ac&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1117531421335113878",
+      "username": "Jamaimahamelia",
+      "resolvedUsername": ".ameliagfx",
+      "reason": "User profile advertising GFX commission services in bio (2D/3D models, banners, emotes), used for unsolicited DM spam",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1170285452511682661\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1170285452285202452/image.png?ex=69a9ee02&is=69a89c82&hm=23e370ec29b4fdfd8bbd2420d418a6dc152bd93562f5ce3f6685113a652b3fa6&\"]",
+      "reporter_id": "662890344681177098",
+      "reporter_name": "emeribd",
+      "reportCount": 1,
+      "reporters": [
+        "emeribd"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1142474546818076782",
+      "username": "deleted_user_9859215c58bf",
+      "resolvedUsername": "deleted_user_9859215c58bf",
+      "reason": "Unsolicited DM advertising professional graphic design services (logos, banners, overlays, emotes), user was blocked",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1168654298666770482\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1168654298226372740/image.png?ex=69a9eda1&is=69a89c21&hm=3c00f754070f68d7ca69bee1a94d13ecd2dfbe316e3696ce9aae80bc5c5d91b8&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 2,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1143272360930193459",
+      "username": "Amy Rose",
+      "resolvedUsername": "ammy.rose",
+      "reason": "Unsolicited DM advertising professional stream artwork and custom designs (logos, banners, overlays, emotes, sub badges), user was blocked",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1167885799841333338\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1167885799660998706/image.png?ex=69a9c4e8&is=69a87368&hm=fe6ff34f5a95df135407942de6e98bb78f82496b265edd407f040b6e6ae91dbe&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1151179060429459549",
+      "username": "Steve",
+      "resolvedUsername": "steve02318",
+      "reason": "Unsolicited DM advertising custom graphics and animation services at 'fair prices' targeting server members",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1154556555560226909\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1154556555690246194/image.png?ex=69aa0e95&is=69a8bd15&hm=ee966c9523b400090256cf0457d9214549244bb1e98471bc06dcbb9c672131b2&\"]",
+      "reporter_id": "174920468309082113",
+      "reporter_name": "joehew",
+      "reportCount": 1,
+      "reporters": [
+        "joehew"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1144763607003975700",
+      "username": "Hailey_vtuber",
+      "resolvedUsername": "hailey_vtuber_24761",
+      "reason": "User profile screenshot showing suspicious account (new account, low activity X connection) - documented for association with GFX spam campaign",
+      "category": "other",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1154555119208243231\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1154555119053049917/Screenshot_20230921-190241_Discord.jpg?ex=69aa0d3e&is=69a8bbbe&hm=fbd7aa8cdda4320276cc04bd3899dfd91fb124def66b142f4a004430c6e7b790&\"]",
+      "reporter_id": "462315941045469211",
+      "reporter_name": "seelenmorder",
+      "reportCount": 1,
+      "reporters": [
+        "seelenmorder"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "546279841712832512",
+      "username": "arumneeil 01",
+      "resolvedUsername": "arumneeil_01",
+      "reason": "Unsolicited DM claiming to be an artist looking for commissions, asking to share portfolio after initiating small talk",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1145418133629325392\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1145418133448958012/image.png?ex=69a9c543&is=69a873c3&hm=82bca6d5090f1c40644b960d33c4cae09bdae9bbdee57dbf073631d689a5b124&\"]",
+      "reporter_id": "534127122827051028",
+      "reporter_name": "mineycart",
+      "reportCount": 1,
+      "reporters": [
+        "mineycart"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1138935700763443341",
+      "username": "jamesvtuber",
+      "resolvedUsername": "24555ss",
+      "reason": "User profile advertising GFX design services in bio (logos, banners, overlays, emotes, animations, app dev)",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1143688176121172058\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1143688175924023347/image.png?ex=69aa119d&is=69a8c01d&hm=090ef5b6a0d27f86ace0ee49c0d5d34614e613d4f91d9cbd9817554c9487ae4d&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    },
+    {
+      "user_id": "1097247047444336690",
+      "username": "Franklin",
+      "resolvedUsername": "franklinarts_",
+      "reason": "Unsolicited DM asking if user is a streamer then offering logo and overlay services for Twitch",
+      "category": "spam",
+      "reasonSource": "image_review",
+      "severity": "high",
+      "evidence": "[\"https://discord.com/channels/889550752123613194/1142508311594410086/1142508864877641828\",\"https://cdn.discordapp.com/attachments/1142508311594410086/1142508864634368081/image.png?ex=69a9bbcc&is=69a86a4c&hm=82f1e5e2de368b5a32df5d7d399326ac707b7ce1e96c5e7554382b0f47af93e4&\"]",
+      "reporter_id": "685127470625980501",
+      "reporter_name": "orsokuma",
+      "reportCount": 1,
+      "reporters": [
+        "orsokuma"
+      ],
+      "channels": [
+        "1142508311594410086"
+      ],
+      "flagged": false
+    }
+  ]
+}

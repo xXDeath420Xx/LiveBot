@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/channels" class="ember-nav-link">Channels</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Breadcrumb -->
+            <div style="margin-bottom: 1.5rem;">
+                <a href="/tokes-bot/channels" style="color: var(--ember-text-muted); text-decoration: none;">
+                    &larr; Back to Channels
+                </a>
+            </div>
+
+            <!-- Header -->
+            <div class="ember-dashboard-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 class="ember-dashboard-title">
+                        <%= channel.channel_name %>
+                        <span class="ember-badge <%= channel.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>">
+                            <%= channel.platform.toUpperCase() %>
+                        </span>
+                    </h1>
+                    <p class="ember-dashboard-subtitle">
+                        Connected via <%= channel.connection_name %>
+                        <% if (channel.is_enabled) { %>
+                            <span class="ember-badge ember-badge-success">Active</span>
+                        <% } else { %>
+                            <span class="ember-badge ember-badge-warning">Paused</span>
+                        <% } %>
+                    </p>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <a href="/tokes-bot/channels/<%= channel.id %>/commands" class="ember-btn ember-btn-primary">
+                        Command Settings
+                    </a>
+                    <button class="ember-btn ember-btn-outline" onclick="toggleChannel()">
+                        <%= channel.is_enabled ? 'Pause Bot' : 'Enable Bot' %>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Active Session Alert -->
+            <% if (activeSession) { %>
+                <div class="ember-alert ember-alert-info ember-mb-3">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
+                    <div>
+                        <strong>Active Smoke Session!</strong>
+                        Started by <%= activeSession.started_by %> with a <%= activeSession.piece %>.
+                        <%= activeSession.total_hits %> hits, <%= activeSession.participant_count %> participants.
+                    </div>
+                </div>
+            <% } %>
+
+            <!-- Settings Card -->
+            <div class="ember-card ember-mb-3">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Channel Settings</h2>
+                </div>
+                <div class="ember-card-body">
+                    <form id="settings-form">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+                            <div>
+                                <label class="ember-label">Command Prefix</label>
+                                <input type="text" id="command-prefix" class="ember-input"
+                                       value="<%= channel.command_prefix || '!' %>" maxlength="5">
+                            </div>
+                            <div>
+                                <label class="ember-label">Global Cooldown (seconds)</label>
+                                <input type="number" id="cooldown-global" class="ember-input"
+                                       value="<%= channel.cooldown_global || 3 %>" min="0" max="60">
+                            </div>
+                            <div>
+                                <label class="ember-label">User Cooldown (seconds)</label>
+                                <input type="number" id="cooldown-user" class="ember-input"
+                                       value="<%= channel.cooldown_user || 5 %>" min="0" max="300">
+                            </div>
+                            <div>
+                                <label class="ember-label">Bot Account</label>
+                                <% if (channel.platform === 'kick' || channel.platform === 'twitch') { %>
+                                    <div class="ember-input" style="background: var(--ember-bg-secondary); cursor: not-allowed; display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="color: var(--ember-success);">&#10003;</span>
+                                        CertiFriedUtility
+                                    </div>
+                                    <input type="hidden" id="bot-connection" value="">
+                                    <p style="font-size: 0.75rem; color: var(--ember-text-muted); margin-top: 0.25rem;">
+                                        <% if (channel.platform === 'kick') { %>
+                                            Messages are sent as <strong>CertiFriedUtility</strong> using your channel's authorization.
+                                        <% } else { %>
+                                            Messages are sent as the <strong>CertiFriedUtility</strong> bot account.
+                                        <% } %>
+                                    </p>
+                                <% } else { %>
+                                    <select id="bot-connection" class="ember-input">
+                                        <option value="">Use channel owner's account</option>
+                                        <% if (typeof botAccounts !== 'undefined' && botAccounts.length > 0) { %>
+                                            <% botAccounts.forEach(bot => { %>
+                                                <option value="<%= bot.id %>" <%= channel.bot_connection_id == bot.id ? 'selected' : '' %>>
+                                                    <%= bot.platform_name %> (<%= bot.platform %>)
+                                                </option>
+                                            <% }) %>
+                                        <% } %>
+                                    </select>
+                                    <p style="font-size: 0.75rem; color: var(--ember-text-muted); margin-top: 0.25rem;">
+                                        <% if (typeof botAccounts !== 'undefined' && botAccounts.length > 0) { %>
+                                            Select which account posts bot messages in this channel.
+                                        <% } else { %>
+                                            Messages will be sent using the configured bot account.
+                                        <% } %>
+                                    </p>
+                                <% } %>
+                            </div>
+                        </div>
+
+                        <h3 style="margin: 1.5rem 0 1rem; font-size: 1rem;">Features</h3>
+                        <%
+                            const features = channel.features_enabled ? (typeof channel.features_enabled === 'string' ? JSON.parse(channel.features_enabled) : channel.features_enabled) : {};
+                        %>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="feature-tokes" <%= features.tokes !== false ? 'checked' : '' %>>
+                                Toke Tracking
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="feature-spark" <%= features.spark !== false ? 'checked' : '' %>>
+                                Daily Spark
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="feature-sessions" <%= features.sessions !== false ? 'checked' : '' %>>
+                                Smoke Sessions
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="feature-trivia" <%= features.trivia ? 'checked' : '' %>>
+                                Trivia
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="feature-shoutout" <%= features.shoutout ? 'checked' : '' %>>
+                                Shoutouts
+                            </label>
+                        </div>
+
+                        <div style="margin-top: 1.5rem;">
+                            <button type="submit" class="ember-btn ember-btn-primary">Save Settings</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Two Column Layout -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <!-- Channel Leaderboard -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Channel Leaderboard</h2>
+                    </div>
+                    <div class="ember-card-body">
+                        <% if (leaderboard.length === 0) { %>
+                            <p class="ember-text-muted">No activity yet. Users will appear here after using commands.</p>
+                        <% } else { %>
+                            <table class="ember-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>User</th>
+                                        <th style="text-align: right;">Tokes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% leaderboard.slice(0, 10).forEach((entry, index) => { %>
+                                        <tr>
+                                            <td style="font-weight: 600; color: var(--ember-primary);"><%= index + 1 %></td>
+                                            <td><%= entry.display_name %></td>
+                                            <td style="text-align: right;"><%= entry.tokes.toLocaleString() %></td>
+                                        </tr>
+                                    <% }) %>
+                                </tbody>
+                            </table>
+                            <% if (leaderboard.length > 10) { %>
+                                <p class="ember-text-muted ember-text-center ember-mt-2">
+                                    Showing top 10 of <%= leaderboard.length %> users
+                                </p>
+                            <% } %>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Recent Activity</h2>
+                    </div>
+                    <div class="ember-card-body" style="max-height: 400px; overflow-y: auto;">
+                        <% if (activity.length === 0) { %>
+                            <p class="ember-text-muted">No activity logged yet.</p>
+                        <% } else { %>
+                            <% activity.slice(0, 20).forEach(log => { %>
+                                <div style="padding: 0.5rem 0; border-bottom: 1px solid var(--ember-border);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span class="ember-badge ember-badge-<%= log.event_type === 'error' ? 'error' : 'primary' %>" style="font-size: 0.65rem;">
+                                            <%= log.event_type %>
+                                        </span>
+                                        <span style="font-size: 0.75rem; color: var(--ember-text-muted);">
+                                            <%= new Date(log.logged_at).toLocaleTimeString() %>
+                                        </span>
+                                    </div>
+                                    <div style="font-size: 0.85rem; margin-top: 0.25rem;">
+                                        <% if (log.actor) { %><strong><%= log.actor %></strong>: <% } %>
+                                        <%= log.details || '-' %>
+                                    </div>
+                                </div>
+                            <% }) %>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Danger Zone -->
+            <div class="ember-card ember-mt-3" style="border-color: var(--ember-error);">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title" style="color: var(--ember-error);">Danger Zone</h2>
+                </div>
+                <div class="ember-card-body">
+                    <p class="ember-text-muted ember-mb-2">
+                        Removing this channel will delete all channel-specific stats and leaderboard data.
+                    </p>
+                    <button class="ember-btn ember-btn-outline" style="border-color: var(--ember-error); color: var(--ember-error);"
+                            onclick="confirmDelete()">
+                        Remove Channel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const channelId = '<%= channel.id %>';
+
+        async function toggleChannel() {
+            const currentState = <%= channel.is_enabled ? 'true' : 'false' %>;
+            try {
+                const response = await fetch(`/tokes-bot/api/channels/${channelId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_enabled: !currentState })
+                });
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to update channel status');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+
+        document.getElementById('settings-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const botConnectionValue = document.getElementById('bot-connection').value;
+            const data = {
+                command_prefix: document.getElementById('command-prefix').value,
+                cooldown_global: parseInt(document.getElementById('cooldown-global').value),
+                cooldown_user: parseInt(document.getElementById('cooldown-user').value),
+                bot_connection_id: botConnectionValue === '' ? null : parseInt(botConnectionValue),
+                features_enabled: {
+                    tokes: document.getElementById('feature-tokes').checked,
+                    spark: document.getElementById('feature-spark').checked,
+                    sessions: document.getElementById('feature-sessions').checked,
+                    trivia: document.getElementById('feature-trivia').checked,
+                    shoutout: document.getElementById('feature-shoutout').checked
+                }
+            };
+
+            try {
+                const response = await fetch(`/tokes-bot/api/channels/${channelId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (response.ok) {
+                    alert('Settings saved!');
+                } else {
+                    alert('Failed to save settings');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        });
+
+        async function confirmDelete() {
+            if (!confirm('Are you sure you want to remove this channel? This will delete all channel-specific data.')) {
+                return;
+            }
+            try {
+                const response = await fetch(`/tokes-bot/api/channels/${channelId}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    window.location.href = '/tokes-bot/channels';
+                } else {
+                    alert('Failed to remove channel');
+                }
+            } catch (err) {
+                alert('Network error');
+            }
+        }
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

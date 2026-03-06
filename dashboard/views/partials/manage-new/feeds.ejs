@@ -1,0 +1,336 @@
+<%# Content Feeds - Tailwind Version %>
+
+<%
+const rFeeds = locals.redditFeeds || [];
+const yFeeds = locals.youtubeFeeds || [];
+const tFeeds = locals.twitterFeeds || [];
+const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
+%>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Feeds',
+            value: totalFeeds,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Reddit',
+            value: rFeeds.length,
+            icon: '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/></svg>',
+            color: 'danger'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'YouTube',
+            value: yFeeds.length,
+            icon: '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
+            color: 'danger'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Twitter/X',
+            value: tFeeds.length,
+            icon: '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+            color: 'info'
+        }) %>
+    </div>
+
+    <!-- Reddit Feeds -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 bg-orange-500/10 rounded-lg">
+                <svg class="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Reddit Feeds</h3>
+                <p class="text-sm text-gray-400">Automatically post new content from subreddits</p>
+            </div>
+        </div>
+
+        <form id="reddit-feed-form" class="mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div class="form-group">
+                    <label class="form-label">Subreddit Name</label>
+                    <input type="text" name="subreddit" class="form-input w-full" required placeholder="buildapcsales">
+                    <p class="form-hint">Without r/ prefix</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Post to Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: null,
+                        placeholder: 'Select channel'
+                    }) %>
+                </div>
+                <button type="submit" class="btn btn-primary w-full">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Reddit Feed
+                </button>
+            </div>
+        </form>
+
+        <% if (rFeeds.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Subreddit</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Channel</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% rFeeds.forEach(feed => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <span class="text-orange-500 font-medium">r/<%= feed.subreddit %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-gray-400">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deleteRedditFeed('<%= feed.id %>')" class="btn btn-danger btn-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                        Remove
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 bg-dark-700 rounded-lg border border-dashed border-dark-400">
+                <span class="text-2xl text-gray-500 block mb-2">📰</span>
+                <p class="text-gray-400">No Reddit feeds configured</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- YouTube Feeds -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 bg-red-500/10 rounded-lg">
+                <svg class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">YouTube Feeds</h3>
+                <p class="text-sm text-gray-400">Get notified when channels upload new videos</p>
+            </div>
+        </div>
+
+        <form id="youtube-feed-form" class="mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div class="form-group">
+                    <label class="form-label">YouTube Channel ID</label>
+                    <input type="text" name="youtube_channel_id" class="form-input w-full" required placeholder="UC...">
+                    <p class="form-hint">Channel ID starting with UC</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Post to Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'discord_channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: null,
+                        placeholder: 'Select channel'
+                    }) %>
+                </div>
+                <button type="submit" class="btn btn-primary w-full">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add YouTube Feed
+                </button>
+            </div>
+        </form>
+
+        <% if (yFeeds.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">YouTube Channel</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Discord Channel</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% yFeeds.forEach(feed => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <code class="text-xs bg-dark-700 px-2 py-1 rounded"><%= feed.youtube_channel_id %></code>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-gray-400">#<%= channels.find(c => c.id === feed.discord_channel_id)?.name || 'Unknown' %></span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deleteYoutubeFeed('<%= feed.id %>')" class="btn btn-danger btn-sm">Remove</button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 bg-dark-700 rounded-lg border border-dashed border-dark-400">
+                <span class="text-2xl text-gray-500 block mb-2">📺</span>
+                <p class="text-gray-400">No YouTube feeds configured</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Twitter Feeds -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 bg-blue-500/10 rounded-lg">
+                <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Twitter/X Feeds</h3>
+                <p class="text-sm text-gray-400">Automatically post new tweets from accounts</p>
+            </div>
+        </div>
+
+        <form id="twitter-feed-form" class="mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div class="form-group">
+                    <label class="form-label">Twitter Username</label>
+                    <input type="text" name="twitter_username" class="form-input w-full" required placeholder="elonmusk">
+                    <p class="form-hint">Without @ symbol</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Post to Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: null,
+                        placeholder: 'Select channel'
+                    }) %>
+                </div>
+                <button type="submit" class="btn btn-primary w-full">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Twitter Feed
+                </button>
+            </div>
+        </form>
+
+        <% if (tFeeds.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Twitter Account</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Channel</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% tFeeds.forEach(feed => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <span class="text-blue-400 font-medium">@<%= feed.twitter_username %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-gray-400">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deleteTwitterFeed('<%= feed.id %>')" class="btn btn-danger btn-sm">Remove</button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 bg-dark-700 rounded-lg border border-dashed border-dark-400">
+                <span class="text-2xl text-gray-500 block mb-2">🐦</span>
+                <p class="text-gray-400">No Twitter feeds configured</p>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<script>
+document.getElementById('reddit-feed-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/feeds/reddit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subreddit: formData.get('subreddit'), channel_id: formData.get('channel_id') })
+        });
+        if (response.ok) { showToast('success', 'Reddit feed added'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to add feed'); }
+});
+
+document.getElementById('youtube-feed-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/feeds/youtube', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ youtube_channel_id: formData.get('youtube_channel_id'), discord_channel_id: formData.get('discord_channel_id') })
+        });
+        if (response.ok) { showToast('success', 'YouTube feed added'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to add feed'); }
+});
+
+document.getElementById('twitter-feed-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/feeds/twitter', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ twitter_username: formData.get('twitter_username'), channel_id: formData.get('channel_id') })
+        });
+        if (response.ok) { showToast('success', 'Twitter feed added'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to add feed'); }
+});
+
+async function deleteRedditFeed(id) {
+    if (!confirm('Remove this feed?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/feeds/reddit/${id}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Feed removed'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to remove'); }
+}
+
+async function deleteYoutubeFeed(id) {
+    if (!confirm('Remove this feed?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/feeds/youtube/${id}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Feed removed'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to remove'); }
+}
+
+async function deleteTwitterFeed(id) {
+    if (!confirm('Remove this feed?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/feeds/twitter/${id}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Feed removed'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to remove'); }
+}
+</script>

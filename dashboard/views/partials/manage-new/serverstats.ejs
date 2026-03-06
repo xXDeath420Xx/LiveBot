@@ -1,0 +1,129 @@
+<%# Server Statistics - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Time Period Selector -->
+    <div class="card">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Server Statistics</h3>
+                    <p class="text-sm text-gray-400">View detailed server activity and analytics</p>
+                </div>
+            </div>
+            <select id="period-select" class="form-input w-40" onchange="loadServerStats()">
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="90d">Last 90 Days</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Current Stats -->
+    <div id="stats-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="card text-center py-6">
+            <div id="stat-messages" class="text-3xl font-bold text-primary-400 mb-1">-</div>
+            <div class="text-sm text-gray-400">Total Messages</div>
+        </div>
+        <div class="card text-center py-6">
+            <div id="stat-members" class="text-3xl font-bold text-accent-green mb-1">-</div>
+            <div class="text-sm text-gray-400">Total Members</div>
+        </div>
+        <div class="card text-center py-6">
+            <div id="stat-joined" class="text-3xl font-bold text-info mb-1">-</div>
+            <div class="text-sm text-gray-400">Members Joined</div>
+        </div>
+        <div class="card text-center py-6">
+            <div id="stat-left" class="text-3xl font-bold text-accent-red mb-1">-</div>
+            <div class="text-sm text-gray-400">Members Left</div>
+        </div>
+    </div>
+
+    <!-- Top Message Senders -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            Top Message Senders
+        </h3>
+        <div id="top-messagers" class="space-y-2">
+            <div class="text-center py-8 text-gray-400">Loading...</div>
+        </div>
+    </div>
+
+    <!-- Most Active Channels -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+            </svg>
+            Most Active Channels
+        </h3>
+        <div id="channel-activity" class="space-y-2">
+            <div class="text-center py-8 text-gray-400">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadServerStats() {
+    const period = document.getElementById('period-select').value;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/serverstats?period=${period}`);
+        const data = await response.json();
+
+        // Current stats
+        const stats = data.currentStats || {};
+        document.getElementById('stat-messages').textContent = (stats.total_messages || 0).toLocaleString();
+        document.getElementById('stat-members').textContent = (stats.total_members || 0).toLocaleString();
+        document.getElementById('stat-joined').textContent = (stats.members_joined || 0).toLocaleString();
+        document.getElementById('stat-left').textContent = (stats.members_left || 0).toLocaleString();
+
+        // Top messagers
+        const messagersList = document.getElementById('top-messagers');
+        if (data.topMessagers && data.topMessagers.length > 0) {
+            messagersList.innerHTML = data.topMessagers.map((user, index) => `
+                <div class="flex items-center justify-between p-3 bg-dark-700 rounded-lg hover:bg-dark-600 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="text-lg font-bold ${index < 3 ? 'text-accent-yellow' : 'text-gray-500'}">
+                            ${index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '#' + (index + 1)}
+                        </span>
+                        <code class="text-sm text-gray-400">${user.user_id}</code>
+                    </div>
+                    <span class="text-primary-400 font-semibold">${user.total_messages.toLocaleString()} messages</span>
+                </div>
+            `).join('');
+        } else {
+            messagersList.innerHTML = '<div class="text-center py-8 text-gray-500">No data available</div>';
+        }
+
+        // Channel activity
+        const channelsList = document.getElementById('channel-activity');
+        if (data.channelActivity && data.channelActivity.length > 0) {
+            channelsList.innerHTML = data.channelActivity.map((channel, index) => `
+                <div class="flex items-center justify-between p-3 bg-dark-700 rounded-lg hover:bg-dark-600 transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="text-lg font-bold ${index < 3 ? 'text-primary-400' : 'text-gray-500'}">#${index + 1}</span>
+                        <span class="text-gray-300">#${channel.channel_name || channel.channel_id}</span>
+                    </div>
+                    <span class="text-accent-green font-semibold">${channel.total_messages.toLocaleString()} messages</span>
+                </div>
+            `).join('');
+        } else {
+            channelsList.innerHTML = '<div class="text-center py-8 text-gray-500">No data available</div>';
+        }
+
+    } catch (error) {
+        console.error('Error loading server stats:', error);
+        document.getElementById('top-messagers').innerHTML = '<div class="text-center py-8 text-accent-red">Error loading data</div>';
+    }
+}
+
+loadServerStats();
+</script>

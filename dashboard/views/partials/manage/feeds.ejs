@@ -1,0 +1,333 @@
+<%
+const rFeeds = redditFeeds || [];
+const yFeeds = youtubeFeeds || [];
+const tFeeds = twitterFeeds || [];
+const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
+%>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-rss"></i>
+                <span>Content Feeds</span>
+            </div>
+            <div class="page-section-subtitle">
+                Automatically post content from Reddit, YouTube, and Twitter
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Feeds</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= totalFeeds %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Reddit</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #FF4500;"><%= rFeeds.length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">YouTube</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #FF0000;"><%= yFeeds.length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Twitter</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #1DA1F2;"><%= tFeeds.length %></div>
+        </div>
+    </div>
+
+<!-- Reddit Feeds -->
+<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
+    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+        <i class="fab fa-reddit" style="color: #FF4500;"></i>
+        Reddit Feeds
+    </h3>
+    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
+        Automatically post new content from subreddits to your channels
+    </p>
+    <form action="/manage/<%= guild.id %>/add-reddit-feed" method="POST" style="margin-bottom: var(--spacing-5);">
+        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+            <div>
+                <label class="form-label">Subreddit Name</label>
+                <input type="text" name="subreddit" class="form-control" required placeholder="buildapcsales">
+                <div class="form-help">Without r/ prefix</div>
+            </div>
+            <div>
+                <label class="form-label">Post to Channel</label>
+                <select name="channel_id" class="form-select" required>
+                    <option value="">Select channel</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>">#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    <i class="fas fa-plus"></i>
+                    <span>Add Reddit Feed</span>
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <% if (rFeeds.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Subreddit</th>
+                        <th>Channel</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% rFeeds.forEach(feed => { %>
+                        <tr>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                    <i class="fab fa-reddit" style="color: #FF4500;"></i>
+                                    <span style="font-weight: var(--font-weight-medium);">r/<%= feed.subreddit %></span>
+                                </div>
+                            </td>
+                            <td>
+                                <span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span>
+                            </td>
+                            <td class="text-end">
+                                <form action="/manage/<%= guild.id %>/remove-reddit-feed" method="POST" style="display: inline;">
+                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="fas fa-trash"></i>
+                                        <span>Remove</span>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
+            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                <i class="fab fa-reddit" style="font-size: var(--font-size-2xl);"></i>
+            </div>
+            <div style="color: var(--color-text-secondary);">No Reddit feeds configured</div>
+        </div>
+    <% } %>
+</div>
+
+<!-- YouTube Feeds -->
+<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
+    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+        <i class="fab fa-youtube" style="color: #FF0000;"></i>
+        YouTube Feeds
+    </h3>
+    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
+        Get notified when YouTube channels upload new videos
+    </p>
+
+    <form action="/manage/<%= guild.id %>/add-youtube-feed" method="POST" style="margin-bottom: var(--spacing-5);">
+        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+            <div>
+                <label class="form-label">YouTube Channel ID</label>
+                <input type="text" name="youtube_channel_id" class="form-control" required placeholder="UC...">
+                <div class="form-help">Channel ID starting with UC</div>
+            </div>
+            <div>
+                <label class="form-label">Post to Channel</label>
+                <select name="discord_channel_id" class="form-select" required>
+                    <option value="">Select channel</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>">#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    <i class="fas fa-plus"></i>
+                    <span>Add YouTube Feed</span>
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <% if (yFeeds.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>YouTube Channel</th>
+                        <th>Discord Channel</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% yFeeds.forEach(feed => { %>
+                        <tr>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                    <i class="fab fa-youtube" style="color: #FF0000;"></i>
+                                    <code style="font-size: var(--font-size-xs); background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
+                                        <%= feed.youtube_channel_id %>
+                                    </code>
+                                </div>
+                            </td>
+                            <td>
+                                <span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.discord_channel_id)?.name || 'Unknown' %></span>
+                            </td>
+                            <td class="text-end">
+                                <form action="/manage/<%= guild.id %>/remove-youtube-feed" method="POST" style="display: inline;">
+                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="fas fa-trash"></i>
+                                        <span>Remove</span>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
+            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                <i class="fab fa-youtube" style="font-size: var(--font-size-2xl);"></i>
+            </div>
+            <div style="color: var(--color-text-secondary);">No YouTube feeds configured</div>
+        </div>
+    <% } %>
+</div>
+
+<!-- Twitter Feeds -->
+<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
+    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+        <i class="fab fa-twitter" style="color: #1DA1F2;"></i>
+        Twitter/X Feeds
+    </h3>
+    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
+        Automatically post new tweets from Twitter/X accounts
+    </p>
+
+    <form action="/manage/<%= guild.id %>/add-twitter-feed" method="POST" style="margin-bottom: var(--spacing-5);">
+        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+            <div>
+                <label class="form-label">Twitter Username</label>
+                <input type="text" name="twitter_username" class="form-control" required placeholder="elonmusk">
+                <div class="form-help">Without @ symbol</div>
+            </div>
+            <div>
+                <label class="form-label">Post to Channel</label>
+                <select name="channel_id" class="form-select" required>
+                    <option value="">Select channel</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>">#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    <i class="fas fa-plus"></i>
+                    <span>Add Twitter Feed</span>
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <% if (tFeeds.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Twitter Account</th>
+                        <th>Channel</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% tFeeds.forEach(feed => { %>
+                        <tr>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                                    <i class="fab fa-twitter" style="color: #1DA1F2;"></i>
+                                    <span style="font-weight: var(--font-weight-medium);">@<%= feed.twitter_username %></span>
+                                </div>
+                            </td>
+                            <td>
+                                <span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span>
+                            </td>
+                            <td class="text-end">
+                                <form action="/manage/<%= guild.id %>/remove-twitter-feed" method="POST" style="display: inline;">
+                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="fas fa-trash"></i>
+                                        <span>Remove</span>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
+            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                <i class="fab fa-twitter" style="font-size: var(--font-size-2xl);"></i>
+            </div>
+            <div style="color: var(--color-text-secondary);">No Twitter feeds configured</div>
+        </div>
+    <% } %>
+</div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-700);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.text-end {
+    text-align: right;
+}
+</style>

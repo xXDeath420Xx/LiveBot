@@ -1,0 +1,275 @@
+<%# Stat Roles - Tailwind Version %>
+
+<%
+const configs = statroleConfigs || [];
+%>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Stat Roles',
+            value: configs.length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Message Milestones',
+            value: configs.filter(c => c.stat_type === 'messages').length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Voice Milestones',
+            value: configs.filter(c => c.stat_type === 'voice_minutes').length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Highest Requirement',
+            value: configs.length > 0 ? Math.max(...configs.map(c => c.required_value)).toLocaleString() : 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Header -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Stat Roles</h3>
+                    <p class="text-sm text-gray-400">Automatically assign roles when users reach statistical milestones</p>
+                </div>
+            </div>
+            <button onclick="addStatRole()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Stat Role
+            </button>
+        </div>
+
+        <form id="stat-roles-form">
+            <div id="stat-roles-container" class="space-y-4">
+                <% if (configs.length > 0) { %>
+                    <% configs.forEach((config, index) => { %>
+                        <div class="stat-role-card p-4 bg-dark-700 rounded-lg border border-dark-400" data-index="<%= index %>">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-primary-500 flex items-center justify-center">
+                                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <p class="font-semibold text-white">Stat Role #<%= index + 1 %></p>
+                                        <p class="text-sm text-gray-400"><%= config.stat_type === 'messages' ? 'Message Milestone' : 'Voice Time Milestone' %></p>
+                                    </div>
+                                </div>
+                                <button type="button" onclick="removeStatRole(this)" class="btn btn-danger btn-sm">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                    Remove
+                                </button>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div class="form-group">
+                                    <label class="form-label">Role to Award</label>
+                                    <select name="configs[<%= index %>][roleId]" class="form-input w-full" required>
+                                        <option value="">Select a role</option>
+                                        <% roles.forEach(role => { %>
+                                            <option value="<%= role.id %>" <%= config.role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                                        <% }) %>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Statistic to Track</label>
+                                    <select name="configs[<%= index %>][stat]" class="form-input w-full" required>
+                                        <option value="messages" <%= config.stat_type === 'messages' ? 'selected' : '' %>>Messages Sent</option>
+                                        <option value="voice_minutes" <%= config.stat_type === 'voice_minutes' ? 'selected' : '' %>>Minutes in Voice</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Required Value</label>
+                                    <input type="number" name="configs[<%= index %>][requiredValue]" class="form-input w-full" value="<%= config.required_value %>" min="1" required>
+                                </div>
+                            </div>
+                        </div>
+                    <% }) %>
+                <% } %>
+            </div>
+
+            <% if (configs.length === 0) { %>
+                <div id="empty-state" class="text-center py-12">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                        </svg>
+                    </div>
+                    <h4 class="text-lg font-semibold text-white mb-2">No Stat Roles Configured</h4>
+                    <p class="text-gray-400 mb-4">Create stat roles to automatically reward active members with roles</p>
+                    <button type="button" onclick="addStatRole()" class="btn btn-primary">Add First Stat Role</button>
+                </div>
+            <% } %>
+
+            <div id="submit-container" class="<%= configs.length === 0 ? 'hidden' : '' %> flex justify-end pt-4 border-t border-dark-400 mt-4">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save All Stat Roles
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-primary-500/10 to-primary-500/5 border-primary-500/30">
+        <h4 class="font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            How Stat Roles Work
+        </h4>
+        <ul class="text-sm text-gray-300 space-y-2">
+            <li class="flex items-start gap-2">
+                <span class="text-primary-400">1.</span>
+                Configure milestones based on messages sent or time in voice channels
+            </li>
+            <li class="flex items-start gap-2">
+                <span class="text-primary-400">2.</span>
+                When a user reaches a milestone, they automatically receive the configured role
+            </li>
+            <li class="flex items-start gap-2">
+                <span class="text-primary-400">3.</span>
+                Statistics are tracked continuously across the server
+            </li>
+            <li class="flex items-start gap-2">
+                <span class="text-primary-400">4.</span>
+                Great for rewarding active community members!
+            </li>
+        </ul>
+    </div>
+</div>
+
+<script>
+let statRoleIndex = <%= configs.length %>;
+
+function addStatRole() {
+    const container = document.getElementById('stat-roles-container');
+    const emptyState = document.getElementById('empty-state');
+    const submitContainer = document.getElementById('submit-container');
+
+    if (emptyState) emptyState.classList.add('hidden');
+    submitContainer.classList.remove('hidden');
+
+    const card = document.createElement('div');
+    card.className = 'stat-role-card p-4 bg-dark-700 rounded-lg border border-dark-400';
+    card.dataset.index = statRoleIndex;
+    card.innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-primary-500 flex items-center justify-center">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="font-semibold text-white">Stat Role #${statRoleIndex + 1}</p>
+                    <p class="text-sm text-gray-400">New Milestone</p>
+                </div>
+            </div>
+            <button type="button" onclick="removeStatRole(this)" class="btn btn-danger btn-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Remove
+            </button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label">Role to Award</label>
+                <select name="configs[${statRoleIndex}][roleId]" class="form-input w-full" required>
+                    <option value="">Select a role</option>
+                    <% roles.forEach(role => { %>
+                        <option value="<%= role.id %>"><%= role.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Statistic to Track</label>
+                <select name="configs[${statRoleIndex}][stat]" class="form-input w-full" required>
+                    <option value="messages">Messages Sent</option>
+                    <option value="voice_minutes">Minutes in Voice</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Required Value</label>
+                <input type="number" name="configs[${statRoleIndex}][requiredValue]" class="form-input w-full" placeholder="1000" min="1" required>
+            </div>
+        </div>
+    `;
+
+    container.appendChild(card);
+    statRoleIndex++;
+}
+
+function removeStatRole(btn) {
+    const card = btn.closest('.stat-role-card');
+    card.remove();
+
+    const remaining = document.querySelectorAll('.stat-role-card');
+    if (remaining.length === 0) {
+        const emptyState = document.getElementById('empty-state');
+        const submitContainer = document.getElementById('submit-container');
+        if (emptyState) emptyState.classList.remove('hidden');
+        submitContainer.classList.add('hidden');
+    }
+
+    // Reindex
+    remaining.forEach((card, idx) => {
+        card.dataset.index = idx;
+        card.querySelector('.font-semibold').textContent = `Stat Role #${idx + 1}`;
+        card.querySelectorAll('select, input').forEach(input => {
+            input.name = input.name.replace(/\[\d+\]/, `[${idx}]`);
+        });
+    });
+}
+
+document.getElementById('stat-roles-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const configs = [];
+    document.querySelectorAll('.stat-role-card').forEach(card => {
+        const idx = card.dataset.index;
+        configs.push({
+            roleId: card.querySelector(`select[name="configs[${idx}][roleId]"]`).value,
+            stat: card.querySelector(`select[name="configs[${idx}][stat]"]`).value,
+            requiredValue: parseInt(card.querySelector(`input[name="configs[${idx}][requiredValue]"]`).value)
+        });
+    });
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/stat-roles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ configs })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Stat roles saved');
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save stat roles');
+    }
+});
+</script>

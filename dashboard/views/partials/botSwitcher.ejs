@@ -1,0 +1,111 @@
+<%# Bot Switcher Partial
+    Available in views where botContext middleware is applied
+    Uses res.locals.selectedBotId and res.locals.availableBots
+%>
+<%
+const currentBot = (locals.availableBots || []).find(b => b.id === locals.selectedBotId) || {
+    id: 'default',
+    name: 'CertiFried Utility',
+    username: 'CertiFried Utility',
+    avatar: '/images/bot-avatar.png',
+    isDefault: true
+};
+const availableBots = locals.availableBots || [];
+const guildId = locals.guild?.id || locals.guildId || '';
+%>
+
+<% if (availableBots.length > 1) { %>
+<div class="bot-switcher relative" data-current-bot="<%= currentBot.id %>" data-guild-id="<%= guildId %>">
+    <button
+        data-trigger
+        class="flex items-center gap-3 px-3 py-2 rounded-lg bg-dark-600 hover:bg-dark-500 border border-dark-400 transition-colors"
+        aria-expanded="false"
+        aria-haspopup="true"
+    >
+        <img
+            src="<%= currentBot.avatar %>"
+            alt="<%= currentBot.name %>"
+            class="w-8 h-8 rounded-full bg-dark-400"
+            onerror="this.src='/images/default-avatar.png'"
+        >
+        <div class="text-left hidden sm:block">
+            <p class="text-sm font-medium text-white truncate max-w-[120px]"><%= currentBot.name %></p>
+            <p class="text-xs text-gray-400">Active Bot</p>
+        </div>
+        <svg class="w-4 h-4 text-gray-400 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+    </button>
+
+    <div
+        data-dropdown
+        class="hidden absolute top-full right-0 mt-2 w-72 bg-dark-600 border border-dark-400 rounded-lg shadow-xl z-50"
+    >
+        <div class="p-3 border-b border-dark-400">
+            <p class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Switch Bot Instance</p>
+            <p class="text-xs text-gray-500 mt-1">Select which bot to configure for this server</p>
+        </div>
+
+        <div data-bot-list class="max-h-64 overflow-y-auto p-2">
+            <% availableBots.forEach(bot => { %>
+                <button
+                    data-bot-id="<%= bot.id %>"
+                    class="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg hover:bg-dark-500 transition-colors group <%= bot.id === currentBot.id ? 'bg-primary-500/10 border border-primary-500/30' : '' %>"
+                >
+                    <div class="relative">
+                        <img
+                            src="<%= bot.avatar %>"
+                            alt="<%= bot.name %>"
+                            class="w-10 h-10 rounded-full bg-dark-400"
+                            onerror="this.src='/images/default-avatar.png'"
+                        >
+                        <span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-dark-600 status-online"></span>
+                    </div>
+
+                    <div class="text-left flex-1 min-w-0">
+                        <p class="text-sm font-medium text-white truncate group-hover:text-primary-400 transition-colors">
+                            <%= bot.name %>
+                        </p>
+                        <p class="text-xs text-gray-400">@<%= bot.username %></p>
+                    </div>
+
+                    <% if (bot.id === currentBot.id) { %>
+                        <div class="flex items-center gap-1">
+                            <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            <span class="text-xs text-primary-400">Active</span>
+                        </div>
+                    <% } %>
+
+                    <% if (bot.isDefault) { %>
+                        <span class="badge badge-info text-xs">Default</span>
+                    <% } %>
+                </button>
+            <% }); %>
+        </div>
+
+        <div class="p-3 border-t border-dark-400 bg-dark-700/50 rounded-b-lg">
+            <p class="text-xs text-gray-500">
+                <svg class="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Switching bots will reload the page with the new context
+            </p>
+        </div>
+    </div>
+</div>
+<% } else if (availableBots.length === 1) { %>
+<div class="flex items-center gap-3 px-3 py-2">
+    <img
+        src="<%= currentBot.avatar %>"
+        alt="<%= currentBot.name %>"
+        class="w-8 h-8 rounded-full bg-dark-400"
+        onerror="this.src='/images/default-avatar.png'"
+    >
+    <div class="text-left hidden sm:block">
+        <p class="text-sm font-medium text-white"><%= currentBot.name %></p>
+        <p class="text-xs text-gray-400">Bot Instance</p>
+    </div>
+</div>
+<% } %>

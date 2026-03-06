@@ -1,0 +1,293 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-exchange-alt"></i>
+                <span>Trading System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Monitor active trades, view trade history, and manage trading activity
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Trades</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= tradeStats?.active_trades || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Completed Trades</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= tradeStats?.completed_trades || 0 %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Cancelled Trades</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-danger);"><%= tradeStats?.cancelled_trades || 0 %></div>
+        </div>
+    </div>
+
+    <!-- Active Trades -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-handshake"></i> Active Trades
+        </h3>
+
+        <% if (activeTrades && activeTrades.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Trade ID</th>
+                            <th>Initiator</th>
+                            <th>Partner</th>
+                            <th>Initiator Offer</th>
+                            <th>Partner Offer</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% activeTrades.forEach(trade => { %>
+                            <tr>
+                                <td>
+                                    <code style="color: var(--color-primary-400); font-weight: var(--font-weight-semibold);">#<%= trade.trade_id %></code>
+                                </td>
+                                <td>
+                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= trade.initiator_id %></code>
+                                </td>
+                                <td>
+                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= trade.partner_id %></code>
+                                </td>
+                                <td>
+                                    <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
+                                        <% if (trade.initiator_currency > 0) { %>
+                                            <span class="badge" style="background: var(--color-warning);"><%= trade.initiator_currency.toLocaleString() %> coins</span>
+                                        <% } %>
+                                        <% if (trade.initiator_items && trade.initiator_items.length > 0) { %>
+                                            <span class="badge" style="background: var(--color-accent-purple);"><%= trade.initiator_items.split(',').length %> items</span>
+                                        <% } %>
+                                        <% if (!trade.initiator_currency && (!trade.initiator_items || !trade.initiator_items.length)) { %>
+                                            <span style="color: var(--color-text-muted); font-size: var(--font-size-xs);">Nothing</span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
+                                        <% if (trade.partner_currency > 0) { %>
+                                            <span class="badge" style="background: var(--color-warning);"><%= trade.partner_currency.toLocaleString() %> coins</span>
+                                        <% } %>
+                                        <% if (trade.partner_items && trade.partner_items.length > 0) { %>
+                                            <span class="badge" style="background: var(--color-accent-purple);"><%= trade.partner_items.split(',').length %> items</span>
+                                        <% } %>
+                                        <% if (!trade.partner_currency && (!trade.partner_items || !trade.partner_items.length)) { %>
+                                            <span style="color: var(--color-text-muted); font-size: var(--font-size-xs);">Nothing</span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <% if (trade.status === 'pending') { %>
+                                        <span class="badge" style="background: var(--color-warning);">Pending</span>
+                                    <% } else if (trade.status === 'accepted') { %>
+                                        <span class="badge badge-success">Accepted</span>
+                                    <% } else { %>
+                                        <span class="badge badge-secondary" style="text-transform: capitalize;"><%= trade.status %></span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                        <%= new Date(trade.created_at).toLocaleString() %>
+                                    </div>
+                                </td>
+                                <td class="text-end">
+                                    <form action="/manage/<%= guild.id %>/trading/cancel" method="POST" style="display: inline;">
+                                        <input type="hidden" name="trade_id" value="<%= trade.trade_id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Cancel this trade?')">
+                                            <i class="fas fa-times"></i>
+                                            <span>Cancel</span>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-handshake"></i>
+                </div>
+                <div class="empty-state-title">No Active Trades</div>
+                <div class="empty-state-description">
+                    No trades are currently in progress
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Recent Trade History -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-history"></i> Recent Trade History (Last 50)
+        </h3>
+
+        <% if (tradeHistory && tradeHistory.length > 0) { %>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Trade ID</th>
+                            <th>Initiator</th>
+                            <th>Partner</th>
+                            <th>Initiator Gave</th>
+                            <th>Partner Gave</th>
+                            <th>Status</th>
+                            <th>Completed</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% tradeHistory.forEach(trade => { %>
+                            <tr>
+                                <td>
+                                    <code style="color: var(--color-primary-400); font-weight: var(--font-weight-semibold);">#<%= trade.trade_id %></code>
+                                </td>
+                                <td>
+                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= trade.initiator_id %></code>
+                                </td>
+                                <td>
+                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= trade.partner_id %></code>
+                                </td>
+                                <td>
+                                    <div style="color: var(--color-text-primary); font-size: var(--font-size-sm);">
+                                        <% if (trade.initiator_currency > 0) { %>
+                                            <span style="color: var(--color-warning);"><%= trade.initiator_currency.toLocaleString() %> coins</span>
+                                        <% } %>
+                                        <% if (trade.initiator_items && trade.initiator_items.length > 0) { %>
+                                            <% if (trade.initiator_currency > 0) { %> + <% } %>
+                                            <span style="color: var(--color-accent-purple);"><%= trade.initiator_items.split(',').length %> items</span>
+                                        <% } %>
+                                        <% if (!trade.initiator_currency && (!trade.initiator_items || !trade.initiator_items.length)) { %>
+                                            <span style="color: var(--color-text-muted);">Nothing</span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div style="color: var(--color-text-primary); font-size: var(--font-size-sm);">
+                                        <% if (trade.partner_currency > 0) { %>
+                                            <span style="color: var(--color-warning);"><%= trade.partner_currency.toLocaleString() %> coins</span>
+                                        <% } %>
+                                        <% if (trade.partner_items && trade.partner_items.length > 0) { %>
+                                            <% if (trade.partner_currency > 0) { %> + <% } %>
+                                            <span style="color: var(--color-accent-purple);"><%= trade.partner_items.split(',').length %> items</span>
+                                        <% } %>
+                                        <% if (!trade.partner_currency && (!trade.partner_items || !trade.partner_items.length)) { %>
+                                            <span style="color: var(--color-text-muted);">Nothing</span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <% if (trade.status === 'completed') { %>
+                                        <span class="badge badge-success">Completed</span>
+                                    <% } else if (trade.status === 'cancelled') { %>
+                                        <span class="badge badge-danger">Cancelled</span>
+                                    <% } else if (trade.status === 'declined') { %>
+                                        <span class="badge" style="background: var(--color-warning);">Declined</span>
+                                    <% } else { %>
+                                        <span class="badge badge-secondary" style="text-transform: capitalize;"><%= trade.status %></span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                        <%= new Date(trade.updated_at || trade.created_at).toLocaleString() %>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
+                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
+                    No trade history yet
+                </div>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    color: var(--color-text-secondary);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+.text-end {
+    text-align: right;
+}
+</style>

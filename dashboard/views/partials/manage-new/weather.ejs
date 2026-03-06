@@ -1,0 +1,131 @@
+<%# Weather Alert System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Users with Locations',
+            value: locals.weatherStats?.totalUsers || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Alerts',
+            value: locals.weatherStats?.activeAlerts || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Alerts Sent (24h)',
+            value: locals.weatherStats?.alertsSent || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Weather Alert Configuration</h3>
+                <p class="text-sm text-gray-400">Send severe weather alerts to users based on their location</p>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'weather_enabled',
+                id: 'weather_enabled',
+                checked: locals.weatherConfig?.enabled || false,
+                label: 'Enable Weather Alerts',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="weather-form" action="/api/guilds/<%= guildId %>/weather/config" method="PUT">
+            <div class="form-group">
+                <label class="form-label">Check Interval (seconds)</label>
+                <input type="number" name="check_interval" class="form-input w-32" value="<%= locals.weatherConfig?.check_interval || 60 %>" min="30" max="300">
+                <p class="form-hint">How often to check for new weather alerts (30-300 seconds)</p>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-primary-500/10 to-accent-yellow/10 border-primary-500/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-accent-yellow/20 flex items-center justify-center text-2xl">
+                    🌤️
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How It Works</h4>
+                <ul class="text-sm text-gray-300 space-y-1.5">
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">1.</span>
+                        Users set their location using <code class="text-primary-400">/weather setlocation [zipcode]</code>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">2.</span>
+                        System monitors NWS alerts for affected zones
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">3.</span>
+                        Users receive DMs when severe alerts affect their area
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">4.</span>
+                        Supports all US locations via ZIP code lookup
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Commands -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">User Commands</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="p-3 bg-dark-700 rounded-lg">
+                <code class="text-primary-400">/weather setlocation [zip]</code>
+                <p class="text-xs text-gray-500 mt-1">Set ZIP code for alerts</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg">
+                <code class="text-primary-400">/weather location</code>
+                <p class="text-xs text-gray-500 mt-1">View saved location</p>
+            </div>
+            <div class="p-3 bg-dark-700 rounded-lg">
+                <code class="text-primary-400">/weather remove</code>
+                <p class="text-xs text-gray-500 mt-1">Remove saved location</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('weather-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        enabled: document.getElementById('weather_enabled').checked,
+        check_interval: parseInt(formData.get('check_interval')) || 60
+    };
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Weather settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save settings'); }
+});
+</script>

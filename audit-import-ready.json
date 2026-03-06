@@ -1,0 +1,1844 @@
+{
+  "rows": [
+    {
+      "user_id": "1334454587490439182",
+      "username": "the best cream (thebestcream)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "GFX/engagement scam DM - sent unsolicited DM with engagement bait script ('If $3000 was deposited...')",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1478083925925695610_0.png"
+    },
+    {
+      "user_id": "742274334785273974",
+      "username": "CherrySnipes (cherrysnipes_1)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by orsokuma",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "No image evidence - message content: `742274334785273974`"
+    },
+    {
+      "user_id": "474780704907984906",
+      "username": "Emery (emery_.24)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by orsokuma",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "No image evidence - message content: `474780704907984906`"
+    },
+    {
+      "user_id": "1379615381572030516",
+      "username": "Vanzyn🙄 (vaneassarichardson_00488)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Fake giveaway scam - posted fake MacBook Air giveaway with @everyone ping to bait DMs",
+      "reported_by": "collectonian",
+      "reported_by_id": "508695212554715177",
+      "evidence": "https://certifriedmultitool.com/evidence/1450642219668078767_0.png"
+    },
+    {
+      "user_id": "1230836294926733345",
+      "username": "𝐀𝐏𝐄𝐗 𝐅𝐔𝐒𝐈𝐎𝐍 𝐏𝐑𝐎𝐌𝐎 (apex_fusion)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited friend request + self-promotion spam with suspicious link (dub.sh)",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "https://certifriedmultitool.com/evidence/1443991201329184859_0.png"
+    },
+    {
+      "user_id": "400202288028844032",
+      "username": "fatmanztv (fatmanztv)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Social engineering scam - fake 'I accidentally reported you' DM to extract personal info",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1439337084761411765_0.png"
+    },
+    {
+      "user_id": "999954938786488351",
+      "username": "Anne (annesoler28_)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Fake giveaway scam - posted fake MacBook Air 2020 giveaway with @everyone ping (same template as other giveaway scams)",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1436521183150604389_0.png"
+    },
+    {
+      "user_id": "663325527586635797",
+      "username": "𝔉𝔬xy! (foxyslyyy_)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Unsolicited friend request with no prior server engagement",
+      "reported_by": "foxvann",
+      "reported_by_id": "742452227104571414",
+      "evidence": "https://certifriedmultitool.com/evidence/1396157987105538148_0.png"
+    },
+    {
+      "user_id": "1209828735587586132",
+      "username": "Brandon Larned (aseagullow.)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: User ID: 1209828735587586132"
+    },
+    {
+      "user_id": "337872932372086784",
+      "username": "Jokemern (jokemern)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited indie game promotion/self-promotion - posted YouTube link and game project seeking playtesters in server",
+      "reported_by": "wrench105",
+      "reported_by_id": "805389643801034762",
+      "evidence": "https://certifriedmultitool.com/evidence/1344093026343059457_0.png"
+    },
+    {
+      "user_id": "1060061384651571250",
+      "username": "deleted_user_20ce59d5dd15 (deleted_user_20ce59d5dd15)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Phishing/social engineering - 'accidentally reported you' scam DM, victim lost $970 via hacked payment link",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1329067142531907676_0.png"
+    },
+    {
+      "user_id": "1321942670117048362",
+      "username": "deleted_user_1bd133ef9612 (deleted_user_1bd133ef9612)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: <@1321942670117048362> \nUser ID: 1321942670117048362\n\nImpersonation of a Twitch Partner / Phishing attempts"
+    },
+    {
+      "user_id": "838870528394788904",
+      "username": "deleted_user_8ca1b1e91081 (deleted_user_8ca1b1e91081)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Phishing - fake 'accidentally reported you' story with forged Discord Trust & Safety email screenshot",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1291725789494116424_0.jpg"
+    },
+    {
+      "user_id": "889550752123613194",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited spam DM targeting content creators - 'Hello content creator, how are you doing?'",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1262388412950777886_0.png"
+    },
+    {
+      "user_id": "899865437267963924",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by orsokuma",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1262388412950777886_0.png"
+    },
+    {
+      "user_id": "1262388118422552597",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by orsokuma",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1262388412950777886_0.png"
+    },
+    {
+      "user_id": "1168964497680109710",
+      "username": "deleted_user_7bbb318d0e89 (deleted_user_7bbb318d0e89)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited spam DM - user 'Emmygreat' contacted by spam merchants (2 blocked messages), reported and blocked",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1262388118422552597_0.png"
+    },
+    {
+      "user_id": "962489445259571300",
+      "username": "deleted_user_47a0384bbf8e (deleted_user_47a0384bbf8e)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "NSFW/adult content spam - profile bio contains explicit OnlyFans link with sexual solicitation",
+      "reported_by": "wrench105",
+      "reported_by_id": "805389643801034762",
+      "evidence": "https://certifriedmultitool.com/evidence/1260323422274326548_0.png"
+    },
+    {
+      "user_id": "1252296565050179736",
+      "username": "deleted_user_2dc2ca99fca5 (deleted_user_2dc2ca99fca5)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Fake Nitro scam bot - sent fake '$10 Nitro Gift' DM via 'Epic Giveaways' bot app with phishing link to steal account credentials",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1257515800928190485_0.png"
+    },
+    {
+      "user_id": "344360533090238475",
+      "username": "i420Guy (i420guy)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "NSFW spam raid - mass-posted '18+ Teen Girls and onlyfans leaks' with discord.gg link and @everyone ping across multiple channels",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "https://certifriedmultitool.com/evidence/1256452609657667635_0.png"
+    },
+    {
+      "user_id": "1176584054418702407",
+      "username": "Emma Bella (emmabella.14)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited GFX spam DM - sent friend request and pitched graphic design/animation commissions to random users",
+      "reported_by": "sheepwego",
+      "reported_by_id": "784142127171895306",
+      "evidence": "https://certifriedmultitool.com/evidence/1242948105863827527_0.png"
+    },
+    {
+      "user_id": "1234980523068100711",
+      "username": "Hazel Vtuber (hazelvtuber0265)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by collectonian",
+      "reported_by": "collectonian",
+      "reported_by_id": "508695212554715177",
+      "evidence": "No image evidence - message content: 1234980523068100711"
+    },
+    {
+      "user_id": "826176197095719032",
+      "username": "deleted_user_82c97d44e0e0 (deleted_user_82c97d44e0e0)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "NSFW spam raid - mass-posted '18+ Teen Girls and onlyfans leaks' with discord.gg link and @everyone ping across multiple channels (user 'kalipo__')",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1234480592796782622_0.png"
+    },
+    {
+      "user_id": "494654464259653645",
+      "username": "deleted_user_30237338248e (deleted_user_30237338248e)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Social engineering/phishing - fake 'I accidentally reported you' scam with forged Discord support ticket claiming account suspension and IP block",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1230933291922882721_0.jpg"
+    },
+    {
+      "user_id": "1115591574479458421",
+      "username": "Garcia21 (garcia6544)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "AutoMod flagged unsolicited self-promotion of DND art commissions posted in fan-arts channel, triggered 'Block Custom' rule for commission spam",
+      "reported_by": "yourwelshprincess",
+      "reported_by_id": "1049686866414280734",
+      "evidence": "https://certifriedmultitool.com/evidence/1230211328120193104_0.jpg | https://certifriedmultitool.com/evidence/1230211328120193104_1.jpg | https://certifriedmultitool.com/evidence/1230211328120193104_2.jpg"
+    },
+    {
+      "user_id": "408995145657221140",
+      "username": "deleted_user_ad216b665105 (deleted_user_ad216b665105)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Sent a fake Discord Trust & Safety phishing message claiming an 'Illegal Purchase' report, directing victim to contact a fraudulent email and Discord ID to resolve a fabricated account suspension",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1228745533154398308_0.png | https://certifriedmultitool.com/evidence/1228745533154398308_1.png"
+    },
+    {
+      "user_id": "1201129044121485384",
+      "username": "Vivian Grace (viviangrace0607_01490)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited promotion spam DM - sent friend request and pitched fake YouTube channel promotion plan to content creators",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1227230327575941310_0.png"
+    },
+    {
+      "user_id": "485930298412892180",
+      "username": "jisi (jisii)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by arturiafayth",
+      "reported_by": "arturiafayth",
+      "reported_by_id": "132995743177768961",
+      "evidence": "No image evidence - message content: 485930298412892180 Link spammer for virus infected adobe"
+    },
+    {
+      "user_id": "489882016809091072",
+      "username": "jamie (jades72)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: 489882016809091072\nPhishing link spammer / hijacked account"
+    },
+    {
+      "user_id": "1178783723181850654",
+      "username": "❈  🎀  𝒾𝓃𝒶𝓎𝒶𝒜𝓋𝒶  🎀  ❈ (inaya_ava3)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: 1178783723181850654\n\n1146565855786836038\n\nGfx artist / spammer"
+    },
+    {
+      "user_id": "1146565855786836038",
+      "username": "⋆ strike ⋆ (inaya_ava10)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: 1178783723181850654\n\n1146565855786836038\n\nGfx artist / spammer"
+    },
+    {
+      "user_id": "825441611135713290",
+      "username": "nightwing123245 (nightwing123245)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by maple_sedai",
+      "reported_by": "maple_sedai",
+      "reported_by_id": "630887355414478878",
+      "evidence": "No image evidence - message content: 825441611135713290\n\nDiscord bot spamming for $50 steam cards"
+    },
+    {
+      "user_id": "181498520824578048",
+      "username": "deleted_user_b36eff2cf389 (deleted_user_b36eff2cf389)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Compromised account - posted fake $50 Steam gift card scam with phishing link and @everyone ping in unrelated channel",
+      "reported_by": "seelenmorder",
+      "reported_by_id": "462315941045469211",
+      "evidence": "https://certifriedmultitool.com/evidence/1205833703016628264_0.jpg"
+    },
+    {
+      "user_id": "901686554030903328",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: The Valhiem Video Game Discord got hacked through one their bots.\nStandard do not click on links applies.\nLikely only relevant to some people here but"
+    },
+    {
+      "user_id": "306752459399888896",
+      "username": "Harrah (harrascasinohotel)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by maple_sedai",
+      "reported_by": "maple_sedai",
+      "reported_by_id": "630887355414478878",
+      "evidence": "No image evidence - message content: Discord user ID: 306752459399888896\n\nThis person keeps joining a friend's discord and posting porn stuff. They keep getting banned and he's had to loc"
+    },
+    {
+      "user_id": "1168309521039499378",
+      "username": "JACK ✔ (jackey0_0)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited GFX spam DM - sent friend request to strangers and pitched art commissions with portfolio",
+      "reported_by": "yourwelshprincess",
+      "reported_by_id": "1049686866414280734",
+      "evidence": "https://certifriedmultitool.com/evidence/1199742815207440434_0.jpg"
+    },
+    {
+      "user_id": "492140129855733787",
+      "username": "ShaubyP (shaubyp)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by orsokuma",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "No image evidence - message content: UserID `492140129855733787`\nPosting links to spam/exploit Discords (another \"OnlyFans\" one)\nWasn't able to grab a screenshot before another moderator "
+    },
+    {
+      "user_id": "1009967945407012884",
+      "username": "Tizzy_ProExpert✅💛 (tizzy_proexpert)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Twitch promotion scam DM - pitched fake 'Twitch Promotional Campaign' claiming to send channel info to 5000+ email addresses for growth",
+      "reported_by": "shelkie",
+      "reported_by_id": "741558619547500615",
+      "evidence": "https://certifriedmultitool.com/evidence/1198936468526215250_0.png"
+    },
+    {
+      "user_id": "957491067933052938",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by noobst3r",
+      "reported_by": "noobst3r",
+      "reported_by_id": "765967923164479488",
+      "evidence": "No image evidence - message content: https://discord.com/channels/889550752123613194/957491067933052938/1112062931157389503"
+    },
+    {
+      "user_id": "1112062931157389503",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by noobst3r",
+      "reported_by": "noobst3r",
+      "reported_by_id": "765967923164479488",
+      "evidence": "No image evidence - message content: https://discord.com/channels/889550752123613194/957491067933052938/1112062931157389503"
+    },
+    {
+      "user_id": "792417931425218580",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by vpsdata",
+      "reported_by": "vpsdata",
+      "reported_by_id": "322722087070466048",
+      "evidence": "No image evidence - message content: unless you give it away for a reason, there is no such thing as giving free stuff away on request, mainly not from random people <:blob_sweat:79241793"
+    },
+    {
+      "user_id": "1161458790051364875",
+      "username": "deleted_user_188d6d5e8250 (deleted_user_188d6d5e8250)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "User requesting others to join a '2D Drawing army' with repeated messages and anime/selfie spam in chat",
+      "reported_by": "yourwelshprincess",
+      "reported_by_id": "1049686866414280734",
+      "evidence": "https://certifriedmultitool.com/evidence/1193911890238251068_0.png | https://certifriedmultitool.com/evidence/1193911890238251068_1.png"
+    },
+    {
+      "user_id": "1193495431733334098",
+      "username": "rona (rona0620)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Begging/soliciting - DMed asking for Xbox Game Pass code from Discord gifts, no deception involved",
+      "reported_by": "vpsdata",
+      "reported_by_id": "322722087070466048",
+      "evidence": "https://certifriedmultitool.com/evidence/1193868470379610192_0.png"
+    },
+    {
+      "user_id": "1136633667490426960",
+      "username": "Leeshami (leeshami)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Twitch promotion scam DM - pitched fake channel promotion to affiliate within 10 days with follower/viewer growth claims",
+      "reported_by": "vpsdata",
+      "reported_by_id": "322722087070466048",
+      "evidence": "https://certifriedmultitool.com/evidence/1192903679297208340_0.png"
+    },
+    {
+      "user_id": "1180498766403477559",
+      "username": "Mr dice (mrdice0421)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Financial scam - posted in general chat offering to 'help earn $40k within 84 hours' for 10% cut, with Telegram link (blocked by AutoMod)",
+      "reported_by": "yourwelshprincess",
+      "reported_by_id": "1049686866414280734",
+      "evidence": "https://certifriedmultitool.com/evidence/1184090813446230086_0.jpg"
+    },
+    {
+      "user_id": "1141822719604834466",
+      "username": "N4S (n4sclan)",
+      "severity": "high",
+      "category": "harassment",
+      "reason": "Racial slur spam/raid - spammed the N-word repeatedly in chat after being told it was inappropriate",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1182377057703972965_0.png"
+    },
+    {
+      "user_id": "642864429943488515",
+      "username": "deleted_user_6bd6db41297b (deleted_user_6bd6db41297b)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Phishing/social engineering - fake 'I accidentally reported your profile for Scamming' DM with forged Discord support ticket email",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1181291098463817848_0.png"
+    },
+    {
+      "user_id": "1180594549509328917",
+      "username": "deleted_user_04313d34aad7 (deleted_user_04313d34aad7)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: `1180594549509328917` \nYour standard oops i reported your steam scammer"
+    },
+    {
+      "user_id": "1133074560082788473",
+      "username": "Tracy Falcon (tracyfalcon)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited GFX spam DM - sent friend request and pitched graphic art services (OC, PFP, banners, emotes, overlays, logos)",
+      "reported_by": "deathgirl1",
+      "reported_by_id": "310550359233921035",
+      "evidence": "https://certifriedmultitool.com/evidence/1178136513243000973_0.png"
+    },
+    {
+      "user_id": "965779061316149301",
+      "username": "deleted_user_1e189a012b6a (deleted_user_1e189a012b6a)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Unsolicited DM selling fraudulent 'Lifetime Spotify Premium' via sellpass.io link - legitimate lifetime subscriptions do not exist",
+      "reported_by": "deathgirl1",
+      "reported_by_id": "310550359233921035",
+      "evidence": "https://certifriedmultitool.com/evidence/1175117712540844052_0.png"
+    },
+    {
+      "user_id": "440108203741544459",
+      "username": "N77356S25471 (n77356s25471)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Suspicious link spam DM - sent unsolicited DM asking to 'test a game' with blogspot link (potential malware/token grabber)",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1167855786559545485_0.png"
+    },
+    {
+      "user_id": "1155143893566881866",
+      "username": "Melissa_Rob. (melissa_rob._94796)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "GFX spammer - profile identifies as freelance artist/graphic designer/animator with open commissions (reported for unsolicited outreach)",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1163907430095270059_0.png"
+    },
+    {
+      "user_id": "1146935829156085822",
+      "username": "Stella Cox (stellacox110)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited GFX spam DM - sent friend request to strangers and pitched graphic design services (logos, banners, overlays, emotes)",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1162500136832872538_0.png"
+    },
+    {
+      "user_id": "997363093795504130",
+      "username": "rockstargee20 (rockstargee20)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited GFX spam DM - sent friend request as 'Gilmore' and DMed asking about channel, pitching graphics/SEO services",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1159228945640718367_0.png"
+    },
+    {
+      "user_id": "371673210917355522",
+      "username": "Elizia Olsen (elisa_._.0_)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited GFX spam DM - messaged random users offering art commissions, claimed to need 'emergency commissions to pay home rent'",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "https://certifriedmultitool.com/evidence/1155321362282451034_0.png"
+    },
+    {
+      "user_id": "946102915322478602",
+      "username": "TheBladeBoy (thebladeboy)",
+      "severity": "high",
+      "category": "harassment",
+      "reason": "Mass-sending friend requests, trolling to pressure acceptance, and DMing 'Blocked' to anyone who declines; reported across multiple servers",
+      "reported_by": "yourwelshprincess",
+      "reported_by_id": "1049686866414280734",
+      "evidence": "https://certifriedmultitool.com/evidence/1146419530873180221_0.jpg | https://certifriedmultitool.com/evidence/1146419530873180221_1.jpg"
+    },
+    {
+      "user_id": "1090348903276220418",
+      "username": "artist mary (artistmary.)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: <@1090348903276220418> \nUder ID: 1090348903276220418\n\nArtist spammer"
+    },
+    {
+      "user_id": "968207642227007508",
+      "username": "Deleted User 91c2ea71 (Deleted User 91c2ea71)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Sent a fake Discord Nitro gift DM impersonating a 'Nitro' bot account, claiming the user won free Nitro with a fraudulent 'Claim' link",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1141818364738687016_0.png"
+    },
+    {
+      "user_id": "268480189065986059",
+      "username": "Draco (dracostarscale)",
+      "severity": "high",
+      "category": "other",
+      "reason": "User profile screenshot documented for moderation record - no direct evidence of harassment visible in image",
+      "reported_by": "littgame83",
+      "reported_by_id": "598218835870351405",
+      "evidence": "https://certifriedmultitool.com/evidence/1139325045630578788_0.png | https://certifriedmultitool.com/evidence/1139325045630578788_1.png | https://certifriedmultitool.com/evidence/1139325045630578788_2.png"
+    },
+    {
+      "user_id": "1136718796388827159",
+      "username": "emicakei125 (emicakei)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by seelenmorder",
+      "reported_by": "seelenmorder",
+      "reported_by_id": "462315941045469211",
+      "evidence": "No image evidence - message content: 1136718796388827159 soliciting art in DM after unsolicited friend request."
+    },
+    {
+      "user_id": "1130778939606962206",
+      "username": "deleted_user_f09036e6dbfd (deleted_user_f09036e6dbfd)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: Salony\nDiscord ID: '1130778939606962206'\n\nSteam scammer"
+    },
+    {
+      "user_id": "1001440126171361382",
+      "username": "Nickey (nickeyyt)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "DMed another member a malicious file disguised as a school assignment which turned out to be malware; reported across multiple servers",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1122232880823804075_0.jpg"
+    },
+    {
+      "user_id": "907417639209566248",
+      "username": "Onlion (onlion.)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: Discord ID: `907417639209566248`\nNo shared servers / no shared friends: Friend request out of the blue.\nCheck out their profile: \"Artista y Productor\""
+    },
+    {
+      "user_id": "1086295068442378291",
+      "username": "deleted_user_096bff3cd303 (deleted_user_096bff3cd303)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by orsokuma",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "No image evidence - message content: Discord IDs: `1086295068442378291`, `557876807144046596`\nKnown doxxer and Twitch viewbotter.\n\nTheir local authorities have been notified\n\nhttps://disc"
+    },
+    {
+      "user_id": "557876807144046596",
+      "username": "Isra84 (isra84_)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by orsokuma",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "No image evidence - message content: Discord IDs: `1086295068442378291`, `557876807144046596`\nKnown doxxer and Twitch viewbotter.\n\nTheir local authorities have been notified\n\nhttps://disc"
+    },
+    {
+      "user_id": "967023695589675039",
+      "username": "Subeta (subeta9906)",
+      "severity": "high",
+      "category": "harassment",
+      "reason": "Used alts to share doxbin links and YouTube videos targeting community members, doxxing campaign",
+      "reported_by": "yourwelshprincess",
+      "reported_by_id": "1049686866414280734",
+      "evidence": "https://certifriedmultitool.com/evidence/1111998224186748958_0.jpg | https://certifriedmultitool.com/evidence/1111998224186748958_1.jpg | https://certifriedmultitool.com/evidence/1111998224186748958_2.jpg | https://certifriedmultitool.com/evidence/1111998224186748958_3.jpg"
+    },
+    {
+      "user_id": "164909914374930434",
+      "username": "Sera (yzrch)",
+      "severity": "high",
+      "category": "harassment",
+      "reason": "Used alt accounts to enter servers and share doxbin links and YouTube video targeting community members, claimed to 'work with law enforcement' while spreading doxxed personal information",
+      "reported_by": "yourwelshprincess",
+      "reported_by_id": "1049686866414280734",
+      "evidence": "https://certifriedmultitool.com/evidence/1111998224186748958_0.jpg | https://certifriedmultitool.com/evidence/1111998224186748958_1.jpg | https://certifriedmultitool.com/evidence/1111998224186748958_2.jpg | https://certifriedmultitool.com/evidence/1111998224186748958_3.jpg"
+    },
+    {
+      "user_id": "649021681398054922",
+      "username": "Bogo (mfbogo)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by joehew",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "No image evidence - message content: 649021681398054922 \n1086295068442378291 \n980719203176816662\n459281050435059713\n229660076359680000"
+    },
+    {
+      "user_id": "980719203176816662",
+      "username": "deleted_user_b1ad0c7c4b8c (deleted_user_b1ad0c7c4b8c)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by joehew",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "No image evidence - message content: 649021681398054922 \n1086295068442378291 \n980719203176816662\n459281050435059713\n229660076359680000"
+    },
+    {
+      "user_id": "459281050435059713",
+      "username": "everything is fake (abitterpain)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by joehew",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "No image evidence - message content: 649021681398054922 \n1086295068442378291 \n980719203176816662\n459281050435059713\n229660076359680000"
+    },
+    {
+      "user_id": "229660076359680000",
+      "username": ". (578437543903)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by joehew",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "No image evidence - message content: 649021681398054922 \n1086295068442378291 \n980719203176816662\n459281050435059713\n229660076359680000"
+    },
+    {
+      "user_id": "985306773529456641",
+      "username": "Lilly_Cooper (originallillycooper)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by sheepwego",
+      "reported_by": "sheepwego",
+      "reported_by_id": "784142127171895306",
+      "evidence": "No image evidence - message content: Trying to sell art to a mate of mine:     Charlotte_charles#4128   ,  Lilly_Cooper#7144     ID's: 985306773529456641  , 1034587247468617759"
+    },
+    {
+      "user_id": "1034587247468617759",
+      "username": "charlotte_charles (charlotte_charles)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by sheepwego",
+      "reported_by": "sheepwego",
+      "reported_by_id": "784142127171895306",
+      "evidence": "No image evidence - message content: Trying to sell art to a mate of mine:     Charlotte_charles#4128   ,  Lilly_Cooper#7144     ID's: 985306773529456641  , 1034587247468617759"
+    },
+    {
+      "user_id": "1048338889955364934",
+      "username": "avaadom (avaadom)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by joehew",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "No image evidence - message content: 1048338889955364934"
+    },
+    {
+      "user_id": "1094379004838019264",
+      "username": "Nicholas_48 (nicholas_48_)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Spammed multiple channels with crypto scam messages promising $10,000+ in 72 hours from crypto market, with Telegram link; blocked by AutoMod",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1098986642800377917_0.png"
+    },
+    {
+      "user_id": "629291784861777920",
+      "username": "Wish Wonders (Ori) (ori_boardwalk)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by demoniarae",
+      "reported_by": "demoniarae",
+      "reported_by_id": "357266048770244628",
+      "evidence": "No image evidence - message content: Ori Boardwalk\nMain acct: 629291784861777920\nAlt acct: 857524119347134484\n-Creepy, stalker like behavior and continuously sending unsolicited DMs after"
+    },
+    {
+      "user_id": "857524119347134484",
+      "username": "deleted_user_ad3e78402ec5 (deleted_user_ad3e78402ec5)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by demoniarae",
+      "reported_by": "demoniarae",
+      "reported_by_id": "357266048770244628",
+      "evidence": "No image evidence - message content: Ori Boardwalk\nMain acct: 629291784861777920\nAlt acct: 857524119347134484\n-Creepy, stalker like behavior and continuously sending unsolicited DMs after"
+    },
+    {
+      "user_id": "922762407124828202",
+      "username": "USER (user9997979)",
+      "severity": "high",
+      "category": "other",
+      "reason": "DM conversation showing user initiating unsolicited contact, appears to be beginning of social engineering or scam approach",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1098652492218236969_0.jpg | https://certifriedmultitool.com/evidence/1098652492218236969_1.jpg | https://certifriedmultitool.com/evidence/1098652492218236969_2.jpg"
+    },
+    {
+      "user_id": "1015176914803105822",
+      "username": "clintonwaller (clintonwaller)",
+      "severity": "high",
+      "category": "harassment",
+      "reason": "47-year-old adult sending unsolicited friend requests to multiple young server members with identical copy-pasted pickup messages, persistently pursuing personal relationships and asking for photos in predatory pattern",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "https://certifriedmultitool.com/evidence/1098334558228848860_0.png | https://certifriedmultitool.com/evidence/1098334558228848860_1.png | https://certifriedmultitool.com/evidence/1098334558228848860_2.png | https://certifriedmultitool.com/evidence/1098334558228848860_3.png | https://certifriedmultitool.com/evidence/1098334558228848860_4.png"
+    },
+    {
+      "user_id": "1044453580628824074",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: To everyone with Discord servers, they are rolling out with a new voice message feature. Just so you're aware, this can be a dangerous feature to gran"
+    },
+    {
+      "user_id": "1067259988445237300",
+      "username": "deleted_user_593b19498f87 (deleted_user_593b19498f87)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by julesmm",
+      "reported_by": "julesmm",
+      "reported_by_id": "465585651232931871",
+      "evidence": "No image evidence - message content: \"big blue cat\" 1067259988445237300 \n- hateful messages"
+    },
+    {
+      "user_id": "1037266257877147689",
+      "username": "Balea*~*studio (balea_studio)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "1065026021805531227",
+      "username": "Ashley_vtuber (ashley_vtuber)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "1053020017945481267",
+      "username": "Kelly_gfx (kelly_gfx)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "1064408375997247519",
+      "username": "amanda_james27 (amanda_james)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "1047500214090612766",
+      "username": "minne7614 (minne7614)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "1087795529234272442",
+      "username": "deleted_user_784c72aa5243 (deleted_user_784c72aa5243)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "1086005061425041519",
+      "username": "deleted_user_ea7238491c20 (deleted_user_ea7238491c20)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "874711686429438012",
+      "username": "Artist.Layla (artist.layla)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "1071502505810345984",
+      "username": "deleted_user_c9f3c7422139 (deleted_user_c9f3c7422139)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "903022083599134761",
+      "username": "alice (alice_daniel)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by axiiasto",
+      "reported_by": "axiiasto",
+      "reported_by_id": "687831251012681798",
+      "evidence": "No image evidence - message content: Here are several Discord IDs of graphic artists that have made their way into my server.\n1037266257877147689\n1065026021805531227\n1053020017945481267\n1"
+    },
+    {
+      "user_id": "1066025060407705681",
+      "username": "Eliza Harper (elizaharper)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: `1066025060407705681`\ngraphic artist"
+    },
+    {
+      "user_id": "397212681985327104",
+      "username": "deleted_user_5e32321a53cd (deleted_user_5e32321a53cd)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Joined server and immediately solicited DMs asking members to use their Temu referral link in exchange for $20 PayPal/CashApp payment",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1088328240977936465_0.jpg"
+    },
+    {
+      "user_id": "1075795021506285680",
+      "username": "destiny. (destiny.1730)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "DMing 'Do you need money' and asking for Cash App or PayPal info, indicative of financial scam or money-flipping scheme",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1087765771335250001_0.jpg | https://certifriedmultitool.com/evidence/1087765771335250001_1.jpg"
+    },
+    {
+      "user_id": "1086348849741836348",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by queenofhearts710",
+      "reported_by": "queenofhearts710",
+      "reported_by_id": "484540877910573068",
+      "evidence": "No image evidence - message content: Discord Id : 1086348849741836348"
+    },
+    {
+      "user_id": "809476416654540810",
+      "username": "deleted_user_cc5dc236242a (deleted_user_cc5dc236242a)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: `809476416654540810`\nSpamming sexually explicit content in GIF form"
+    },
+    {
+      "user_id": "1079568091199053856",
+      "username": "deleted_user_8152d71eda68 (deleted_user_8152d71eda68)",
+      "severity": "high",
+      "category": "harassment",
+      "reason": "Impersonating Andrew Tate, being disruptive in chat, insulting community members, demanding personal information, promoting 'Hustlers University'",
+      "reported_by": "drewbusi",
+      "reported_by_id": "753529965579862016",
+      "evidence": "https://certifriedmultitool.com/evidence/1079572218192875520_0.png"
+    },
+    {
+      "user_id": "733731507151306824",
+      "username": "deleted_user_28f4c04e30f1 (deleted_user_28f4c04e30f1)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: <@733731507151306824> \nUser id: `733731507151306824`- another \"pornographic\" discord link spammer"
+    },
+    {
+      "user_id": "645324611826876427",
+      "username": "deleted_user_b462648ed1f8 (deleted_user_b462648ed1f8)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by fluffythewalrus",
+      "reported_by": "fluffythewalrus",
+      "reported_by_id": "169224065494679552",
+      "evidence": "No image evidence - message content: ⁨Blue-raider⁩#7288 (645324611826876427)  posted links to pornographic materials"
+    },
+    {
+      "user_id": "1068408499073208410",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by queenofhearts710",
+      "reported_by": "queenofhearts710",
+      "reported_by_id": "484540877910573068",
+      "evidence": "No image evidence - message content: id number : 1068408499073208410"
+    },
+    {
+      "user_id": "798900523972820992",
+      "username": "deleted_user_bd033b25f4da (deleted_user_bd033b25f4da)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by fluffythewalrus",
+      "reported_by": "fluffythewalrus",
+      "reported_by_id": "169224065494679552",
+      "evidence": "No image evidence - message content: Nope#0009 (798900523972820992) posted horrifying gory material in my Discord"
+    },
+    {
+      "user_id": "1064286880444711084",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by queenofhearts710",
+      "reported_by": "queenofhearts710",
+      "reported_by_id": "484540877910573068",
+      "evidence": "No image evidence - message content: Discord id: 1064286880444711084"
+    },
+    {
+      "user_id": "484540877910573068",
+      "username": "👑𝓠𝓾𝓮𝓮𝓷𝓞𝓯𝓗𝓮𝓪𝓻𝓽𝓼710👑 (queenofhearts710)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by joehew",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "No image evidence - message content: <@484540877910573068>, could you please share their Discord ID?"
+    },
+    {
+      "user_id": "1063843587135127624",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: Discord id: 1063843587135127624\nSteam scam profile"
+    },
+    {
+      "user_id": "1036642802697777202",
+      "username": "Deleted User 1a902f9f (Deleted User 1a902f9f)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Evidence image file not found on disk; unable to review",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1061269593815003247_0.jpg"
+    },
+    {
+      "user_id": "816741498581811255",
+      "username": "Tyrannos1993 (tyrannos1997)",
+      "severity": "high",
+      "category": "harassment",
+      "reason": "Unsolicited DMs asking for photos of appearance, persistently asking to call, predatory behavior toward younger users who expressed discomfort",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1057020300455317534_0.png | https://certifriedmultitool.com/evidence/1057020300455317534_1.png | https://certifriedmultitool.com/evidence/1057020300455317534_2.png | https://certifriedmultitool.com/evidence/1057020300455317534_3.png"
+    },
+    {
+      "user_id": "927675033902530652",
+      "username": "kenneth51801 (kenneth51801)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: Discord id: `927675033902530652`\nTwitch username: `kenneth51801`\n\nSexually harassing one of my underage female swords and asking impertinent questions"
+    },
+    {
+      "user_id": "547014366860410880",
+      "username": "BB (.elcono)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mrfluffynl",
+      "reported_by": "mrfluffynl",
+      "reported_by_id": "181886583983702016",
+      "evidence": "No image evidence - message content: el cono 547014366860410880\nGoobman 277621699510403084\nN0odle 277268519547043842\n\nToxic people who harass people in discord after harassing on Twitch\nB"
+    },
+    {
+      "user_id": "277621699510403084",
+      "username": "Goobman (.goobman)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mrfluffynl",
+      "reported_by": "mrfluffynl",
+      "reported_by_id": "181886583983702016",
+      "evidence": "No image evidence - message content: el cono 547014366860410880\nGoobman 277621699510403084\nN0odle 277268519547043842\n\nToxic people who harass people in discord after harassing on Twitch\nB"
+    },
+    {
+      "user_id": "277268519547043842",
+      "username": "N0odle (n0odle_0000)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mrfluffynl",
+      "reported_by": "mrfluffynl",
+      "reported_by_id": "181886583983702016",
+      "evidence": "No image evidence - message content: el cono 547014366860410880\nGoobman 277621699510403084\nN0odle 277268519547043842\n\nToxic people who harass people in discord after harassing on Twitch\nB"
+    },
+    {
+      "user_id": "747809055762022411",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by littgame83",
+      "reported_by": "littgame83",
+      "reported_by_id": "598218835870351405",
+      "evidence": "No image evidence - message content: I’ve been told that there’s a scam going around in DMs at the moment that looks like this. \n\nhttps://media.discordapp.net/attachments/7478090557620224"
+    },
+    {
+      "user_id": "1042949857888981022",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by littgame83",
+      "reported_by": "littgame83",
+      "reported_by_id": "598218835870351405",
+      "evidence": "No image evidence - message content: I’ve been told that there’s a scam going around in DMs at the moment that looks like this. \n\nhttps://media.discordapp.net/attachments/7478090557620224"
+    },
+    {
+      "user_id": "1023557005912330301",
+      "username": "Deleted User dfc3739a (Deleted User dfc3739a)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by orsokuma",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "No image evidence - message content: ?ban 1023557005912330301 Nitro scam bot"
+    },
+    {
+      "user_id": "894549713087500319",
+      "username": "Deleted User 1456a54d (Deleted User 1456a54d)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: `894549713087500319`\n\nDiscord spam / phishing bot - attempts to collect info by telling you \"discord has gifted you a free nitro boost\""
+    },
+    {
+      "user_id": "348870586312818690",
+      "username": "Benji (b.enji)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: ```348870586312818690```\n```1034642414985555989```\n2 horrible people who have targeted harassed people to a serious degree to the point where the poli"
+    },
+    {
+      "user_id": "1034642414985555989",
+      "username": "Jalon (jalon8480)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: ```348870586312818690```\n```1034642414985555989```\n2 horrible people who have targeted harassed people to a serious degree to the point where the poli"
+    },
+    {
+      "user_id": "1023388803693559840",
+      "username": "Deleted User 1e7eb5ee (Deleted User 1e7eb5ee)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Fake 'Giveaway' bot DM sending a fraudulent Discord Nitro gift link with 'Accept' button, classic Nitro phishing scam",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "https://certifriedmultitool.com/evidence/1038638759966674965_0.png"
+    },
+    {
+      "user_id": "751411247538372669",
+      "username": "febriyani (febriyani0249)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: `751411247538372669`\nSpamming discord spam links"
+    },
+    {
+      "user_id": "887377465612312596",
+      "username": "Deleted User af8fd3cf (Deleted User af8fd3cf)",
+      "severity": "high",
+      "category": "phishing",
+      "reason": "Sent fake Discord Nitro giveaway DM via 'Giveaways' bot claiming user won Nitro Game and Nitro Classic, requiring them to add a bot for fraudulent redeem code",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "https://certifriedmultitool.com/evidence/1024051631173664809_0.png"
+    },
+    {
+      "user_id": "672863662922268684",
+      "username": "Vaping_Whovian (vaping_whovian)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by queenofhearts710",
+      "reported_by": "queenofhearts710",
+      "reported_by_id": "484540877910573068",
+      "evidence": "No image evidence - message content: I know I been spreading it around to warn as well <@672863662922268684>"
+    },
+    {
+      "user_id": "993243435391791194",
+      "username": "BLAZ3 (xblazzey)",
+      "severity": "high",
+      "category": "other",
+      "reason": "User profile captured as evidence for ban - profile screenshot preserved for reported violations",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1004036103126397069_0.png"
+    },
+    {
+      "user_id": "809120343239032863",
+      "username": "NOCAPBASIL (nocapbasil5992)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Soliciting illegal drug sales (codeine) in server chat",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "https://certifriedmultitool.com/evidence/1001867294416326717_0.png"
+    },
+    {
+      "user_id": "625865941065924619",
+      "username": "Chaotic (damagedchaos.)",
+      "severity": "high",
+      "category": "harassment",
+      "reason": "Unsolicited harassing DM sending the message 'this is why mom never loved you'",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1000902129533341716_0.jpg"
+    },
+    {
+      "user_id": "219203684188422144",
+      "username": "Clutch World (clutchworld)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: Username: `JaClutch#7714` Discord ID: `219203684188422144` - hacker, troll, doxxing - tried to publicly display my home address to a general channel a"
+    },
+    {
+      "user_id": "384541554313920512",
+      "username": "Cant get me on the line (ironsacc)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: Username: `JaClutch#7714` Discord ID: `219203684188422144` - hacker, troll, doxxing - tried to publicly display my home address to a general channel a"
+    },
+    {
+      "user_id": "406880348333539331",
+      "username": "Lou (ghostlad777)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: Username: `JaClutch#7714` Discord ID: `219203684188422144` - hacker, troll, doxxing - tried to publicly display my home address to a general channel a"
+    },
+    {
+      "user_id": "994176100831867006",
+      "username": "deleted_user_1608f410180b (deleted_user_1608f410180b)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Unsolicited DM running a Steam account impersonation scam, claiming to have been scammed by someone with same Steam profile to social engineer account details",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/994194413448331344_0.png"
+    },
+    {
+      "user_id": "1542724962393505792",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: New thing *sigh*\nhttps://twitter.com/ARC_Automaton/status/1542724962393505792?t=RLiFYdg1Jh657dX--GIuUQ&s=19"
+    },
+    {
+      "user_id": "982468788349984768",
+      "username": "deleted_user_5cce095c41c8 (deleted_user_5cce095c41c8)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM spam promoting another Discord server (e-girl gaming center) with false promises of Nitro for active members",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/991467862051012660_0.png"
+    },
+    {
+      "user_id": "978828019336634480",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: Here's a few for you\n`978828019336634480` - troublemaker (invited troll accounts in) [ACCOUNT DELETED]\n`394871587062677504` - invited more troll accou"
+    },
+    {
+      "user_id": "394871587062677504",
+      "username": "tobee369 (tobeeisverycool369)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: Here's a few for you\n`978828019336634480` - troublemaker (invited troll accounts in) [ACCOUNT DELETED]\n`394871587062677504` - invited more troll accou"
+    },
+    {
+      "user_id": "412282715149172736",
+      "username": "loud (loud99)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: Here's a few for you\n`978828019336634480` - troublemaker (invited troll accounts in) [ACCOUNT DELETED]\n`394871587062677504` - invited more troll accou"
+    },
+    {
+      "user_id": "818920746322755626",
+      "username": "Nixie (nixie_the_lynxie)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: Here's a few for you\n`978828019336634480` - troublemaker (invited troll accounts in) [ACCOUNT DELETED]\n`394871587062677504` - invited more troll accou"
+    },
+    {
+      "user_id": "663081167125217340",
+      "username": "deleted_user_c1e98f3e0e56 (deleted_user_c1e98f3e0e56)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by mineycart",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "No image evidence - message content: Here's a few for you\n`978828019336634480` - troublemaker (invited troll accounts in) [ACCOUNT DELETED]\n`394871587062677504` - invited more troll accou"
+    },
+    {
+      "user_id": "839763885657817128",
+      "username": "deleted_user_54e6db31b4e4 (deleted_user_54e6db31b4e4)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: Troll: Hopping into live streamer's vc channels in discords just to yell the N word repeatedly \nUsername: `posin3/5#6830`\nID: `839763885657817128`"
+    },
+    {
+      "user_id": "804151021034536971",
+      "username": "deleted_user_09ff94727b8b (deleted_user_09ff94727b8b)",
+      "severity": "high",
+      "category": "other",
+      "reason": "User profile screenshot documented for moderation record - insufficient context for specific violation",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/978655449316458566_0.png"
+    },
+    {
+      "user_id": "958749357388222554",
+      "username": "Kanachok (kanachok7701)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: `/ban 958749357388222554 Phishing attempts / Steam Scams are not permitted` (/ban is a built-in command in discord)\nAnother one for ya\nDisplay name: `"
+    },
+    {
+      "user_id": "348496085381283852",
+      "username": "𝓤𝓻𝓼𝓾𝓼 (ursus_4455)",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by orsokuma",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "No image evidence - message content: Just had a compromised account spam us with phishing links; Display name: \"Ursus#0001\" (lul, nice pun there)\nDiscord ID: `348496085381283852`\n\nFor tho"
+    },
+    {
+      "user_id": "859802018197143622",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "other",
+      "reason": "Various red flags - reported by blueishmeteor",
+      "reported_by": "blueishmeteor",
+      "reported_by_id": "141281787530706944",
+      "evidence": "No image evidence - message content: Stay safe all! <:PlushHeart:859802018197143622>"
+    },
+    {
+      "user_id": "1401842785245728818",
+      "username": "Tofusnuggles (tufosnuggles.1)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be a college student needing commission work to cover expenses",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1442859239638040637_0.png"
+    },
+    {
+      "user_id": "1143212062013661316",
+      "username": "Mellany (mellany1105_)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "GFX spammer - reported by emeribd",
+      "reported_by": "emeribd",
+      "reported_by_id": "662890344681177098",
+      "evidence": "No image evidence - message content: 1143212062013661316"
+    },
+    {
+      "user_id": "1185323984141697189",
+      "username": "Elira Marine 🥀 (eliramarine08826)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be a college student graphic designer needing commissions to cover expenses",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1265086195700990073_0.png"
+    },
+    {
+      "user_id": "1044968528421335060",
+      "username": "janifar (janifar07)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM from mutual server soliciting graphics/art commissions",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1257763397101948978_0.png"
+    },
+    {
+      "user_id": "1044280778697220129",
+      "username": "zenodi jones (zenodi_jones2)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM spam advertising graphic design and animation commission services",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1250189336549527552_0.jpg"
+    },
+    {
+      "user_id": "1242882486577664101",
+      "username": "⋆ 🐯  🎀  𝒯𝑒𝓈𝓈𝒶  🎀  🐯 ⋆ (sandytessa_94931)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be a commission artist offering design services at reasonable prices",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1247662173073702914_0.png"
+    },
+    {
+      "user_id": "1208519101719511123",
+      "username": "Kristi (kristii_00)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be an artist who can do all kinds of artwork",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1242971432015892552_0.png"
+    },
+    {
+      "user_id": "1146221212968689735",
+      "username": "Maeve (chloe77733)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM apologizing for being intrusive while soliciting art commissions at 'fair prices'",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1242224746003959879_0.png"
+    },
+    {
+      "user_id": "1216868783063302206",
+      "username": "Kat Sims (katsims_946)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM promoting IT company offering software, website, PPC, and graphics work from mutual server",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1242174110872899604_0.png"
+    },
+    {
+      "user_id": "950063302560591872",
+      "username": "deleted_user_3c48ad4b5a7c (deleted_user_3c48ad4b5a7c)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM soliciting art commissions, claiming to be a paid character artist from mutual server",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1234296411298992259_0.png"
+    },
+    {
+      "user_id": "768808435310788628",
+      "username": "FORGER (loidforger79)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM soliciting design commissions, claiming to be designer affiliated with streamer station offering logos, overlays, banners, emotes",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1233960761617940521_0.png"
+    },
+    {
+      "user_id": "1082549950707142676",
+      "username": "Mia_ (mia_cozbe)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM spam advertising GFX and stream art services with discount offers, repeated across multiple dates with identical scripted messages",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1233063298690322473_0.png"
+    },
+    {
+      "user_id": "1105102707657814027",
+      "username": "Artfinity (eteator18e3)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising GFX services (logos, banners, emotes, overlays, vtuber models, animations) with discount offer after cold friend request",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1230214773975547935_0.png"
+    },
+    {
+      "user_id": "964751249746579476",
+      "username": "Raw_Eviee <3 (eeve3_vivi)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM pitching ideas for recipient's channel after cold friend request from mutual server",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1230194049965752420_0.png"
+    },
+    {
+      "user_id": "1101966335312937123",
+      "username": "anjelinajospeh (anjelinajospeh)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Unsolicited DM using fabricated emergency sob story (pet injury, kicked out) to guilt-trip into purchasing GFX commissions",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1220100534149583069_0.png"
+    },
+    {
+      "user_id": "1151491236293775410",
+      "username": "lillyrose (lilly_.rose)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising graphic design, animation, and streaming art services with 50% discount after cold-messaging from mutual server",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1217961441626296432_0.png"
+    },
+    {
+      "user_id": "1185336499592507412",
+      "username": "Alathir (alathirk)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Unsolicited DM using fabricated sob story (kicked out of home, lost job) to guilt-trip into purchasing GFX services",
+      "reported_by": "vpsdata",
+      "reported_by_id": "322722087070466048",
+      "evidence": "https://certifriedmultitool.com/evidence/1215013418692649091_0.png"
+    },
+    {
+      "user_id": "555126192500637716",
+      "username": "Sakura sui (sakura_sui54)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising GFX design services (custom logos, overlays, banners, emotes) after cold friend request from mutual server",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1212873815118446663_0.png"
+    },
+    {
+      "user_id": "1190676523011805285",
+      "username": "Anna (anna04845)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM spam advertising artwork commission services targeting streamers",
+      "reported_by": "seelenmorder",
+      "reported_by_id": "462315941045469211",
+      "evidence": "https://certifriedmultitool.com/evidence/1210683726401507348_0.jpg"
+    },
+    {
+      "user_id": "494932877902086155",
+      "username": "mickeymina (mickey8416)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM spam advertising art commission services",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1196611423040720946_0.jpg"
+    },
+    {
+      "user_id": "1073369122588606567",
+      "username": "Rozicaaa (rozicaa)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM asking if recipient is a VTuber/streamer to pitch GFX services after cold friend request",
+      "reported_by": "vpsdata",
+      "reported_by_id": "322722087070466048",
+      "evidence": "https://certifriedmultitool.com/evidence/1195243513466601512_0.png"
+    },
+    {
+      "user_id": "1142922479640268920",
+      "username": "deleted_user_8cbfc9e46046 (deleted_user_8cbfc9e46046)",
+      "severity": "high",
+      "category": "scam",
+      "reason": "Discord chat exchange involving discussion of scam/fraud-related activity",
+      "reported_by": "vpsdata",
+      "reported_by_id": "322722087070466048",
+      "evidence": "https://certifriedmultitool.com/evidence/1194723963683754035_0.png"
+    },
+    {
+      "user_id": "996737648284676117",
+      "username": "Scarlet (scarletdoesart_)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising graphic art commissions at exclusive discounts (logos, banners, VTube models, emotes, PFPs, animations) after cold friend request",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1194016210489196654_0.png"
+    },
+    {
+      "user_id": "1163125895276544101",
+      "username": "Brantly (brantly0283)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising GFX art services (logos, banners, overlays, emotes, badges, animations) after cold friend request from mutual server",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1193524331087667240_0.png"
+    },
+    {
+      "user_id": "1151601012759597177",
+      "username": "Emmavtuber (emmavtuber0984)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM targeting streamers to advertise GFX design services (logos, banners, emotes, overlays, VTuber models) after cold approach",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1189652129305088111_0.png"
+    },
+    {
+      "user_id": "1136552927234900010",
+      "username": "Yoko Littner (sethivan.)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising GFX services after cold friend request from mutual server",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1186866958415708261_0.png"
+    },
+    {
+      "user_id": "1162518712126013521",
+      "username": "𝒥𝓊𝓁𝒾𝒶 𝑀𝒶𝓇𝒾𝑒 (juliamarie0937)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising digital art and GFX services (logos, emotes, overlays, VTuber models, animations, web dev) after cold-messaging about streaming",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1184226789527146536_0.png"
+    },
+    {
+      "user_id": "1177675573087191162",
+      "username": "Emily (charilejack)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM spam advertising art commission services with 'Report Spam' flag visible",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1182694283103457340_0.jpg"
+    },
+    {
+      "user_id": "1174151126757675053",
+      "username": "deleted_user_e9a56bea0c14 (deleted_user_e9a56bea0c14)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising digital art commission services at 'reasonable prices' targeting server members",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1175595203009183895_0.png"
+    },
+    {
+      "user_id": "1141390706863251477",
+      "username": "Madison_Web (madison_.web)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "GFX spammer - reported by seelenmorder",
+      "reported_by": "seelenmorder",
+      "reported_by_id": "462315941045469211",
+      "evidence": "No image evidence - message content: 1141390706863251477\nfriend request, mentions they are an artist...yadda yadda yadda..."
+    },
+    {
+      "user_id": "794896310238445579",
+      "username": "Anna Ashely (annaashely)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising professional graphic design services and influencer marketing to streamers",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1174075000731471942_0.png"
+    },
+    {
+      "user_id": "1044649603707981847",
+      "username": "YazVt (yaz_vt1)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising stream art services with Halloween discount offer, user was blocked",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1173973654439198832_0.png"
+    },
+    {
+      "user_id": "1156344298074275952",
+      "username": "Juliana (juliana_vt)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "User profile screenshot (shows 'oliva'/olivamariya) - documented for association with GFX spam DM campaign",
+      "reported_by": "emeribd",
+      "reported_by_id": "662890344681177098",
+      "evidence": "https://certifriedmultitool.com/evidence/1172354341760405535_0.png"
+    },
+    {
+      "user_id": "1149075460152639508",
+      "username": "ezraabel792 (ezraabel)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM asking about streaming essentials then pitching GFX services (logos, banners, overlays, emotes, VTuber models)",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1171895574124040202_0.png"
+    },
+    {
+      "user_id": "1147311552752517290",
+      "username": "Esho (esho0517)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising professional GFX services specializing in 2D/3D character design with discount offers",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1171575074105610341_0.png"
+    },
+    {
+      "user_id": "1117531421335113878",
+      "username": "Jamaimahamelia (.ameliagfx)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "User profile advertising GFX commission services in bio (2D/3D models, banners, emotes), used for unsolicited DM spam",
+      "reported_by": "emeribd",
+      "reported_by_id": "662890344681177098",
+      "evidence": "https://certifriedmultitool.com/evidence/1170285452511682661_0.png"
+    },
+    {
+      "user_id": "1142474546818076782",
+      "username": "deleted_user_9859215c58bf (deleted_user_9859215c58bf)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising professional graphic design services (logos, banners, overlays, emotes), user was blocked",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1168654298666770482_0.png"
+    },
+    {
+      "user_id": "1143272360930193459",
+      "username": "Amy Rose (ammy.rose)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising professional stream artwork and custom designs (logos, banners, overlays, emotes, sub badges), user was blocked",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1167885799841333338_0.png"
+    },
+    {
+      "user_id": "1151179060429459549",
+      "username": "Steve (steve02318)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM advertising custom graphics and animation services at 'fair prices' targeting server members",
+      "reported_by": "joehew",
+      "reported_by_id": "174920468309082113",
+      "evidence": "https://certifriedmultitool.com/evidence/1154556555560226909_0.png"
+    },
+    {
+      "user_id": "1144763607003975700",
+      "username": "Hailey_vtuber (hailey_vtuber_24761)",
+      "severity": "high",
+      "category": "other",
+      "reason": "User profile screenshot showing suspicious account (new account, low activity X connection) - documented for association with GFX spam campaign",
+      "reported_by": "seelenmorder",
+      "reported_by_id": "462315941045469211",
+      "evidence": "https://certifriedmultitool.com/evidence/1154555119208243231_0.jpg"
+    },
+    {
+      "user_id": "1146184430776492082",
+      "username": "Unknown/Deleted User",
+      "severity": "high",
+      "category": "spam",
+      "reason": "GFX spammer - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: https://discord.com/channels/889550752123613194/899865437267963924/1146184430776492082 \nFor the sake of one <@534127122827051028>"
+    },
+    {
+      "user_id": "534127122827051028",
+      "username": "Miney (mineycart)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "GFX spammer - reported by death420",
+      "reported_by": "death420",
+      "reported_by_id": "365905620060340224",
+      "evidence": "No image evidence - message content: https://discord.com/channels/889550752123613194/899865437267963924/1146184430776492082 \nFor the sake of one <@534127122827051028>"
+    },
+    {
+      "user_id": "546279841712832512",
+      "username": "arumneeil 01 (arumneeil_01)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM claiming to be an artist looking for commissions, asking to share portfolio after initiating small talk",
+      "reported_by": "mineycart",
+      "reported_by_id": "534127122827051028",
+      "evidence": "https://certifriedmultitool.com/evidence/1145418133629325392_0.png"
+    },
+    {
+      "user_id": "1138935700763443341",
+      "username": "jamesvtuber (24555ss)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "User profile advertising GFX design services in bio (logos, banners, overlays, emotes, animations, app dev)",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1143688176121172058_0.png"
+    },
+    {
+      "user_id": "1097247047444336690",
+      "username": "Franklin (franklinarts_)",
+      "severity": "high",
+      "category": "spam",
+      "reason": "Unsolicited DM asking if user is a streamer then offering logo and overlay services for Twitch",
+      "reported_by": "orsokuma",
+      "reported_by_id": "685127470625980501",
+      "evidence": "https://certifriedmultitool.com/evidence/1142508864877641828_0.png"
+    }
+  ]
+}

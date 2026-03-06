@@ -1,0 +1,153 @@
+{
+  "dynoMessages": [
+    {
+      "channelId": "1311038095675887648",
+      "channelName": "newbies",
+      "messageId": "1311039596020240434",
+      "content": "Dyno™ #dyno-updates",
+      "embeds": [],
+      "components": [],
+      "reactions": [],
+      "timestamp": 1732646597629
+    },
+    {
+      "channelId": "1311038095675887648",
+      "channelName": "newbies",
+      "messageId": "1311039038110699571",
+      "content": "",
+      "embeds": [],
+      "components": [],
+      "reactions": [],
+      "timestamp": 1732646464613
+    },
+    {
+      "channelId": "1311040673117503549",
+      "channelName": "log-mod",
+      "messageId": "1311063316449329162",
+      "content": "Dyno™ #dyno-updates",
+      "embeds": [],
+      "components": [],
+      "reactions": [],
+      "timestamp": 1732652253020
+    },
+    {
+      "channelId": "1311041107613974548",
+      "channelName": "rules",
+      "messageId": "1311044556183175342",
+      "content": "Rules and general info\n\nIf you guys want to play and don't see a game that you would like to play just shoot me a message @leafy\n\nAccepted payments are currently Venmo, Paypal, Cashapp, and Zelle. If you do send money through venmo please just make it private and send an emoji with the transaction unrelated to gambling.\n\nBe cool and chill no funny business or colluding please, if we are in a voice channel and it is multi way or you're in a hand please do not tell players what you had or influence action i appreciate it\n\nHave fun!\n\nHit the thumbs up at the bottom of the post to proceed into the discord!",
+      "embeds": [],
+      "components": [],
+      "reactions": [
+        {
+          "emoji": "👍",
+          "emojiId": null,
+          "count": 13
+        }
+      ],
+      "timestamp": 1732647780224
+    },
+    {
+      "channelId": "1311063572264259665",
+      "channelName": "log-bot",
+      "messageId": "1311063646457298994",
+      "content": "Dyno™ #dyno-updates",
+      "embeds": [],
+      "components": [],
+      "reactions": [],
+      "timestamp": 1732652331700
+    },
+    {
+      "channelId": "1311419150161412116",
+      "channelName": "test",
+      "messageId": "1311419681508294698",
+      "content": "We will be playing tonight around 7pmish. If you would like to play please help us out with a thumbs up at the bottom for a head count. 9 seats available get yours with a thumbs up",
+      "embeds": [],
+      "components": [],
+      "reactions": [
+        {
+          "emoji": "👍",
+          "emojiId": null,
+          "count": 1
+        }
+      ],
+      "timestamp": 1732737217071
+    }
+  ],
+  "reactionRoles": [
+    {
+      "channelId": "1311041107613974548",
+      "channelName": "rules",
+      "messageId": "1311044556183175342",
+      "content": "Rules and general info\n\nIf you guys want to play and don't see a game that you would like to play just shoot me a message @leafy\n\nAccepted payments are currently Venmo, Paypal, Cashapp, and Zelle. If you do send money through venmo please just make it private and send an emoji with the transaction unrelated to gambling.\n\nBe cool and chill no funny business or colluding please, if we are in a voice channel and it is multi way or you're in a hand please do not tell players what you had or influence action i appreciate it\n\nHave fun!\n\nHit the thumbs up at the bottom of the post to proceed into the discord!",
+      "embeds": [],
+      "components": [],
+      "reactions": [
+        {
+          "emoji": "👍",
+          "emojiId": null,
+          "count": 13
+        }
+      ],
+      "timestamp": 1732647780224
+    },
+    {
+      "channelId": "1311419150161412116",
+      "channelName": "test",
+      "messageId": "1311419681508294698",
+      "content": "We will be playing tonight around 7pmish. If you would like to play please help us out with a thumbs up at the bottom for a head count. 9 seats available get yours with a thumbs up",
+      "embeds": [],
+      "components": [],
+      "reactions": [
+        {
+          "emoji": "👍",
+          "emojiId": null,
+          "count": 1
+        }
+      ],
+      "timestamp": 1732737217071
+    }
+  ],
+  "loggingChannels": [
+    {
+      "id": "1311040605782278287",
+      "name": "log-channels",
+      "parentName": "Moderation"
+    },
+    {
+      "id": "1311040645594611773",
+      "name": "log-join-leave",
+      "parentName": "Moderation"
+    },
+    {
+      "id": "1311040673117503549",
+      "name": "log-mod",
+      "parentName": "Moderation"
+    },
+    {
+      "id": "1311040701710073887",
+      "name": "log-members",
+      "parentName": "Moderation"
+    },
+    {
+      "id": "1311040829929816105",
+      "name": "log-messages",
+      "parentName": "Moderation"
+    },
+    {
+      "id": "1311040904479641754",
+      "name": "log-roles",
+      "parentName": "Moderation"
+    },
+    {
+      "id": "1311040938210234508",
+      "name": "log-voice",
+      "parentName": "Moderation"
+    },
+    {
+      "id": "1311063572264259665",
+      "name": "log-bot",
+      "parentName": "Moderation"
+    }
+  ],
+  "embeds": []
+}

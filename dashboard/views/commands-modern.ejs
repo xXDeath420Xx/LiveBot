@@ -1,0 +1,336 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Commands',
+    additionalCSS: []
+}) %>
+
+<style>
+/* Command-specific styles */
+.command-category {
+    margin-bottom: var(--spacing-8);
+}
+
+.command-card {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-6);
+    margin-bottom: var(--spacing-4);
+    transition: all var(--transition-base);
+    border-left: 3px solid transparent;
+}
+
+.command-card:hover {
+    border-left-color: var(--color-primary-500);
+    transform: translateX(4px);
+    box-shadow: var(--shadow-md);
+    background: var(--color-dark-600);
+}
+
+.command-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-4);
+    margin-bottom: var(--spacing-3);
+}
+
+.command-name {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-primary-400);
+    font-family: var(--font-family-mono);
+}
+
+.command-description {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-3);
+}
+
+.command-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-2);
+    margin-top: var(--spacing-3);
+}
+
+.option-badge {
+    font-size: var(--font-size-xs);
+    padding: var(--spacing-1) var(--spacing-3);
+    background: rgba(79, 172, 254, 0.15);
+    color: #4facfe;
+    border-radius: var(--radius-full);
+    font-family: var(--font-family-mono);
+}
+
+.option-required {
+    background: rgba(240, 71, 71, 0.15);
+    color: var(--color-danger);
+}
+
+.category-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-4);
+    margin-bottom: var(--spacing-6);
+    padding-bottom: var(--spacing-4);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.category-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-xl);
+}
+
+.category-title {
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+}
+
+.category-count {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-left: auto;
+}
+
+.search-container {
+    position: sticky;
+    top: var(--topbar-height);
+    z-index: 40;
+    background: var(--color-dark-800);
+    padding: var(--spacing-6) 0;
+    margin-bottom: var(--spacing-8);
+}
+
+.no-results {
+    text-align: center;
+    padding: var(--spacing-16) var(--spacing-8);
+    color: var(--color-text-muted);
+}
+
+.filter-tabs {
+    display: flex;
+    gap: var(--spacing-2);
+    flex-wrap: wrap;
+    margin-top: var(--spacing-4);
+}
+
+.filter-tab {
+    padding: var(--spacing-2) var(--spacing-4);
+    background: transparent;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.filter-tab:hover {
+    border-color: var(--color-primary-500);
+    color: var(--color-text-primary);
+}
+
+.filter-tab.active {
+    background: var(--color-primary-500);
+    border-color: var(--color-primary-500);
+    color: var(--color-text-primary);
+}
+</style>
+
+<div class="app-layout">
+    <%- include('partials/sidebar', {
+        user: user,
+        currentPage: 'commands'
+    }) %>
+
+    <div class="main-content">
+        <%- include('partials/topbar', {
+            breadcrumbs: [
+                { label: 'Dashboard', url: '/dashboard' },
+                { label: 'Commands', url: '/commands' }
+            ],
+            user: user
+        }) %>
+
+        <div class="content">
+            <div class="content-container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div class="page-header-top">
+                        <div>
+                            <h1 class="page-title">Bot Commands</h1>
+                            <p class="page-description">
+                                Comprehensive command reference for CertiFried MultiTool
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Search & Filter -->
+                <div class="search-container">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <div style="position: relative;">
+                            <i class="fas fa-search" style="position: absolute; left: var(--spacing-4); top: 50%; transform: translateY(-50%); color: var(--color-text-muted);"></i>
+                            <input type="text"
+                                   id="commandSearch"
+                                   class="form-input"
+                                   placeholder="Search commands, categories, or descriptions..."
+                                   style="padding-left: var(--spacing-10);">
+                        </div>
+                    </div>
+
+                    <div class="filter-tabs" id="categoryFilters">
+                        <button class="filter-tab active" data-category="all">All Commands</button>
+                        <% categories.forEach(cat => { %>
+                            <button class="filter-tab" data-category="<%= cat %>"><%= cat %></button>
+                        <% }); %>
+                    </div>
+                </div>
+
+                <!-- Commands by Category -->
+                <div id="commandsContainer">
+                    <%
+                    const commandsByCategory = {};
+                    commands.forEach(cmd => {
+                        const cat = cmd.category || 'General';
+                        if (!commandsByCategory[cat]) commandsByCategory[cat] = [];
+                        commandsByCategory[cat].push(cmd);
+                    });
+
+                    categories.forEach(category => {
+                        const cmds = commandsByCategory[category] || [];
+                        if (cmds.length === 0) return;
+                    %>
+                        <div class="command-category" data-category="<%= category %>">
+                            <div class="category-header">
+                                <div class="category-icon">
+                                    <i class="fas fa-<%= category === 'Admin' ? 'shield-alt' : category === 'Music' ? 'music' : category === 'Moderation' ? 'gavel' : category === 'Fun' ? 'gamepad' : category === 'Utility' ? 'tools' : category === 'Streamer' ? 'video' : 'terminal' %>"></i>
+                                </div>
+                                <div>
+                                    <h2 class="category-title"><%= category %></h2>
+                                </div>
+                                <div class="category-count">
+                                    <%= cmds.length %> command<%= cmds.length !== 1 ? 's' : '' %>
+                                </div>
+                            </div>
+
+                            <% cmds.forEach(cmd => { %>
+                                <div class="command-card" data-command-name="/<%= cmd.name %>" data-command-description="<%= cmd.description %>">
+                                    <div class="command-header">
+                                        <span class="command-name">/<%= cmd.name %></span>
+                                        <% if (cmd.default_member_permissions) { %>
+                                            <span class="badge badge-warning" style="font-size: var(--font-size-xs);">
+                                                <i class="fas fa-lock"></i> Admin Only
+                                            </span>
+                                        <% } %>
+                                    </div>
+
+                                    <div class="command-description">
+                                        <%= cmd.description %>
+                                    </div>
+
+                                    <% if (cmd.options && cmd.options.length > 0) { %>
+                                        <div class="command-options">
+                                            <% cmd.options.forEach(opt => { %>
+                                                <span class="option-badge <%= opt.required ? 'option-required' : '' %>">
+                                                    <%= opt.name %><%= opt.required ? '*' : '' %>
+                                                </span>
+                                            <% }); %>
+                                        </div>
+                                    <% } %>
+                                </div>
+                            <% }); %>
+                        </div>
+                    <% }); %>
+                </div>
+
+                <!-- No Results Message -->
+                <div id="noResults" class="no-results" style="display: none;">
+                    <i class="fas fa-search" style="font-size: 3rem; margin-bottom: var(--spacing-4); color: var(--color-text-disabled);"></i>
+                    <h3>No commands found</h3>
+                    <p>Try adjusting your search or filter</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('commandSearch');
+    const filterTabs = document.querySelectorAll('.filter-tab');
+    const commandCategories = document.querySelectorAll('.command-category');
+    const commandCards = document.querySelectorAll('.command-card');
+    const noResults = document.getElementById('noResults');
+    const commandsContainer = document.getElementById('commandsContainer');
+
+    let currentCategory = 'all';
+
+    // Search functionality
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        filterCommands(query, currentCategory);
+    });
+
+    // Category filter functionality
+    filterTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            filterTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentCategory = tab.dataset.category;
+            filterCommands(searchInput.value.toLowerCase(), currentCategory);
+        });
+    });
+
+    function filterCommands(query, category) {
+        let visibleCount = 0;
+
+        commandCategories.forEach(catDiv => {
+            const catName = catDiv.dataset.category;
+            let categoryVisible = false;
+
+            // Check if category should be shown
+            if (category !== 'all' && catName !== category) {
+                catDiv.style.display = 'none';
+                return;
+            }
+
+            // Filter cards within this category
+            const cards = catDiv.querySelectorAll('.command-card');
+            cards.forEach(card => {
+                const name = card.dataset.commandName.toLowerCase();
+                const desc = card.dataset.commandDescription.toLowerCase();
+
+                if (name.includes(query) || desc.includes(query)) {
+                    card.style.display = 'block';
+                    categoryVisible = true;
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            catDiv.style.display = categoryVisible ? 'block' : 'none';
+        });
+
+        // Show/hide no results message
+        if (visibleCount === 0) {
+            commandsContainer.style.display = 'none';
+            noResults.style.display = 'block';
+        } else {
+            commandsContainer.style.display = 'block';
+            noResults.style.display = 'none';
+        }
+    }
+});
+</script>

@@ -1,0 +1,472 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Add Question - ' + (typeof form !== 'undefined' ? form.form_name : 'Form'),
+    additionalCSS: []
+}) %>
+
+<style>
+/* Add Question Form Styles */
+.form-preview-card {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-6);
+    margin-bottom: var(--spacing-6);
+}
+
+.question-preview-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.question-preview-item {
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-4);
+    margin-bottom: var(--spacing-3);
+    transition: all var(--transition-fast);
+}
+
+.question-preview-item:hover {
+    background: var(--color-dark-500);
+    transform: translateX(4px);
+}
+
+.question-preview-item:last-child {
+    margin-bottom: 0;
+}
+
+.question-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: var(--spacing-3);
+}
+
+.question-preview-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: var(--gradient-primary);
+    border-radius: 50%;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-right: var(--spacing-2);
+}
+
+.question-preview-title {
+    flex: 1;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.question-preview-badges {
+    display: flex;
+    gap: var(--spacing-2);
+    flex-wrap: wrap;
+}
+
+.question-preview-options {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+    padding-left: var(--spacing-8);
+}
+
+.form-actions {
+    display: flex;
+    gap: var(--spacing-3);
+    margin-top: var(--spacing-6);
+}
+
+.form-section {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-6);
+}
+
+.form-section-title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-4);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.form-section-title i {
+    color: var(--color-primary-400);
+}
+
+.switch-container {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    padding: var(--spacing-4);
+    background: var(--color-dark-600);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-dark-400);
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.switch-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--color-dark-400);
+    transition: var(--transition-base);
+    border-radius: 24px;
+}
+
+.switch-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: var(--transition-base);
+    border-radius: 50%;
+}
+
+.switch input:checked + .switch-slider {
+    background: var(--gradient-primary);
+}
+
+.switch input:checked + .switch-slider:before {
+    transform: translateX(24px);
+}
+
+.switch-label {
+    flex: 1;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.empty-questions {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-6);
+    color: var(--color-text-muted);
+}
+
+.empty-questions i {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-4);
+    color: var(--color-text-disabled);
+}
+
+.type-badge {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+}
+</style>
+
+<div class="app-layout">
+    <%- include('partials/sidebar', {
+        user: user,
+        currentPage: 'manage'
+    }) %>
+
+    <div class="main-content">
+        <%- include('partials/topbar', {
+            breadcrumbs: [
+                { label: 'Dashboard', url: '/dashboard' },
+                { label: 'Servers', url: '/servers' },
+                { label: typeof guild !== 'undefined' ? guild.name : 'Server', url: typeof guild !== 'undefined' ? '/manage/' + guild.id : '#' },
+                { label: 'Forms', url: typeof guild !== 'undefined' ? '/manage/' + guild.id + '#forms' : '#' },
+                { label: 'Add Question', url: '#' }
+            ],
+            user: user
+        }) %>
+
+        <div class="content">
+            <div class="content-container">
+                <!-- Page Header -->
+                <div class="page-header">
+                    <div class="page-header-top">
+                        <div>
+                            <h1 class="page-title">
+                                <i class="fas fa-question-circle" style="color: var(--color-primary-400);"></i>
+                                Add Question to <%= typeof form !== 'undefined' ? form.form_name : 'Form' %>
+                            </h1>
+                            <p class="page-description">
+                                Create a new question for this form
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Content Grid -->
+                <div class="grid grid-cols-3" style="grid-template-columns: 2fr 1fr; align-items: start;">
+                    <!-- Question Form -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <i class="fas fa-edit"></i>
+                                <span>Question Builder</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <form action="/manage/<%= typeof guild !== 'undefined' ? guild.id : '' %>/forms/<%= typeof form !== 'undefined' ? form.form_id : '' %>/add-question" method="POST">
+                                <!-- Question Text -->
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        Question Text
+                                        <span style="color: var(--color-danger);">*</span>
+                                    </label>
+                                    <input type="text"
+                                           name="question_text"
+                                           class="form-input"
+                                           placeholder="What would you like to ask?"
+                                           required>
+                                    <div class="form-help">
+                                        The question that will be displayed to users
+                                    </div>
+                                </div>
+
+                                <!-- Question Type -->
+                                <div class="form-group">
+                                    <label class="form-label">
+                                        Question Type
+                                        <span style="color: var(--color-danger);">*</span>
+                                    </label>
+                                    <select name="question_type"
+                                            id="question-type"
+                                            class="form-select"
+                                            required
+                                            onchange="toggleOptions()">
+                                        <option value="short_text">Short Text (Single line)</option>
+                                        <option value="long_text">Long Text (Paragraph)</option>
+                                        <option value="number">Number</option>
+                                        <option value="select">Multiple Choice (Select)</option>
+                                    </select>
+                                    <div class="form-help">
+                                        Choose the type of response you want to collect
+                                    </div>
+                                </div>
+
+                                <!-- Options Field (conditional) -->
+                                <div class="form-group" id="options-container" style="display: none;">
+                                    <label class="form-label">
+                                        Options
+                                        <span style="color: var(--color-danger);">*</span>
+                                    </label>
+                                    <textarea name="question_options"
+                                              id="question-options"
+                                              class="form-input"
+                                              rows="6"
+                                              placeholder="Option 1&#10;Option 2&#10;Option 3&#10;Option 4"></textarea>
+                                    <div class="form-help">
+                                        Enter each option on a new line
+                                    </div>
+                                </div>
+
+                                <!-- Required Toggle -->
+                                <div class="form-group">
+                                    <div class="switch-container">
+                                        <label class="switch">
+                                            <input type="checkbox"
+                                                   id="is-required"
+                                                   name="is_required"
+                                                   checked>
+                                            <span class="switch-slider"></span>
+                                        </label>
+                                        <div class="switch-label">
+                                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                                This question is required
+                                            </div>
+                                            <div>Users must answer this question to submit the form</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Question Order -->
+                                <div class="form-group">
+                                    <label class="form-label">Question Order</label>
+                                    <input type="number"
+                                           name="question_order"
+                                           class="form-input"
+                                           value="0"
+                                           min="0"
+                                           style="max-width: 150px;">
+                                    <div class="form-help">
+                                        Lower numbers appear first (0 = first)
+                                    </div>
+                                </div>
+
+                                <!-- Form Actions -->
+                                <div class="form-actions">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-plus"></i>
+                                        Add Question
+                                    </button>
+                                    <a href="/manage/<%= typeof guild !== 'undefined' ? guild.id : '' %>#forms"
+                                       class="btn btn-secondary">
+                                        <i class="fas fa-arrow-left"></i>
+                                        Back to Forms
+                                    </a>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Existing Questions Preview -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-header-title">
+                                <i class="fas fa-eye"></i>
+                                <span>Existing Questions</span>
+                            </div>
+                            <% if (typeof existingQuestions !== 'undefined' && existingQuestions.length > 0) { %>
+                                <span class="badge badge-secondary"><%= existingQuestions.length %></span>
+                            <% } %>
+                        </div>
+                        <div class="card-body">
+                            <% if (typeof existingQuestions !== 'undefined' && existingQuestions.length > 0) { %>
+                                <ul class="question-preview-list">
+                                    <% existingQuestions.forEach((q, idx) => { %>
+                                        <li class="question-preview-item">
+                                            <div class="question-preview-header">
+                                                <div class="question-preview-title">
+                                                    <span class="question-preview-number"><%= idx + 1 %></span>
+                                                    <%= q.question_text %>
+                                                </div>
+                                            </div>
+                                            <div class="question-preview-badges">
+                                                <span class="badge badge-secondary type-badge">
+                                                    <%= q.question_type %>
+                                                </span>
+                                                <% if (q.is_required) { %>
+                                                    <span class="badge badge-danger">
+                                                        <i class="fas fa-asterisk"></i>
+                                                        Required
+                                                    </span>
+                                                <% } %>
+                                            </div>
+                                            <% if (q.question_options) { %>
+                                                <div class="question-preview-options">
+                                                    <i class="fas fa-list"></i>
+                                                    Options: <%= q.question_options %>
+                                                </div>
+                                            <% } %>
+                                        </li>
+                                    <% }); %>
+                                </ul>
+                            <% } else { %>
+                                <div class="empty-questions">
+                                    <i class="fas fa-inbox"></i>
+                                    <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); margin-bottom: var(--spacing-2);">
+                                        No questions yet
+                                    </div>
+                                    <div style="font-size: var(--font-size-sm);">
+                                        This will be the first question in the form
+                                    </div>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Preview Info Card -->
+                <div class="card" style="margin-top: var(--spacing-6);">
+                    <div class="card-body" style="padding: var(--spacing-4);">
+                        <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                            <i class="fas fa-info-circle" style="font-size: var(--font-size-xl); color: var(--color-primary-400);"></i>
+                            <div>
+                                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                    Question Types
+                                </div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                    <strong>Short Text:</strong> Single line input &bull;
+                                    <strong>Long Text:</strong> Multi-line paragraph &bull;
+                                    <strong>Number:</strong> Numeric input only &bull;
+                                    <strong>Select:</strong> Dropdown with custom options
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>
+
+<script>
+function toggleOptions() {
+    const type = document.getElementById('question-type').value;
+    const optionsContainer = document.getElementById('options-container');
+    const optionsTextarea = document.getElementById('question-options');
+
+    if (type === 'select') {
+        optionsContainer.style.display = 'block';
+        optionsTextarea.required = true;
+    } else {
+        optionsContainer.style.display = 'none';
+        optionsTextarea.required = false;
+        optionsTextarea.value = '';
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    toggleOptions();
+
+    // Add real-time validation
+    const questionText = document.querySelector('input[name="question_text"]');
+    const questionType = document.getElementById('question-type');
+    const questionOptions = document.getElementById('question-options');
+
+    if (questionText) {
+        questionText.addEventListener('input', (e) => {
+            if (e.target.value.length > 100) {
+                e.target.setCustomValidity('Question text should be under 100 characters for better display');
+            } else {
+                e.target.setCustomValidity('');
+            }
+        });
+    }
+
+    if (questionOptions) {
+        questionOptions.addEventListener('input', (e) => {
+            const lines = e.target.value.split('\n').filter(line => line.trim());
+            if (lines.length < 2 && questionType.value === 'select') {
+                e.target.setCustomValidity('Please provide at least 2 options');
+            } else if (lines.length > 25) {
+                e.target.setCustomValidity('Maximum 25 options allowed');
+            } else {
+                e.target.setCustomValidity('');
+            }
+        });
+    }
+});
+</script>

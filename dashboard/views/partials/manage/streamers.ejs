@@ -1,0 +1,831 @@
+<%
+const channelOptions = channels.map(c => ({ id: c.id, name: c.name }));
+const announcementSettings = settings || {};
+const defaultChannelId = announcementSettings.announcement_channel_id || '';
+const defaultLiveRoleId = announcementSettings.live_role_id || '';
+const defaultMessage = announcementSettings.announcement_message || '{streamer} is now live on {platform}! {url}';
+%>
+
+<style>
+/* Compact Streamers Page Styles */
+.streamers-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.stat-card-compact {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.2s ease;
+}
+
+.stat-card-compact:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.stat-card-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.stat-card-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #a78bfa;
+}
+
+.stat-card-value.success { color: #10b981; }
+.stat-card-value.warning { color: #f59e0b; }
+
+/* Collapsible Settings Panel */
+.settings-panel {
+    background: rgba(167, 139, 250, 0.05);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.settings-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    background: rgba(167, 139, 250, 0.08);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.settings-panel-header:hover {
+    background: rgba(167, 139, 250, 0.12);
+}
+
+.settings-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.settings-panel-title i { color: #a78bfa; }
+
+.settings-panel-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.settings-status-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.settings-status-badge.configured {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.settings-status-badge.not-configured {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.settings-toggle-icon {
+    color: rgba(255, 255, 255, 0.5);
+    transition: transform 0.3s;
+}
+
+.settings-panel.expanded .settings-toggle-icon {
+    transform: rotate(180deg);
+}
+
+.settings-panel-body {
+    display: none;
+    padding: 20px;
+    border-top: 1px solid rgba(167, 139, 250, 0.15);
+}
+
+.settings-panel.expanded .settings-panel-body {
+    display: block;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.settings-grid-full {
+    grid-column: span 2;
+}
+
+/* Warning Banner */
+.warning-banner {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.warning-banner i {
+    color: #f59e0b;
+    font-size: 1.1rem;
+}
+
+.warning-banner-text {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.warning-banner-text strong {
+    color: #f59e0b;
+}
+
+/* Compact Table Styles */
+.streamers-table-wrapper {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.streamers-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.streamers-table thead {
+    background: rgba(167, 139, 250, 0.08);
+}
+
+.streamers-table thead th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.2);
+}
+
+.streamers-table tbody tr {
+    transition: background 0.15s;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.08);
+}
+
+.streamers-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.streamers-table tbody tr:hover {
+    background: rgba(167, 139, 250, 0.06);
+}
+
+.streamers-table tbody td {
+    padding: 12px 16px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.streamer-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(96, 165, 250, 0.2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    flex-shrink: 0;
+}
+
+.streamer-name {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 0.9rem;
+}
+
+.streamer-meta {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.platform-badges {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.platform-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.subscription-badge {
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    color: #a78bfa;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge.active {
+    background: rgba(67, 181, 129, 0.15);
+    color: #43b581;
+}
+
+.status-badge.blacklisted {
+    background: rgba(237, 66, 69, 0.15);
+    color: #ed4245;
+}
+
+/* Search Bar */
+.search-wrapper {
+    position: relative;
+    margin-bottom: 16px;
+}
+
+.search-input {
+    width: 100%;
+    padding: 10px 16px 10px 40px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+
+.search-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.85rem;
+}
+
+/* Compact Empty State */
+.empty-state-modern {
+    text-align: center;
+    padding: 48px 24px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+}
+
+.empty-state-icon-modern {
+    font-size: 2.5rem;
+    color: rgba(167, 139, 250, 0.3);
+    margin-bottom: 16px;
+}
+
+.empty-state-title-modern {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 8px;
+}
+
+.empty-state-description-modern {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 20px;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.btn-action {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    color: #a78bfa;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-action:hover {
+    background: rgba(167, 139, 250, 0.15);
+    border-color: rgba(167, 139, 250, 0.5);
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .streamers-stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .settings-grid { grid-template-columns: 1fr; }
+    .settings-grid-full { grid-column: span 1; }
+}
+
+@media (max-width: 768px) {
+    .streamers-stats-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-video"></i>
+                <span>Live Notifications</span>
+            </div>
+            <div class="page-section-subtitle">
+                Configure announcement settings and manage streamers across 7 platforms
+            </div>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-streamer-modal">
+            <i class="fas fa-plus"></i>
+            <span>Add Streamer</span>
+        </button>
+    </div>
+
+    <!-- Warning if no default channel set -->
+    <% if (!defaultChannelId) { %>
+        <div class="warning-banner">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div class="warning-banner-text">
+                <strong>No default announcement channel configured.</strong> Streamers using "Server Default" won't post announcements until you set one below.
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Stats Overview - Compact -->
+    <div class="streamers-stats-grid">
+        <div class="stat-card-compact">
+            <div class="stat-card-label">Streamers</div>
+            <div class="stat-card-value"><%= consolidatedStreamers?.length || 0 %></div>
+        </div>
+        <div class="stat-card-compact">
+            <div class="stat-card-label">Subscriptions</div>
+            <div class="stat-card-value"><%= consolidatedStreamers?.reduce((sum, s) => sum + (s.subscriptions?.length || 0), 0) || 0 %></div>
+        </div>
+        <div class="stat-card-compact">
+            <div class="stat-card-label">Platforms</div>
+            <div class="stat-card-value"><%= new Set(consolidatedStreamers?.flatMap(s => s.platforms || []) || []).size %></div>
+        </div>
+        <div class="stat-card-compact">
+            <div class="stat-card-label">Discord Linked</div>
+            <div class="stat-card-value success"><%= consolidatedStreamers?.filter(s => s.discord_user_id).length || 0 %></div>
+        </div>
+    </div>
+
+    <!-- Collapsible Default Announcement Settings -->
+    <div class="settings-panel <%= defaultChannelId ? '' : 'expanded' %>" id="announcement-settings-panel">
+        <div class="settings-panel-header" onclick="toggleSettingsPanel()">
+            <div class="settings-panel-title">
+                <i class="fas fa-bullhorn"></i>
+                Default Announcement Settings
+            </div>
+            <div class="settings-panel-status">
+                <span class="settings-status-badge <%= defaultChannelId ? 'configured' : 'not-configured' %>">
+                    <%= defaultChannelId ? 'Configured' : 'Not Set' %>
+                </span>
+                <i class="fas fa-chevron-down settings-toggle-icon"></i>
+            </div>
+        </div>
+        <div class="settings-panel-body">
+            <form action="/manage/<%= guild.id %>/update-announcements" method="POST">
+                <div class="settings-grid">
+                    <div>
+                        <label class="form-label">Default Channel</label>
+                        <select class="form-select" name="announcement_channel_id">
+                            <option value="">Disabled</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>" <%= defaultChannelId === channel.id ? 'selected' : '' %>>
+                                    #<%= channel.name %>
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">Channel for streamers using "Server Default"</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Live Role</label>
+                        <select class="form-select" name="live_role_id">
+                            <option value="">No Role</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>" <%= defaultLiveRoleId === role.id ? 'selected' : '' %>>
+                                    <%= role.name %>
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">Auto-assigned when Discord users go live</div>
+                    </div>
+                    <div class="settings-grid-full">
+                        <label class="form-label">Message Template</label>
+                        <textarea class="form-control" name="announcement_message" rows="2" style="font-family: monospace; font-size: 0.8rem;"><%= defaultMessage %></textarea>
+                        <div class="form-help">Variables: {streamer}, {platform}, {game}, {url}, {title}, {everyone}</div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
+                    <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.85rem;">
+                        <i class="fas fa-save"></i> Save Defaults
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Search + Bulk Actions Bar -->
+    <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
+        <div class="search-wrapper" style="flex: 1; margin-bottom: 0;">
+            <i class="fas fa-search search-icon"></i>
+            <input type="text" id="streamerSearch" class="search-input" placeholder="Search streamers...">
+        </div>
+        <button class="btn btn-secondary" id="bulk-actions-btn" style="display: none; white-space: nowrap;"
+                data-bs-toggle="modal" data-bs-target="#bulk-actions-modal">
+            <i class="fas fa-layer-group"></i>
+            <span>Bulk Actions (<span id="bulk-count">0</span>)</span>
+        </button>
+    </div>
+
+    <!-- Streamers Table -->
+    <% if (consolidatedStreamers && consolidatedStreamers.length > 0) { %>
+        <div class="streamers-table-wrapper">
+            <table class="streamers-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" id="select-all-streamers" class="form-check-input" title="Select All">
+                        </th>
+                        <th>Streamer</th>
+                        <th>Platforms</th>
+                        <th>Subscriptions</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="streamersTableBody">
+                    <% consolidatedStreamers.forEach(streamer => { %>
+                        <tr class="streamer-row" data-streamer-name="<%= (streamer.name || '').toLowerCase() %>" data-platforms="<%= ((streamer.platforms || []).join(' ')).toLowerCase() %>" data-subscription-ids="<%= (streamer.subscriptions || []).map(s => s.id || s.subscription_id).filter(Boolean).join(',') %>">
+                            <td>
+                                <input type="checkbox" class="form-check-input streamer-checkbox">
+                            </td>
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <div class="streamer-avatar">
+                                        <i class="fas fa-video" style="color: #a78bfa; font-size: 0.9rem;"></i>
+                                    </div>
+                                    <div>
+                                        <div class="streamer-name"><%= streamer.name %></div>
+                                        <% if (streamer.discord_user_id) { %>
+                                            <div class="streamer-meta">
+                                                <i class="fab fa-discord"></i> Linked
+                                            </div>
+                                        <% } %>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="platform-badges">
+                                    <% streamer.platforms.forEach(platform => {
+                                        const colors = {
+                                            twitch: '#9146FF',
+                                            youtube: '#FF0000',
+                                            kick: '#53FC18',
+                                            tiktok: '#000',
+                                            trovo: '#1BC981',
+                                            facebook: '#1877F2',
+                                            instagram: '#E4405F'
+                                        };
+                                        const color = colors[platform.toLowerCase()] || '#6B7280';
+                                    %>
+                                        <span class="platform-badge" style="background: <%= color %>; color: white;"><%= platform %></span>
+                                    <% }); %>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="subscription-badge"><%= streamer.subscriptions.length %></span>
+                            </td>
+                            <td>
+                                <span class="status-badge <%= streamer.is_blacklisted ? 'blacklisted' : 'active' %>">
+                                    <%= streamer.is_blacklisted ? 'Blocked' : 'Active' %>
+                                </span>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <button class="btn-action edit-streamer-btn"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#edit-streamer-modal"
+                                            data-streamer="<%- JSON.stringify(streamer).replace(/"/g, '&quot;') %>">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div class="empty-state-modern">
+            <div class="empty-state-icon-modern">
+                <i class="fas fa-video"></i>
+            </div>
+            <div class="empty-state-title-modern">No Streamers Yet</div>
+            <div class="empty-state-description-modern">
+                Add your first streamer to start receiving live notifications across 7 platforms
+            </div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-streamer-modal">
+                <i class="fas fa-plus"></i>
+                <span>Add First Streamer</span>
+            </button>
+        </div>
+    <% } %>
+</div>
+
+<%- include('partials/manage/add-streamer', { guild, roles, channels }) %>
+<%- include('partials/manage/edit-streamer-modal', { guild, roles, channels }) %>
+<%- include('partials/manage/bulk-actions-modal', { channels, roles }) %>
+
+<script>
+// Wait for Bootstrap to be available (loaded by manage.ejs)
+function waitForBootstrap(callback, maxAttempts = 50) {
+    let attempts = 0;
+    function check() {
+        if (typeof bootstrap !== 'undefined') {
+            console.log('[Streamers] Bootstrap loaded after', attempts, 'attempts');
+            callback();
+        } else if (attempts < maxAttempts) {
+            attempts++;
+            setTimeout(check, 50);
+        } else {
+            console.error('[Streamers] Bootstrap never loaded after', maxAttempts, 'attempts');
+            // Still call callback to use manual fallback
+            callback();
+        }
+    }
+    check();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('[Streamers] Page loaded, waiting for Bootstrap...');
+
+    waitForBootstrap(() => {
+        console.log('[Streamers] Bootstrap available:', typeof bootstrap !== 'undefined');
+
+        // Check if modal exists
+        const modal = document.getElementById('edit-streamer-modal');
+        console.log('[Streamers] Edit modal found:', !!modal);
+
+        if (!modal) {
+            console.error('[Streamers] Edit modal not in DOM!');
+            return;
+        }
+
+        // Add click listeners to edit buttons
+        document.querySelectorAll('.edit-streamer-btn').forEach(btn => {
+            console.log('[Streamers] Adding click listener to edit button');
+
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('[Streamers] Edit button clicked');
+
+                const modalEl = document.getElementById('edit-streamer-modal');
+                if (!modalEl) {
+                    console.error('[Streamers] Modal element not found!');
+                    return;
+                }
+
+                // Parse the streamer data
+                const streamerData = btn.getAttribute('data-streamer');
+                console.log('[Streamers] Streamer data:', streamerData?.substring(0, 100));
+
+                // Try Bootstrap first
+                if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                    console.log('[Streamers] Using Bootstrap Modal');
+                    try {
+                        const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                        // Store streamer data for the modal to use
+                        modalEl._streamerData = streamerData;
+                        modalEl._triggerButton = btn;
+                        bsModal.show();
+                    } catch (err) {
+                        console.error('[Streamers] Bootstrap modal error:', err);
+                        openModalManually(modalEl, btn);
+                    }
+                } else {
+                    console.log('[Streamers] Bootstrap not available, using manual modal');
+                    openModalManually(modalEl, btn);
+                }
+            });
+        });
+
+        console.log('[Streamers] Edit buttons initialized:', document.querySelectorAll('.edit-streamer-btn').length);
+    });
+
+    // Manual modal open function (fallback)
+    function openModalManually(modalEl, btn) {
+        console.log('[Streamers] Opening modal manually');
+
+        // Store button reference on modal for the event handler to find
+        modalEl._triggerButton = btn;
+
+        // Create backdrop
+        let backdrop = document.querySelector('.modal-backdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop fade show';
+            document.body.appendChild(backdrop);
+        }
+
+        // Show modal
+        modalEl.classList.add('show');
+        modalEl.style.display = 'block';
+        modalEl.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+
+        // Trigger the show event for the modal's internal code
+        const event = new CustomEvent('show.bs.modal', {
+            bubbles: true,
+            detail: { relatedTarget: btn }
+        });
+        // Note: relatedTarget is readonly, so we use _triggerButton instead
+        modalEl.dispatchEvent(event);
+
+        // Close on backdrop click
+        backdrop.onclick = () => closeModalManually(modalEl);
+
+        // Close on X button click
+        const closeButtons = modalEl.querySelectorAll('[data-bs-dismiss="modal"]');
+        closeButtons.forEach(closeBtn => {
+            closeBtn.addEventListener('click', () => {
+                closeModalManually(modalEl);
+            });
+        });
+
+        // Close on Escape key
+        document.addEventListener('keydown', function escHandler(e) {
+            if (e.key === 'Escape') {
+                closeModalManually(modalEl);
+                document.removeEventListener('keydown', escHandler);
+            }
+        });
+    }
+
+    function closeModalManually(modalEl) {
+        modalEl.classList.remove('show');
+        modalEl.style.display = 'none';
+        modalEl.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+        document.querySelector('.modal-backdrop')?.remove();
+    }
+
+    // Search functionality
+    const searchInput = document.getElementById('streamerSearch');
+    const tableBody = document.getElementById('streamersTableBody');
+
+    if (searchInput && tableBody) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const rows = tableBody.querySelectorAll('.streamer-row');
+
+            rows.forEach(row => {
+                const name = row.dataset.streamerName;
+                const platforms = row.dataset.platforms;
+
+                if (name.includes(query) || platforms.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+});
+
+// Settings panel toggle
+function toggleSettingsPanel() {
+    const panel = document.getElementById('announcement-settings-panel');
+    if (panel) {
+        panel.classList.toggle('expanded');
+    }
+}
+
+// Bulk selection logic
+function updateBulkSelection() {
+    const checked = document.querySelectorAll('.streamer-checkbox:checked');
+    const bulkBtn = document.getElementById('bulk-actions-btn');
+    const bulkCount = document.getElementById('bulk-count');
+    const selectAll = document.getElementById('select-all-streamers');
+
+    if (bulkBtn) bulkBtn.style.display = checked.length > 0 ? '' : 'none';
+    if (bulkCount) bulkCount.textContent = checked.length;
+
+    // Collect all subscription IDs from checked rows
+    const subIds = [];
+    checked.forEach(cb => {
+        const row = cb.closest('tr');
+        const ids = (row?.dataset.subscriptionIds || '').split(',').filter(Boolean);
+        subIds.push(...ids);
+    });
+    window._bulkSelectedSubscriptionIds = subIds;
+
+    // Update modal count text
+    const countEl = document.getElementById('bulk-selection-count');
+    if (countEl) countEl.textContent = checked.length + ' streamer(s) selected (' + subIds.length + ' subscription(s))';
+
+    // Sync select-all checkbox state
+    const allCheckboxes = document.querySelectorAll('.streamer-checkbox');
+    if (selectAll && allCheckboxes.length > 0) {
+        selectAll.checked = checked.length === allCheckboxes.length;
+        selectAll.indeterminate = checked.length > 0 && checked.length < allCheckboxes.length;
+    }
+}
+
+document.getElementById('select-all-streamers')?.addEventListener('change', function() {
+    document.querySelectorAll('.streamer-checkbox').forEach(cb => { cb.checked = this.checked; });
+    updateBulkSelection();
+});
+
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('streamer-checkbox')) updateBulkSelection();
+});
+</script>
+
+<style>
+/* Form styling */
+.form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+
+.form-help {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+    margin-top: 4px;
+}
+
+.form-control, .form-select {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #fff;
+    font-size: 0.85rem;
+    width: 100%;
+}
+
+.form-control:focus, .form-select:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+</style>

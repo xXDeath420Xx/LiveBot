@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Streamer dashboard for CertiFried MultiTool">
+    <meta name="robots" content="noindex">
+    <title>Streamer Dashboard - CertiFried MultiTool</title>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-blue: #60a5fa;
+            --accent-green: #34d399;
+            --accent-yellow: #fbbf24;
+            --accent-red: #f87171;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Background Effects */
+        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.35; animation: float 20s ease-in-out infinite; }
+        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #9146FF, #a78bfa); top: -15%; right: -10%; }
+        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #53FC18, #34d399); bottom: -15%; left: -10%; animation-delay: -10s; }
+        @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, 30px) scale(1.05); } }
+
+        /* Navbar */
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
+        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover { color: var(--text-primary); }
+        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50px; text-decoration: none; transition: all 0.2s; }
+        .user-menu:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
+        .user-avatar { width: 28px; height: 28px; border-radius: 50%; }
+        .user-name { color: var(--text-primary); font-size: 0.875rem; font-weight: 500; }
+
+        /* Main Content */
+        main { position: relative; z-index: 1; padding: 100px 1.5rem 4rem; max-width: 1400px; margin: 0 auto; }
+
+        /* Page Header */
+        .page-header { margin-bottom: 2rem; }
+        .page-header-content { display: flex; align-items: center; gap: 1rem; }
+        .page-icon { width: 56px; height: 56px; background: linear-gradient(135deg, rgba(145, 70, 255, 0.2), rgba(167, 139, 250, 0.2)); border: 1px solid rgba(145, 70, 255, 0.3); border-radius: 16px; display: flex; align-items: center; justify-content: center; }
+        .page-icon i { font-size: 1.5rem; color: #9146FF; }
+        .page-title { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .page-subtitle { color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem; }
+
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; text-align: center; transition: all 0.2s; backdrop-filter: blur(10px); }
+        .stat-card:hover { border-color: var(--accent-purple); transform: translateY(-2px); }
+        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; }
+        .stat-icon i { font-size: 1.25rem; }
+        .stat-icon.purple { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
+        .stat-icon.green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+        .stat-icon.yellow { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); }
+        .stat-value { font-size: 1.75rem; font-weight: 800; margin-bottom: 0.25rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        /* Content Grid */
+        .content-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; }
+        @media (max-width: 1024px) { .content-grid { grid-template-columns: 1fr; } }
+
+        /* Card */
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; backdrop-filter: blur(10px); }
+        .card-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); }
+        .card-title { display: flex; align-items: center; gap: 0.625rem; font-weight: 600; font-size: 0.95rem; }
+        .card-title i { color: var(--accent-purple); }
+        .card-badge { padding: 0.25rem 0.625rem; background: rgba(255, 255, 255, 0.05); border-radius: 6px; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); }
+        .card-body { padding: 1.25rem; }
+
+        /* Table */
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { padding: 0.75rem 1rem; text-align: left; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); background: rgba(255, 255, 255, 0.02); border-bottom: 1px solid var(--border-color); }
+        td { padding: 0.875rem 1rem; font-size: 0.875rem; border-bottom: 1px solid var(--border-color); }
+        tr:hover td { background: rgba(255, 255, 255, 0.02); }
+        tr:last-child td { border-bottom: none; }
+
+        /* Platform Icons */
+        .platform-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+        .platform-icon img { width: 16px; height: 16px; }
+        .platform-icon i { font-size: 0.875rem; color: white; }
+        .platform-twitch { background: #9146FF; }
+        .platform-kick { background: #53FC18; }
+        .platform-youtube { background: #FF0000; }
+        .platform-tiktok { background: #000; border: 1px solid #FE2C55; }
+        .platform-trovo { background: #19D760; }
+        .platform-facebook { background: #1877F2; }
+        .platform-instagram { background: linear-gradient(45deg, #F58529, #DD2A7B, #8134AF); }
+
+        /* Viewer Badge */
+        .viewer-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.5rem; background: rgba(167, 139, 250, 0.15); border-radius: 6px; font-size: 0.75rem; font-weight: 600; color: var(--accent-purple); }
+        .viewer-badge i { font-size: 0.625rem; }
+
+        /* Account List */
+        .account-list { display: flex; flex-direction: column; gap: 0.75rem; }
+        .account-item { display: flex; align-items: center; gap: 0.875rem; padding: 0.875rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 12px; transition: all 0.2s; }
+        .account-item:hover { background: var(--bg-card-hover); border-color: rgba(167, 139, 250, 0.3); transform: translateX(4px); }
+        .account-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+        .account-icon img { width: 22px; height: 22px; }
+        .account-icon i { font-size: 1.125rem; color: white; }
+        .account-info { flex: 1; min-width: 0; }
+        .account-platform { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-bottom: 0.125rem; }
+        .account-name { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .account-status { display: flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; font-weight: 500; }
+        .account-status.live { color: var(--accent-green); }
+        .account-status.offline { color: var(--text-muted); }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .account-status.live .status-dot { background: var(--accent-green); animation: pulse 2s infinite; }
+        .account-status.offline .status-dot { background: var(--text-muted); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        /* Empty State */
+        .empty-state { text-align: center; padding: 3rem 1.5rem; color: var(--text-muted); }
+        .empty-state i { font-size: 2.5rem; margin-bottom: 1rem; opacity: 0.3; }
+        .empty-state p { font-size: 0.875rem; }
+        .empty-state-small { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+        /* Footer */
+        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
+        .footer .container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; }
+        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
+        .footer-link:hover { color: var(--accent-purple); }
+        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
+
+        /* Mobile Menu */
+        .mobile-menu-btn { display: none; background: none; border: none; color: var(--text-primary); font-size: 1.5rem; cursor: pointer; padding: 0.5rem; }
+        .mobile-menu { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(11, 15, 17, 0.98); z-index: 9999; flex-direction: column; padding: 1.5rem; }
+        .mobile-menu.open { display: flex; }
+        .mobile-menu-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
+        .mobile-menu-close { background: none; border: none; color: var(--text-primary); font-size: 1.5rem; cursor: pointer; padding: 0.5rem; }
+        .mobile-menu-links { display: flex; flex-direction: column; gap: 0.5rem; }
+        .mobile-menu-links a { color: var(--text-secondary); text-decoration: none; font-size: 1.1rem; font-weight: 500; padding: 1rem; border-radius: 10px; transition: all 0.2s; }
+        .mobile-menu-links a:hover { background: var(--bg-card); color: var(--text-primary); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .navbar-links { display: none; }
+            .mobile-menu-btn { display: block; }
+            main { padding: 90px 1rem 3rem; }
+            .page-header-content { flex-direction: column; text-align: center; }
+            .stats-grid { grid-template-columns: 1fr; }
+            th, td { padding: 0.625rem 0.75rem; }
+            .footer-links { flex-direction: column; gap: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/" class="navbar-brand">
+                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                <span>CertiFried</span>
+            </a>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/servers">Servers</a>
+                <a href="/commands">Commands</a>
+                <a href="/status">Status</a>
+            </div>
+            <% if (user) { %>
+                <a href="/profile" class="user-menu">
+                    <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="Avatar" class="user-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                    <span class="user-name"><%= user.username %></span>
+                </a>
+            <% } else { %>
+                <a href="/login" class="user-menu">
+                    <span class="user-name">Login</span>
+                </a>
+            <% } %>
+            <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open menu">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobile-menu">
+        <div class="mobile-menu-header">
+            <a href="/" class="navbar-brand">
+                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                <span>CertiFried</span>
+            </a>
+            <button class="mobile-menu-close" id="mobile-menu-close" aria-label="Close menu">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="mobile-menu-links">
+            <a href="/">Home</a>
+            <a href="/servers">Servers</a>
+            <a href="/commands">Commands</a>
+            <a href="/status">Status</a>
+            <% if (user) { %>
+                <a href="/profile">Profile</a>
+            <% } else { %>
+                <a href="/login">Login</a>
+            <% } %>
+        </div>
+    </div>
+
+    <main>
+        <div class="page-header">
+            <div class="page-header-content">
+                <div class="page-icon">
+                    <i class="fas fa-user-astronaut"></i>
+                </div>
+                <div>
+                    <h1 class="page-title">Streamer Dashboard</h1>
+                    <p class="page-subtitle">Your personal streaming stats and activity overview</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon purple">
+                    <i class="fas fa-bullhorn"></i>
+                </div>
+                <div class="stat-value" id="total-announcements">...</div>
+                <div class="stat-label">Total Announcements</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-value" id="hours-tracked">...</div>
+                <div class="stat-label">Hours Tracked</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon yellow">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <div class="stat-value" id="most-active-guild" style="font-size: 1.25rem;">...</div>
+                <div class="stat-label">Most Active Guild</div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fas fa-history"></i>
+                        Recent Announcements
+                    </div>
+                    <span class="card-badge" id="announcement-count">0</span>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Platform</th>
+                                <th>Game</th>
+                                <th>Guild</th>
+                                <th>Viewers</th>
+                            </tr>
+                        </thead>
+                        <tbody id="announcements-tbody">
+                            <tr>
+                                <td colspan="5">
+                                    <div class="empty-state">
+                                        <i class="fas fa-spinner fa-spin"></i>
+                                        <p>Loading announcements...</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fas fa-link"></i>
+                        Linked Accounts
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="account-list" id="linked-accounts-list">
+                        <div class="empty-state">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading accounts...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-links">
+                <a href="/commands" class="footer-link">Commands</a>
+                <a href="/status" class="footer-link">Status</a>
+                <a href="/docs" class="footer-link">Documentation</a>
+                <a href="/terms" class="footer-link">Terms</a>
+                <a href="/privacy" class="footer-link">Privacy</a>
+            </div>
+            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const mobileMenuClose = document.getElementById('mobile-menu-close');
+
+    if (mobileMenuBtn && mobileMenu && mobileMenuClose) {
+        mobileMenuBtn.addEventListener('click', () => {
+            mobileMenu.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        });
+
+        mobileMenuClose.addEventListener('click', () => {
+            mobileMenu.classList.remove('open');
+            document.body.style.overflow = '';
+        });
+
+        mobileMenu.addEventListener('click', (e) => {
+            if (e.target === mobileMenu) {
+                mobileMenu.classList.remove('open');
+                document.body.style.overflow = '';
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadStreamerDashboardData();
+    });
+
+    async function loadStreamerDashboardData() {
+        try {
+            const response = await fetch('/api/streamer/dashboard');
+            const data = await response.json();
+
+            if (data.success) {
+                document.getElementById('total-announcements').textContent = data.stats.totalAnnouncements?.toLocaleString() || '0';
+                const hoursTracked = Math.round(data.stats.hoursTracked || 0);
+                document.getElementById('hours-tracked').textContent = `${hoursTracked}h`;
+                document.getElementById('most-active-guild').textContent = data.stats.mostActiveGuild || 'N/A';
+
+                populateAnnouncements(data.recentAnnouncements || []);
+                populateLinkedAccounts(data.linkedAccounts || []);
+            } else {
+                console.error('Failed to load streamer dashboard data:', data.error);
+                showEmptyState();
+            }
+        } catch (error) {
+            console.error('Error loading streamer dashboard data:', error);
+            showEmptyState();
+        }
+    }
+
+    function populateAnnouncements(announcements) {
+        const tbody = document.getElementById('announcements-tbody');
+        const countBadge = document.getElementById('announcement-count');
+
+        countBadge.textContent = announcements.length;
+
+        if (announcements.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5">
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p>No recent announcements</p>
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = announcements.map(announcement => {
+            const date = new Date(announcement.announced_at || announcement.created_at);
+            const formattedDate = date.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            const platform = announcement.platform || 'unknown';
+            const platformIcons = {
+                twitch: 'fab fa-twitch',
+                youtube: 'fab fa-youtube',
+                tiktok: 'fab fa-tiktok',
+                facebook: 'fab fa-facebook',
+                instagram: 'fab fa-instagram'
+            };
+
+            let platformIconHtml = '';
+            if (platform === 'kick') {
+                platformIconHtml = '<img src="/images/kick.png" alt="Kick">';
+            } else if (platform === 'trovo') {
+                platformIconHtml = '<img src="/images/trovo.png" alt="Trovo">';
+            } else {
+                platformIconHtml = `<i class="${platformIcons[platform] || 'fas fa-video'}"></i>`;
+            }
+
+            return `
+                <tr>
+                    <td>${formattedDate}</td>
+                    <td>
+                        <div class="platform-icon platform-${platform}">
+                            ${platformIconHtml}
+                        </div>
+                    </td>
+                    <td>${announcement.game_name || announcement.category || 'Just Chatting'}</td>
+                    <td style="color: var(--text-muted);">${announcement.guild_name || 'Unknown Guild'}</td>
+                    <td>
+                        <span class="viewer-badge">
+                            <i class="fas fa-eye"></i>
+                            ${(announcement.viewer_count || 0).toLocaleString()}
+                        </span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function populateLinkedAccounts(accounts) {
+        const list = document.getElementById('linked-accounts-list');
+
+        if (accounts.length === 0) {
+            list.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-unlink"></i>
+                    <p>No linked accounts</p>
+                    <p class="empty-state-small">Link your streaming accounts to get started</p>
+                </div>
+            `;
+            return;
+        }
+
+        list.innerHTML = accounts.map(account => {
+            const platform = account.platform || 'unknown';
+
+            let iconHtml = '';
+            if (platform === 'kick') {
+                iconHtml = '<img src="/images/kick.png" alt="Kick">';
+            } else if (platform === 'trovo') {
+                iconHtml = '<img src="/images/trovo.png" alt="Trovo">';
+            } else {
+                const icons = {
+                    twitch: 'fab fa-twitch',
+                    youtube: 'fab fa-youtube',
+                    tiktok: 'fab fa-tiktok',
+                    facebook: 'fab fa-facebook',
+                    instagram: 'fab fa-instagram'
+                };
+                iconHtml = `<i class="${icons[platform] || 'fas fa-video'}"></i>`;
+            }
+
+            return `
+                <div class="account-item">
+                    <div class="account-icon platform-${platform}">
+                        ${iconHtml}
+                    </div>
+                    <div class="account-info">
+                        <div class="account-platform">${platform}</div>
+                        <div class="account-name">${account.username || account.display_name}</div>
+                    </div>
+                    <div class="account-status ${account.is_live ? 'live' : 'offline'}">
+                        <span class="status-dot"></span>
+                        ${account.is_live ? 'Live' : 'Offline'}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function showEmptyState() {
+        document.getElementById('total-announcements').textContent = '0';
+        document.getElementById('hours-tracked').textContent = '0h';
+        document.getElementById('most-active-guild').textContent = 'N/A';
+
+        populateAnnouncements([]);
+        populateLinkedAccounts([]);
+    }
+    </script>
+</body>
+</html>

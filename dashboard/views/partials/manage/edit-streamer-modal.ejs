@@ -1,0 +1,705 @@
+<style>
+/* Edit Modal Specific Styles - Purple Theme */
+.subscription-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: all 0.2s;
+}
+
+.subscription-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.subscription-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+}
+
+.subscription-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.subscription-card-platform {
+    color: #a78bfa;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+}
+
+.btn-outline-danger {
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: rgba(239, 68, 68, 0.9);
+}
+
+.btn-outline-danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: #ffffff;
+}
+
+.btn-danger:hover {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #ffffff;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+
+.empty-subscriptions {
+    text-align: center;
+    padding: 40px 20px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.9rem;
+}
+
+.moderation-section {
+    background: rgba(239, 68, 68, 0.05);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 24px;
+}
+
+.moderation-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.moderation-description {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 16px;
+}
+
+.text-primary {
+    color: #a78bfa !important;
+}
+
+.text-muted {
+    color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Modal Scrolling Fix */
+.modal-content {
+    background: #0f1316;
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 16px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(20px);
+}
+
+.modal-header {
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    padding: 24px 32px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.modal-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #ffffff 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+#edit-streamer-modal .modal-body {
+    padding: 32px;
+    max-height: calc(100vh - 200px) !important;
+    overflow-y: auto !important;
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(167, 139, 250, 0.15);
+    padding: 20px 32px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.btn-close {
+    background: transparent url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23fff'%3e%3cpath d='M.293.293a1 1 0 011.414 0L8 6.586 14.293.293a1 1 0 111.414 1.414L9.414 8l6.293 6.293a1 1 0 01-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 01-1.414-1.414L6.586 8 .293 1.707a1 1 0 010-1.414z'/%3e%3c/svg%3e") center/1em auto no-repeat;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.btn-close:hover {
+    opacity: 1;
+}
+
+.form-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 8px;
+    display: block;
+}
+
+.form-control, .form-select {
+    background: rgba(0, 0, 0, 0.5) !important;
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: #ffffff !important;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.form-control:focus, .form-select:focus {
+    background: rgba(0, 0, 0, 0.6) !important;
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2);
+    outline: none;
+    color: #ffffff !important;
+}
+
+.form-control::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.section-divider {
+    margin: 32px 0;
+    border: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(167, 139, 250, 0.3), transparent);
+}
+
+.section-header {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.section-description {
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 20px;
+}
+
+.form-check-input {
+    background-color: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(167, 139, 250, 0.25);
+    width: 44px;
+    height: 24px;
+    cursor: pointer;
+}
+
+.form-check-input:checked {
+    background-color: #a78bfa;
+    border-color: #a78bfa;
+}
+
+.form-check-input:focus {
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2);
+}
+
+.form-check-label {
+    color: rgba(255, 255, 255, 0.8);
+    margin-left: 12px;
+    font-size: 0.9rem;
+}
+
+.btn {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+    border: none;
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    color: #ffffff;
+    box-shadow: 0 4px 15px rgba(167, 139, 250, 0.35);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #8b5cf6 0%, #c4b5fd 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(167, 139, 250, 0.5);
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 80px;
+}
+
+select.form-select option {
+    background: #1e2028;
+    color: #ffffff;
+}
+</style>
+
+<div class="modal fade" id="edit-streamer-modal" tabindex="-1" aria-labelledby="editStreamerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content" style="max-height: 90vh; display: flex; flex-direction: column;">
+            <form id="edit-streamer-form" method="POST" style="display: flex; flex-direction: column; max-height: 90vh;">
+                <div class="modal-header" style="flex-shrink: 0;">
+                    <h5 class="modal-title" id="editStreamerModalLabel">
+                        <i class="fas fa-edit"></i>
+                        Edit Streamer: <span id="edit-streamer-name" style="color: #a78bfa;"></span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" style="overflow-y: auto !important; padding: 32px; flex: 1 1 auto; min-height: 0;">
+                    <input type="hidden" name="consolidated_streamer_id" id="consolidated-streamer-id">
+
+                    <!-- Discord Link Section -->
+                    <div class="mb-4">
+                        <label for="discord-user-id" class="form-label">
+                            <i class="fab fa-discord me-1" style="color: #a78bfa;"></i>
+                            Linked Discord User (Optional)
+                        </label>
+                        <input type="text" class="form-control" id="discord-user-id" name="discord_user_id" placeholder="Discord User ID (e.g., 123456789012345678)">
+                        <small style="color: rgba(255, 255, 255, 0.5); font-size: 0.8rem; margin-top: 6px; display: block;">
+                            Link this streamer to a Discord user for additional features
+                        </small>
+                    </div>
+
+                    <hr class="section-divider">
+
+                    <!-- Subscriptions Section -->
+                    <h5 class="section-header">
+                        <i class="fas fa-bell" style="color: #a78bfa;"></i>
+                        Announcement Subscriptions
+                    </h5>
+                    <p class="section-description">Manage individual platform subscriptions and their announcement settings</p>
+
+                    <div id="subscriptions-container"></div>
+
+                    <hr class="section-divider">
+
+                    <!-- Add Platform Section -->
+                    <h5 class="section-header">
+                        <i class="fas fa-link" style="color: #a78bfa;"></i>
+                        Add Additional Platform
+                    </h5>
+                    <p class="section-description">Link another platform account to this streamer</p>
+
+                    <div class="row g-3 mb-4" style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(167, 139, 250, 0.2); border-radius: 12px; padding: 20px;">
+                        <div class="col-md-4">
+                            <label for="add-platform" class="form-label">Platform</label>
+                            <select class="form-select" id="add-platform">
+                                <option value="">-- Select Platform --</option>
+                                <option value="twitch">Twitch</option>
+                                <option value="youtube">YouTube</option>
+                                <option value="kick">Kick</option>
+                                <option value="tiktok">TikTok</option>
+                                <option value="trovo">Trovo</option>
+                                <option value="facebook">Facebook</option>
+                                <option value="instagram">Instagram</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="add-username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="add-username" placeholder="Platform username">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="add-channel" class="form-label">Announcement Channel</label>
+                            <select class="form-select" id="add-channel">
+                                <option value="">-- Use Server Default --</option>
+                                <% channels.forEach(channel => { %>
+                                    <option value="<%= channel.id %>"># <%= channel.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <button type="button" class="btn btn-success" id="add-platform-btn">
+                                <i class="fas fa-plus me-2"></i>Add Platform
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr class="section-divider">
+
+                    <!-- Moderation Section -->
+                    <div class="moderation-section">
+                        <h5 class="moderation-title">
+                            <i class="fas fa-shield-alt me-2" style="color: #ef4444;"></i>
+                            Moderation Controls
+                        </h5>
+                        <p class="moderation-description">
+                            Blacklisting will remove all streamer data and prevent them from being re-added to this server
+                        </p>
+                        <div id="blacklist-controls"></div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="flex-shrink: 0;">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const editStreamerModal = document.getElementById('edit-streamer-modal');
+    if (!editStreamerModal) return;
+
+    const allChannels = <%- JSON.stringify(channels) %>;
+    const allRoles = <%- JSON.stringify(roles) %>;
+    const subscriptionsContainer = document.getElementById('subscriptions-container');
+    const blacklistControls = document.getElementById('blacklist-controls');
+
+    // Add form submit handler for debugging
+    const editForm = document.getElementById('edit-streamer-form');
+    if (editForm) {
+        editForm.addEventListener('submit', (e) => {
+            console.log('[EDIT FORM] Form submitting!');
+            console.log('[EDIT FORM] Action:', editForm.action);
+            console.log('[EDIT FORM] Method:', editForm.method);
+
+            const formData = new FormData(editForm);
+            const formObj = {};
+            for (let [key, value] of formData.entries()) {
+                formObj[key] = value;
+            }
+            console.log('[EDIT FORM] Form Data:', formObj);
+
+            // Check if action is set
+            if (!editForm.action || editForm.action.includes('undefined')) {
+                console.error('[EDIT FORM] ERROR: Form action not set properly!', editForm.action);
+                alert('Error: Form action not set. Please refresh and try again.');
+                e.preventDefault();
+                return false;
+            }
+            // Don't prevent default - let it submit normally
+        });
+    }
+
+    editStreamerModal.addEventListener('show.bs.modal', event => {
+        console.log('[EDIT MODAL] show.bs.modal event triggered');
+
+        // Get button from event.relatedTarget (Bootstrap) or fallback to stored reference
+        const button = event.relatedTarget || editStreamerModal._triggerButton;
+        console.log('[EDIT MODAL] Button found:', !!button);
+
+        if (!button) {
+            console.error('[EDIT MODAL] No button reference found!');
+            return;
+        }
+
+        const streamerDataAttr = button.getAttribute('data-streamer');
+        console.log('[EDIT MODAL] Streamer data attr length:', streamerDataAttr?.length);
+
+        if (!streamerDataAttr) {
+            console.error('[EDIT MODAL] No data-streamer attribute on button!');
+            return;
+        }
+
+        let streamer;
+        try {
+            streamer = JSON.parse(streamerDataAttr);
+            console.log('[EDIT MODAL] Parsed streamer:', streamer.name);
+        } catch (e) {
+            console.error('[EDIT MODAL] Failed to parse streamer data:', e);
+            return;
+        }
+
+        const form = document.getElementById('edit-streamer-form');
+        form.action = `/manage/<%= guild.id %>/edit-consolidated-streamer`;
+        console.log('[EDIT MODAL] Set form action to:', form.action);
+
+        document.getElementById('edit-streamer-name').textContent = streamer.name;
+        document.getElementById('consolidated-streamer-id').value = streamer.id;
+        document.getElementById('discord-user-id').value = streamer.discord_user_id || '';
+
+        // Store streamer data for add platform button
+        editStreamerModal.setAttribute('data-current-streamer', JSON.stringify(streamer));
+
+        // Build Subscriptions
+        subscriptionsContainer.innerHTML = '';
+
+        if (!streamer.subscriptions || streamer.subscriptions.length === 0) {
+            subscriptionsContainer.innerHTML = `
+                <div class="empty-subscriptions">
+                    <i class="fas fa-inbox" style="font-size: 2.5rem; color: rgba(255, 255, 255, 0.2); margin-bottom: 12px; display: block;"></i>
+                    <p>No announcement subscriptions configured for this streamer</p>
+                </div>
+            `;
+        } else {
+            streamer.subscriptions.forEach(sub => {
+                const subId = sub.subscription_id;
+                const subCard = document.createElement('div');
+                subCard.className = 'subscription-card';
+                subCard.id = `sub-card-${subId}`;
+
+                let channelOptionsHtml = '<option value="">-- Use Server Default --</option>';
+                allChannels.forEach(channel => {
+                    const selected = sub.announcement_channel_id == channel.id ? 'selected' : '';
+                    channelOptionsHtml += `<option value="${channel.id}" ${selected}># ${channel.name}</option>`;
+                });
+
+                let roleOptionsHtml = '<option value="">-- None --</option>';
+                allRoles.forEach(role => {
+                    const selected = sub.live_role_id == role.id ? 'selected' : '';
+                    roleOptionsHtml += `<option value="${role.id}" ${selected}>${role.name}</option>`;
+                });
+
+                const channelName = allChannels.find(c => c.id == sub.announcement_channel_id)?.name || 'Server Default';
+
+                subCard.innerHTML = `
+                    <div class="subscription-card-header">
+                        <div class="subscription-card-title">
+                            <span class="subscription-card-platform">${sub.platform.toUpperCase()}</span>
+                            <span style="color: rgba(255, 255, 255, 0.7); font-weight: 500; margin: 0 8px;">${sub.platform_username || streamer.name}</span>
+                            in <strong>#${channelName}</strong>
+                        </div>
+                        <form class="delete-subscription-form" action="/manage/<%= guild.id %>/delete-subscription" method="POST" style="margin: 0;">
+                            <input type="hidden" name="subscriptionId" value="${subId}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="fas fa-trash-alt me-1"></i>Delete
+                            </button>
+                        </form>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="sub-channel-${subId}" class="form-label">Announcement Channel</label>
+                            <select class="form-select" id="sub-channel-${subId}" name="subscriptions[${subId}][announcement_channel_id]">
+                                ${channelOptionsHtml}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="sub-role-${subId}" class="form-label">Live Role</label>
+                            <select class="form-select" id="sub-role-${subId}" name="subscriptions[${subId}][live_role_id]">
+                                ${roleOptionsHtml}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="sub-message-${subId}" class="form-label">Custom Announcement Message</label>
+                            <textarea class="form-control" id="sub-message-${subId}" name="subscriptions[${subId}][custom_message]" rows="3" placeholder="${sub.platform.toLowerCase() === 'tiktok' ? '{username} uploaded a new TikTok!\\n\\n{description}\\n\\n@everyone' : 'Hey @everyone, {username} is live!'}">${sub.custom_message || ''}</textarea>
+                            <small style="color: rgba(255, 255, 255, 0.5); font-size: 0.8rem; margin-top: 6px; display: block;">
+                                ${sub.platform.toLowerCase() === 'tiktok'
+                                    ? '<strong>TikTok variables:</strong> {username}, {title}, {description}, {url} • Video will auto-embed'
+                                    : '<strong>Live stream variables:</strong> {username}, {game}, {title}, {url}'}
+                            </small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="sub-webhook-name-${subId}" class="form-label">Webhook Display Name</label>
+                            <input type="text" class="form-control" id="sub-webhook-name-${subId}" name="subscriptions[${subId}][override_nickname]" value="${sub.override_nickname || ''}" placeholder="Leave blank for default">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="sub-webhook-avatar-${subId}" class="form-label">Webhook Avatar URL</label>
+                            <input type="url" class="form-control" id="sub-webhook-avatar-${subId}" name="subscriptions[${subId}][override_avatar_url]" value="${sub.override_avatar_url || ''}" placeholder="Leave blank for default">
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="sub-keep-${subId}" name="subscriptions[${subId}][keep_summary]" ${!sub.delete_on_end ? 'checked' : ''}>
+                                <label class="form-check-label" for="sub-keep-${subId}">
+                                    Keep announcement message after stream ends
+                                </label>
+                            </div>
+                        </div>
+                        ${sub.platform.toLowerCase() === 'tiktok' ? `
+                        <div class="col-12" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(167, 139, 250, 0.2);">
+                            <h6 style="color: #a78bfa; font-size: 0.9rem; font-weight: 600; margin-bottom: 12px;">
+                                <i class="fas fa-video me-2"></i>TikTok Video Post Notifications
+                            </h6>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="sub-notify-videos-${subId}" name="subscriptions[${subId}][notify_videos]" ${sub.notify_videos ? 'checked' : ''}>
+                                <label class="form-check-label" for="sub-notify-videos-${subId}">
+                                    <strong>Enable video post notifications</strong>
+                                    <small style="display: block; color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; margin-top: 4px;">
+                                        Bot will announce new TikTok videos every 5 minutes
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-12">
+                            <label for="sub-video-channel-${subId}" class="form-label">Video Announcement Channel</label>
+                            <select class="form-select" id="sub-video-channel-${subId}" name="subscriptions[${subId}][video_announcement_channel_id]">
+                                <option value="">-- Not Set --</option>
+                                ${allChannels.map(channel => {
+                                    const selected = sub.video_announcement_channel_id == channel.id ? 'selected' : '';
+                                    return `<option value="${channel.id}" ${selected}># ${channel.name}</option>`;
+                                }).join('')}
+                            </select>
+                            <small style="color: rgba(255, 255, 255, 0.5); font-size: 0.8rem; margin-top: 6px; display: block;">
+                                Where TikTok video announcements will be posted (separate from live stream announcements)
+                            </small>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+                subscriptionsContainer.appendChild(subCard);
+            });
+        }
+
+        // Build Moderation Controls
+        blacklistControls.innerHTML = '';
+        const streamerIdentifier = streamer.discord_user_id || streamer.name;
+
+        if (streamer.is_blacklisted) {
+            const unblacklistForm = document.createElement('form');
+            unblacklistForm.action = `/manage/<%= guild.id %>/unblacklist`;
+            unblacklistForm.method = 'POST';
+            unblacklistForm.innerHTML = `
+                <input type="hidden" name="identifier" value="${streamerIdentifier}">
+                <input type="hidden" name="streamer_id" value="${streamer.id}">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-check me-2"></i>Remove from Blacklist
+                </button>
+            `;
+            blacklistControls.appendChild(unblacklistForm);
+        } else {
+            const blacklistForm = document.createElement('form');
+            blacklistForm.action = `/manage/<%= guild.id %>/blacklist`;
+            blacklistForm.method = 'POST';
+            blacklistForm.innerHTML = `
+                <input type="hidden" name="identifier" value="${streamerIdentifier}">
+                <button type="submit" class="btn btn-danger">
+                    <i class="fas fa-ban me-2"></i>Blacklist This Streamer
+                </button>
+            `;
+            blacklistControls.appendChild(blacklistForm);
+        }
+    });
+
+    // Handle add platform button
+    document.getElementById('add-platform-btn').addEventListener('click', async () => {
+        const platform = document.getElementById('add-platform').value;
+        const username = document.getElementById('add-username').value;
+        const channelId = document.getElementById('add-channel').value;
+
+        if (!platform || !username) {
+            alert('Please select a platform and enter a username');
+            return;
+        }
+
+        const streamerData = JSON.parse(editStreamerModal.getAttribute('data-current-streamer'));
+        const discordUserId = document.getElementById('discord-user-id').value;
+
+        try {
+            const response = await fetch('/manage/<%= guild.id %>/add-streamer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    platform: platform,
+                    username: username,
+                    discord_user_id: discordUserId,
+                    announcement_channel_id: channelId || ''
+                })
+            });
+
+            if (response.redirected) {
+                const url = new URL(response.url);
+                const error = url.searchParams.get('error');
+                if (error) {
+                    alert(`Error adding platform: ${error}`);
+                } else {
+                    alert('Platform added successfully! Refreshing page...');
+                    window.location.reload();
+                }
+            } else {
+                alert('Platform added successfully! Refreshing page...');
+                window.location.reload();
+            }
+        } catch (error) {
+            console.error('Error adding platform:', error);
+            alert(`Error: ${error.message}`);
+        }
+    });
+
+    // Handle subscription deletion
+    subscriptionsContainer.addEventListener('submit', async (e) => {
+        if (e.target.classList.contains('delete-subscription-form')) {
+            e.preventDefault();
+            const form = e.target;
+            const subId = form.querySelector('input[name="subscriptionId"]').value;
+
+            if (!confirm('Are you sure you want to delete this subscription? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subscriptionId: subId })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    const card = form.closest('.subscription-card');
+                    card.style.opacity = '0';
+                    card.style.transform = 'scale(0.9)';
+                    setTimeout(() => card.remove(), 200);
+
+                    // Check if no more subscriptions
+                    setTimeout(() => {
+                        if (subscriptionsContainer.querySelectorAll('.subscription-card').length === 0) {
+                            subscriptionsContainer.innerHTML = `
+                                <div class="empty-subscriptions">
+                                    <i class="fas fa-inbox" style="font-size: 2.5rem; color: rgba(255, 255, 255, 0.2); margin-bottom: 12px; display: block;"></i>
+                                    <p>No announcement subscriptions configured for this streamer</p>
+                                </div>
+                            `;
+                        }
+                    }, 250);
+                } else {
+                    throw new Error(result.error || 'Failed to delete subscription');
+                }
+            } catch (error) {
+                console.error('Error deleting subscription:', error);
+                alert(`Error: ${error.message}`);
+            }
+        }
+    });
+});
+</script>

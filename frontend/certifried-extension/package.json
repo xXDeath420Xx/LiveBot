@@ -1,0 +1,20 @@
+{
+  "name": "certifried-extension-frontend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "CertiFried Twitch Extension Frontend",
+  "scripts": {
+    "build": "node build.js",
+    "build:prod": "node build.js --production",
+    "build:zip": "node build.js --production --zip",
+    "watch": "node build.js --watch",
+    "dev": "node build.js --watch",
+    "clean": "rm -rf dist release"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,396 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-music"></i>
+                <span>Music System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Configure the bot's music features for your server
+            </div>
+        </div>
+    </div>
+
+    <!-- General Settings -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-cog" style="color: var(--color-primary-400);"></i>
+            General Music Settings
+        </h3>
+        <form action="/manage/<%= guild.id %>/music/config" method="POST">
+            <div class="form-check" style="margin-bottom: var(--spacing-4);">
+                <input class="form-check-input" type="checkbox" id="musicEnabled" name="enabled" <%= (musicConfig && musicConfig.enabled) ? 'checked' : '' %>>
+                <label class="form-check-label" for="musicEnabled">
+                    Enable Music Module
+                </label>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">DJ Role</label>
+                <select class="form-select" name="djRoleId">
+                    <option value="">None</option>
+                    <% roles.forEach(role => { %>
+                        <option value="<%= role.id %>" <%= (musicConfig && musicConfig.dj_role_id === role.id) ? 'selected' : '' %>><%= role.name %></option>
+                    <% }) %>
+                </select>
+                <div class="form-help">Users with this role can bypass most music command restrictions</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save General Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- AI DJ Settings -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-microphone" style="color: var(--color-accent-purple);"></i>
+            AI DJ
+        </h3>
+        <form action="/manage/<%= guild.id %>/music/dj" method="POST">
+            <div class="form-check" style="margin-bottom: var(--spacing-4);">
+                <input class="form-check-input" type="checkbox" id="djEnabled" name="djEnabled" <%= (musicConfig && musicConfig.dj_enabled) ? 'checked' : '' %>>
+                <label class="form-check-label" for="djEnabled">
+                    Enable AI DJ
+                </label>
+            </div>
+            <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
+                The bot will announce tracks and provide commentary like a radio DJ
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">DJ Voice</label>
+                <select class="form-select" name="djVoice">
+                    <% if (availableDJVoices && availableDJVoices.length > 0) { %>
+                        <%
+                        // Group voices by category
+                        const voicesByCategory = {};
+                        availableDJVoices.forEach(voice => {
+                            if (!voicesByCategory[voice.category]) {
+                                voicesByCategory[voice.category] = [];
+                            }
+                            voicesByCategory[voice.category].push(voice);
+                        });
+
+                        // Sort categories: English first, then alphabetically
+                        const sortedCategories = Object.keys(voicesByCategory).sort((a, b) => {
+                            if (a === 'US English') return -1;
+                            if (b === 'US English') return 1;
+                            if (a === 'British English') return -1;
+                            if (b === 'British English') return 1;
+                            return a.localeCompare(b);
+                        });
+                        %>
+                        <% sortedCategories.forEach(category => { %>
+                            <% const voices = voicesByCategory[category]; %>
+                            <% if (voices.length > 0) { %>
+                                <optgroup label="<%= category %>">
+                                    <% voices.forEach(voice => { %>
+                                        <option value="<%= voice.value %>" <%= (musicConfig && musicConfig.dj_voice === voice.value) ? 'selected' : '' %>><%= voice.label %></option>
+                                    <% }); %>
+                                </optgroup>
+                            <% } %>
+                        <% }); %>
+                    <% } else { %>
+                        <option value="female">🇺🇸 Female (Default)</option>
+                        <option value="male">🇺🇸 Male (Default)</option>
+                    <% } %>
+                </select>
+                <div class="form-help">Choose the voice personality for your AI DJ. Total voices available: <%= availableDJVoices ? availableDJVoices.length : 0 %></div>
+            </div>
+
+            <div style="margin-top: var(--spacing-3); margin-bottom: var(--spacing-4);">
+                <button type="button" class="btn btn-secondary btn-sm" id="preview-voice-btn" onclick="previewVoice()">
+                    <i class="fas fa-volume-up"></i>
+                    <span>Preview Selected Voice</span>
+                </button>
+                <span id="preview-status" style="margin-left: var(--spacing-2); font-size: var(--font-size-sm); color: var(--color-text-muted);"></span>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save AI DJ Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- FlaviBot-Style Features -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-star" style="color: var(--color-accent-gold);"></i>
+            Advanced Features
+        </h3>
+        <form action="/manage/<%= guild.id %>/music/advanced" method="POST">
+            <!-- 24/7 Mode -->
+            <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div class="form-check" style="margin-bottom: var(--spacing-3);">
+                    <input class="form-check-input" type="checkbox" id="twentyFourSeven" name="twentyFourSeven" <%= (musicConfig && musicConfig.twenty_four_seven) ? 'checked' : '' %>>
+                    <label class="form-check-label" for="twentyFourSeven">
+                        <i class="fas fa-infinity" style="color: var(--color-primary-400);"></i>
+                        <strong>24/7 Mode</strong>
+                    </label>
+                </div>
+                <div class="form-help" style="margin-left: 26px;">Bot stays in voice channel even when queue is empty</div>
+            </div>
+
+            <!-- Autoplay -->
+            <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div class="form-check" style="margin-bottom: var(--spacing-3);">
+                    <input class="form-check-input" type="checkbox" id="autoplayEnabled" name="autoplayEnabled" <%= (musicConfig && musicConfig.autoplay_enabled) ? 'checked' : '' %>>
+                    <label class="form-check-label" for="autoplayEnabled">
+                        <i class="fas fa-random" style="color: var(--color-success);"></i>
+                        <strong>Autoplay</strong>
+                    </label>
+                </div>
+                <div class="form-help" style="margin-left: 26px; margin-bottom: var(--spacing-3);">Automatically play similar songs when queue ends</div>
+                <div style="margin-left: 26px;">
+                    <label class="form-label">Autoplay Source</label>
+                    <select class="form-select" name="autoplaySource" style="max-width: 300px;">
+                        <option value="youtube" <%= (musicConfig && musicConfig.autoplay_source === 'youtube') ? 'selected' : '' %>>YouTube (Similar songs)</option>
+                        <option value="ai" <%= (musicConfig && musicConfig.autoplay_source === 'ai') ? 'selected' : '' %>>AI Recommendations (Gemini)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Song Request Channel -->
+            <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div style="margin-bottom: var(--spacing-3);">
+                    <label class="form-label">
+                        <i class="fas fa-hashtag" style="color: var(--color-info);"></i>
+                        Song Request Channel
+                    </label>
+                    <select class="form-select" name="requestChannelId" style="max-width: 300px;">
+                        <option value="">Disabled</option>
+                        <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= (musicConfig && musicConfig.request_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                    <div class="form-help">Any message in this channel will be treated as a song request</div>
+                </div>
+            </div>
+
+            <!-- Vote Skip -->
+            <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div class="form-check" style="margin-bottom: var(--spacing-3);">
+                    <input class="form-check-input" type="checkbox" id="voteSkipEnabled" name="voteSkipEnabled" <%= (musicConfig && musicConfig.vote_skip_enabled) ? 'checked' : '' %>>
+                    <label class="form-check-label" for="voteSkipEnabled">
+                        <i class="fas fa-vote-yea" style="color: var(--color-warning);"></i>
+                        <strong>Vote Skip</strong>
+                    </label>
+                </div>
+                <div class="form-help" style="margin-left: 26px; margin-bottom: var(--spacing-3);">Require votes from listeners to skip songs</div>
+                <div style="margin-left: 26px;">
+                    <label class="form-label">Skip Threshold (%)</label>
+                    <input type="number" class="form-control" name="voteSkipPercentage" value="<%= musicConfig.vote_skip_percentage || 50 %>" min="1" max="100" style="max-width: 120px;">
+                    <div class="form-help">Percentage of listeners required to skip (1-100%)</div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Advanced Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Playlist Settings -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-list" style="color: var(--color-success);"></i>
+            Playlists
+        </h3>
+        <form action="/manage/<%= guild.id %>/music/playlists" method="POST">
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Max Playlists Per User</label>
+                    <input type="number" class="form-control" name="maxPlaylists" value="<%= musicConfig.max_playlists_per_user || 10 %>" min="1" max="50">
+                    <div class="form-help">Maximum playlists each user can create</div>
+                </div>
+                <div>
+                    <label class="form-label">Max Songs Per Playlist</label>
+                    <input type="number" class="form-control" name="maxSongsPerPlaylist" value="<%= musicConfig.max_songs_per_playlist || 100 %>" min="10" max="1000">
+                    <div class="form-help">Maximum songs in each playlist</div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Playlist Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Audio Filters -->
+    <div>
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-sliders-h" style="color: var(--color-warning);"></i>
+            Enabled Audio Filters
+        </h3>
+        <p style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
+            Select which audio filters are available for use in your server
+        </p>
+        <form action="/manage/<%= guild.id %>/music/filters" method="POST">
+            <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div class="grid grid-cols-3" style="gap: var(--spacing-3);">
+                    <% const availableFilters = ['bassboost', '8D', 'vaporwave', 'nightcore', 'phaser', 'tremolo', 'vibrato', 'reverse', 'treble', 'normalizer', 'surrounding', 'pulsator', 'subboost', 'karaoke', 'flanger', 'gate', 'haas', 'mcompand']; %>
+                    <% availableFilters.forEach(filter => { %>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="filters[]" value="<%= filter %>" id="filter-<%= filter %>" <%= (musicConfig.enabled_filters && musicConfig.enabled_filters.includes(filter)) ? 'checked' : '' %>>
+                            <label class="form-check-label" for="filter-<%= filter %>" style="text-transform: capitalize;">
+                                <%= filter %>
+                            </label>
+                        </div>
+                    <% }); %>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Filter Settings</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<style>
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.form-check {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.form-check-input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.form-check-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.btn-secondary {
+    background: var(--color-dark-500);
+    border: 1px solid var(--color-dark-300);
+    color: var(--color-text-secondary);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background: var(--color-dark-400);
+    border-color: var(--color-primary-400);
+    color: var(--color-text-primary);
+}
+
+.btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-sm {
+    padding: calc(var(--spacing-2) - 2px) var(--spacing-3);
+    font-size: var(--font-size-sm);
+}
+</style>
+
+<script>
+let currentAudio = null;
+
+function previewVoice() {
+    const voiceSelect = document.querySelector('select[name="djVoice"]');
+    const selectedVoice = voiceSelect.value;
+    const statusSpan = document.getElementById('preview-status');
+    const previewBtn = document.getElementById('preview-voice-btn');
+
+    if (!selectedVoice) {
+        statusSpan.textContent = '⚠️ Please select a voice first';
+        statusSpan.style.color = 'var(--color-warning)';
+        return;
+    }
+
+    // Stop any currently playing audio
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+    }
+
+    // Update button state
+    previewBtn.disabled = true;
+    statusSpan.textContent = '⏳ Loading preview...';
+    statusSpan.style.color = 'var(--color-text-muted)';
+
+    // Fetch pre-generated preview audio
+    fetch(`/api/voice-preview/${selectedVoice}`)
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Voice preview not found');
+        }
+        return response.blob();
+    })
+    .then(audioBlob => {
+        const audioUrl = URL.createObjectURL(audioBlob);
+        currentAudio = new Audio(audioUrl);
+
+        currentAudio.onplay = () => {
+            statusSpan.textContent = '🔊 Playing...';
+            statusSpan.style.color = 'var(--color-success)';
+        };
+
+        currentAudio.onended = () => {
+            statusSpan.textContent = '';
+            previewBtn.disabled = false;
+            URL.revokeObjectURL(audioUrl);
+            currentAudio = null;
+        };
+
+        currentAudio.onerror = () => {
+            statusSpan.textContent = '❌ Playback error';
+            statusSpan.style.color = 'var(--color-danger)';
+            previewBtn.disabled = false;
+            currentAudio = null;
+        };
+
+        currentAudio.play().catch(err => {
+            console.error('Audio playback error:', err);
+            statusSpan.textContent = '❌ Could not play audio';
+            statusSpan.style.color = 'var(--color-danger)';
+            previewBtn.disabled = false;
+        });
+    })
+    .catch(error => {
+        console.error('Preview error:', error);
+        statusSpan.textContent = '❌ Failed to generate preview';
+        statusSpan.style.color = 'var(--color-danger)';
+        previewBtn.disabled = false;
+    });
+}
+
+// Auto-enable preview button when voice changes
+document.addEventListener('DOMContentLoaded', function() {
+    const voiceSelect = document.querySelector('select[name="djVoice"]');
+    if (voiceSelect) {
+        voiceSelect.addEventListener('change', function() {
+            document.getElementById('preview-status').textContent = '';
+            document.getElementById('preview-voice-btn').disabled = false;
+        });
+    }
+});
+</script>

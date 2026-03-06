@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Home</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/channels" class="ember-nav-link">Channels</a>
+                <a href="/tokes-bot/profile" class="ember-nav-link active">Profile</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Profile Settings</h1>
+                <p class="ember-dashboard-subtitle">Manage your profile and preferences</p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <!-- Stats Card -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Your Stats</h2>
+                    </div>
+                    <div class="ember-card-body">
+                        <div class="ember-dashboard-grid" style="grid-template-columns: repeat(2, 1fr);">
+                            <div class="ember-stat-card">
+                                <div class="ember-stat-value"><%= (profile.lifetime_tokes || 0).toLocaleString() %></div>
+                                <div class="ember-stat-label">Lifetime Tokes</div>
+                            </div>
+                            <div class="ember-stat-card">
+                                <div class="ember-stat-value"><%= profile.level || 1 %></div>
+                                <div class="ember-stat-label">Level</div>
+                            </div>
+                            <div class="ember-stat-card">
+                                <div class="ember-stat-value"><%= profile.current_streak || 0 %></div>
+                                <div class="ember-stat-label">Current Streak</div>
+                            </div>
+                            <div class="ember-stat-card">
+                                <div class="ember-stat-value"><%= profile.best_streak || 0 %></div>
+                                <div class="ember-stat-label">Best Streak</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connected Platforms -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Connected Platforms</h2>
+                    </div>
+                    <div class="ember-card-body">
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <% connections.forEach(conn => { %>
+                                <div class="ember-platform-item" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                        <img src="<%= conn.platform_avatar || '/images/default-avatar.png' %>" alt="<%= conn.platform_name %>" style="width: 40px; height: 40px; border-radius: 50%;">
+                                        <div>
+                                            <div style="font-weight: 600;"><%= conn.platform_name %></div>
+                                            <span class="ember-badge <%= conn.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>" style="font-size: 0.65rem;">
+                                                <%= conn.platform.toUpperCase() %>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <% if (connections.length > 1) { %>
+                                        <button onclick="disconnectPlatform('<%= conn.platform %>')" class="ember-btn ember-btn-sm ember-btn-ghost">Disconnect</button>
+                                    <% } %>
+                                </div>
+                            <% }); %>
+
+                            <!-- Add Platform Buttons -->
+                            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                <% if (!connections.find(c => c.platform === 'twitch')) { %>
+                                    <a href="/tokes-bot/auth/twitch?returnTo=/tokes-bot/profile" class="ember-btn ember-btn-twitch" style="flex: 1;">
+                                        Connect Twitch
+                                    </a>
+                                <% } %>
+                                <% if (!connections.find(c => c.platform === 'kick')) { %>
+                                    <a href="/tokes-bot/auth/kick?returnTo=/tokes-bot/profile" class="ember-btn ember-btn-kick" style="flex: 1;">
+                                        Connect Kick
+                                    </a>
+                                <% } %>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profile Preferences -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Preferences</h2>
+                    </div>
+                    <div class="ember-card-body">
+                        <form id="preferencesForm">
+                            <div class="ember-form-group">
+                                <label class="ember-checkbox">
+                                    <input type="checkbox" name="show_on_leaderboard" id="show_on_leaderboard" <%= profile.show_on_leaderboard !== 0 ? 'checked' : '' %>>
+                                    <span>Show on public leaderboards</span>
+                                </label>
+                            </div>
+
+                            <div class="ember-form-group">
+                                <label class="ember-label">Bio</label>
+                                <textarea name="profile_bio" class="ember-input" rows="3" maxlength="500" placeholder="Tell others about yourself..."><%= profile.profile_bio || '' %></textarea>
+                            </div>
+
+                            <div class="ember-form-group">
+                                <label class="ember-label">Favorite Strain</label>
+                                <input type="text" name="favorite_strain" class="ember-input" value="<%= profile.favorite_strain || '' %>" maxlength="100" placeholder="e.g., Blue Dream">
+                            </div>
+
+                            <div class="ember-form-group">
+                                <label class="ember-label">Preferred Piece</label>
+                                <select name="preferred_piece" class="ember-input">
+                                    <option value="">Not specified</option>
+                                    <option value="joint" <%= profile.preferred_piece === 'joint' ? 'selected' : '' %>>Joint</option>
+                                    <option value="blunt" <%= profile.preferred_piece === 'blunt' ? 'selected' : '' %>>Blunt</option>
+                                    <option value="bong" <%= profile.preferred_piece === 'bong' ? 'selected' : '' %>>Bong</option>
+                                    <option value="pipe" <%= profile.preferred_piece === 'pipe' ? 'selected' : '' %>>Pipe</option>
+                                    <option value="dab" <%= profile.preferred_piece === 'dab' ? 'selected' : '' %>>Dab Rig</option>
+                                    <option value="vape" <%= profile.preferred_piece === 'vape' ? 'selected' : '' %>>Vape</option>
+                                </select>
+                            </div>
+
+                            <button type="submit" class="ember-btn ember-btn-primary">Save Preferences</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Data Management -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Data Management</h2>
+                    </div>
+                    <div class="ember-card-body">
+                        <p class="ember-text-muted" style="margin-bottom: 1rem;">
+                            Manage your data and privacy settings. You can export your data or delete your account.
+                        </p>
+
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <a href="/tokes-bot/api/export-data" class="ember-btn ember-btn-secondary" download>
+                                Export My Data (JSON)
+                            </a>
+                            <a href="/tokes-bot/data-management" class="ember-btn ember-btn-ghost">
+                                Data & Account Options
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Save preferences
+        document.getElementById('preferencesForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const data = {
+                show_on_leaderboard: formData.get('show_on_leaderboard') === 'on',
+                profile_bio: formData.get('profile_bio') || null,
+                favorite_strain: formData.get('favorite_strain') || null,
+                preferred_piece: formData.get('preferred_piece') || null
+            };
+
+            try {
+                const response = await fetch('/tokes-bot/api/profile', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    alert('Preferences saved!');
+                } else {
+                    const result = await response.json();
+                    alert(result.error || 'Failed to save preferences');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+
+        // Disconnect platform
+        async function disconnectPlatform(platform) {
+            if (!confirm(`Are you sure you want to disconnect ${platform}?`)) return;
+
+            try {
+                const response = await fetch(`/tokes-bot/api/platforms/${platform}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    const result = await response.json();
+                    alert(result.error || 'Failed to disconnect platform');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+
+    <style>
+        .ember-form-group { margin-bottom: 1rem; }
+        .ember-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+        .ember-btn-twitch {
+            background: #9146ff;
+            color: white;
+            border: none;
+        }
+        .ember-btn-twitch:hover { background: #7d3bdb; }
+        .ember-btn-kick {
+            background: #53fc18;
+            color: #000;
+            border: none;
+        }
+        .ember-btn-kick:hover { background: #45d614; }
+    </style>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

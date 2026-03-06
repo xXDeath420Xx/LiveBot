@@ -1,0 +1,466 @@
+<%# Reaction Roles Settings - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats Overview -->
+    <% if (locals.reactionRolePanels && locals.reactionRolePanels.length > 0) { %>
+        <div class="grid grid-cols-3 gap-4">
+            <%- include('../../components/cards/statCard', {
+                title: 'Total Panels',
+                value: locals.reactionRolePanels.length,
+                icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>',
+                color: 'primary'
+            }) %>
+
+            <%- include('../../components/cards/statCard', {
+                title: 'Total Roles',
+                value: locals.reactionRolePanels.reduce((sum, p) => sum + (p.mappings?.length || 0), 0),
+                icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>',
+                color: 'info'
+            }) %>
+
+            <%- include('../../components/cards/statCard', {
+                title: 'Deployed',
+                value: locals.reactionRolePanels.filter(p => p.message_id && p.message_id !== 'PENDING').length,
+                icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>',
+                color: 'success'
+            }) %>
+        </div>
+    <% } %>
+
+    <!-- Panels Header -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Reaction Role Panels</h3>
+                <p class="text-sm text-gray-400">Allow users to self-assign roles via reactions</p>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="openCreatePanelModal()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Panel
+            </button>
+        </div>
+
+        <!-- Panels List -->
+        <% if (locals.reactionRolePanels && locals.reactionRolePanels.length > 0) { %>
+            <div class="space-y-4">
+                <% locals.reactionRolePanels.forEach(panel => { %>
+                    <div class="p-4 bg-dark-700 rounded-lg border border-dark-400" data-panel-id="<%= panel.id %>">
+                        <div class="flex items-start justify-between mb-4">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <h4 class="font-semibold text-white"><%= panel.panel_name %></h4>
+                                    <% if (panel.message_id === 'PENDING') { %>
+                                        <span class="badge badge-warning text-xs">PENDING</span>
+                                    <% } else if (panel.message_id) { %>
+                                        <span class="badge badge-success text-xs">DEPLOYED</span>
+                                    <% } %>
+                                </div>
+                                <p class="text-sm text-gray-500 mt-1">
+                                    <span class="text-primary-400">#</span>
+                                    <%= Array.from(channels.values()).find(c => c.id === panel.channel_id)?.name || 'Unknown Channel' %>
+                                </p>
+                            </div>
+                            <div class="flex gap-2">
+                                <% if (panel.message_id === 'PENDING' && panel.mappings && panel.mappings.length > 0) { %>
+                                    <button type="button" class="btn btn-success btn-sm" onclick="deployPanel('<%= panel.id %>')">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                        </svg>
+                                        Deploy
+                                    </button>
+                                <% } %>
+                                <button type="button" class="p-1.5 rounded hover:bg-dark-500 text-gray-400 hover:text-accent-red" title="Delete" onclick="deletePanel('<%= panel.id %>')">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Role Mappings -->
+                        <% if (panel.mappings && panel.mappings.length > 0) { %>
+                            <div class="mb-4">
+                                <p class="text-xs text-gray-500 uppercase tracking-wider mb-2">Role Mappings (<%= panel.mappings.length %>)</p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                    <% panel.mappings.forEach(mapping => {
+                                        const role = Array.from(roles.values()).find(r => r.id === mapping.role_id);
+                                    %>
+                                        <div class="flex items-center justify-between p-2 bg-dark-600 rounded">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xl"><%= mapping.emoji_id %></span>
+                                                <span class="text-sm text-white"><%= role?.name || 'Unknown Role' %></span>
+                                            </div>
+                                            <button type="button" class="p-1 text-gray-500 hover:text-accent-red" onclick="removeMapping('<%= mapping.id %>')">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    <% }); %>
+                                </div>
+                            </div>
+                        <% } else { %>
+                            <div class="mb-4 p-4 bg-dark-600 rounded text-center text-gray-500 text-sm">
+                                No role mappings added yet
+                            </div>
+                        <% } %>
+
+                        <!-- Add Mapping Form -->
+                        <form class="add-mapping-form flex gap-2 items-end" data-panel-id="<%= panel.id %>">
+                            <div class="flex-1">
+                                <label class="form-label text-xs">Emoji</label>
+                                <input type="text" name="emoji_id" class="form-input w-full emoji-input" placeholder="Click to select" readonly onclick="openEmojiPicker(this)" required>
+                            </div>
+                            <div class="flex-1">
+                                <label class="form-label text-xs">Role</label>
+                                <select name="role_id" class="form-input w-full" required>
+                                    <option value="">Select role...</option>
+                                    <% Array.from(roles.values()).filter(r => !r.managed).forEach(role => { %>
+                                        <option value="<%= role.id %>"><%= role.name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                Add
+                            </button>
+                        </form>
+                    </div>
+                <% }); %>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <svg class="empty-state-icon mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                </svg>
+                <p class="empty-state-title">No Reaction Role Panels</p>
+                <p class="empty-state-text">Create a panel to let users self-assign roles</p>
+                <button type="button" class="btn btn-primary mt-4" onclick="openCreatePanelModal()">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Create First Panel
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-primary-500/10 to-accent-purple/10 border-primary-500/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How Reaction Roles Work</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-300">
+                    <div class="flex items-start gap-2">
+                        <span class="text-primary-400 font-bold">1.</span>
+                        <span>Create a panel and add emoji-role mappings</span>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="text-primary-400 font-bold">2.</span>
+                        <span>Deploy the panel to a channel</span>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="text-primary-400 font-bold">3.</span>
+                        <span>Users react with emojis to get roles</span>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="text-primary-400 font-bold">4.</span>
+                        <span>Remove reaction to remove the role</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Panel Modal -->
+<div id="create-panel-modal" class="modal hidden">
+    <div class="modal-overlay" onclick="closeCreatePanelModal()"></div>
+    <div class="modal-content max-w-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Create Reaction Role Panel</h3>
+            <button type="button" class="modal-close" onclick="closeCreatePanelModal()">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="create-panel-form" class="modal-body space-y-4">
+            <div class="form-group">
+                <label class="form-label">Panel Name *</label>
+                <input type="text" name="panel_name" class="form-input w-full" placeholder="e.g., Color Roles" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Channel *</label>
+                <%- include('../../components/forms/channelSelect', {
+                    name: 'channel_id',
+                    channels: Array.from(channels.values()),
+                    placeholder: 'Select channel'
+                }) %>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea name="description" class="form-input w-full h-24 resize-none" placeholder="React to get your roles!"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="form-group">
+                    <%- include('../../components/forms/colorPicker', {
+                        name: 'embed_color',
+                        label: 'Embed Color',
+                        value: '#a78bfa'
+                    }) %>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mode</label>
+                    <select name="panel_mode" class="form-input w-full">
+                        <option value="normal">Normal (Multiple)</option>
+                        <option value="unique">Unique (One Only)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Interaction Type</label>
+                <select name="interaction_type" class="form-input w-full">
+                    <option value="button">Buttons</option>
+                    <option value="select_menu">Select Menu</option>
+                    <option value="reaction">Reactions</option>
+                </select>
+            </div>
+        </form>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeCreatePanelModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="createPanel()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Panel
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Emoji Picker Modal -->
+<div id="emoji-picker-modal" class="modal hidden">
+    <div class="modal-overlay" onclick="closeEmojiPicker()"></div>
+    <div class="modal-content max-w-sm">
+        <div class="modal-header">
+            <h3 class="modal-title">Select Emoji</h3>
+            <button type="button" class="modal-close" onclick="closeEmojiPicker()">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="emoji-grid" class="grid grid-cols-8 gap-2"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentEmojiInput = null;
+
+const commonEmojis = [
+    '✅', '❌', '✔️', '❎', '⭕', '🔴', '🟢', '🔵', '🟡', '🟣',
+    '🟠', '⚪', '⚫', '🟤', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣',
+    '7️⃣', '8️⃣', '9️⃣', '🔟', '🎮', '🎨', '🎵', '🎬', '⚽', '🏀',
+    '🏈', '⚾', '🎾', '🏐', '🏉', '🥏', '🎱', '🏓', '🏸', '🏒',
+    '👍', '👎', '👌', '✌️', '🤝', '👏', '🙌', '👋', '✋', '👊',
+    '🌟', '⭐', '🌙', '☀️', '⛅', '🌈', '❤️', '💙', '💚', '💛',
+    '🧡', '💜', '🖤', '🤍', '🤎', '💯', '🔥', '💧', '💨', '⚡'
+];
+
+function openEmojiPicker(input) {
+    currentEmojiInput = input;
+    const grid = document.getElementById('emoji-grid');
+    grid.innerHTML = '';
+
+    commonEmojis.forEach(emoji => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'text-2xl p-2 rounded hover:bg-dark-500 transition-transform hover:scale-125';
+        btn.textContent = emoji;
+        btn.onclick = () => selectEmoji(emoji);
+        grid.appendChild(btn);
+    });
+
+    document.getElementById('emoji-picker-modal').classList.remove('hidden');
+}
+
+function closeEmojiPicker() {
+    document.getElementById('emoji-picker-modal').classList.add('hidden');
+    currentEmojiInput = null;
+}
+
+function selectEmoji(emoji) {
+    if (currentEmojiInput) {
+        currentEmojiInput.value = emoji;
+    }
+    closeEmojiPicker();
+}
+
+function openCreatePanelModal() {
+    document.getElementById('create-panel-form').reset();
+    document.getElementById('create-panel-modal').classList.remove('hidden');
+}
+
+function closeCreatePanelModal() {
+    document.getElementById('create-panel-modal').classList.add('hidden');
+}
+
+async function createPanel() {
+    const form = document.getElementById('create-panel-form');
+    const formData = new FormData(form);
+
+    const data = {
+        panel_name: formData.get('panel_name'),
+        channel_id: formData.get('channel_id'),
+        description: formData.get('description'),
+        embed_color: formData.get('embed_color'),
+        panel_mode: formData.get('panel_mode'),
+        interaction_type: formData.get('interaction_type')
+    };
+
+    if (!data.panel_name || !data.channel_id) {
+        showToast('error', 'Please fill in required fields');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/reaction-roles/panels', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Panel created');
+            closeCreatePanelModal();
+            location.reload();
+        } else {
+            throw new Error('Failed to create');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to create panel');
+    }
+}
+
+async function deployPanel(panelId) {
+    if (!confirm('Deploy this panel to Discord?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/reaction-roles/${panelId}/deploy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            showToast('success', 'Panel deployed');
+            location.reload();
+        } else {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to deploy');
+        }
+    } catch (error) {
+        showToast('error', error.message);
+    }
+}
+
+async function deletePanel(panelId) {
+    if (!confirm('Delete this panel and all its mappings?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/reaction-roles/panels/${panelId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast('success', 'Panel deleted');
+            document.querySelector(`[data-panel-id="${panelId}"]`)?.remove();
+        } else {
+            throw new Error('Failed to delete');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to delete panel');
+    }
+}
+
+async function removeMapping(mappingId) {
+    if (!confirm('Remove this role mapping?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/reaction-roles/mappings/${mappingId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast('success', 'Mapping removed');
+            location.reload();
+        } else {
+            throw new Error('Failed to remove');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to remove mapping');
+    }
+}
+
+// Add mapping form handlers
+document.querySelectorAll('.add-mapping-form').forEach(form => {
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const panelId = this.dataset.panelId;
+        const formData = new FormData(this);
+
+        const data = {
+            emoji_id: formData.get('emoji_id'),
+            role_id: formData.get('role_id')
+        };
+
+        if (!data.emoji_id || !data.role_id) {
+            showToast('error', 'Please select emoji and role');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/guilds/<%= guildId %>/reaction-roles/${panelId}/mappings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (response.ok) {
+                showToast('success', 'Mapping added');
+                location.reload();
+            } else {
+                throw new Error('Failed to add');
+            }
+        } catch (error) {
+            showToast('error', 'Failed to add mapping');
+        }
+    });
+});
+
+// Close modals on escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeCreatePanelModal();
+        closeEmojiPicker();
+    }
+});
+</script>

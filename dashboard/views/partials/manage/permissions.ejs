@@ -1,0 +1,283 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-shield-alt"></i>
+                <span>Permission Overrides</span>
+            </div>
+            <div class="page-section-subtitle">
+                Manage command and feature permission overrides for roles and channels
+            </div>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-permission-modal">
+            <i class="fas fa-plus"></i>
+            <span>Add Override</span>
+        </button>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Overrides</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= (permissionOverrides || []).length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Role Overrides</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= (permissionOverrides || []).filter(p => p.type === 'role').length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Channel Overrides</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= (permissionOverrides || []).filter(p => p.type === 'channel').length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Commands Protected</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= new Set((permissionOverrides || []).map(p => p.command_name)).size %></div>
+        </div>
+    </div>
+
+    <!-- Permission Overrides Table -->
+    <% if (permissionOverrides && permissionOverrides.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Command/Feature</th>
+                        <th>Type</th>
+                        <th>Target</th>
+                        <th>Permission</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% permissionOverrides.forEach(permission => { %>
+                        <tr>
+                            <td>
+                                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                                    <i class="fas fa-terminal" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
+                                    <%= permission.command_name || permission.feature_name %>
+                                </div>
+                            </td>
+                            <td>
+                                <% if (permission.type === 'role') { %>
+                                    <span class="badge badge-primary"><i class="fas fa-users"></i> Role</span>
+                                <% } else { %>
+                                    <span class="badge" style="background: var(--color-accent-purple);"><i class="fas fa-hashtag"></i> Channel</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <% if (permission.type === 'role') {
+                                    const role = roles.find(r => r.id === permission.target_id);
+                                %>
+                                    <span style="color: var(--color-text-secondary);">
+                                        <i class="fas fa-users" style="margin-right: var(--spacing-1);"></i>
+                                        <%= role ? role.name : 'Unknown Role' %>
+                                    </span>
+                                <% } else {
+                                    const channel = channels.find(c => c.id === permission.target_id);
+                                %>
+                                    <span style="color: var(--color-text-secondary);">
+                                        <i class="fas fa-hashtag" style="margin-right: var(--spacing-1);"></i>
+                                        <%= channel ? channel.name : 'Unknown Channel' %>
+                                    </span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <% if (permission.allowed) { %>
+                                    <span class="badge badge-success"><i class="fas fa-check"></i> Allowed</span>
+                                <% } else { %>
+                                    <span class="badge badge-danger"><i class="fas fa-times"></i> Denied</span>
+                                <% } %>
+                            </td>
+                            <td class="text-end">
+                                <form action="/manage/<%= guild.id %>/delete-permission-override" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this permission override?')">
+                                    <input type="hidden" name="overrideId" value="<%= permission.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">
+                                        <i class="fas fa-trash"></i>
+                                        <span>Delete</span>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <div class="empty-state-title">No Permission Overrides</div>
+            <div class="empty-state-description">
+                Create permission overrides to control who can use specific commands or features
+            </div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-permission-modal">
+                <i class="fas fa-plus"></i>
+                <span>Add First Override</span>
+            </button>
+        </div>
+    <% } %>
+</div>
+
+<!-- Add Permission Modal -->
+<div class="modal fade" id="add-permission-modal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400);">
+            <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
+                    Add Permission Override
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="/manage/<%= guild.id %>/create-permission-override" method="POST">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Command/Feature Name</label>
+                        <input type="text" class="form-control" name="command_name" placeholder="e.g., ban, music, moderation" required>
+                        <div class="form-help">Enter the command or feature name to override</div>
+                    </div>
+
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Override Type</label>
+                        <select class="form-select" name="type" id="override-type" required>
+                            <option value="role">Role</option>
+                            <option value="channel">Channel</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: var(--spacing-4);" id="role-select-container">
+                        <label class="form-label">Target Role</label>
+                        <select class="form-select" name="role_id" id="role-select">
+                            <option value="">Select a role...</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"><%= role.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: var(--spacing-4); display: none;" id="channel-select-container">
+                        <label class="form-label">Target Channel</label>
+                        <select class="form-select" name="channel_id" id="channel-select">
+                            <option value="">Select a channel...</option>
+                            <% channels.filter(c => c.type === 0 || c.type === 5).forEach(channel => { %>
+                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Permission</label>
+                        <select class="form-select" name="allowed" required>
+                            <option value="true">Allow</option>
+                            <option value="false">Deny</option>
+                        </select>
+                        <div class="form-help">Whether this command/feature should be allowed or denied</div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>
+                        <span>Create Override</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const overrideType = document.getElementById('override-type');
+    const roleContainer = document.getElementById('role-select-container');
+    const channelContainer = document.getElementById('channel-select-container');
+    const roleSelect = document.getElementById('role-select');
+    const channelSelect = document.getElementById('channel-select');
+
+    if (overrideType) {
+        overrideType.addEventListener('change', (e) => {
+            if (e.target.value === 'role') {
+                roleContainer.style.display = 'block';
+                channelContainer.style.display = 'none';
+                roleSelect.required = true;
+                channelSelect.required = false;
+            } else {
+                roleContainer.style.display = 'none';
+                channelContainer.style.display = 'block';
+                roleSelect.required = false;
+                channelSelect.required = true;
+            }
+        });
+    }
+});
+</script>

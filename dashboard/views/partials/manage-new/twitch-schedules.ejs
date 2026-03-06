@@ -1,0 +1,245 @@
+<%# Twitch Schedules - Tailwind Version %>
+
+<%
+const syncs = twitchScheduleSyncs || [];
+const twitchStreamers = consolidatedStreamers ? consolidatedStreamers.filter(s => s.platforms?.includes('twitch')) : [];
+%>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Syncs',
+            value: syncs.length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Twitch Streamers',
+            value: twitchStreamers.length,
+            icon: '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/></svg>',
+            color: 'purple'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Channels Used',
+            value: new Set(syncs.map(s => s.channel_id)).size,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Auto-Update',
+            value: 'Enabled',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Add Schedule Sync -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 bg-purple-500/10 rounded-lg">
+                <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Add Schedule Sync</h3>
+                <p class="text-sm text-gray-400">Sync a Twitch streamer's schedule to automatically post updates</p>
+            </div>
+        </div>
+
+        <form id="add-sync-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Twitch Streamer</label>
+                    <select name="streamerId" class="form-input w-full" required>
+                        <option value="">Select streamer</option>
+                        <% twitchStreamers.forEach(streamer => { %>
+                            <% const twitchSub = streamer.subscriptions?.find(sub => sub.platform === 'twitch'); %>
+                            <% if (twitchSub) { %>
+                                <option value="<%= twitchSub.streamer_id %>"><%= streamer.name %></option>
+                            <% } %>
+                        <% }) %>
+                    </select>
+                    <p class="form-hint">Must be a Twitch streamer</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Post Schedule In</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'channelId',
+                        channels: channels,
+                        selected: null,
+                        placeholder: 'Select channel...'
+                    }) %>
+                    <p class="form-hint">Where to post schedule updates</p>
+                </div>
+                <div class="form-group flex items-end">
+                    <button type="submit" class="btn btn-primary w-full">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Create Sync
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Active Schedule Syncs -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 bg-primary-500/10 rounded-lg">
+                <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Active Schedule Syncs</h3>
+                <p class="text-sm text-gray-400">Manage your configured schedule synchronizations</p>
+            </div>
+        </div>
+
+        <% if (syncs.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Streamer</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Channel</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Last Sync</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% syncs.forEach(sync => { %>
+                            <% const streamer = consolidatedStreamers?.find(s => s.subscriptions?.some(sub => sub.streamer_id === sync.streamer_id)); %>
+                            <% const channel = channels.find(c => c.id === sync.channel_id); %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                            <svg class="w-4 h-4 text-purple-400" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>
+                                            </svg>
+                                        </div>
+                                        <span class="font-medium text-white"><%= streamer ? streamer.name : 'Unknown Streamer' %></span>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-gray-400">#</span>
+                                        <span class="text-gray-300"><%= channel ? channel.name : 'Unknown Channel' %></span>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4 text-sm text-gray-500">
+                                    <%= sync.last_sync ? new Date(sync.last_sync).toLocaleString() : 'Never' %>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deleteSync('<%= sync.id %>')" class="btn btn-danger btn-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                        Remove
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-purple-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Schedule Syncs</h4>
+                <p class="text-gray-400">Create a schedule sync to automatically post Twitch stream schedules</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-purple-500/10 to-purple-500/5 border-purple-500/30">
+        <h4 class="font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            How Schedule Syncs Work
+        </h4>
+        <ul class="text-sm text-gray-300 space-y-2">
+            <li class="flex items-start gap-2">
+                <span class="text-purple-400">1.</span>
+                The bot fetches the streamer's Twitch schedule automatically
+            </li>
+            <li class="flex items-start gap-2">
+                <span class="text-purple-400">2.</span>
+                When the schedule changes, an embed is posted to your channel
+            </li>
+            <li class="flex items-start gap-2">
+                <span class="text-purple-400">3.</span>
+                Schedules are updated every hour to stay current
+            </li>
+            <li class="flex items-start gap-2">
+                <span class="text-purple-400">4.</span>
+                Great for keeping your community informed about upcoming streams!
+            </li>
+        </ul>
+    </div>
+</div>
+
+<script>
+document.getElementById('add-sync-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    const data = {
+        streamerId: formData.get('streamerId'),
+        channelId: formData.get('channelId')
+    };
+
+    if (!data.streamerId || !data.channelId) {
+        showToast('error', 'Please select both a streamer and channel');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/twitch-schedules/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Schedule sync created');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to create schedule sync');
+    }
+});
+
+async function deleteSync(syncId) {
+    if (!confirm('Remove this schedule sync?')) return;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/twitch-schedules/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ syncId })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Schedule sync removed');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to remove schedule sync');
+    }
+}
+</script>

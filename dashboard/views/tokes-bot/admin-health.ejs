@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+    <style>
+        .health-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .health-card {
+            background: var(--ember-bg-card);
+            border: 1px solid var(--ember-border);
+            border-radius: 8px;
+            padding: 1.25rem;
+        }
+        .health-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .health-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .health-status.healthy {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--ember-success);
+        }
+        .health-status.degraded {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--ember-warning);
+        }
+        .health-status.unhealthy {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--ember-error);
+        }
+        .health-status.unknown {
+            background: rgba(107, 114, 128, 0.15);
+            color: var(--ember-text-muted);
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+        .health-metrics {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+        .metric {
+            background: var(--ember-bg-elevated);
+            padding: 0.75rem;
+            border-radius: 6px;
+        }
+        .metric-label {
+            font-size: 0.7rem;
+            color: var(--ember-text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .metric-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--ember-text-primary);
+        }
+        .bot-status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        .bot-status-card {
+            background: var(--ember-bg-card);
+            border: 1px solid var(--ember-border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        .bot-status-card h3 {
+            margin: 0 0 0.5rem 0;
+            color: var(--ember-text-primary);
+        }
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        .connection-status.connected {
+            color: var(--ember-success);
+        }
+        .connection-status.disconnected {
+            color: var(--ember-error);
+        }
+        .refresh-time {
+            font-size: 0.75rem;
+            color: var(--ember-text-muted);
+            text-align: right;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+                <span class="ember-badge ember-badge-error">Admin</span>
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Public Site</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/admin" class="ember-nav-link">Overview</a>
+                <a href="/tokes-bot/admin/users" class="ember-nav-link">Users</a>
+                <a href="/tokes-bot/admin/moderation" class="ember-nav-link">Moderation</a>
+                <a href="/tokes-bot/admin/analytics" class="ember-nav-link">Analytics</a>
+                <a href="/tokes-bot/admin/health" class="ember-nav-link active">Health</a>
+                <a href="/tokes-bot/admin/commands" class="ember-nav-link">Commands</a>
+                <a href="/tokes-bot/admin/sessions" class="ember-nav-link">Sessions</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Channel Health Monitor</h1>
+                <p class="ember-dashboard-subtitle">Monitor connection status and performance across all channels</p>
+            </div>
+
+            <!-- Refresh Time -->
+            <div class="refresh-time">
+                Last updated: <span id="lastUpdate">Loading...</span>
+                <button class="ember-btn ember-btn-ghost" onclick="refreshHealth()" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <polyline points="1 20 1 14 7 14"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Bot Status Overview -->
+            <div class="bot-status-grid">
+                <div class="bot-status-card">
+                    <h3>Twitch Bot</h3>
+                    <div id="twitchStatus" class="connection-status disconnected">
+                        <span class="status-dot"></span>
+                        <span>Checking...</span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--ember-text-muted);">
+                        <div>Channels: <span id="twitchChannels">-</span></div>
+                        <div>Messages/min: <span id="twitchMsgRate">-</span></div>
+                    </div>
+                    <button class="ember-btn ember-btn-outline ember-mt-2" onclick="reconnectBot('twitch')">
+                        Reconnect
+                    </button>
+                </div>
+                <div class="bot-status-card">
+                    <h3>Kick Bot</h3>
+                    <div id="kickStatus" class="connection-status disconnected">
+                        <span class="status-dot"></span>
+                        <span>Checking...</span>
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--ember-text-muted);">
+                        <div>Channels: <span id="kickChannels">-</span></div>
+                        <div>Messages/min: <span id="kickMsgRate">-</span></div>
+                    </div>
+                    <button class="ember-btn ember-btn-outline ember-mt-2" onclick="reconnectBot('kick')">
+                        Reconnect
+                    </button>
+                </div>
+            </div>
+
+            <!-- System Metrics -->
+            <div class="ember-card ember-mb-3">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">System Metrics</h2>
+                </div>
+                <div class="ember-card-body">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+                        <div class="metric">
+                            <div class="metric-label">Database</div>
+                            <div id="dbStatus" class="metric-value" style="color: var(--ember-success);">OK</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Memory Usage</div>
+                            <div id="memoryUsage" class="metric-value">-</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Uptime</div>
+                            <div id="uptime" class="metric-value">-</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Active Sessions</div>
+                            <div id="activeSessions" class="metric-value">-</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Errors (24h)</div>
+                            <div id="errors24h" class="metric-value">-</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">API Requests (1h)</div>
+                            <div id="apiRequests" class="metric-value">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Channel Health List -->
+            <div class="ember-card">
+                <div class="ember-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 class="ember-card-title">Channel Status</h2>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <select id="platformFilter" class="ember-input" style="width: auto;" onchange="filterChannels()">
+                            <option value="all">All Platforms</option>
+                            <option value="twitch">Twitch</option>
+                            <option value="kick">Kick</option>
+                        </select>
+                        <select id="statusFilter" class="ember-input" style="width: auto;" onchange="filterChannels()">
+                            <option value="all">All Status</option>
+                            <option value="healthy">Healthy</option>
+                            <option value="degraded">Degraded</option>
+                            <option value="unhealthy">Unhealthy</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="ember-card-body">
+                    <div id="channelList" class="health-grid">
+                        <div class="ember-text-center" style="grid-column: 1 / -1; padding: 2rem;">
+                            <div class="ember-spinner"></div>
+                            <p class="ember-text-muted">Loading channel health data...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        let channelData = [];
+
+        async function loadHealthData() {
+            try {
+                // Load bot status
+                const statusRes = await fetch('/tokes-bot/api/admin/health/status');
+                const statusData = await statusRes.json();
+
+                updateBotStatus('twitch', statusData.twitch);
+                updateBotStatus('kick', statusData.kick);
+
+                // Update system metrics
+                document.getElementById('memoryUsage').textContent = statusData.memory || '-';
+                document.getElementById('uptime').textContent = statusData.uptime || '-';
+                document.getElementById('activeSessions').textContent = statusData.activeSessions?.toLocaleString() || '-';
+                document.getElementById('errors24h').textContent = statusData.errors24h?.toLocaleString() || '-';
+                document.getElementById('apiRequests').textContent = statusData.apiRequests?.toLocaleString() || '-';
+                document.getElementById('dbStatus').textContent = statusData.database ? 'OK' : 'Error';
+                document.getElementById('dbStatus').style.color = statusData.database ? 'var(--ember-success)' : 'var(--ember-error)';
+
+                // Load channel health
+                const channelsRes = await fetch('/tokes-bot/api/admin/health/channels');
+                channelData = await channelsRes.json();
+
+                renderChannels(channelData);
+
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            } catch (error) {
+                console.error('Failed to load health data:', error);
+                document.getElementById('lastUpdate').textContent = 'Error - ' + new Date().toLocaleTimeString();
+            }
+        }
+
+        function updateBotStatus(platform, data) {
+            const statusEl = document.getElementById(`${platform}Status`);
+            const channelsEl = document.getElementById(`${platform}Channels`);
+            const msgRateEl = document.getElementById(`${platform}MsgRate`);
+
+            // Handle missing or null data
+            if (!data) {
+                statusEl.className = 'connection-status disconnected';
+                statusEl.innerHTML = '<span class="status-dot" style="background: var(--ember-text-muted);"></span><span>Unknown</span>';
+                channelsEl.textContent = '-';
+                msgRateEl.textContent = '-';
+                return;
+            }
+
+            if (data.connected) {
+                statusEl.className = 'connection-status connected';
+                statusEl.innerHTML = '<span class="status-dot" style="background: var(--ember-success);"></span><span>Connected</span>';
+            } else {
+                statusEl.className = 'connection-status disconnected';
+                statusEl.innerHTML = '<span class="status-dot" style="background: var(--ember-error);"></span><span>Disconnected</span>';
+            }
+
+            channelsEl.textContent = data.channels?.toLocaleString() || '0';
+            msgRateEl.textContent = data.messageRate?.toFixed(1) || '0';
+        }
+
+        function renderChannels(channels) {
+            const container = document.getElementById('channelList');
+
+            if (!channels || channels.length === 0) {
+                container.innerHTML = `
+                    <div class="ember-text-center" style="grid-column: 1 / -1; padding: 2rem;">
+                        <p class="ember-text-muted">No channels registered</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = channels.map(channel => `
+                <div class="health-card" data-platform="${channel.platform}" data-status="${channel.health_status}">
+                    <div class="health-card-header">
+                        <div>
+                            <span class="ember-badge ${channel.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick'}" style="font-size: 0.65rem;">
+                                ${channel.platform.toUpperCase()}
+                            </span>
+                            <span style="font-weight: 600; margin-left: 0.5rem;">${channel.channel_name}</span>
+                        </div>
+                        <div class="health-status ${channel.health_status || 'unknown'}">
+                            <span class="status-dot"></span>
+                            ${(channel.health_status || 'unknown').charAt(0).toUpperCase() + (channel.health_status || 'unknown').slice(1)}
+                        </div>
+                    </div>
+                    <div class="health-metrics">
+                        <div class="metric">
+                            <div class="metric-label">Uptime</div>
+                            <div class="metric-value" style="font-size: 1rem;">${channel.uptime_percentage?.toFixed(1) || 0}%</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Latency</div>
+                            <div class="metric-value" style="font-size: 1rem;">${channel.avg_latency_ms || 0}ms</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Error Rate</div>
+                            <div class="metric-value" style="font-size: 1rem; ${channel.error_rate > 5 ? 'color: var(--ember-error);' : ''}">${channel.error_rate?.toFixed(1) || 0}%</div>
+                        </div>
+                        <div class="metric">
+                            <div class="metric-label">Last Check</div>
+                            <div class="metric-value" style="font-size: 0.8rem;">${channel.last_health_check ? new Date(channel.last_health_check).toLocaleTimeString() : 'Never'}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                        <button class="ember-btn ember-btn-ghost" style="flex: 1; padding: 0.5rem;" onclick="checkHealth(${channel.id})">
+                            Check Now
+                        </button>
+                        ${!channel.is_enabled ? `<button class="ember-btn ember-btn-success" style="flex: 1; padding: 0.5rem;" onclick="enableChannel(${channel.id})">Enable</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function filterChannels() {
+            const platform = document.getElementById('platformFilter').value;
+            const status = document.getElementById('statusFilter').value;
+
+            let filtered = channelData;
+
+            if (platform !== 'all') {
+                filtered = filtered.filter(c => c.platform === platform);
+            }
+
+            if (status !== 'all') {
+                filtered = filtered.filter(c => c.health_status === status);
+            }
+
+            renderChannels(filtered);
+        }
+
+        async function reconnectBot(platform) {
+            if (!confirm(`Are you sure you want to reconnect the ${platform} bot?`)) return;
+
+            try {
+                const res = await fetch(`/tokes-bot/api/admin/health/reconnect/${platform}`, { method: 'POST' });
+                if (res.ok) {
+                    alert(`${platform} bot reconnection initiated`);
+                    setTimeout(loadHealthData, 2000);
+                } else {
+                    alert('Failed to reconnect');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function checkHealth(channelId) {
+            try {
+                const res = await fetch(`/tokes-bot/api/admin/health/check/${channelId}`, { method: 'POST' });
+                if (res.ok) {
+                    loadHealthData();
+                }
+            } catch (error) {
+                console.error('Health check failed:', error);
+            }
+        }
+
+        async function enableChannel(channelId) {
+            try {
+                const res = await fetch(`/tokes-bot/api/admin/channels/${channelId}/enable`, { method: 'POST' });
+                if (res.ok) {
+                    loadHealthData();
+                }
+            } catch (error) {
+                console.error('Enable failed:', error);
+            }
+        }
+
+        function refreshHealth() {
+            loadHealthData();
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadHealthData, 30000);
+
+        // Initial load
+        loadHealthData();
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

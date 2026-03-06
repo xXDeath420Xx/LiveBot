@@ -1,0 +1,489 @@
+/* Comprehensive Dropdown & Form Control Dark Theme Fix
+   Updated to match canna-friend.com inspired purple theme
+*/
+
+/* ============================================================================
+   FORM CONTROLS - Force Dark Theme with Purple Accents
+   ============================================================================ */
+
+/* All select elements - force dark background */
+select,
+select.form-control,
+select.form-select,
+.form-select,
+input[type="select"],
+#period-select,
+#emoji-period-select,
+#confession-channel,
+#mod-channel,
+#sticky-channel,
+#meme-channel {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23a78bfa' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.75rem center !important;
+    background-size: 16px 12px !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 10px !important;
+    color: #ffffff !important;
+    padding: 0.75rem 2.5rem 0.75rem 1rem !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+    appearance: none !important;
+    transition: all 0.2s ease !important;
+}
+
+select:focus,
+select.form-control:focus,
+select.form-select:focus,
+.form-select:focus {
+    background-color: rgba(0, 0, 0, 0.5) !important;
+    border-color: #a78bfa !important;
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2) !important;
+    color: #ffffff !important;
+    outline: none !important;
+}
+
+/* Select dropdown options */
+select option,
+select.form-control option,
+select.form-select option,
+.form-select option {
+    background-color: #0f1316 !important;
+    color: #ffffff !important;
+    padding: 10px !important;
+}
+
+select option:hover,
+select option:checked,
+select option:focus {
+    background-color: rgba(167, 139, 250, 0.3) !important;
+    color: #ffffff !important;
+}
+
+/* Input elements */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="url"],
+input[type="tel"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+textarea {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
+    border-radius: 10px !important;
+    transition: all 0.2s ease !important;
+}
+
+input:focus,
+textarea:focus {
+    background-color: rgba(0, 0, 0, 0.5) !important;
+    border-color: #a78bfa !important;
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2) !important;
+    color: #ffffff !important;
+    outline: none !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Checkboxes and Radio buttons */
+input[type="checkbox"],
+input[type="radio"] {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    cursor: pointer;
+}
+
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+    background-color: #a78bfa !important;
+    border-color: #a78bfa !important;
+}
+
+input[type="checkbox"]:focus,
+input[type="radio"]:focus {
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2) !important;
+}
+
+/* Labels */
+label,
+.form-label {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-weight: 500;
+}
+
+/* Small text and hints */
+small,
+.small,
+.form-text {
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+/* ============================================================================
+   TEXT COLOR OVERRIDES
+   ============================================================================ */
+
+.text-danger {
+    color: #f87171 !important;
+}
+
+.text-success {
+    color: #34d399 !important;
+}
+
+.text-warning {
+    color: #fbbf24 !important;
+}
+
+.text-info {
+    color: #60a5fa !important;
+}
+
+.text-muted {
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.text-secondary {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Section headers and titles */
+.section-header h1,
+.manage-section h1,
+h1, h2, h3, h4, h5, h6 {
+    color: #ffffff !important;
+}
+
+/* Card text */
+.card-title,
+.card-header {
+    color: #ffffff !important;
+}
+
+.card-body,
+.card-text {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Loading text */
+.loading-spinner {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* ============================================================================
+   NAVIGATION ELEMENTS
+   ============================================================================ */
+
+.manage-nav-link {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+.manage-nav-link:hover {
+    color: #ffffff !important;
+}
+
+.manage-nav-heading {
+    color: rgba(255, 255, 255, 0.5) !important;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* Stats and metrics */
+.stat-value {
+    color: #ffffff !important;
+}
+
+.stat-label {
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* ============================================================================
+   DROPDOWN MENUS (Bootstrap)
+   ============================================================================ */
+
+.dropdown-menu {
+    background-color: #0f1316 !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 12px !important;
+    backdrop-filter: blur(20px) !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dropdown-item {
+    color: rgba(255, 255, 255, 0.8) !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease !important;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background-color: rgba(167, 139, 250, 0.2) !important;
+    color: #ffffff !important;
+}
+
+.dropdown-item.active {
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%) !important;
+    color: #ffffff !important;
+}
+
+/* ============================================================================
+   BUTTONS
+   ============================================================================ */
+
+.btn {
+    color: #ffffff !important;
+}
+
+/* ============================================================================
+   ALERTS
+   ============================================================================ */
+
+.alert {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* ============================================================================
+   TABLES
+   ============================================================================ */
+
+table,
+.table {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.table th {
+    color: #ffffff !important;
+}
+
+.table td {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* ============================================================================
+   BADGES
+   ============================================================================ */
+
+.badge {
+    color: #ffffff !important;
+}
+
+/* ============================================================================
+   LIST ITEMS
+   ============================================================================ */
+
+.list-group-item {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* ============================================================================
+   LINKS
+   ============================================================================ */
+
+a {
+    color: #a78bfa;
+    text-decoration: none;
+}
+
+a:hover {
+    color: #c4b5fd;
+}
+
+/* ============================================================================
+   DISABLED STATES
+   ============================================================================ */
+
+*:disabled,
+*[disabled] {
+    opacity: 0.5;
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* ============================================================================
+   SPECIFIC COMPONENT OVERRIDES
+   ============================================================================ */
+
+.rank-entry,
+.emoji-entry,
+.leaderboard-entry,
+.confession-item,
+.capsule-item,
+.sticky-item,
+.achievement-item {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.section-actions select,
+.section-actions .form-control {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    color: #ffffff !important;
+}
+
+/* ============================================================================
+   MODAL STYLING - Force Dark Theme with Purple Accents
+   ============================================================================ */
+
+.modal-content {
+    background: #0f1316 !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 16px !important;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6) !important;
+    backdrop-filter: blur(20px) !important;
+}
+
+.modal-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    padding: 1.25rem 1.5rem !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.modal-body {
+    padding: 1.5rem !important;
+    background: transparent !important;
+    max-height: calc(100vh - 200px) !important;
+    overflow-y: auto !important;
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    padding: 1rem 1.5rem !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    gap: 0.5rem !important;
+}
+
+.modal-title {
+    color: #ffffff !important;
+    font-size: 1.25rem !important;
+    font-weight: 600 !important;
+}
+
+/* Modal Form Controls */
+.modal-body .form-control,
+.modal-content .form-control,
+.modal-body input,
+.modal-content input,
+.modal-body textarea,
+.modal-content textarea,
+.modal-body select,
+.modal-content select {
+    background-color: rgba(0, 0, 0, 0.5) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 10px !important;
+    padding: 0.75rem 1rem !important;
+    color: #ffffff !important;
+    font-size: 0.9rem !important;
+    transition: all 0.2s ease !important;
+}
+
+.modal-body .form-control:focus,
+.modal-content .form-control:focus,
+.modal-body input:focus,
+.modal-content input:focus,
+.modal-body textarea:focus,
+.modal-content textarea:focus,
+.modal-body select:focus,
+.modal-content select:focus {
+    background-color: rgba(0, 0, 0, 0.6) !important;
+    border-color: #a78bfa !important;
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2) !important;
+    outline: none !important;
+    color: #ffffff !important;
+}
+
+/* Close Button */
+.btn-close {
+    filter: invert(1) !important;
+    opacity: 0.7 !important;
+}
+
+.btn-close:hover {
+    opacity: 1 !important;
+}
+
+/* Modal Buttons */
+.modal-content .btn-primary {
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 15px rgba(167, 139, 250, 0.35) !important;
+}
+
+.modal-content .btn-primary:hover {
+    background: linear-gradient(135deg, #8b5cf6 0%, #c4b5fd 100%) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(167, 139, 250, 0.5) !important;
+}
+
+.modal-content .btn-secondary {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.modal-content .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+}
+
+.modal-content .btn-danger {
+    background: linear-gradient(135deg, #ef4444 0%, #f87171 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+}
+
+.modal-content .btn-success {
+    background: linear-gradient(135deg, #10b981 0%, #34d399 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+}
+
+/* ============================================================================
+   FORM CHECK (Switches and Checkboxes)
+   ============================================================================ */
+
+.form-check-input {
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.form-check-input:checked {
+    background-color: #a78bfa !important;
+    border-color: #a78bfa !important;
+}
+
+.form-check-input:focus {
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2) !important;
+}
+
+.form-check-label {
+    color: rgba(255, 255, 255, 0.8) !important;
+    font-size: 0.9rem !important;
+}
+
+/* ============================================================================
+   INPUT GROUPS
+   ============================================================================ */
+
+.input-group-text {
+    background-color: rgba(167, 139, 250, 0.15) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    color: #a78bfa !important;
+}
+
+/* ============================================================================
+   PLACEHOLDER TEXT
+   ============================================================================ */
+
+.form-control::placeholder,
+textarea::placeholder,
+input::placeholder {
+    color: rgba(255, 255, 255, 0.4) !important;
+}

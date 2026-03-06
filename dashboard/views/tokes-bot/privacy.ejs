@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+    <style>
+        .legal-content h2 { margin-top: 2rem; margin-bottom: 1rem; font-size: 1.5rem; }
+        .legal-content h3 { margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1.125rem; }
+        .legal-content p { margin-bottom: 1rem; color: var(--ember-text-secondary); }
+        .legal-content ul { margin-bottom: 1rem; padding-left: 1.5rem; color: var(--ember-text-secondary); }
+        .legal-content li { margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Home</a>
+                <a href="/tokes-bot/commands" class="ember-nav-link">Commands</a>
+                <a href="/tokes-bot/leaderboards" class="ember-nav-link">Leaderboards</a>
+            </div>
+            <div class="ember-nav-actions">
+                <% if (user) { %>
+                    <a href="/tokes-bot/dashboard" class="ember-btn ember-btn-primary">Dashboard</a>
+                <% } else { %>
+                    <a href="/tokes-bot/auth/twitch" class="ember-btn ember-btn-outline">Login</a>
+                <% } %>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container ember-container-sm">
+            <div class="ember-card legal-content">
+                <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Privacy Policy</h1>
+                <p class="ember-text-muted">Last updated: January 2025</p>
+
+                <h2>1. Introduction</h2>
+                <p>
+                    CertiFriedUtility ("we," "our," or "us") is a cannabis community chat bot service operated as part of
+                    CertiFried MultiTool. This Privacy Policy explains how we collect, use, and protect your information
+                    when you use our service on Twitch and Kick platforms.
+                </p>
+
+                <h2>2. Information We Collect</h2>
+
+                <h3>2.1 Account Information</h3>
+                <p>When you connect your Twitch or Kick account, we collect:</p>
+                <ul>
+                    <li>Platform user ID and username</li>
+                    <li>Profile avatar URL</li>
+                    <li>Email address (if provided during OAuth)</li>
+                    <li>OAuth access and refresh tokens (encrypted)</li>
+                </ul>
+
+                <h3>2.2 Usage Data</h3>
+                <p>We collect data about your interactions with the bot:</p>
+                <ul>
+                    <li>Command usage (tokes, daily claims, session participation)</li>
+                    <li>Leaderboard statistics</li>
+                    <li>Channel activity timestamps</li>
+                </ul>
+
+                <h3>2.3 Channel Data</h3>
+                <p>For channel owners who add CertiFriedUtility:</p>
+                <ul>
+                    <li>Channel configuration settings</li>
+                    <li>Bot feature preferences</li>
+                    <li>Channel-specific leaderboards</li>
+                </ul>
+
+                <h2>3. How We Use Your Information</h2>
+                <p>We use collected information to:</p>
+                <ul>
+                    <li>Provide bot functionality (toke tracking, sessions, leaderboards)</li>
+                    <li>Maintain streak records and daily claims</li>
+                    <li>Display public leaderboards</li>
+                    <li>Send messages on your behalf (with your authorization)</li>
+                    <li>Improve our service and fix bugs</li>
+                </ul>
+
+                <h2>4. Data Storage and Security</h2>
+                <p>
+                    Your data is stored in secure MySQL databases. OAuth tokens are encrypted at rest.
+                    We implement industry-standard security measures to protect your information.
+                </p>
+
+                <h2>5. Data Sharing</h2>
+                <p>We do not sell your personal information. We may share data only:</p>
+                <ul>
+                    <li>On public leaderboards (username and stats only)</li>
+                    <li>When required by law</li>
+                    <li>To protect our rights or safety</li>
+                </ul>
+
+                <h2>6. Your Rights</h2>
+
+                <h3>6.1 Access and Portability</h3>
+                <p>You can request a copy of your data by contacting us.</p>
+
+                <h3>6.2 Deletion</h3>
+                <p>
+                    You can request deletion of your data by disconnecting the bot from your channel
+                    and contacting us. We will remove your data within 30 days.
+                </p>
+
+                <h3>6.3 Opt-Out</h3>
+                <p>
+                    You can stop using the bot at any time by removing it from your channel or
+                    not using bot commands.
+                </p>
+
+                <h2>7. GDPR Rights (EU Users)</h2>
+                <p>If you are in the European Union, you have additional rights including:</p>
+                <ul>
+                    <li>Right to access your personal data</li>
+                    <li>Right to rectification of inaccurate data</li>
+                    <li>Right to erasure ("right to be forgotten")</li>
+                    <li>Right to data portability</li>
+                    <li>Right to object to processing</li>
+                </ul>
+
+                <h2>8. CCPA Rights (California Users)</h2>
+                <p>California residents have the right to:</p>
+                <ul>
+                    <li>Know what personal information is collected</li>
+                    <li>Request deletion of personal information</li>
+                    <li>Opt-out of the sale of personal information (we do not sell data)</li>
+                    <li>Non-discrimination for exercising privacy rights</li>
+                </ul>
+
+                <h2>9. Age Requirement</h2>
+                <p>
+                    <strong>CertiFriedUtility is intended for users 18 years of age or older.</strong>
+                    By using our service, you confirm that you are at least 18 years old.
+                    We do not knowingly collect information from users under 18.
+                </p>
+
+                <h2>10. Third-Party Platforms</h2>
+                <p>
+                    CertiFriedUtility operates on Twitch and Kick platforms. Your use of these platforms
+                    is subject to their respective privacy policies. We are not responsible for
+                    their data practices.
+                </p>
+
+                <h2>11. Changes to This Policy</h2>
+                <p>
+                    We may update this Privacy Policy from time to time. We will notify users of
+                    significant changes through the bot or dashboard.
+                </p>
+
+                <h2>12. Contact Us</h2>
+                <p>
+                    For privacy-related questions or to exercise your rights, contact us at:<br>
+                    <a href="mailto:privacy@certifriedmultitool.com" style="color: var(--ember-primary);">
+                        privacy@certifriedmultitool.com
+                    </a>
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

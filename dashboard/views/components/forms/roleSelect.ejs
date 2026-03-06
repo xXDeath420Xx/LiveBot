@@ -1,0 +1,66 @@
+<%# Role Select Component
+    Props:
+    - name: string (required) - Form field name
+    - id: string - Element ID
+    - roles: Array - Array of role objects from guild.roles.cache
+    - selected: string|Array - Selected role ID(s)
+    - placeholder: string - Placeholder text
+    - required: boolean - Whether field is required
+    - disabled: boolean - Whether field is disabled
+    - multiple: boolean - Allow multiple selection
+    - excludeManaged: boolean - Exclude managed/bot roles
+    - excludeEveryone: boolean - Exclude @everyone role (default: true)
+    - class: string - Additional CSS classes
+%>
+<%
+const excludeEveryone = locals.excludeEveryone !== false;
+const excludeManaged = locals.excludeManaged === true;
+
+const filteredRoles = (locals.roles || [])
+    .filter(r => {
+        if (excludeEveryone && r.name === '@everyone') return false;
+        if (excludeManaged && r.managed) return false;
+        return true;
+    })
+    .sort((a, b) => b.position - a.position);
+
+const isSelected = (roleId) => {
+    if (Array.isArray(locals.selected)) {
+        return locals.selected.includes(roleId);
+    }
+    return locals.selected === roleId;
+};
+
+const getColorStyle = (color) => {
+    if (!color || color === 0) return '';
+    return `style="color: #${color.toString(16).padStart(6, '0')}"`;
+};
+%>
+
+<select
+    name="<%= locals.name %><%= locals.multiple ? '[]' : '' %>"
+    id="<%= locals.id || locals.name %>"
+    class="form-select <%= locals.class || '' %>"
+    <%= locals.required ? 'required' : '' %>
+    <%= locals.disabled ? 'disabled' : '' %>
+    <%= locals.multiple ? 'multiple' : '' %>
+    data-enhanced-select
+>
+    <% if (!locals.multiple) { %>
+        <option value=""><%= locals.placeholder || 'Select a role' %></option>
+    <% } %>
+
+    <% filteredRoles.forEach(role => { %>
+        <option
+            value="<%= role.id %>"
+            <%= isSelected(role.id) ? 'selected' : '' %>
+            <%- getColorStyle(role.color) %>
+        >
+            @<%= role.name %>
+        </option>
+    <% }); %>
+</select>
+
+<% if (locals.multiple) { %>
+<p class="form-hint">Hold Ctrl/Cmd to select multiple roles</p>
+<% } %>

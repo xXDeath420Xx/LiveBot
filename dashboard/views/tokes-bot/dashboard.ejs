@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Home</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link active">Dashboard</a>
+                <a href="/tokes-bot/channels" class="ember-nav-link">Channels</a>
+                <a href="/tokes-bot/leaderboards" class="ember-nav-link">Leaderboards</a>
+                <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+                    <a href="/tokes-bot/admin" class="ember-nav-link" style="color: var(--ember-error);">Admin</a>
+                <% } %>
+            </div>
+
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Dashboard Content -->
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Welcome back, <%= user.name %></h1>
+                <p class="ember-dashboard-subtitle">Manage your CertiFriedUtility channels and view your stats</p>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="ember-dashboard-grid">
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= profile ? profile.lifetime_tokes.toLocaleString() : '0' %></div>
+                    <div class="ember-stat-label">Lifetime Tokes</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= profile ? profile.current_streak : '0' %></div>
+                    <div class="ember-stat-label">Current Streak</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= profile ? profile.level : '1' %></div>
+                    <div class="ember-stat-label">Level</div>
+                </div>
+                <div class="ember-stat-card">
+                    <div class="ember-stat-value"><%= channels.length %></div>
+                    <div class="ember-stat-label">Active Channels</div>
+                </div>
+            </div>
+
+            <!-- Two Column Layout -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <!-- Connected Accounts -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Connected Accounts</h2>
+                        <% if (connections.length < 2) { %>
+                            <a href="/tokes-bot/auth/<%= connections[0]?.platform === 'twitch' ? 'kick' : 'twitch' %>" class="ember-btn ember-btn-sm ember-btn-outline">
+                                + Add Platform
+                            </a>
+                        <% } %>
+                    </div>
+                    <div class="ember-card-body">
+                        <% if (connections.length === 0) { %>
+                            <p class="ember-text-muted">No accounts connected yet.</p>
+                        <% } else { %>
+                            <% connections.forEach(conn => { %>
+                                <div style="display: flex; align-items: center; gap: 1rem; padding: 0.75rem 0; border-bottom: 1px solid var(--ember-border);">
+                                    <% if (conn.platform_avatar) { %>
+                                        <img src="<%= conn.platform_avatar %>" alt="" style="width: 40px; height: 40px; border-radius: 50%;">
+                                    <% } else { %>
+                                        <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--ember-bg-elevated); display: flex; align-items: center; justify-content: center;">
+                                            <%= conn.platform_name.charAt(0).toUpperCase() %>
+                                        </div>
+                                    <% } %>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600;"><%= conn.platform_name %></div>
+                                        <div style="font-size: 0.8rem; color: var(--ember-text-muted);">
+                                            <span class="ember-badge <%= conn.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>">
+                                                <%= conn.platform.charAt(0).toUpperCase() + conn.platform.slice(1) %>
+                                            </span>
+                                            <% if (conn.is_bot_account) { %>
+                                                <span class="ember-badge ember-badge-primary" style="cursor: pointer;" onclick="toggleBotStatus('<%= conn.platform %>', false)" title="Click to unmark as bot">Bot Account</span>
+                                            <% } else { %>
+                                                <span class="ember-badge ember-badge-ghost" style="cursor: pointer; opacity: 0.6;" onclick="toggleBotStatus('<%= conn.platform %>', true)" title="Click to mark as bot account">Not a Bot</span>
+                                            <% } %>
+                                            <% if (conn.platform === user.platform) { %>
+                                                <span class="ember-badge ember-badge-success">Current</span>
+                                            <% } %>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <% if (connections.length > 1 && conn.platform !== user.platform) { %>
+                                            <button onclick="switchPlatform('<%= conn.platform %>')" class="ember-btn ember-btn-sm ember-btn-primary" title="Switch to <%= conn.platform %>">
+                                                Switch
+                                            </button>
+                                        <% } %>
+                                        <% if (connections.length > 1) { %>
+                                            <button onclick="disconnectPlatform('<%= conn.platform %>')" class="ember-btn ember-btn-sm ember-btn-ghost" title="Disconnect <%= conn.platform %>">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                </svg>
+                                            </button>
+                                        <% } %>
+                                    </div>
+                                </div>
+                            <% }) %>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Your Channels -->
+                <div class="ember-card">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title">Your Channels</h2>
+                        <a href="/tokes-bot/channels" class="ember-btn ember-btn-sm ember-btn-primary">Manage</a>
+                    </div>
+                    <div class="ember-card-body">
+                        <% if (channels.length === 0) { %>
+                            <p class="ember-text-muted ember-mb-2">No channels configured yet.</p>
+                            <a href="/tokes-bot/channels" class="ember-btn ember-btn-outline">Add Channel</a>
+                        <% } else { %>
+                            <% channels.slice(0, 5).forEach(channel => { %>
+                                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid var(--ember-border);">
+                                    <div>
+                                        <div style="font-weight: 600;"><%= channel.channel_name %></div>
+                                        <div style="font-size: 0.8rem;">
+                                            <span class="ember-badge <%= channel.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>">
+                                                <%= channel.platform %>
+                                            </span>
+                                            <% if (channel.is_enabled) { %>
+                                                <span class="ember-badge ember-badge-success">Active</span>
+                                            <% } else { %>
+                                                <span class="ember-badge ember-badge-warning">Paused</span>
+                                            <% } %>
+                                        </div>
+                                    </div>
+                                    <a href="/tokes-bot/channels/<%= channel.id %>" class="ember-btn ember-btn-sm ember-btn-ghost">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M9 18l6-6-6-6"/>
+                                        </svg>
+                                    </a>
+                                </div>
+                            <% }) %>
+                            <% if (channels.length > 5) { %>
+                                <div class="ember-text-center ember-mt-2">
+                                    <a href="/tokes-bot/channels" class="ember-btn ember-btn-ghost">View all <%= channels.length %> channels</a>
+                                </div>
+                            <% } %>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="ember-card ember-mt-3">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Recent Activity</h2>
+                </div>
+                <div class="ember-card-body">
+                    <% if (recentActivity.length === 0) { %>
+                        <p class="ember-text-muted">No recent activity in your channels.</p>
+                    <% } else { %>
+                        <table class="ember-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Type</th>
+                                    <th>User</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% recentActivity.forEach(activity => { %>
+                                    <tr>
+                                        <td style="font-size: 0.8rem; color: var(--ember-text-muted);">
+                                            <%= new Date(activity.logged_at).toLocaleString() %>
+                                        </td>
+                                        <td>
+                                            <span class="ember-badge ember-badge-<%= activity.event_type === 'error' ? 'error' : 'primary' %>">
+                                                <%= activity.event_type %>
+                                            </span>
+                                        </td>
+                                        <td><%= activity.actor || '-' %></td>
+                                        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                            <%= activity.details || '-' %>
+                                        </td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="ember-card ember-mt-3">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Quick Actions</h2>
+                </div>
+                <div class="ember-card-body" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <a href="/tokes-bot/channels" class="ember-btn ember-btn-outline">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        Add Channel
+                    </a>
+                    <a href="/tokes-bot/commands" class="ember-btn ember-btn-outline">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="4 17 10 11 4 5"/>
+                            <line x1="12" y1="19" x2="20" y2="19"/>
+                        </svg>
+                        View Commands
+                    </a>
+                    <a href="/tokes-bot/leaderboards" class="ember-btn ember-btn-outline">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 20V10"/>
+                            <path d="M18 20V4"/>
+                            <path d="M6 20v-4"/>
+                        </svg>
+                        Leaderboards
+                    </a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+                <a href="/tokes-bot/status" class="ember-footer-link">Status</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+    async function switchPlatform(platform) {
+        try {
+            const response = await fetch(`/tokes-bot/api/platforms/${platform}/activate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert(data.error || 'Failed to switch platform');
+            }
+        } catch (error) {
+            console.error('Error switching platform:', error);
+            alert('An error occurred while switching platforms');
+        }
+    }
+
+    async function toggleBotStatus(platform, makeBot) {
+        const action = makeBot ? 'mark this account as a bot' : 'unmark this account as a bot';
+        if (!confirm(`Are you sure you want to ${action}? Bot accounts are used to send messages in channels.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/tokes-bot/api/platforms/${platform}/bot-status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ is_bot_account: makeBot })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert(data.error || 'Failed to update bot status');
+            }
+        } catch (error) {
+            console.error('Error updating bot status:', error);
+            alert('An error occurred while updating bot status');
+        }
+    }
+
+    async function disconnectPlatform(platform) {
+        if (!confirm(`Are you sure you want to disconnect your ${platform} account?`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/tokes-bot/api/platforms/${platform}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                alert(`${platform} disconnected successfully!`);
+                window.location.reload();
+            } else {
+                alert(data.error || 'Failed to disconnect platform');
+            }
+        } catch (error) {
+            console.error('Error disconnecting platform:', error);
+            alert('An error occurred while disconnecting the platform');
+        }
+    }
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

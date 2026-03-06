@@ -1,0 +1,323 @@
+/**
+ * Text Readability Enhancement CSS
+ * Ensures consistent, readable text across all dashboard pages
+ * regardless of background color changes
+ */
+
+/* ==================== BASE TEXT STYLES ==================== */
+
+/* Primary text - always readable */
+body,
+.text-primary-readable,
+.manage-content h1,
+.manage-content h2,
+.manage-content h3,
+.manage-content h4,
+.manage-content h5,
+.manage-content h6,
+.card-title,
+.section-title,
+.modal-title,
+.streamer-name,
+.module-name {
+    color: rgba(255, 255, 255, 0.95) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Secondary text - clearly readable */
+.text-secondary-readable,
+p,
+.description,
+.section-description,
+.module-description,
+.form-text,
+small,
+.streamer-meta {
+    color: rgba(255, 255, 255, 0.75) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Muted text - still readable */
+.text-muted-readable,
+.text-muted,
+.text-secondary,
+.empty-state-description {
+    color: rgba(255, 255, 255, 0.65) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Disabled text - readable but clearly disabled */
+.text-disabled,
+.form-control:disabled,
+.form-select:disabled {
+    color: rgba(255, 255, 255, 0.45) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* ==================== FORM ELEMENTS ==================== */
+
+/* Form labels - always readable */
+.form-label,
+label {
+    color: rgba(255, 255, 255, 0.9) !important;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Form inputs and selects */
+.form-control,
+.form-select,
+textarea.form-control,
+input.form-control {
+    color: rgba(255, 255, 255, 0.95) !important;
+    text-shadow: none;
+}
+
+.form-control::placeholder,
+.form-select::placeholder,
+textarea.form-control::placeholder {
+    color: rgba(255, 255, 255, 0.4) !important;
+    text-shadow: none;
+}
+
+/* Form help text */
+.form-text,
+.help-text,
+small.text-muted {
+    color: rgba(255, 255, 255, 0.6) !important;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+}
+
+/* ==================== TABLES ==================== */
+
+/* Table headers */
+.streamers-table thead th,
+.data-table thead th,
+table thead th {
+    color: rgba(255, 255, 255, 0.85) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Table cells */
+.streamers-table tbody td,
+.data-table tbody td,
+table tbody td {
+    color: rgba(255, 255, 255, 0.9) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* ==================== BADGES AND TAGS ==================== */
+
+/* Platform badges */
+.platform-badge,
+.badge,
+.status-badge,
+.subscription-badge {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    font-weight: 600;
+}
+
+/* Ensure white text on colored badges */
+.platform-badge,
+.btn-primary,
+.btn-success,
+.btn-danger,
+.btn-warning,
+.btn-info {
+    color: #ffffff !important;
+}
+
+/* ==================== BUTTONS ==================== */
+
+/* Button text readability */
+.btn {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    font-weight: 600;
+}
+
+.btn-secondary {
+    color: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* ==================== NAVIGATION ==================== */
+
+/* Sidebar navigation */
+.manage-nav-link,
+.nav-link {
+    color: rgba(255, 255, 255, 0.8) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    transition: color 0.2s, text-shadow 0.2s;
+}
+
+.manage-nav-link:hover,
+.nav-link:hover,
+.manage-nav-link.active,
+.nav-link.active {
+    color: rgba(255, 255, 255, 0.98) !important;
+    text-shadow: 0 2px 4px rgba(167, 139, 250, 0.4);
+}
+
+/* ==================== STATS AND METRICS ==================== */
+
+/* Stat values */
+.quick-stat-value,
+.stat-value,
+.metric-value {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Stat labels */
+.quick-stat-label,
+.stat-label,
+.metric-label {
+    color: rgba(255, 255, 255, 0.7) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* ==================== CARDS AND PANELS ==================== */
+
+/* Card content */
+.card,
+.module-card,
+.stat-card,
+.subscription-card {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.card-header,
+.subscription-card-header {
+    color: rgba(255, 255, 255, 0.95) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* ==================== EMPTY STATES ==================== */
+
+.empty-state,
+.empty-state-modern,
+.empty-subscriptions {
+    color: rgba(255, 255, 255, 0.65) !important;
+}
+
+.empty-state-title,
+.empty-state-title-modern {
+    color: rgba(255, 255, 255, 0.85) !important;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* ==================== LINKS ==================== */
+
+a {
+    color: #a78bfa;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: color 0.2s, text-shadow 0.2s;
+}
+
+a:hover {
+    color: #6b77f4;
+    text-shadow: 0 2px 3px rgba(167, 139, 250, 0.4);
+}
+
+/* ==================== MODALS ==================== */
+
+/* Modal headers */
+.modal-header h5,
+.modal-header .modal-title {
+    color: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Modal body text */
+.modal-body {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.modal-body p,
+.modal-body .section-description {
+    color: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* ==================== SPECIAL GRADIENTS ==================== */
+
+/* Keep gradient text effects but ensure base readability */
+.hub-hero h1,
+.dashboard-hero h1,
+.modal-title {
+    /* Gradient text already has good contrast, but add fallback */
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* ==================== DARK BACKGROUNDS ==================== */
+
+/* Ensure text on dark backgrounds is always white enough */
+[style*="background: linear-gradient"],
+[style*="background: rgba"],
+.dark-background,
+.manage-content,
+.manage-body {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* ==================== ACCESSIBILITY OVERRIDES ==================== */
+
+/* Ensure minimum contrast for accessibility */
+*:not(.btn):not(.badge):not(.platform-badge) {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Prevent text from becoming too transparent on any element */
+[style*="color: rgba(255, 255, 255, 0.1"],
+[style*="color: rgba(255, 255, 255, 0.2"] {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ==================== SEARCH AND INPUT FIELDS ==================== */
+
+.search-input,
+.search-wrapper input {
+    color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.search-icon,
+.input-group-text {
+    color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* ==================== RESPONSIVE TEXT READABILITY ==================== */
+
+@media (max-width: 768px) {
+    /* Increase text shadows on mobile for better readability */
+    h1, h2, h3, h4, h5, h6 {
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6) !important;
+    }
+
+    p, span, div {
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+    }
+}
+
+/* ==================== PRINT STYLES ==================== */
+
+@media print {
+    /* Remove shadows for print */
+    * {
+        text-shadow: none !important;
+        color: #000 !important;
+    }
+}
+
+/* ==================== ICON READABILITY ==================== */
+
+i.fas,
+i.fab,
+i.far,
+.fa,
+.fa-solid {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Colored icons maintain their color but with shadow */
+[style*="color: #a78bfa"],
+[style*="color: #ef4444"],
+[style*="color: #10b981"] {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5) !important;
+}

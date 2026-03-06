@@ -1,0 +1,78 @@
+<%# Stat Card Component
+    Props:
+    - title: string (required) - Card title/label
+    - value: string|number (required) - Main value to display
+    - icon: string - SVG icon HTML or emoji
+    - change: number - Percentage change (positive/negative)
+    - changeLabel: string - Label for change (e.g., "vs last week")
+    - color: string - Color theme (primary, success, warning, danger)
+    - href: string - Optional link
+    - class: string - Additional CSS classes
+    - dataStat: string - Data attribute for real-time updates
+%>
+<%
+const colorClasses = {
+    primary: {
+        bg: 'bg-primary-500/10',
+        icon: 'text-primary-400',
+        text: 'text-primary-400'
+    },
+    success: {
+        bg: 'bg-accent-green/10',
+        icon: 'text-accent-green',
+        text: 'text-accent-green'
+    },
+    warning: {
+        bg: 'bg-accent-yellow/10',
+        icon: 'text-accent-yellow',
+        text: 'text-accent-yellow'
+    },
+    danger: {
+        bg: 'bg-accent-red/10',
+        icon: 'text-accent-red',
+        text: 'text-accent-red'
+    }
+};
+const theme = colorClasses[locals.color] || colorClasses.primary;
+const isPositive = (locals.change || 0) >= 0;
+%>
+
+<% if (locals.href) { %>
+<a href="<%= locals.href %>" class="card card-hover block <%= locals.class || '' %>">
+<% } else { %>
+<div class="card <%= locals.class || '' %>">
+<% } %>
+
+    <div class="flex items-start justify-between">
+        <div class="flex-1">
+            <p class="text-sm text-gray-400 mb-1"><%= locals.title %></p>
+            <p class="text-3xl font-bold text-white" <%= locals.dataStat ? `data-stat="${locals.dataStat}"` : '' %>>
+                <%= typeof locals.value === 'number' ? locals.value.toLocaleString() : locals.value %>
+            </p>
+
+            <% if (typeof locals.change !== 'undefined') { %>
+                <div class="flex items-center gap-1 mt-2">
+                    <span class="<%= isPositive ? 'text-accent-green' : 'text-accent-red' %> text-sm font-medium">
+                        <%= isPositive ? '+' : '' %><%= locals.change %>%
+                    </span>
+                    <% if (locals.changeLabel) { %>
+                        <span class="text-xs text-gray-500"><%= locals.changeLabel %></span>
+                    <% } %>
+                </div>
+            <% } %>
+        </div>
+
+        <% if (locals.icon) { %>
+            <div class="<%= theme.bg %> p-3 rounded-lg">
+                <div class="<%= theme.icon %> w-6 h-6">
+                    <%- locals.icon %>
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+<% if (locals.href) { %>
+</a>
+<% } else { %>
+</div>
+<% } %>

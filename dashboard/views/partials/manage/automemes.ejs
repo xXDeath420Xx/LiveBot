@@ -1,0 +1,667 @@
+<style>
+/* Auto-Memes Page Styles */
+.automemes-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.automeme-stat-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 14px;
+    padding: 24px 20px;
+    text-align: center;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.automeme-stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #7c3aed 0%, #a78bfa 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.automeme-stat-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(167, 139, 250, 0.4);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(167, 139, 250, 0.15);
+}
+
+.automeme-stat-card:hover::before {
+    opacity: 1;
+}
+
+.automeme-stat-icon {
+    width: 48px;
+    height: 48px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(96, 165, 250, 0.2));
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.automeme-stat-icon i {
+    font-size: 1.25rem;
+    color: #a78bfa;
+}
+
+.automeme-stat-icon.active { background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(74, 222, 128, 0.2)); border-color: rgba(34, 197, 94, 0.3); }
+.automeme-stat-icon.active i { color: #22c55e; }
+.automeme-stat-icon.orange { background: linear-gradient(135deg, rgba(251, 146, 60, 0.2), rgba(249, 115, 22, 0.2)); border-color: rgba(251, 146, 60, 0.3); }
+.automeme-stat-icon.orange i { color: #fb923c; }
+
+.automeme-stat-label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.automeme-stat-value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.automeme-stat-value.active {
+    background: linear-gradient(135deg, #22c55e 0%, #4ade80 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.automeme-stat-value.inactive {
+    background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Section Cards */
+.automeme-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.automeme-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.automeme-section-header i {
+    font-size: 1.25rem;
+    color: #a78bfa;
+}
+
+.automeme-section-header h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+
+.automeme-section-body {
+    padding: 24px;
+}
+
+/* Form Styles */
+.automeme-form-group {
+    margin-bottom: 24px;
+}
+
+.automeme-form-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 10px;
+}
+
+.automeme-form-input,
+.automeme-form-select {
+    width: 100%;
+    padding: 14px 18px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.automeme-form-input:focus,
+.automeme-form-select:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15);
+}
+
+.automeme-form-select option {
+    background: #1a1d21;
+    color: #ffffff;
+}
+
+.automeme-form-hint {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Toggle Switch */
+.automeme-toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.automeme-toggle-wrapper:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.automeme-toggle {
+    position: relative;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.automeme-toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.automeme-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: 0.3s;
+    border-radius: 28px;
+}
+
+.automeme-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.automeme-toggle input:checked + .automeme-toggle-slider {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    border-color: #a78bfa;
+}
+
+.automeme-toggle input:checked + .automeme-toggle-slider:before {
+    transform: translateX(24px);
+}
+
+.automeme-toggle-label {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 0.95rem;
+}
+
+.automeme-toggle-desc {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 2px;
+}
+
+/* Info Alert */
+.automeme-info-box {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 20px;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 12px;
+    margin-bottom: 24px;
+}
+
+.automeme-info-icon {
+    width: 40px;
+    height: 40px;
+    background: rgba(59, 130, 246, 0.2);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.automeme-info-icon i {
+    color: #3b82f6;
+    font-size: 1rem;
+}
+
+.automeme-info-content strong {
+    display: block;
+    color: #ffffff;
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+}
+
+.automeme-info-content span {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+/* Subreddit Tags */
+.subreddit-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.subreddit-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(251, 146, 60, 0.15);
+    border: 1px solid rgba(251, 146, 60, 0.3);
+    border-radius: 20px;
+    color: #fb923c;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.subreddit-tag:hover {
+    background: rgba(251, 146, 60, 0.25);
+    border-color: rgba(251, 146, 60, 0.5);
+}
+
+.subreddit-tag i {
+    font-size: 0.7rem;
+}
+
+/* Save Button */
+.automeme-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 28px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.automeme-save-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+}
+
+.automeme-save-btn i {
+    font-size: 1rem;
+}
+
+/* How It Works List */
+.automeme-features-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.automeme-feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.automeme-feature-item:last-child {
+    border-bottom: none;
+}
+
+.automeme-feature-icon {
+    width: 32px;
+    height: 32px;
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.automeme-feature-icon i {
+    color: #a78bfa;
+    font-size: 0.85rem;
+}
+
+.automeme-feature-text {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* Grid Layout */
+.automeme-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+@media (max-width: 992px) {
+    .automeme-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .automemes-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-laugh-beam"></i>
+                <span>Auto-Memes</span>
+            </div>
+            <div class="page-section-subtitle">
+                Automatically post memes from Reddit to your server
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div id="automeme-stats-container" class="automemes-stats-grid" style="display: none;">
+        <div class="automeme-stat-card">
+            <div class="automeme-stat-icon active" id="status-icon">
+                <i class="fas fa-power-off"></i>
+            </div>
+            <div class="automeme-stat-label">Status</div>
+            <div class="automeme-stat-value active" id="status-value">Active</div>
+        </div>
+        <div class="automeme-stat-card">
+            <div class="automeme-stat-icon">
+                <i class="fas fa-clock"></i>
+            </div>
+            <div class="automeme-stat-label">Post Interval</div>
+            <div class="automeme-stat-value" id="interval-value">24h</div>
+        </div>
+        <div class="automeme-stat-card">
+            <div class="automeme-stat-icon orange">
+                <i class="fab fa-reddit-alien"></i>
+            </div>
+            <div class="automeme-stat-label">Subreddits</div>
+            <div class="automeme-stat-value" id="subreddit-count">0</div>
+        </div>
+    </div>
+
+    <div class="automeme-grid">
+        <!-- Configuration Card -->
+        <div class="automeme-section-card">
+            <div class="automeme-section-header">
+                <i class="fas fa-cog"></i>
+                <h3>Configuration</h3>
+            </div>
+            <div class="automeme-section-body">
+                <form id="automeme-config-form" onsubmit="saveAutoMemeConfig(event)">
+                    <!-- Enable Toggle -->
+                    <div class="automeme-form-group">
+                        <label class="automeme-toggle-wrapper">
+                            <div class="automeme-toggle">
+                                <input type="checkbox" id="automeme-enabled" name="enabled">
+                                <span class="automeme-toggle-slider"></span>
+                            </div>
+                            <div>
+                                <div class="automeme-toggle-label">Enable Auto-Memes</div>
+                                <div class="automeme-toggle-desc">Automatically post memes at regular intervals</div>
+                            </div>
+                        </label>
+                    </div>
+
+                    <!-- Channel Select -->
+                    <div class="automeme-form-group">
+                        <label class="automeme-form-label">
+                            <i class="fas fa-hashtag" style="color: #a78bfa; margin-right: 8px;"></i>
+                            Meme Channel
+                        </label>
+                        <select id="meme-channel" name="channel_id" class="automeme-form-select" required>
+                            <option value="">Select a channel...</option>
+                            <% if (channels) { %>
+                                <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                                    <option value="<%= channel.id %>">#<%= channel.name %></option>
+                                <% }); %>
+                            <% } %>
+                        </select>
+                    </div>
+
+                    <!-- Post Interval -->
+                    <div class="automeme-form-group">
+                        <label class="automeme-form-label">
+                            <i class="fas fa-clock" style="color: #a78bfa; margin-right: 8px;"></i>
+                            Post Interval (hours)
+                        </label>
+                        <input
+                            type="number"
+                            id="post-interval"
+                            name="post_interval_hours"
+                            class="automeme-form-input"
+                            min="1"
+                            max="168"
+                            value="24"
+                            required
+                        >
+                        <span class="automeme-form-hint">How often to post memes (1-168 hours)</span>
+                    </div>
+
+                    <!-- Subreddits -->
+                    <div class="automeme-form-group">
+                        <label class="automeme-form-label">
+                            <i class="fab fa-reddit-alien" style="color: #fb923c; margin-right: 8px;"></i>
+                            Subreddits
+                        </label>
+                        <input
+                            type="text"
+                            id="subreddits"
+                            name="subreddits"
+                            class="automeme-form-input"
+                            placeholder="memes,dankmemes,wholesomememes"
+                            required
+                        >
+                        <span class="automeme-form-hint">Enter subreddit names without r/ prefix, separated by commas</span>
+                        <div class="subreddit-tags">
+                            <span class="subreddit-tag" onclick="addSubreddit('memes')"><i class="fab fa-reddit"></i> memes</span>
+                            <span class="subreddit-tag" onclick="addSubreddit('dankmemes')"><i class="fab fa-reddit"></i> dankmemes</span>
+                            <span class="subreddit-tag" onclick="addSubreddit('wholesomememes')"><i class="fab fa-reddit"></i> wholesomememes</span>
+                            <span class="subreddit-tag" onclick="addSubreddit('ProgrammerHumor')"><i class="fab fa-reddit"></i> ProgrammerHumor</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="automeme-save-btn">
+                        <i class="fas fa-save"></i>
+                        Save Settings
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- How It Works Card -->
+        <div class="automeme-section-card">
+            <div class="automeme-section-header">
+                <i class="fas fa-info-circle"></i>
+                <h3>How It Works</h3>
+            </div>
+            <div class="automeme-section-body">
+                <ul class="automeme-features-list">
+                    <li class="automeme-feature-item">
+                        <div class="automeme-feature-icon">
+                            <i class="fas fa-download"></i>
+                        </div>
+                        <div class="automeme-feature-text">
+                            The bot automatically fetches top memes from your selected subreddits
+                        </div>
+                    </li>
+                    <li class="automeme-feature-item">
+                        <div class="automeme-feature-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="automeme-feature-text">
+                            Memes are posted at the interval you specify (1-168 hours)
+                        </div>
+                    </li>
+                    <li class="automeme-feature-item">
+                        <div class="automeme-feature-icon">
+                            <i class="fas fa-image"></i>
+                        </div>
+                        <div class="automeme-feature-text">
+                            Only image posts from Reddit are fetched for best quality
+                        </div>
+                    </li>
+                    <li class="automeme-feature-item">
+                        <div class="automeme-feature-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <div class="automeme-feature-text">
+                            NSFW content is automatically filtered out for safety
+                        </div>
+                    </li>
+                    <li class="automeme-feature-item">
+                        <div class="automeme-feature-icon">
+                            <i class="fas fa-link"></i>
+                        </div>
+                        <div class="automeme-feature-text">
+                            Each post includes the title and a link to the original Reddit post
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function addSubreddit(name) {
+    const input = document.getElementById('subreddits');
+    const current = input.value.split(',').map(s => s.trim()).filter(s => s);
+    if (!current.includes(name)) {
+        current.push(name);
+        input.value = current.join(',');
+    }
+}
+
+async function loadAutoMemeConfig() {
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/automeme');
+        const data = await response.json();
+
+        if (data.config) {
+            const enabled = data.config.enabled || false;
+            document.getElementById('automeme-enabled').checked = enabled;
+            document.getElementById('meme-channel').value = data.config.channel_id || '';
+            document.getElementById('post-interval').value = data.config.post_interval_hours || 24;
+            document.getElementById('subreddits').value = data.config.subreddits || 'memes,dankmemes';
+
+            // Show stats if enabled
+            if (enabled) {
+                const statsContainer = document.getElementById('automeme-stats-container');
+                statsContainer.style.display = 'grid';
+
+                const statusIcon = document.getElementById('status-icon');
+                const statusValue = document.getElementById('status-value');
+
+                statusIcon.classList.add('active');
+                statusValue.textContent = 'Active';
+                statusValue.classList.add('active');
+                statusValue.classList.remove('inactive');
+
+                document.getElementById('interval-value').textContent = data.config.post_interval_hours + 'h';
+                document.getElementById('subreddit-count').textContent = (data.config.subreddits || '').split(',').filter(s => s.trim()).length;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading auto-meme config:', error);
+    }
+}
+
+async function saveAutoMemeConfig(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+
+    const config = {
+        enabled: document.getElementById('automeme-enabled').checked,
+        channel_id: formData.get('channel_id'),
+        post_interval_hours: parseInt(formData.get('post_interval_hours')),
+        subreddits: formData.get('subreddits').trim()
+    };
+
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/automeme', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+
+        if (response.ok) {
+            alert('Auto-meme settings saved successfully!');
+            loadAutoMemeConfig();
+        } else {
+            alert('Failed to save settings');
+        }
+    } catch (error) {
+        console.error('Error saving config:', error);
+        alert('Error saving settings');
+    }
+}
+
+loadAutoMemeConfig();
+</script>

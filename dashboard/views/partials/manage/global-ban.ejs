@@ -1,0 +1,362 @@
+<%# Global Ban Database - Guild Management Partial %>
+
+<div class="space-y-6">
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Protection',
+            value: (locals.globalBanConfig && locals.globalBanConfig.enabled) ? 'Active' : 'Disabled',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: (locals.globalBanConfig && locals.globalBanConfig.enabled) ? 'success' : 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Bans',
+            value: locals.globalBanStats ? locals.globalBanStats.activeEntries : 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>',
+            color: 'danger'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Pending Reports',
+            value: locals.globalBanStats ? locals.globalBanStats.pendingReports : 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Guilds Protected',
+            value: locals.globalBanStats ? locals.globalBanStats.enabledGuilds : 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
+            color: 'primary'
+        }) %>
+    </div>
+
+    <!-- Guild Configuration -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Global Ban Protection</h3>
+                    <p class="text-sm text-gray-400">Configure how this server enforces global bans</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'globalban_enabled',
+                id: 'globalban_enabled',
+                checked: locals.globalBanConfig && locals.globalBanConfig.enabled,
+                label: 'Enable',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="globalban-config-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Critical Action</label>
+                    <select name="action_critical" class="form-input w-full">
+                        <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'ban') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Ban</option>
+                        <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'kick') ? 'selected' : '' %>>Kick</option>
+                        <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'alert') ? 'selected' : '' %>>Alert Only</option>
+                        <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'none') ? 'selected' : '' %>>None</option>
+                    </select>
+                    <p class="form-hint">Phishing, verified scams</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">High Action</label>
+                    <select name="action_high" class="form-input w-full">
+                        <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'ban') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Ban</option>
+                        <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'kick') ? 'selected' : '' %>>Kick</option>
+                        <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'alert') ? 'selected' : '' %>>Alert Only</option>
+                        <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'none') ? 'selected' : '' %>>None</option>
+                    </select>
+                    <p class="form-hint">Raid organizers, repeat offenders</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Medium Action</label>
+                    <select name="action_medium" class="form-input w-full">
+                        <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'ban') ? 'selected' : '' %>>Ban</option>
+                        <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'kick') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Kick</option>
+                        <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'alert') ? 'selected' : '' %>>Alert Only</option>
+                        <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'none') ? 'selected' : '' %>>None</option>
+                    </select>
+                    <p class="form-hint">Spam accounts, nuisance</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Low Action</label>
+                    <select name="action_low" class="form-input w-full">
+                        <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'ban') ? 'selected' : '' %>>Ban</option>
+                        <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'kick') ? 'selected' : '' %>>Kick</option>
+                        <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'alert') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Alert Only</option>
+                        <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'none') ? 'selected' : '' %>>None</option>
+                    </select>
+                    <p class="form-hint">Single incident, unverified</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Alert Channel</label>
+                    <select name="alert_channel_id" class="form-input w-full">
+                        <option value="">None</option>
+                        <% if (locals.channels) { channels.forEach(ch => { %>
+                            <option value="<%= ch.id %>" <%= (locals.globalBanConfig && locals.globalBanConfig.alert_channel_id === ch.id) ? 'selected' : '' %>>#<%= ch.name %></option>
+                        <% }); } %>
+                    </select>
+                    <p class="form-hint">Channel for ban alert notifications</p>
+                </div>
+                <div class="form-group flex items-end gap-4">
+                    <%- include('../../components/forms/toggle', {
+                        name: 'check_on_message',
+                        id: 'check_on_message',
+                        checked: locals.globalBanConfig && locals.globalBanConfig.check_on_message,
+                        label: 'Check on Message',
+                        hint: 'Also check when users send messages (higher load)',
+                        size: 'md'
+                    }) %>
+                </div>
+                <div class="form-group flex items-end gap-4">
+                    <%- include('../../components/forms/toggle', {
+                        name: 'auto_aggregate',
+                        id: 'auto_aggregate',
+                        checked: locals.globalBanConfig ? locals.globalBanConfig.auto_aggregate_opt_in : true,
+                        label: 'Auto-Aggregate',
+                        hint: 'Contribute bans to the shared database',
+                        size: 'md'
+                    }) %>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Ban List -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-accent-red/10 rounded-lg">
+                    <svg class="w-5 h-5 text-accent-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Global Ban List</h3>
+                    <p class="text-sm text-gray-400">Users flagged across the CertiFried network</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <input type="text" id="globalban-search" class="form-input w-48" placeholder="Search User ID...">
+                <select id="globalban-severity-filter" class="form-input w-32">
+                    <option value="">All</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="border-b border-white/10">
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">User ID</th>
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Severity</th>
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Category</th>
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Source</th>
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Reason</th>
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Date</th>
+                    </tr>
+                </thead>
+                <tbody id="globalban-entries-body">
+                    <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="globalban-pagination" class="flex items-center justify-between mt-4 px-4">
+            <span class="text-sm text-gray-400" id="globalban-page-info"></span>
+            <div class="flex gap-2">
+                <button id="globalban-prev" class="btn btn-sm btn-secondary" disabled>Previous</button>
+                <button id="globalban-next" class="btn btn-sm btn-secondary" disabled>Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Log -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="p-2 bg-primary-500/10 rounded-lg">
+                <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Action Log</h3>
+                <p class="text-sm text-gray-400">Global ban actions taken in this server</p>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="border-b border-white/10">
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Action</th>
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">User</th>
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Details</th>
+                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Date</th>
+                    </tr>
+                </thead>
+                <tbody id="globalban-log-body">
+                    <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const guildId = '<%= guild.id %>';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    const severityColors = {
+        critical: 'bg-red-500/20 text-red-400',
+        high: 'bg-orange-500/20 text-orange-400',
+        medium: 'bg-yellow-500/20 text-yellow-400',
+        low: 'bg-blue-500/20 text-blue-400'
+    };
+
+    let currentPage = 1;
+    const pageSize = 15;
+
+    // Load ban entries
+    async function loadEntries(page = 1) {
+        const search = document.getElementById('globalban-search').value.trim();
+        const severity = document.getElementById('globalban-severity-filter').value;
+        let url = `/api/guilds/${guildId}/global-ban/entries?page=${page}&limit=${pageSize}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (severity) url += `&severity=${severity}`;
+
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error);
+
+            const tbody = document.getElementById('globalban-entries-body');
+            if (data.entries.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">No entries found</td></tr>';
+            } else {
+                tbody.innerHTML = data.entries.map(e => `
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="px-4 py-3 text-sm font-mono text-white">${e.user_id}</td>
+                        <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs font-semibold ${severityColors[e.severity] || ''}">${e.severity.toUpperCase()}</span></td>
+                        <td class="px-4 py-3 text-sm text-gray-300">${e.category}</td>
+                        <td class="px-4 py-3 text-sm text-gray-400">${e.source.replace('_', ' ')}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300 max-w-xs truncate">${e.reason || '-'}</td>
+                        <td class="px-4 py-3 text-sm text-gray-400">${new Date(e.created_at).toLocaleDateString()}</td>
+                    </tr>
+                `).join('');
+            }
+
+            // Pagination
+            currentPage = data.pagination.page;
+            document.getElementById('globalban-page-info').textContent = `Page ${data.pagination.page} of ${data.pagination.pages || 1} (${data.pagination.total} entries)`;
+            document.getElementById('globalban-prev').disabled = data.pagination.page <= 1;
+            document.getElementById('globalban-next').disabled = data.pagination.page >= data.pagination.pages;
+        } catch (err) {
+            console.error('Failed to load entries:', err);
+        }
+    }
+
+    // Load action log
+    async function loadActionLog() {
+        try {
+            const res = await fetch(`/api/guilds/${guildId}/global-ban/action-log?limit=15`);
+            const data = await res.json();
+            if (!data.success) return;
+
+            const tbody = document.getElementById('globalban-log-body');
+            if (data.logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">No actions recorded yet</td></tr>';
+            } else {
+                tbody.innerHTML = data.logs.map(l => `
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs font-semibold bg-primary-500/20 text-primary-400">${l.action}</span></td>
+                        <td class="px-4 py-3 text-sm font-mono text-white">${l.user_id}</td>
+                        <td class="px-4 py-3 text-sm text-gray-300 max-w-xs truncate">${l.details || '-'}</td>
+                        <td class="px-4 py-3 text-sm text-gray-400">${new Date(l.created_at).toLocaleString()}</td>
+                    </tr>
+                `).join('');
+            }
+        } catch (err) {
+            console.error('Failed to load action log:', err);
+        }
+    }
+
+    // Save config
+    document.getElementById('globalban-config-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const body = {
+            enabled: form.querySelector('[name="globalban_enabled"]').checked,
+            action_critical: form.querySelector('[name="action_critical"]').value,
+            action_high: form.querySelector('[name="action_high"]').value,
+            action_medium: form.querySelector('[name="action_medium"]').value,
+            action_low: form.querySelector('[name="action_low"]').value,
+            alert_channel_id: form.querySelector('[name="alert_channel_id"]').value || null,
+            check_on_join: true,
+            check_on_message: form.querySelector('[name="check_on_message"]').checked,
+            auto_aggregate_opt_in: form.querySelector('[name="auto_aggregate"]').checked,
+            exempt_roles: []
+        };
+
+        try {
+            const res = await fetch(`/api/guilds/${guildId}/global-ban/config`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('Global ban settings saved', 'success');
+            } else {
+                showToast(data.error || 'Failed to save', 'error');
+            }
+        } catch (err) {
+            showToast('Failed to save settings', 'error');
+        }
+    });
+
+    // Search and filter
+    document.getElementById('globalban-search')?.addEventListener('input', debounce(() => loadEntries(1), 500));
+    document.getElementById('globalban-severity-filter')?.addEventListener('change', () => loadEntries(1));
+    document.getElementById('globalban-prev')?.addEventListener('click', () => loadEntries(currentPage - 1));
+    document.getElementById('globalban-next')?.addEventListener('click', () => loadEntries(currentPage + 1));
+
+    function debounce(fn, ms) {
+        let t;
+        return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    }
+
+    function showToast(msg, type) {
+        if (window.showToast) return window.showToast(msg, type);
+        alert(msg);
+    }
+
+    // Initial load
+    loadEntries(1);
+    loadActionLog();
+})();
+</script>

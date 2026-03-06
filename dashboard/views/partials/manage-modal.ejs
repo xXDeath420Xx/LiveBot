@@ -1,0 +1,30 @@
+<div class="modal fade" id="<%= locals.modalId || 'manageModal' %>" tabindex="-1" aria-labelledby="<%= locals.modalId || 'manageModal' %>Label" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <form id="<%= locals.modalId || 'manageModal' %>-form">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="<%= locals.modalId || 'manageModal' %>Label"><%= locals.title || 'Manage Item' %></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-floating mb-3">
+                        <input type="text" class="form-control" id="streamer-username" name="username" placeholder="Enter streamer's username" required>
+                        <label for="streamer-username">Streamer Username</label>
+                    </div>
+                    <div class="form-floating">
+                        <select class="form-select" id="streamer-platform" name="platform">
+                            <option value="twitch" selected>Twitch</option>
+                            <option value="youtube">YouTube</option>
+                            <option value="kick">Kick</option>
+                        </select>
+                        <label for="streamer-platform">Platform</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-2"></i>Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

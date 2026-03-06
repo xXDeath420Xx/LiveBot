@@ -1,0 +1,83 @@
+<%# Feature Card Component
+    Props:
+    - title: string (required) - Feature name
+    - description: string - Feature description
+    - icon: string - SVG icon HTML or emoji
+    - enabled: boolean - Whether feature is enabled
+    - href: string - Link to feature settings
+    - toggleName: string - Name for enable/disable toggle
+    - badges: Array - Array of badge objects { text, color }
+    - stats: Array - Array of stat objects { label, value }
+    - class: string - Additional CSS classes
+    - premium: boolean - Whether feature requires premium
+%>
+<%
+const statusColor = locals.enabled ? 'status-online' : 'status-offline';
+const statusText = locals.enabled ? 'Enabled' : 'Disabled';
+%>
+
+<div class="card card-hover <%= locals.class || '' %>">
+    <div class="flex items-start justify-between mb-4">
+        <div class="flex items-center gap-3">
+            <% if (locals.icon) { %>
+                <div class="bg-primary-500/10 p-2.5 rounded-lg">
+                    <div class="text-primary-400 w-5 h-5">
+                        <%- locals.icon %>
+                    </div>
+                </div>
+            <% } %>
+
+            <div>
+                <h3 class="font-semibold text-white flex items-center gap-2">
+                    <%= locals.title %>
+                    <% if (locals.premium) { %>
+                        <span class="badge bg-gradient-accent text-white text-xs">Premium</span>
+                    <% } %>
+                </h3>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <span class="status-dot <%= statusColor %>"></span>
+                    <span class="text-xs text-gray-400"><%= statusText %></span>
+                </div>
+            </div>
+        </div>
+
+        <% if (locals.toggleName) { %>
+            <label class="toggle <%= locals.enabled ? 'active' : '' %>">
+                <input type="checkbox" name="<%= locals.toggleName %>" class="sr-only" <%= locals.enabled ? 'checked' : '' %>>
+                <span class="toggle-dot"></span>
+            </label>
+        <% } %>
+    </div>
+
+    <% if (locals.description) { %>
+        <p class="text-sm text-gray-400 mb-4"><%= locals.description %></p>
+    <% } %>
+
+    <% if (locals.badges && locals.badges.length > 0) { %>
+        <div class="flex flex-wrap gap-2 mb-4">
+            <% locals.badges.forEach(badge => { %>
+                <span class="badge badge-<%= badge.color || 'info' %>"><%= badge.text %></span>
+            <% }); %>
+        </div>
+    <% } %>
+
+    <% if (locals.stats && locals.stats.length > 0) { %>
+        <div class="grid grid-cols-<%= Math.min(locals.stats.length, 3) %> gap-4 py-3 border-t border-dark-400">
+            <% locals.stats.forEach(stat => { %>
+                <div class="text-center">
+                    <p class="text-lg font-semibold text-white"><%= stat.value %></p>
+                    <p class="text-xs text-gray-500"><%= stat.label %></p>
+                </div>
+            <% }); %>
+        </div>
+    <% } %>
+
+    <% if (locals.href) { %>
+        <a href="<%= locals.href %>" class="btn btn-secondary w-full mt-4">
+            Configure
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+        </a>
+    <% } %>
+</div>

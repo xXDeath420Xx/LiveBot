@@ -1,0 +1,307 @@
+<style>
+/* Compact Starboard Page Styles */
+.starboard-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(251, 191, 36, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.starboard-section-header {
+    background: rgba(251, 191, 36, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(251, 191, 36, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.starboard-section-header i { font-size: 1rem; color: #fbbf24; }
+.starboard-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
+.starboard-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
+
+.starboard-section-body { padding: 18px; }
+
+/* Toggle Switch */
+.starboard-toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+}
+
+.starboard-toggle-wrapper:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(251, 191, 36, 0.3);
+}
+
+.starboard-toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.starboard-toggle input { opacity: 0; width: 0; height: 0; }
+
+.starboard-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: 0.2s;
+    border-radius: 24px;
+}
+
+.starboard-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+.starboard-toggle input:checked + .starboard-toggle-slider {
+    background: linear-gradient(135deg, #f59e0b, #fbbf24);
+    border-color: #fbbf24;
+}
+
+.starboard-toggle input:checked + .starboard-toggle-slider:before {
+    transform: translateX(20px);
+}
+
+.starboard-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
+.starboard-toggle-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
+
+/* Form Styles */
+.starboard-form-group { margin-bottom: 16px; }
+
+.starboard-form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+
+.starboard-form-label i { color: #fbbf24; margin-right: 6px; }
+
+.starboard-form-input,
+.starboard-form-select {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.starboard-form-input:focus,
+.starboard-form-select:focus {
+    outline: none;
+    border-color: rgba(251, 191, 36, 0.5);
+    box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.1);
+}
+
+.starboard-form-select option { background: #1a1d21; color: #ffffff; }
+
+.starboard-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.starboard-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+/* Info Box */
+.starboard-info-box {
+    display: flex;
+    gap: 12px;
+    padding: 14px;
+    background: rgba(251, 191, 36, 0.06);
+    border: 1px solid rgba(251, 191, 36, 0.15);
+    border-radius: 10px;
+    margin-bottom: 16px;
+}
+
+.starboard-info-icon {
+    width: 32px;
+    height: 32px;
+    background: rgba(251, 191, 36, 0.15);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.starboard-info-icon i { color: #fbbf24; font-size: 0.85rem; }
+
+.starboard-info-title { font-weight: 600; color: #ffffff; font-size: 0.8rem; margin-bottom: 6px; }
+
+.starboard-info-list { list-style: none; padding: 0; margin: 0; }
+
+.starboard-info-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+    padding: 3px 0;
+}
+
+.starboard-info-list li i { color: #fbbf24; font-size: 0.5rem; }
+
+/* Button Group */
+.starboard-button-group { display: flex; gap: 10px; }
+
+.starboard-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+    border: none;
+    border-radius: 8px;
+    color: #000000;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.starboard-save-btn:hover { box-shadow: 0 4px 16px rgba(251, 191, 36, 0.4); }
+
+.starboard-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.starboard-reset-btn:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+
+@media (max-width: 768px) {
+    .starboard-form-grid { grid-template-columns: 1fr; }
+    .starboard-button-group { flex-direction: column; }
+    .starboard-save-btn, .starboard-reset-btn { width: 100%; justify-content: center; }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-star"></i>
+                <span>Starboard</span>
+            </div>
+            <div class="page-section-subtitle">
+                Highlight the best messages in your server by adding them to a special channel
+            </div>
+        </div>
+    </div>
+
+    <div class="starboard-section-card">
+        <div class="starboard-section-header">
+            <i class="fas fa-star"></i>
+            <div>
+                <h3>Starboard Configuration</h3>
+                <p>Set up your server's hall of fame</p>
+            </div>
+        </div>
+        <div class="starboard-section-body">
+            <form action="/manage/<%= guild.id %>/starboard/config" method="POST">
+                <!-- Enable Toggle -->
+                <label class="starboard-toggle-wrapper">
+                    <div class="starboard-toggle">
+                        <input type="checkbox" id="starboardEnabled" name="enabled" <%= starboardConfig && starboardConfig.enabled ? 'checked' : '' %>>
+                        <span class="starboard-toggle-slider"></span>
+                    </div>
+                    <div>
+                        <div class="starboard-toggle-label">Enable Starboard System</div>
+                        <div class="starboard-toggle-desc">Automatically post starred messages to a special channel</div>
+                    </div>
+                </label>
+
+                <!-- Settings Grid -->
+                <div class="starboard-form-grid">
+                    <div class="starboard-form-group" style="margin-bottom: 0;">
+                        <label class="starboard-form-label">
+                            <i class="fas fa-hashtag"></i>Starboard Channel
+                        </label>
+                        <select class="starboard-form-select" name="channelId">
+                            <option value="">Select a channel...</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>" <%= starboardConfig && starboardConfig.channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                            <% }) %>
+                        </select>
+                        <span class="starboard-form-hint">Channel where starred messages will be posted</span>
+                    </div>
+
+                    <div class="starboard-form-group" style="margin-bottom: 0;">
+                        <label class="starboard-form-label">
+                            <i class="fas fa-star"></i>Star Threshold
+                        </label>
+                        <input type="number" class="starboard-form-input" name="threshold" value="<%= starboardConfig ? starboardConfig.threshold : '5' %>" min="1" max="50">
+                        <span class="starboard-form-hint">Number of star reactions needed to post</span>
+                    </div>
+                </div>
+
+                <!-- Info Box -->
+                <div class="starboard-info-box" style="margin-top: 24px;">
+                    <div class="starboard-info-icon">
+                        <i class="fas fa-info-circle"></i>
+                    </div>
+                    <div>
+                        <div class="starboard-info-title">How Starboard Works</div>
+                        <ul class="starboard-info-list">
+                            <li><i class="fas fa-circle"></i> Users react with star emoji to messages they like</li>
+                            <li><i class="fas fa-circle"></i> When threshold is reached, message is posted to starboard channel</li>
+                            <li><i class="fas fa-circle"></i> Original message link and author are preserved</li>
+                            <li><i class="fas fa-circle"></i> Star count updates automatically in starboard</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Button Group -->
+                <div class="starboard-button-group">
+                    <button type="submit" class="starboard-save-btn">
+                        <i class="fas fa-save"></i>
+                        Save Starboard Settings
+                    </button>
+                    <button type="button" class="starboard-reset-btn" onclick="location.reload()">
+                        <i class="fas fa-undo"></i>
+                        Reset
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
