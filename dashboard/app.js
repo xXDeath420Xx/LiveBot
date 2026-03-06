@@ -102,11 +102,16 @@ export function createApp(options = {}) {
     const viewsDir = path.join(__dirname, 'views');
     app.engine('ejs', async (filePath, options, callback) => {
         try {
-            const includeFile = (templatePath, data = {}) => {
-                const fullPath = path.resolve(viewsDir, templatePath + (templatePath.endsWith('.ejs') ? '' : '.ejs'));
-                const template = fs.readFileSync(fullPath, 'utf8');
-                return ejs.render(template, { ...options, ...data, include: includeFile, filename: fullPath });
-            };
+            function makeInclude(callerFile) {
+                return (templatePath, data = {}) => {
+                    const ext = templatePath.endsWith('.ejs') ? '' : '.ejs';
+                    const baseDir = callerFile ? path.dirname(callerFile) : viewsDir;
+                    const fullPath = path.resolve(baseDir, templatePath + ext);
+                    const template = fs.readFileSync(fullPath, 'utf8');
+                    return ejs.render(template, { ...options, ...data, filename: fullPath, include: makeInclude(fullPath) });
+                };
+            }
+            const includeFile = makeInclude(filePath);
 
             options.filename = filePath;
             options.views = [viewsDir];
