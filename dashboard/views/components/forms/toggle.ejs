@@ -1,0 +1,55 @@
+<%# Toggle Switch Component
+    Props:
+    - name: string (required) - Form field name
+    - id: string - Element ID
+    - checked: boolean - Initial checked state
+    - disabled: boolean - Whether toggle is disabled
+    - label: string - Label text
+    - hint: string - Help text below the toggle
+    - size: string - Size variant (sm, md, lg)
+    - class: string - Additional CSS classes
+%>
+<%
+const size = locals.size || 'md';
+const sizeClasses = {
+    sm: 'h-5 w-9',
+    md: 'h-6 w-11',
+    lg: 'h-7 w-14'
+};
+const dotSizeClasses = {
+    sm: 'h-3 w-3',
+    md: 'h-4 w-4',
+    lg: 'h-5 w-5'
+};
+const translateClasses = {
+    sm: 'translate-x-5',
+    md: 'translate-x-6',
+    lg: 'translate-x-8'
+};
+%>
+
+<div class="flex items-center gap-3 <%= locals.class || '' %>">
+    <label class="toggle <%= sizeClasses[size] %> <%= locals.checked ? 'active' : '' %> <%= locals.disabled ? 'opacity-50 cursor-not-allowed' : '' %>">
+        <input
+            type="checkbox"
+            name="<%= locals.name %>"
+            id="<%= locals.id || locals.name %>"
+            value="true"
+            class="sr-only"
+            <%= locals.checked ? 'checked' : '' %>
+            <%= locals.disabled ? 'disabled' : '' %>
+        >
+        <span class="toggle-dot <%= dotSizeClasses[size] %> <%= locals.checked ? translateClasses[size] : '' %>"></span>
+    </label>
+
+    <% if (locals.label) { %>
+        <div>
+            <label for="<%= locals.id || locals.name %>" class="text-sm font-medium text-gray-200 cursor-pointer">
+                <%= locals.label %>
+            </label>
+            <% if (locals.hint) { %>
+                <p class="form-hint"><%= locals.hint %></p>
+            <% } %>
+        </div>
+    <% } %>
+</div>

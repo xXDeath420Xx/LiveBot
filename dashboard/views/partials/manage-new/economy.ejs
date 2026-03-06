@@ -1,0 +1,486 @@
+<%# Economy System Settings - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Economy Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Users',
+            value: locals.economyStats?.total_users || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: 'primary'
+        }) %>
+
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Currency',
+            value: (locals.economyStats?.total_currency || 0).toLocaleString(),
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+
+        <%- include('../../components/cards/statCard', {
+            title: 'Transactions',
+            value: locals.economyStats?.total_transactions || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>',
+            color: 'info'
+        }) %>
+
+        <%- include('../../components/cards/statCard', {
+            title: 'Shop Items',
+            value: locals.shopItems?.length || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>',
+            color: 'warning'
+        }) %>
+    </div>
+
+    <!-- Economy Configuration -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Economy Configuration</h3>
+                <p class="text-sm text-gray-400">Configure your server's economy settings</p>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'economy_enabled',
+                id: 'economy_enabled',
+                checked: locals.economyConfig?.enabled || false,
+                label: 'Enable Economy',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="economy-form" action="/api/guilds/<%= guildId %>/economy/config" method="PUT" data-track-changes>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label class="form-label">Currency Name</label>
+                        <input type="text" name="currency_name" class="form-input w-full" value="<%= locals.economyConfig?.currency_name || 'coins' %>" placeholder="coins">
+                        <p class="form-hint">Name of your server's currency</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Currency Symbol</label>
+                        <input type="text" name="currency_symbol" class="form-input w-32" value="<%= locals.economyConfig?.currency_symbol || '🪙' %>" placeholder="🪙">
+                        <p class="form-hint">Emoji or symbol for currency</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Starting Balance</label>
+                        <input type="number" name="starting_balance" class="form-input w-full" value="<%= locals.economyConfig?.starting_balance || 1000 %>" min="0">
+                        <p class="form-hint">Initial balance for new users</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label class="form-label">Daily Reward</label>
+                        <input type="number" name="daily_amount" class="form-input w-full" value="<%= locals.economyConfig?.daily_amount || 100 %>" min="0">
+                        <p class="form-hint">Currency earned from /daily command</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label">Work Min</label>
+                            <input type="number" name="work_min_amount" class="form-input w-full" value="<%= locals.economyConfig?.work_min_amount || 50 %>" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Work Max</label>
+                            <input type="number" name="work_max_amount" class="form-input w-full" value="<%= locals.economyConfig?.work_max_amount || 150 %>" min="0">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Max Bank Capacity</label>
+                        <input type="number" name="max_bank_capacity" class="form-input w-full" value="<%= locals.economyConfig?.max_bank_capacity || 10000 %>" min="0">
+                        <p class="form-hint">Default bank storage limit</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Shop Items -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Shop Items</h3>
+                <p class="text-sm text-gray-400">Manage items in your server's shop</p>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="openShopModal()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Item
+            </button>
+        </div>
+
+        <% if (locals.shopItems && locals.shopItems.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="data-table w-full">
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th>Type</th>
+                            <th>Price</th>
+                            <th>Stock</th>
+                            <th>Properties</th>
+                            <th class="w-24"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% locals.shopItems.forEach(item => { %>
+                            <tr data-item-id="<%= item.item_id %>">
+                                <td>
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-2xl"><%= item.item_emoji || '📦' %></span>
+                                        <div>
+                                            <p class="font-medium text-white"><%= item.item_name %></p>
+                                            <p class="text-xs text-gray-500 line-clamp-1"><%= item.item_description || 'No description' %></p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge badge-secondary capitalize"><%= item.item_type %></span>
+                                </td>
+                                <td>
+                                    <span class="font-semibold text-accent-yellow"><%= item.price.toLocaleString() %></span>
+                                    <span class="text-xs text-gray-500"><%= locals.economyConfig?.currency_name || 'coins' %></span>
+                                </td>
+                                <td>
+                                    <% if (item.stock === null) { %>
+                                        <span class="badge badge-success">Unlimited</span>
+                                    <% } else { %>
+                                        <span class="badge badge-primary"><%= item.stock %></span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div class="flex flex-wrap gap-1">
+                                        <% if (item.tradeable) { %><span class="badge badge-info text-xs">Trade</span><% } %>
+                                        <% if (item.sellable) { %><span class="badge badge-warning text-xs">Sell</span><% } %>
+                                        <% if (item.usable) { %><span class="badge badge-success text-xs">Use</span><% } %>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="flex gap-1">
+                                        <button type="button" class="p-1.5 rounded hover:bg-dark-500 text-gray-400 hover:text-white" title="Edit" onclick="editShopItem(<%= JSON.stringify(item).replace(/"/g, '&quot;') %>)">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                            </svg>
+                                        </button>
+                                        <button type="button" class="p-1.5 rounded hover:bg-dark-500 text-gray-400 hover:text-accent-red" title="Delete" onclick="deleteShopItem(<%= item.item_id %>)">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <svg class="empty-state-icon mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+                </svg>
+                <p class="empty-state-title">No Shop Items</p>
+                <p class="empty-state-text">Create your first shop item to start your economy</p>
+                <button type="button" class="btn btn-primary mt-4" onclick="openShopModal()">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add First Item
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Richest Users</h3>
+                <p class="text-sm text-gray-400">Top 10 wealthiest members</p>
+            </div>
+        </div>
+
+        <% if (locals.topUsers && locals.topUsers.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="data-table w-full">
+                    <thead>
+                        <tr>
+                            <th class="w-16">Rank</th>
+                            <th>User</th>
+                            <th class="text-right">Wallet</th>
+                            <th class="text-right">Bank</th>
+                            <th class="text-right">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% locals.topUsers.forEach((user, index) => {
+                            const total = (user.wallet || 0) + (user.bank || 0);
+                        %>
+                            <tr>
+                                <td>
+                                    <% if (index === 0) { %>
+                                        <span class="text-2xl">🥇</span>
+                                    <% } else if (index === 1) { %>
+                                        <span class="text-2xl">🥈</span>
+                                    <% } else if (index === 2) { %>
+                                        <span class="text-2xl">🥉</span>
+                                    <% } else { %>
+                                        <span class="text-gray-500 font-semibold">#<%= index + 1 %></span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <code class="text-sm text-gray-400"><%= user.user_id %></code>
+                                </td>
+                                <td class="text-right">
+                                    <span class="text-accent-green"><%= (user.wallet || 0).toLocaleString() %></span>
+                                </td>
+                                <td class="text-right">
+                                    <span class="text-primary-400"><%= (user.bank || 0).toLocaleString() %></span>
+                                </td>
+                                <td class="text-right">
+                                    <span class="font-bold text-accent-yellow"><%= total.toLocaleString() %></span>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 text-gray-500">
+                No economy data yet
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Shop Item Modal -->
+<div id="shop-modal" class="modal hidden">
+    <div class="modal-overlay" onclick="closeShopModal()"></div>
+    <div class="modal-content max-w-lg">
+        <div class="modal-header">
+            <h3 class="modal-title" id="shop-modal-title">Add Shop Item</h3>
+            <button type="button" class="modal-close" onclick="closeShopModal()">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="shop-form" class="modal-body space-y-4">
+            <input type="hidden" name="item_id" id="item_id">
+
+            <div class="grid grid-cols-3 gap-4">
+                <div class="col-span-2 form-group">
+                    <label class="form-label">Item Name *</label>
+                    <input type="text" name="item_name" id="item_name" class="form-input w-full" placeholder="Legendary Sword" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Emoji</label>
+                    <input type="text" name="item_emoji" id="item_emoji" class="form-input w-full" placeholder="🗡️">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea name="item_description" id="item_description" class="form-input w-full h-20 resize-none" placeholder="A powerful weapon..."></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Type *</label>
+                    <select name="item_type" id="item_type" class="form-input w-full" required>
+                        <option value="consumable">Consumable</option>
+                        <option value="collectible">Collectible</option>
+                        <option value="tool">Tool</option>
+                        <option value="role">Role</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Price *</label>
+                    <input type="number" name="price" id="item_price" class="form-input w-full" min="0" required placeholder="1000">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Stock</label>
+                    <input type="number" name="stock" id="item_stock" class="form-input w-full" min="0" placeholder="Unlimited">
+                    <p class="form-hint">Leave empty for unlimited</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Sell Value</label>
+                    <input type="number" name="sell_value" id="item_sell_value" class="form-input w-full" min="0" value="0">
+                </div>
+            </div>
+
+            <div class="flex flex-wrap gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="tradeable" id="item_tradeable" class="form-checkbox" checked>
+                    <span class="text-sm text-gray-300">Tradeable</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="sellable" id="item_sellable" class="form-checkbox">
+                    <span class="text-sm text-gray-300">Sellable</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="usable" id="item_usable" class="form-checkbox">
+                    <span class="text-sm text-gray-300">Usable</span>
+                </label>
+            </div>
+        </form>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeShopModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveShopItem()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save Item
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentEditingItemId = null;
+
+// Economy form submission
+document.getElementById('economy-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = {};
+    formData.forEach((value, key) => {
+        if (value === 'on') data[key] = true;
+        else if (!isNaN(value) && value !== '') data[key] = Number(value);
+        else data[key] = value;
+    });
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Economy settings saved');
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save settings');
+    }
+});
+
+function openShopModal() {
+    currentEditingItemId = null;
+    document.getElementById('shop-modal-title').textContent = 'Add Shop Item';
+    document.getElementById('shop-form').reset();
+    document.getElementById('item_tradeable').checked = true;
+    document.getElementById('shop-modal').classList.remove('hidden');
+}
+
+function closeShopModal() {
+    document.getElementById('shop-modal').classList.add('hidden');
+    currentEditingItemId = null;
+}
+
+function editShopItem(item) {
+    currentEditingItemId = item.item_id;
+    document.getElementById('shop-modal-title').textContent = 'Edit Shop Item';
+    document.getElementById('item_id').value = item.item_id;
+    document.getElementById('item_name').value = item.item_name || '';
+    document.getElementById('item_emoji').value = item.item_emoji || '';
+    document.getElementById('item_description').value = item.item_description || '';
+    document.getElementById('item_type').value = item.item_type || 'other';
+    document.getElementById('item_price').value = item.price || 0;
+    document.getElementById('item_stock').value = item.stock || '';
+    document.getElementById('item_sell_value').value = item.sell_value || 0;
+    document.getElementById('item_tradeable').checked = !!item.tradeable;
+    document.getElementById('item_sellable').checked = !!item.sellable;
+    document.getElementById('item_usable').checked = !!item.usable;
+    document.getElementById('shop-modal').classList.remove('hidden');
+}
+
+async function saveShopItem() {
+    const form = document.getElementById('shop-form');
+    const formData = new FormData(form);
+
+    const data = {
+        item_name: formData.get('item_name'),
+        item_emoji: formData.get('item_emoji') || null,
+        item_description: formData.get('item_description') || null,
+        item_type: formData.get('item_type'),
+        price: parseInt(formData.get('price')) || 0,
+        stock: formData.get('stock') ? parseInt(formData.get('stock')) : null,
+        sell_value: parseInt(formData.get('sell_value')) || 0,
+        tradeable: formData.get('tradeable') === 'on',
+        sellable: formData.get('sellable') === 'on',
+        usable: formData.get('usable') === 'on'
+    };
+
+    if (!data.item_name || !data.item_type) {
+        showToast('error', 'Please fill in required fields');
+        return;
+    }
+
+    try {
+        const url = currentEditingItemId
+            ? `/api/guilds/<%= guildId %>/economy/shop/${currentEditingItemId}`
+            : `/api/guilds/<%= guildId %>/economy/shop`;
+
+        const response = await fetch(url, {
+            method: currentEditingItemId ? 'PATCH' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', currentEditingItemId ? 'Item updated' : 'Item added');
+            closeShopModal();
+            location.reload();
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save item');
+    }
+}
+
+async function deleteShopItem(itemId) {
+    if (!confirm('Delete this shop item?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/economy/shop/${itemId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast('success', 'Item deleted');
+            document.querySelector(`[data-item-id="${itemId}"]`)?.remove();
+        } else {
+            throw new Error('Failed to delete');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to delete item');
+    }
+}
+
+// Close modal on escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeShopModal();
+});
+</script>

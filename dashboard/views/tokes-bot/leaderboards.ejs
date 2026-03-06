@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+    <style>
+        .rank-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+        .rank-1 { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; }
+        .rank-2 { background: linear-gradient(135deg, #C0C0C0, #A0A0A0); color: #000; }
+        .rank-3 { background: linear-gradient(135deg, #CD7F32, #8B4513); color: #fff; }
+        .rank-default { background: var(--ember-bg-elevated); color: var(--ember-text-muted); }
+
+        .tab-container {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--ember-border);
+            padding-bottom: 1rem;
+        }
+        .tab-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            background: transparent;
+            color: var(--ember-text-muted);
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover {
+            background: var(--ember-bg-card);
+            color: var(--ember-text-primary);
+        }
+        .tab-btn.active {
+            background: var(--ember-primary);
+            color: white;
+        }
+        .leaderboard-section {
+            display: none;
+        }
+        .leaderboard-section.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Home</a>
+                <a href="/tokes-bot/commands" class="ember-nav-link">Commands</a>
+                <a href="/tokes-bot/leaderboards" class="ember-nav-link active">Leaderboards</a>
+                <a href="/tokes-bot/status" class="ember-nav-link">Status</a>
+            </div>
+
+            <div class="ember-nav-actions">
+                <% if (user) { %>
+                    <div class="ember-nav-user">
+                        <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                        <span><%= user.name %></span>
+                    </div>
+                    <a href="/tokes-bot/dashboard" class="ember-btn ember-btn-primary">Dashboard</a>
+                <% } else { %>
+                    <a href="/tokes-bot/auth/twitch" class="ember-btn ember-btn-outline">Login with Twitch</a>
+                <% } %>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Leaderboards Content -->
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Global Leaderboards</h1>
+                <p class="ember-dashboard-subtitle">Top performers across all CertiFriedUtility channels</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tab-container">
+                <button class="tab-btn active" data-tab="tokes">Top Tokers</button>
+                <button class="tab-btn" data-tab="streaks">Best Streaks</button>
+                <button class="tab-btn" data-tab="levels">Highest Levels</button>
+            </div>
+
+            <!-- Top Tokers -->
+            <div id="tokes-section" class="leaderboard-section active">
+                <div class="ember-card">
+                    <% if (topTokers.length === 0) { %>
+                        <p class="ember-text-muted ember-text-center" style="padding: 2rem;">No data yet. Start toking!</p>
+                    <% } else { %>
+                        <table class="ember-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">Rank</th>
+                                    <th>User</th>
+                                    <th style="text-align: right;">Tokes</th>
+                                    <th style="text-align: right;">Level</th>
+                                    <th style="text-align: right;">Streak</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% topTokers.forEach((user, index) => { %>
+                                    <tr>
+                                        <td>
+                                            <span class="rank-badge <%= index < 3 ? 'rank-' + (index + 1) : 'rank-default' %>">
+                                                <%= index + 1 %>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="ember-table-user">
+                                                <span class="ember-badge <%= user.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>" style="font-size: 0.65rem;">
+                                                    <%= user.platform.toUpperCase() %>
+                                                </span>
+                                                <strong><%= user.display_name %></strong>
+                                            </div>
+                                        </td>
+                                        <td style="text-align: right; font-weight: 600; color: var(--ember-primary);">
+                                            <%= user.lifetime_tokes.toLocaleString() %>
+                                        </td>
+                                        <td style="text-align: right;">Lv. <%= user.level %></td>
+                                        <td style="text-align: right;"><%= user.current_streak %> days</td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Best Streaks -->
+            <div id="streaks-section" class="leaderboard-section">
+                <div class="ember-card">
+                    <% if (topStreaks.length === 0) { %>
+                        <p class="ember-text-muted ember-text-center" style="padding: 2rem;">No streaks yet. Use !spark daily!</p>
+                    <% } else { %>
+                        <table class="ember-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">Rank</th>
+                                    <th>User</th>
+                                    <th style="text-align: right;">Current Streak</th>
+                                    <th style="text-align: right;">Best Streak</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% topStreaks.forEach((user, index) => { %>
+                                    <tr>
+                                        <td>
+                                            <span class="rank-badge <%= index < 3 ? 'rank-' + (index + 1) : 'rank-default' %>">
+                                                <%= index + 1 %>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="ember-table-user">
+                                                <span class="ember-badge <%= user.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>" style="font-size: 0.65rem;">
+                                                    <%= user.platform.toUpperCase() %>
+                                                </span>
+                                                <strong><%= user.display_name %></strong>
+                                            </div>
+                                        </td>
+                                        <td style="text-align: right; font-weight: 600; color: var(--ember-secondary);">
+                                            <%= user.current_streak %> days
+                                        </td>
+                                        <td style="text-align: right;"><%= user.best_streak %> days</td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Highest Levels -->
+            <div id="levels-section" class="leaderboard-section">
+                <div class="ember-card">
+                    <% if (topLevels.length === 0) { %>
+                        <p class="ember-text-muted ember-text-center" style="padding: 2rem;">No levels yet. Start earning XP!</p>
+                    <% } else { %>
+                        <table class="ember-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">Rank</th>
+                                    <th>User</th>
+                                    <th style="text-align: right;">Level</th>
+                                    <th style="text-align: right;">XP</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% topLevels.forEach((user, index) => { %>
+                                    <tr>
+                                        <td>
+                                            <span class="rank-badge <%= index < 3 ? 'rank-' + (index + 1) : 'rank-default' %>">
+                                                <%= index + 1 %>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="ember-table-user">
+                                                <span class="ember-badge <%= user.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>" style="font-size: 0.65rem;">
+                                                    <%= user.platform.toUpperCase() %>
+                                                </span>
+                                                <strong><%= user.display_name %></strong>
+                                            </div>
+                                        </td>
+                                        <td style="text-align: right; font-weight: 600; color: var(--ember-accent);">
+                                            Level <%= user.level %>
+                                        </td>
+                                        <td style="text-align: right;"><%= user.xp.toLocaleString() %> XP</td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+                <a href="/tokes-bot/status" class="ember-footer-link">Status</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Update active tab
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Show corresponding section
+                const tab = btn.dataset.tab;
+                document.querySelectorAll('.leaderboard-section').forEach(s => s.classList.remove('active'));
+                document.getElementById(tab + '-section').classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,245 @@
+<%# Security Settings - Tailwind Version %>
+
+<%
+const securityScore = ((locals.antiRaidConfig?.enabled ? 1 : 0) + (locals.antiNukeConfig?.enabled ? 1 : 0) + (locals.joinGateConfig?.enabled ? 1 : 0));
+const scoreText = securityScore === 3 ? 'High' : securityScore >= 1 ? 'Medium' : 'Low';
+const scoreColor = securityScore === 3 ? 'success' : securityScore >= 1 ? 'warning' : 'danger';
+%>
+
+<div class="space-y-6">
+    <!-- Security Status Overview -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Anti-Raid',
+            value: locals.antiRaidConfig?.enabled ? 'Active' : 'Off',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: locals.antiRaidConfig?.enabled ? 'success' : 'secondary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Anti-Nuke',
+            value: locals.antiNukeConfig?.enabled ? 'Active' : 'Off',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
+            color: locals.antiNukeConfig?.enabled ? 'success' : 'secondary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Join Gate',
+            value: locals.joinGateConfig?.enabled ? 'Active' : 'Off',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>',
+            color: locals.joinGateConfig?.enabled ? 'success' : 'secondary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Security Score',
+            value: scoreText,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
+            color: scoreColor
+        }) %>
+    </div>
+
+    <!-- Anti-Raid Protection -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-accent-red/10 rounded-lg">
+                    <svg class="w-5 h-5 text-accent-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Anti-Raid Protection</h3>
+                    <p class="text-sm text-gray-400">Detect and stop raid attempts</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'antiraid_enabled',
+                id: 'antiraid_enabled',
+                checked: locals.antiRaidConfig?.enabled || false,
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="antiraid-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Join Threshold</label>
+                    <input type="number" name="threshold" class="form-input w-full" value="<%= locals.antiRaidConfig?.threshold || 10 %>" min="3" max="50">
+                    <p class="form-hint">Joins to trigger anti-raid</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Time Period (seconds)</label>
+                    <input type="number" name="time_period" class="form-input w-full" value="<%= locals.antiRaidConfig?.time_period || 10 %>" min="5" max="300">
+                    <p class="form-hint">Time frame to count joins</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Action</label>
+                    <select name="action" class="form-input w-full">
+                        <option value="kick" <%= locals.antiRaidConfig?.action === 'kick' ? 'selected' : '' %>>Kick Members</option>
+                        <option value="ban" <%= locals.antiRaidConfig?.action === 'ban' ? 'selected' : '' %>>Ban Members</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="p-4 bg-dark-700 rounded-lg border-l-4 border-primary-500">
+                <p class="text-sm text-gray-300">
+                    <strong>Example:</strong> If threshold is 10 and time period is 10 seconds, anti-raid triggers when 10 users join within 10 seconds.
+                </p>
+            </div>
+
+            <div class="flex justify-end">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Anti-Raid Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Anti-Nuke Protection -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-accent-yellow/10 rounded-lg">
+                    <svg class="w-5 h-5 text-accent-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Anti-Nuke Protection</h3>
+                    <p class="text-sm text-gray-400">Protect against mass destruction</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'antinuke_enabled',
+                id: 'antinuke_enabled',
+                checked: locals.antiNukeConfig?.enabled || false,
+                size: 'md'
+            }) %>
+        </div>
+
+        <div class="p-4 bg-dark-700 rounded-lg border-l-4 border-accent-red mb-4">
+            <p class="font-semibold text-white mb-2">Protected Actions:</p>
+            <ul class="text-sm text-gray-300 space-y-1 list-disc list-inside">
+                <li>Channel deletions (more than 3 in 10 seconds)</li>
+                <li>Role deletions (more than 3 in 10 seconds)</li>
+                <li>Mass bans (more than 5 in 10 seconds)</li>
+                <li>Webhook spam (more than 5 created in 10 seconds)</li>
+            </ul>
+        </div>
+
+        <div class="flex justify-end">
+            <button type="button" class="btn btn-primary" onclick="saveAntiNuke()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save Anti-Nuke Settings
+            </button>
+        </div>
+    </div>
+
+    <!-- Join Gate -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-accent-green/10 rounded-lg">
+                    <svg class="w-5 h-5 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Join Gate</h3>
+                    <p class="text-sm text-gray-400">Require verification before server access</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'joingate_enabled',
+                id: 'joingate_enabled',
+                checked: locals.joinGateConfig?.enabled || false,
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="joingate-form" class="space-y-4">
+            <div class="form-group">
+                <label class="form-label">Verification Role</label>
+                <%- include('../../components/forms/roleSelect', {
+                    name: 'joingate_role_id',
+                    roles: Array.from(roles.values()),
+                    selected: locals.joinGateConfig?.role_id,
+                    placeholder: 'Select role to grant after verification'
+                }) %>
+                <p class="form-hint">This role will be granted when members complete verification</p>
+            </div>
+
+            <div class="p-4 bg-dark-700 rounded-lg border-l-4 border-accent-green">
+                <p class="text-sm text-gray-300">
+                    <strong>Tip:</strong> Use Join Gate with Discord's built-in verification or custom verification channels for maximum protection.
+                </p>
+            </div>
+
+            <div class="flex justify-end">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Join Gate Settings
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('antiraid-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const enabled = document.getElementById('antiraid_enabled').checked;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/security/antiraid', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enabled,
+                threshold: parseInt(formData.get('threshold')),
+                time_period: parseInt(formData.get('time_period')),
+                action: formData.get('action')
+            })
+        });
+        if (response.ok) showToast('success', 'Anti-Raid settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save'); }
+});
+
+async function saveAntiNuke() {
+    const enabled = document.getElementById('antinuke_enabled').checked;
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/security/antinuke', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+        });
+        if (response.ok) showToast('success', 'Anti-Nuke settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save'); }
+}
+
+document.getElementById('joingate-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const enabled = document.getElementById('joingate_enabled').checked;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/security/joingate', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                enabled,
+                role_id: formData.get('joingate_role_id')
+            })
+        });
+        if (response.ok) showToast('success', 'Join Gate settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save'); }
+});
+</script>

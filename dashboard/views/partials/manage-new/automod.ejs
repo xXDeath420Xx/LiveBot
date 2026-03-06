@@ -1,0 +1,450 @@
+<%# AutoMod Settings - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- AutoMod Overview Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Rules',
+            value: locals.automodRules?.length || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'primary'
+        }) %>
+
+        <%- include('../../components/cards/statCard', {
+            title: 'Filter Types',
+            value: locals.automodRules ? new Set(locals.automodRules.map(r => r.filter_type)).size : 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>',
+            color: 'info'
+        }) %>
+
+        <%- include('../../components/cards/statCard', {
+            title: 'Protection',
+            value: locals.automodRules?.length >= 3 ? 'High' : locals.automodRules?.length >= 1 ? 'Medium' : 'Low',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
+            color: 'success'
+        }) %>
+
+        <%- include('../../components/cards/statCard', {
+            title: 'Actions Today',
+            value: locals.automodStats?.actionsToday || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>',
+            color: 'warning'
+        }) %>
+    </div>
+
+    <!-- Add New Rule Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Add AutoMod Rule</h3>
+                <p class="text-sm text-gray-400">Create a new automatic moderation rule</p>
+            </div>
+        </div>
+
+        <form id="add-rule-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Filter Type</label>
+                    <select name="filter_type" id="filter-type" class="form-input w-full" required>
+                        <option value="banned_words">Banned Words</option>
+                        <option value="mass_mention">Mass Mention</option>
+                        <option value="all_caps">All Caps</option>
+                        <option value="anti_spam">Anti-Spam</option>
+                        <option value="anti_links">Anti-Links</option>
+                        <option value="anti_invites">Anti-Invites</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Action</label>
+                    <select name="action" id="action-select" class="form-input w-full" required>
+                        <option value="delete">Delete Message</option>
+                        <option value="warn">Warn Member</option>
+                        <option value="mute">Timeout Member</option>
+                        <option value="kick">Kick Member</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="duration-group" style="display: none;">
+                    <label class="form-label">Duration (minutes)</label>
+                    <input type="number" name="action_duration" class="form-input w-full" min="1" max="40320" placeholder="10">
+                </div>
+            </div>
+
+            <!-- Dynamic Config Section -->
+            <div id="config-sections">
+                <!-- Banned Words -->
+                <div id="config-banned_words" class="config-section">
+                    <div class="form-group">
+                        <label class="form-label">Banned Words (comma-separated)</label>
+                        <textarea name="config_words" class="form-input w-full h-24 resize-none" placeholder="word1, word2, bad phrase"></textarea>
+                        <p class="form-hint">Enter words or phrases to block</p>
+                    </div>
+                </div>
+
+                <!-- Mass Mention -->
+                <div id="config-mass_mention" class="config-section hidden">
+                    <div class="form-group">
+                        <label class="form-label">Mention Limit</label>
+                        <input type="number" name="config_mention_limit" class="form-input w-32" value="5" min="1" max="50">
+                        <p class="form-hint">Max mentions allowed in a single message</p>
+                    </div>
+                </div>
+
+                <!-- All Caps -->
+                <div id="config-all_caps" class="config-section hidden">
+                    <div class="form-group">
+                        <label class="form-label">Caps Percentage Limit (%)</label>
+                        <input type="number" name="config_caps_limit" class="form-input w-32" value="70" min="50" max="100">
+                        <p class="form-hint">Max percentage of capital letters allowed</p>
+                    </div>
+                </div>
+
+                <!-- Anti-Spam -->
+                <div id="config-anti_spam" class="config-section hidden">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label">Message Limit</label>
+                            <input type="number" name="config_message_limit" class="form-input w-full" value="5" min="2" max="20">
+                            <p class="form-hint">Messages before triggering</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Time Window (seconds)</label>
+                            <input type="number" name="config_time_period" class="form-input w-full" value="10" min="3" max="60">
+                            <p class="form-hint">Time period to count messages</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Anti-Links -->
+                <div id="config-anti_links" class="config-section hidden">
+                    <div class="form-group">
+                        <label class="form-label">Whitelisted Domains (comma-separated)</label>
+                        <textarea name="config_whitelist" class="form-input w-full h-20 resize-none" placeholder="youtube.com, github.com"></textarea>
+                        <p class="form-hint">Links from these domains will be allowed</p>
+                    </div>
+                </div>
+
+                <!-- Anti-Invites -->
+                <div id="config-anti_invites" class="config-section hidden">
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <input type="checkbox" name="config_allow_own" id="allow_own" class="form-checkbox">
+                            <label for="allow_own" class="text-sm text-gray-300">Allow own server invites</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Rule
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Active Rules -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Active Rules</h3>
+                <p class="text-sm text-gray-400">Currently active AutoMod rules</p>
+            </div>
+        </div>
+
+        <% if (locals.automodRules && locals.automodRules.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="data-table w-full">
+                    <thead>
+                        <tr>
+                            <th>Filter Type</th>
+                            <th>Configuration</th>
+                            <th>Action</th>
+                            <th class="w-24"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% locals.automodRules.forEach(rule => {
+                            const config = typeof rule.config === 'string' ? JSON.parse(rule.config) : (rule.config || {});
+                            const typeLabels = {
+                                'banned_words': 'Banned Words',
+                                'bannedWords': 'Banned Words',
+                                'mass_mention': 'Mass Mention',
+                                'massMention': 'Mass Mention',
+                                'all_caps': 'All Caps',
+                                'allCaps': 'All Caps',
+                                'anti_spam': 'Anti-Spam',
+                                'antiSpam': 'Anti-Spam',
+                                'anti_links': 'Anti-Links',
+                                'anti_invites': 'Anti-Invites'
+                            };
+                            const typeColors = {
+                                'banned_words': 'badge-danger',
+                                'bannedWords': 'badge-danger',
+                                'mass_mention': 'badge-warning',
+                                'massMention': 'badge-warning',
+                                'all_caps': 'badge-info',
+                                'allCaps': 'badge-info',
+                                'anti_spam': 'badge-warning',
+                                'antiSpam': 'badge-warning',
+                                'anti_links': 'badge-info',
+                                'anti_invites': 'badge-info'
+                            };
+                            const actionBadges = {
+                                'delete': 'badge-secondary',
+                                'warn': 'badge-warning',
+                                'mute': 'badge-danger',
+                                'kick': 'badge-danger'
+                            };
+                        %>
+                        <tr data-rule-id="<%= rule.id %>">
+                            <td>
+                                <span class="badge <%= typeColors[rule.filter_type] || 'badge-info' %>">
+                                    <%= typeLabels[rule.filter_type] || rule.filter_type %>
+                                </span>
+                            </td>
+                            <td>
+                                <div class="text-sm text-gray-300">
+                                    <% if (rule.filter_type === 'banned_words' || rule.filter_type === 'bannedWords') { %>
+                                        <span class="text-gray-500">Words:</span>
+                                        <%= config.words?.slice(0, 3).join(', ') %><%= config.words?.length > 3 ? '...' : '' %>
+                                    <% } else if (rule.filter_type === 'mass_mention' || rule.filter_type === 'massMention') { %>
+                                        <span class="text-gray-500">Limit:</span>
+                                        <span class="text-primary-400"><%= config.limit || config.mention_limit || 5 %></span> mentions
+                                    <% } else if (rule.filter_type === 'all_caps' || rule.filter_type === 'allCaps') { %>
+                                        <span class="text-gray-500">Max:</span>
+                                        <span class="text-accent-yellow"><%= config.limit || config.caps_limit || 70 %>%</span> caps
+                                    <% } else if (rule.filter_type === 'anti_spam' || rule.filter_type === 'antiSpam') { %>
+                                        <span class="text-primary-400"><%= config.messageLimit || config.message_limit || 5 %></span> msgs /
+                                        <span class="text-accent-yellow"><%= config.timePeriod || config.time_period || 10 %>s</span>
+                                    <% } else if (rule.filter_type === 'anti_links') { %>
+                                        <span class="text-gray-500">Whitelist:</span>
+                                        <%= config.whitelist?.length || 0 %> domains
+                                    <% } else if (rule.filter_type === 'anti_invites') { %>
+                                        Allow own: <%= config.allow_own ? 'Yes' : 'No' %>
+                                    <% } else { %>
+                                        <code class="text-xs"><%= JSON.stringify(config).substring(0, 50) %></code>
+                                    <% } %>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge <%= actionBadges[rule.action] || 'badge-secondary' %>">
+                                    <%= rule.action?.toUpperCase() %>
+                                </span>
+                                <% if (rule.action_duration_minutes) { %>
+                                    <span class="text-xs text-gray-500 ml-1">(<%= rule.action_duration_minutes %>m)</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <div class="flex gap-1">
+                                    <button type="button" class="p-1.5 rounded hover:bg-dark-500 text-gray-400 hover:text-white" title="Edit" onclick="editRule(<%= JSON.stringify(rule).replace(/"/g, '&quot;') %>)">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                        </svg>
+                                    </button>
+                                    <button type="button" class="p-1.5 rounded hover:bg-dark-500 text-gray-400 hover:text-accent-red" title="Delete" onclick="deleteRule(<%= rule.id %>)">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <svg class="empty-state-icon mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+                <p class="empty-state-title">No AutoMod Rules</p>
+                <p class="empty-state-text">Create your first rule to start automatically moderating content</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Exemptions Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Exemptions</h3>
+                <p class="text-sm text-gray-400">Roles and channels exempt from AutoMod</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="form-group">
+                <label class="form-label">Exempt Roles</label>
+                <%- include('../../components/forms/roleSelect', {
+                    name: 'exempt_roles',
+                    roles: Array.from(roles.values()),
+                    selected: locals.automodConfig?.exempt_roles || [],
+                    multiple: true,
+                    placeholder: 'Select roles to exempt'
+                }) %>
+                <p class="form-hint">These roles bypass all AutoMod rules</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Exempt Channels</label>
+                <%- include('../../components/forms/channelSelect', {
+                    name: 'exempt_channels',
+                    channels: Array.from(channels.values()),
+                    selected: locals.automodConfig?.exempt_channels || [],
+                    multiple: true,
+                    placeholder: 'Select channels to exempt'
+                }) %>
+                <p class="form-hint">AutoMod is disabled in these channels</p>
+            </div>
+        </div>
+
+        <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+            <button type="button" class="btn btn-primary" onclick="saveExemptions()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Save Exemptions
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Filter type change handler
+document.getElementById('filter-type')?.addEventListener('change', function() {
+    document.querySelectorAll('.config-section').forEach(el => el.classList.add('hidden'));
+    const section = document.getElementById(`config-${this.value}`);
+    if (section) section.classList.remove('hidden');
+});
+
+// Action change handler
+document.getElementById('action-select')?.addEventListener('change', function() {
+    const durationGroup = document.getElementById('duration-group');
+    durationGroup.style.display = (this.value === 'mute') ? 'block' : 'none';
+});
+
+// Add rule form
+document.getElementById('add-rule-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const filterType = formData.get('filter_type');
+    const action = formData.get('action');
+
+    const data = {
+        filter_type: filterType,
+        action: action,
+        action_duration_minutes: action === 'mute' ? parseInt(formData.get('action_duration')) || 10 : null,
+        config: {}
+    };
+
+    // Build config based on filter type
+    switch (filterType) {
+        case 'banned_words':
+            const words = formData.get('config_words')?.split(',').map(w => w.trim()).filter(w => w);
+            data.config = { words };
+            break;
+        case 'mass_mention':
+            data.config = { limit: parseInt(formData.get('config_mention_limit')) || 5 };
+            break;
+        case 'all_caps':
+            data.config = { limit: parseInt(formData.get('config_caps_limit')) || 70 };
+            break;
+        case 'anti_spam':
+            data.config = {
+                messageLimit: parseInt(formData.get('config_message_limit')) || 5,
+                timePeriod: parseInt(formData.get('config_time_period')) || 10
+            };
+            break;
+        case 'anti_links':
+            const whitelist = formData.get('config_whitelist')?.split(',').map(d => d.trim()).filter(d => d);
+            data.config = { whitelist };
+            break;
+        case 'anti_invites':
+            data.config = { allow_own: formData.get('config_allow_own') === 'on' };
+            break;
+    }
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/automod/rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'AutoMod rule added');
+            location.reload();
+        } else {
+            const err = await response.json();
+            throw new Error(err.error || 'Failed to add rule');
+        }
+    } catch (error) {
+        showToast('error', error.message);
+    }
+});
+
+async function deleteRule(ruleId) {
+    if (!confirm('Delete this AutoMod rule?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/automod/rules/${ruleId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast('success', 'Rule deleted');
+            document.querySelector(`[data-rule-id="${ruleId}"]`)?.remove();
+        } else {
+            throw new Error('Failed to delete');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to delete rule');
+    }
+}
+
+function editRule(rule) {
+    // Populate form with rule data for editing
+    document.getElementById('filter-type').value = rule.filter_type;
+    document.getElementById('filter-type').dispatchEvent(new Event('change'));
+    document.getElementById('action-select').value = rule.action;
+    document.getElementById('action-select').dispatchEvent(new Event('change'));
+
+    const config = typeof rule.config === 'string' ? JSON.parse(rule.config) : rule.config;
+
+    // Populate config fields based on type
+    if (rule.filter_type === 'banned_words' || rule.filter_type === 'bannedWords') {
+        document.querySelector('[name="config_words"]').value = config.words?.join(', ') || '';
+    }
+    // Add more type handling as needed
+
+    showToast('info', 'Rule loaded for editing - make changes and click Add Rule');
+}
+
+async function saveExemptions() {
+    const exemptRoles = Array.from(document.querySelector('[name="exempt_roles"]')?.selectedOptions || []).map(o => o.value);
+    const exemptChannels = Array.from(document.querySelector('[name="exempt_channels"]')?.selectedOptions || []).map(o => o.value);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/automod/exemptions', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ exempt_roles: exemptRoles, exempt_channels: exemptChannels })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Exemptions saved');
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save exemptions');
+    }
+}
+</script>

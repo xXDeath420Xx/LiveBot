@@ -1,0 +1,67 @@
+/* Upload/dashboard/public/css/dashboard-style.css */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
+
+/* Unified Dark Theme Variables */
+:root {
+    --background-primary: #36393f;
+    --background-secondary: #2f3136;
+    --background-tertiary: #202225;
+    --header-primary: #ffffff;
+    --text-normal: #dcddde;
+    --text-muted: #b9bbbe;
+    --border-color: #40444B;
+    --brand-color: #7289da;
+    --success-color: #43b581;
+    --warning-color: #faa61a;
+    --danger-color: #f04747;
+    --border-radius: 8px;
+    --twitch-color: #9146FF;
+    --youtube-color: #FF0000;
+    --kick-color: #52E252;
+}
+
+/* Base body styles to enforce the dark theme */
+body {
+    background-color: var(--background-primary);
+    color: var(--text-normal);
+    font-family: 'Inter', sans-serif;
+}
+
+/* Main container for consistent padding on all pages */
+.page-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.page-header {
+    margin-bottom: 2.5rem;
+}
+
+/* Standardized card style for a consistent look */
+.content-card {
+    background-color: var(--background-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    transition: all 0.2s ease-in-out;
+}
+
+.server-card:hover {
+    transform: translateY(-5px);
+    border-color: var(--brand-color);
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Override Bootstrap components to match the theme */
+.list-group-item, .card {
+    background-color: var(--background-secondary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-normal) !important;
+}
+
+.modal-content {
+    background-color: var(--background-secondary);
+    border-color: var(--border-color);
+}

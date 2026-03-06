@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Home</a>
+                <a href="/tokes-bot/commands" class="ember-nav-link">Commands</a>
+                <a href="/tokes-bot/leaderboards" class="ember-nav-link">Leaderboards</a>
+                <a href="/tokes-bot/status" class="ember-nav-link">Status</a>
+            </div>
+
+            <div class="ember-nav-actions">
+                <% if (user) { %>
+                    <div class="ember-nav-user">
+                        <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                        <span><%= user.name %></span>
+                    </div>
+                    <a href="/tokes-bot/dashboard" class="ember-btn ember-btn-primary">Dashboard</a>
+                <% } else { %>
+                    <a href="/tokes-bot/auth/twitch" class="ember-btn ember-btn-outline">Login with Twitch</a>
+                <% } %>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Error Content -->
+    <main class="ember-dashboard" style="display: flex; align-items: center; justify-content: center; min-height: 80vh;">
+        <div class="ember-container ember-text-center">
+            <div style="font-size: 6rem; color: var(--ember-primary); margin-bottom: 1rem;">
+                <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+            </div>
+            <h1 style="font-size: 2rem; font-weight: 700; margin-bottom: 0.5rem;">Something went wrong</h1>
+            <p class="ember-text-muted" style="font-size: 1.125rem; margin-bottom: 2rem;">
+                <%= error || 'An unexpected error occurred.' %>
+            </p>
+            <div style="display: flex; gap: 1rem; justify-content: center;">
+                <a href="/tokes-bot" class="ember-btn ember-btn-primary">Go Home</a>
+                <a href="javascript:history.back()" class="ember-btn ember-btn-outline">Go Back</a>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

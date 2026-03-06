@@ -1,0 +1,230 @@
+<%
+const csConfig = typeof communitySupportConfig !== 'undefined' ? communitySupportConfig : {};
+const csEnabled = !!csConfig.enabled;
+%>
+
+<style>
+.cs-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(139, 92, 246, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+.cs-card-header {
+    background: rgba(139, 92, 246, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.cs-card-header i { font-size: 1rem; color: #8b5cf6; }
+.cs-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #fff; margin: 0; }
+.cs-card-body { padding: 18px; }
+.cs-form-group { margin-bottom: 16px; }
+.cs-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
+.cs-form-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-top: 4px; }
+.cs-form-select, .cs-form-input {
+    width: 100%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #fff;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+}
+.cs-form-input { max-width: 120px; }
+.cs-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(0,0,0,0.15);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+.cs-toggle-label { font-size: 0.85rem; color: rgba(255,255,255,0.8); }
+.cs-toggle-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+.cs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cs-points-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.cs-save-btn {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    color: #fff;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.cs-save-btn:hover { opacity: 0.9; }
+.cs-status-msg {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    display: none;
+}
+.cs-status-msg.success { display: block; background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
+.cs-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+@media (max-width: 640px) { .cs-grid, .cs-points-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-hands-helping"></i>
+                <span>Community Support</span>
+            </div>
+            <div class="page-section-subtitle">
+                Track raid/support activity and reward top community supporters
+            </div>
+        </div>
+    </div>
+
+    <div id="cs-status" class="cs-status-msg"></div>
+
+    <form id="cs-form">
+        <!-- Enable -->
+        <div class="cs-card">
+            <div class="cs-card-header">
+                <i class="fas fa-power-off"></i>
+                <h3>Enable Community Support</h3>
+            </div>
+            <div class="cs-card-body">
+                <div class="cs-toggle-row">
+                    <div>
+                        <div class="cs-toggle-label">Community Support System</div>
+                        <div class="cs-toggle-hint">Track raids and support activity, award points, monthly leaderboard</div>
+                    </div>
+                    <input type="checkbox" name="enabled" id="cs-enabled" <%= csEnabled ? 'checked' : '' %> style="accent-color: #8b5cf6;">
+                </div>
+            </div>
+        </div>
+
+        <!-- Channels -->
+        <div class="cs-card">
+            <div class="cs-card-header">
+                <i class="fas fa-hashtag"></i>
+                <h3>Channels</h3>
+            </div>
+            <div class="cs-card-body">
+                <div class="cs-grid">
+                    <div class="cs-form-group">
+                        <label class="cs-form-label">Raid Channel</label>
+                        <select name="raid_channel_id" class="cs-form-select">
+                            <option value="">Select...</option>
+                            <% channels.forEach(ch => { %>
+                                <option value="<%= ch.id %>" <%= csConfig.raid_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                        <div class="cs-form-hint">Channel where raid posts are tracked</div>
+                    </div>
+                    <div class="cs-form-group">
+                        <label class="cs-form-label">Support Channel</label>
+                        <select name="support_channel_id" class="cs-form-select">
+                            <option value="">Select...</option>
+                            <% channels.forEach(ch => { %>
+                                <option value="<%= ch.id %>" <%= csConfig.support_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                        <div class="cs-form-hint">Channel where support activity is tracked</div>
+                    </div>
+                    <div class="cs-form-group">
+                        <label class="cs-form-label">Shoutout Channel</label>
+                        <select name="shoutout_channel_id" class="cs-form-select">
+                            <option value="">Select...</option>
+                            <% channels.forEach(ch => { %>
+                                <option value="<%= ch.id %>" <%= csConfig.shoutout_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                        <div class="cs-form-hint">Monthly top supporters are posted here</div>
+                    </div>
+                    <div class="cs-form-group">
+                        <label class="cs-form-label">Affiliate Link Channel</label>
+                        <select name="affiliate_link_channel_id" class="cs-form-select">
+                            <option value="">None</option>
+                            <% channels.forEach(ch => { %>
+                                <option value="<%= ch.id %>" <%= csConfig.affiliate_link_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="cs-form-group">
+                        <label class="cs-form-label">Non-Affiliate Link Channel</label>
+                        <select name="non_affiliate_link_channel_id" class="cs-form-select">
+                            <option value="">None</option>
+                            <% channels.forEach(ch => { %>
+                                <option value="<%= ch.id %>" <%= csConfig.non_affiliate_link_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Points -->
+        <div class="cs-card">
+            <div class="cs-card-header">
+                <i class="fas fa-star"></i>
+                <h3>Point Values</h3>
+            </div>
+            <div class="cs-card-body">
+                <div class="cs-points-grid">
+                    <div class="cs-form-group">
+                        <label class="cs-form-label">Raid Affiliate</label>
+                        <input type="number" name="raid_affiliate_points" class="cs-form-input" value="<%= csConfig.raid_affiliate_points || 5 %>" min="1" max="100">
+                        <div class="cs-form-hint">Points for raiding an affiliate</div>
+                    </div>
+                    <div class="cs-form-group">
+                        <label class="cs-form-label">Raid Non-Affiliate</label>
+                        <input type="number" name="raid_non_affiliate_points" class="cs-form-input" value="<%= csConfig.raid_non_affiliate_points || 10 %>" min="1" max="100">
+                        <div class="cs-form-hint">Points for raiding a non-affiliate</div>
+                    </div>
+                    <div class="cs-form-group">
+                        <label class="cs-form-label">Support</label>
+                        <input type="number" name="support_points" class="cs-form-input" value="<%= csConfig.support_points || 3 %>" min="1" max="100">
+                        <div class="cs-form-hint">Points for support channel activity</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="cs-save-btn">
+            <i class="fas fa-save"></i> Save Community Support Config
+        </button>
+    </form>
+</div>
+
+<script>
+document.getElementById('cs-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('cs-status');
+    const body = {
+        enabled: document.getElementById('cs-enabled').checked,
+        raid_channel_id: e.target.raid_channel_id.value || null,
+        support_channel_id: e.target.support_channel_id.value || null,
+        shoutout_channel_id: e.target.shoutout_channel_id.value || null,
+        affiliate_link_channel_id: e.target.affiliate_link_channel_id.value || null,
+        non_affiliate_link_channel_id: e.target.non_affiliate_link_channel_id.value || null,
+        raid_affiliate_points: parseInt(e.target.raid_affiliate_points.value) || 5,
+        raid_non_affiliate_points: parseInt(e.target.raid_non_affiliate_points.value) || 10,
+        support_points: parseInt(e.target.support_points.value) || 3
+    };
+    try {
+        const res = await fetch('/api/guilds/<%= guild.id %>/community-support/config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        status.textContent = data.success ? 'Community support config saved!' : (data.error || 'Failed to save');
+        status.className = 'cs-status-msg ' + (data.success ? 'success' : 'error');
+    } catch (err) {
+        status.textContent = 'Network error';
+        status.className = 'cs-status-msg error';
+    }
+});
+</script>

@@ -1,0 +1,224 @@
+<%# Quarantine System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'System Status',
+            value: quarantineConfig && quarantineConfig.is_enabled ? 'Active' : 'Disabled',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
+            color: quarantineConfig && quarantineConfig.is_enabled ? 'success' : 'secondary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Quarantine Role',
+            value: quarantineConfig && quarantineConfig.quarantine_role_id ? (roles.find(r => r.id === quarantineConfig.quarantine_role_id)?.name || 'Unknown') : 'Not Set',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Quarantined Users',
+            value: quarantinedUsers ? quarantinedUsers.length : 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>',
+            color: 'primary'
+        }) %>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            Quarantine Configuration
+        </h3>
+
+        <form id="quarantine-config-form" class="space-y-4">
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <%- include('../../components/forms/toggle', {
+                    name: 'is_enabled',
+                    label: 'Enable Quarantine System',
+                    description: 'Allow moderators to quarantine users using the /quarantine command',
+                    checked: quarantineConfig && quarantineConfig.is_enabled
+                }) %>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Quarantine Role</label>
+                <%- include('../../components/forms/roleSelect', {
+                    name: 'quarantine_role_id',
+                    roles: roles,
+                    selected: quarantineConfig?.quarantine_role_id,
+                    placeholder: 'Select a role...'
+                }) %>
+                <p class="form-hint">Users will be assigned this role when quarantined. Ensure this role has very limited permissions.</p>
+            </div>
+
+            <div class="p-4 bg-accent-yellow/10 rounded-lg border-l-4 border-accent-yellow">
+                <p class="font-semibold text-white mb-2">Important Notes:</p>
+                <ul class="text-sm text-gray-300 space-y-1 list-disc list-inside">
+                    <li>When a user is quarantined, all their roles are removed and replaced with the quarantine role</li>
+                    <li>The quarantine role should have minimal permissions (view channels only)</li>
+                    <li>Create a dedicated quarantine channel that only quarantined users can access</li>
+                    <li>Use the /quarantine command to quarantine or release users</li>
+                </ul>
+            </div>
+
+            <div class="flex justify-end pt-4 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Quarantine Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Quarantined Users List -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-accent-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            Currently Quarantined Users
+        </h3>
+
+        <% if (quarantinedUsers && quarantinedUsers.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">User</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Quarantined By</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Reason</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Date</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% quarantinedUsers.forEach(user => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-8 h-8 rounded-full bg-dark-500 flex items-center justify-center text-sm font-bold text-gray-400">
+                                            <%= user.username ? user.username.charAt(0).toUpperCase() : '?' %>
+                                        </div>
+                                        <div>
+                                            <p class="font-medium text-white"><%= user.username || 'Unknown User' %></p>
+                                            <p class="text-xs text-gray-500"><%= user.user_id %></p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4 text-sm text-gray-400">
+                                    <%= user.moderator_tag || user.moderator_id || 'System' %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <p class="text-sm text-gray-400 truncate max-w-xs"><%= user.reason || 'No reason provided' %></p>
+                                </td>
+                                <td class="py-3 px-4 text-sm text-gray-500">
+                                    <%= user.quarantined_at ? new Date(user.quarantined_at).toLocaleDateString() : 'Unknown' %>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="releaseFromQuarantine('<%= user.user_id %>')" class="btn btn-success btn-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
+                                        </svg>
+                                        Release
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Quarantined Users</h4>
+                <p class="text-gray-400">
+                    <% if (quarantineConfig && quarantineConfig.is_enabled) { %>
+                        All clear! No users are currently in quarantine.
+                    <% } else { %>
+                        Enable the quarantine system to start using this feature.
+                    <% } %>
+                </p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Usage Guide -->
+    <div class="card bg-gradient-to-r from-primary-500/10 to-primary-500/5 border-primary-500/30">
+        <h4 class="font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+            </svg>
+            How to Use Quarantine
+        </h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <p class="font-semibold text-accent-red mb-2">Quarantine a User</p>
+                <code class="block p-2 bg-dark-800 rounded text-sm text-gray-300 mb-2">/quarantine user:@username enable:true</code>
+                <p class="text-sm text-gray-400">Removes all roles and restricts the user to quarantine channels</p>
+            </div>
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <p class="font-semibold text-accent-green mb-2">Release a User</p>
+                <code class="block p-2 bg-dark-800 rounded text-sm text-gray-300 mb-2">/quarantine user:@username enable:false</code>
+                <p class="text-sm text-gray-400">Removes the quarantine role and restores access</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('quarantine-config-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    const config = {
+        is_enabled: formData.get('is_enabled') === 'on',
+        quarantine_role_id: formData.get('quarantine_role_id')
+    };
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/quarantine/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Quarantine settings saved');
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save quarantine settings');
+    }
+});
+
+async function releaseFromQuarantine(userId) {
+    if (!confirm('Are you sure you want to release this user from quarantine?')) return;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/quarantine/release', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId })
+        });
+
+        if (response.ok) {
+            showToast('success', 'User released from quarantine');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to release user');
+    }
+}
+</script>

@@ -1,0 +1,872 @@
+<%- include('partials/modern-header', {
+    pageTitle: event ? event.name + ' - Schedule' : 'Schedule Not Found',
+    additionalCSS: []
+}) %>
+
+<style>
+/* Schedule Page Styles */
+.schedule-page {
+    min-height: 100vh;
+    background: var(--color-dark-800);
+    padding-bottom: var(--spacing-12);
+}
+
+.schedule-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-6);
+}
+
+/* Event Header */
+.event-header {
+    background: var(--gradient-primary);
+    padding: var(--spacing-10) var(--spacing-6);
+    border-radius: var(--radius-xl);
+    margin-bottom: var(--spacing-6);
+    box-shadow: var(--shadow-lg);
+}
+
+.event-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: var(--spacing-6);
+}
+
+.event-info h1 {
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin: 0 0 var(--spacing-2) 0;
+}
+
+.event-description {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: var(--font-size-base);
+    max-width: 600px;
+    margin-bottom: var(--spacing-4);
+}
+
+.event-links {
+    display: flex;
+    gap: var(--spacing-3);
+    flex-wrap: wrap;
+}
+
+.event-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-4);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-weight: var(--font-weight-medium);
+    transition: all 0.2s ease;
+}
+
+.event-link:hover {
+    background: rgba(255, 255, 255, 0.2);
+    text-decoration: none;
+    color: var(--color-text-primary);
+}
+
+.event-link.twitch {
+    background: #9146ff;
+    border-color: #9146ff;
+}
+
+.event-link.twitch:hover {
+    background: #7c3aed;
+}
+
+/* Ticker Section */
+.ticker-section {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-6);
+    margin-bottom: var(--spacing-6);
+    box-shadow: var(--shadow-md);
+}
+
+.ticker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-5);
+}
+
+.ticker-title {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-1) var(--spacing-3);
+    background: rgba(67, 181, 129, 0.2);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-success);
+    text-transform: uppercase;
+}
+
+.live-indicator::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--color-success);
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.9); }
+}
+
+.ticker-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-4);
+}
+
+@media (max-width: 768px) {
+    .ticker-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ticker-card {
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-4);
+}
+
+.ticker-card.current {
+    border-color: var(--color-success);
+    background: rgba(67, 181, 129, 0.1);
+}
+
+.ticker-card-label {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    margin-bottom: var(--spacing-2);
+}
+
+.ticker-card.current .ticker-card-label {
+    color: var(--color-success);
+}
+
+.ticker-card-game {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-1);
+}
+
+.ticker-card-category {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.ticker-card-runners {
+    color: var(--color-primary-400);
+    font-size: var(--font-size-sm);
+    margin-top: var(--spacing-2);
+}
+
+.ticker-card-time {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+/* Progress Section */
+.progress-section {
+    margin-bottom: var(--spacing-6);
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-2);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--color-dark-600);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-full);
+    transition: width 0.5s ease;
+}
+
+/* Schedule Tabs */
+.schedule-tabs {
+    display: flex;
+    gap: var(--spacing-2);
+    margin-bottom: var(--spacing-6);
+    flex-wrap: wrap;
+}
+
+.schedule-tab {
+    padding: var(--spacing-2) var(--spacing-4);
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-weight: var(--font-weight-medium);
+    transition: all 0.2s ease;
+}
+
+.schedule-tab:hover {
+    background: var(--color-dark-500);
+    color: var(--color-text-primary);
+    text-decoration: none;
+}
+
+.schedule-tab.active {
+    background: var(--color-primary-500);
+    border-color: var(--color-primary-500);
+    color: var(--color-text-primary);
+}
+
+/* Schedule Table */
+.schedule-table-container {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+}
+
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.schedule-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--color-dark-600);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.schedule-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    vertical-align: middle;
+}
+
+.schedule-table tbody tr {
+    transition: background 0.2s ease;
+}
+
+.schedule-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.schedule-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.schedule-table tbody tr.status-running {
+    background: rgba(67, 181, 129, 0.15);
+}
+
+.schedule-table tbody tr.status-running td {
+    border-color: rgba(67, 181, 129, 0.3);
+}
+
+.schedule-table tbody tr.status-completed {
+    opacity: 0.5;
+}
+
+.run-position {
+    font-family: var(--font-family-mono);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-muted);
+    width: 50px;
+}
+
+.run-game {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.run-category {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-sm);
+}
+
+.run-runners {
+    color: var(--color-primary-400);
+}
+
+.run-time {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
+}
+
+.run-estimate {
+    color: var(--color-text-primary);
+}
+
+.run-setup {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+}
+
+.run-eta {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: var(--spacing-1) var(--spacing-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+}
+
+.status-pending { background: var(--color-dark-500); color: var(--color-text-muted); }
+.status-running { background: var(--color-success); color: white; }
+.status-completed { background: var(--color-primary-500); color: white; }
+.status-skipped { background: var(--color-warning); color: black; }
+
+/* Error State */
+.error-state {
+    text-align: center;
+    padding: var(--spacing-16) var(--spacing-6);
+}
+
+.error-state i {
+    font-size: 5rem;
+    color: var(--color-dark-400);
+    margin-bottom: var(--spacing-6);
+}
+
+.error-state h2 {
+    font-size: var(--font-size-2xl);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-3);
+}
+
+.error-state p {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-3) var(--spacing-5);
+    background: var(--color-primary-500);
+    color: var(--color-text-primary);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    font-weight: var(--font-weight-medium);
+    transition: background 0.2s ease;
+}
+
+.back-link:hover {
+    background: var(--color-primary-600);
+    text-decoration: none;
+    color: var(--color-text-primary);
+}
+
+/* User Bar */
+.user-bar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--spacing-4);
+    padding: var(--spacing-3) var(--spacing-6);
+    background: var(--color-dark-700);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.user-bar-inner {
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.user-bar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+}
+
+.user-bar-left a {
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: var(--font-size-sm);
+    transition: color 0.2s ease;
+}
+
+.user-bar-left a:hover {
+    color: var(--color-text-primary);
+}
+
+.user-bar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-3);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-full);
+    object-fit: cover;
+    border: 2px solid var(--color-primary-500);
+}
+
+.user-name {
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-sm);
+}
+
+.twitch-login-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-4);
+    background: #9146ff;
+    color: #fff;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    transition: background 0.2s ease;
+}
+
+.twitch-login-btn:hover {
+    background: #7c3aed;
+    color: #fff;
+    text-decoration: none;
+}
+
+.my-schedules-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-4);
+    background: var(--color-primary-600);
+    color: #fff;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    transition: background 0.2s ease;
+}
+
+.my-schedules-btn:hover {
+    background: var(--color-primary-500);
+    color: #fff;
+    text-decoration: none;
+}
+
+.logout-btn {
+    padding: var(--spacing-2) var(--spacing-3);
+    background: var(--color-dark-500);
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.logout-btn:hover {
+    background: var(--color-danger-500);
+    color: #fff;
+    text-decoration: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .event-info h1 {
+        font-size: var(--font-size-2xl);
+    }
+
+    .event-header-content {
+        flex-direction: column;
+    }
+
+    .schedule-table {
+        font-size: var(--font-size-sm);
+    }
+
+    .schedule-table th,
+    .schedule-table td {
+        padding: var(--spacing-3) var(--spacing-2);
+    }
+
+    .hide-mobile {
+        display: none;
+    }
+
+    .user-bar {
+        padding: var(--spacing-2) var(--spacing-3);
+    }
+
+    .user-bar-inner {
+        flex-direction: column;
+        gap: var(--spacing-2);
+    }
+
+    .user-name {
+        display: none;
+    }
+}
+</style>
+
+<div class="schedule-page">
+    <!-- User Bar -->
+    <div class="user-bar">
+        <div class="user-bar-inner">
+            <div class="user-bar-left">
+                <a href="/"><i class="fas fa-home"></i> Home</a>
+                <a href="/schedule"><i class="fas fa-calendar"></i> Calendar</a>
+            </div>
+            <div class="user-bar-right">
+                <% if (twitchUser) { %>
+                    <div class="user-info">
+                        <img src="<%= twitchUser.avatar %>" alt="<%= twitchUser.display_name %>" class="user-avatar">
+                        <span class="user-name"><%= twitchUser.display_name %></span>
+                    </div>
+                    <a href="/my-schedules" class="my-schedules-btn">
+                        <i class="fas fa-calendar-plus"></i> My Schedules
+                    </a>
+                    <a href="/auth/twitch/logout" class="logout-btn">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </a>
+                <% } else { %>
+                    <a href="/auth/twitch?returnTo=<%= event ? '/schedule/' + event.slug : '/schedule' %>" class="twitch-login-btn">
+                        <i class="fab fa-twitch"></i> Login with Twitch
+                    </a>
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+    <div class="schedule-container">
+        <% if (error || !event) { %>
+            <div class="error-state">
+                <i class="fas fa-calendar-xmark"></i>
+                <h2>Schedule Not Found</h2>
+                <p><%= error || 'The requested event could not be found or is not currently active.' %></p>
+                <a href="/schedule" class="back-link">
+                    <i class="fas fa-arrow-left"></i> Back to Calendar
+                </a>
+            </div>
+        <% } else { %>
+            <!-- Event Header -->
+            <header class="event-header">
+                <div class="event-header-content">
+                    <div class="event-info">
+                        <h1><%= event.name %></h1>
+                        <% if (event.description) { %>
+                            <p class="event-description"><%= event.description %></p>
+                        <% } %>
+                        <div class="event-links">
+                            <a href="/schedule" class="event-link">
+                                <i class="fas fa-arrow-left"></i> Calendar
+                            </a>
+                            <% if (event.twitch_channel) { %>
+                                <a href="https://twitch.tv/<%= event.twitch_channel %>" target="_blank" class="event-link twitch">
+                                    <i class="fab fa-twitch"></i> Watch Live
+                                </a>
+                            <% } %>
+                            <a href="/api/schedule/<%= event.slug %>/export" target="_blank" class="event-link">
+                                <i class="fas fa-download"></i> Export JSON
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Live Ticker -->
+            <div class="ticker-section" id="ticker">
+                <div class="ticker-header">
+                    <div class="ticker-title">
+                        <i class="fas fa-play-circle"></i>
+                        <span>Now Playing</span>
+                    </div>
+                    <span class="live-indicator">Live</span>
+                </div>
+                <div class="ticker-grid" id="ticker-cards">
+                    <div class="ticker-card">
+                        <div class="ticker-card-label">Previous</div>
+                        <div class="ticker-card-game" id="prev-game">-</div>
+                        <div class="ticker-card-category" id="prev-category"></div>
+                        <div class="ticker-card-runners" id="prev-runners"></div>
+                    </div>
+                    <div class="ticker-card current">
+                        <div class="ticker-card-label">Current Run</div>
+                        <div class="ticker-card-game" id="current-game">-</div>
+                        <div class="ticker-card-category" id="current-category"></div>
+                        <div class="ticker-card-runners" id="current-runners"></div>
+                        <div class="ticker-card-time" id="current-estimate"></div>
+                    </div>
+                    <div class="ticker-card">
+                        <div class="ticker-card-label">Up Next</div>
+                        <div class="ticker-card-game" id="next-game">-</div>
+                        <div class="ticker-card-category" id="next-category"></div>
+                        <div class="ticker-card-runners" id="next-runners"></div>
+                        <div class="ticker-card-time" id="next-eta"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-section">
+                <div class="progress-info">
+                    <span id="progress-text">0 of <%= items.length %> runs completed</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Schedule Tabs -->
+            <% if (schedules.length > 1) { %>
+                <div class="schedule-tabs">
+                    <% schedules.forEach(schedule => { %>
+                        <a href="/schedule/<%= event.slug %>?schedule=<%= schedule.slug %>"
+                           class="schedule-tab <%= currentSchedule && currentSchedule.id === schedule.id ? 'active' : '' %>">
+                            <%= schedule.name %>
+                        </a>
+                    <% }); %>
+                </div>
+            <% } %>
+
+            <!-- Schedule Table -->
+            <div class="schedule-table-container">
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Game</th>
+                            <th>Runner(s)</th>
+                            <th>Estimate</th>
+                            <th class="hide-mobile">ETA</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="runs-tbody">
+                        <% if (items.length === 0) { %>
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: var(--spacing-10); color: var(--color-text-muted);">
+                                    No runs scheduled yet
+                                </td>
+                            </tr>
+                        <% } else { %>
+                            <% items.forEach((item, index) => { %>
+                                <tr class="status-<%= item.status || 'pending' %>" data-item-id="<%= item.id %>">
+                                    <td class="run-position"><%= item.position %></td>
+                                    <td>
+                                        <div class="run-game"><%= item.game_name %></div>
+                                        <% if (item.category) { %>
+                                            <div class="run-category"><%= item.category %></div>
+                                        <% } %>
+                                    </td>
+                                    <td class="run-runners"><%= item.runners || '-' %></td>
+                                    <td class="run-time">
+                                        <div class="run-estimate"><%= formatTime(item.estimate_seconds) %></div>
+                                        <% if (item.setup_seconds) { %>
+                                            <div class="run-setup">+<%= formatTime(item.setup_seconds) %> setup</div>
+                                        <% } %>
+                                    </td>
+                                    <td class="run-eta hide-mobile">
+                                        <% if (item.estimated_start) { %>
+                                            <%= formatETA(item.estimated_start) %>
+                                        <% } else { %>
+                                            -
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <span class="status-badge status-<%= item.status || 'pending' %>">
+                                            <%= item.status || 'pending' %>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<%- include('partials/modern-footer') %>
+
+<script>
+    const eventSlug = '<%= event?.slug || "" %>';
+    const scheduleSlug = '<%= currentSchedule?.slug || "" %>';
+
+    function formatTime(seconds) {
+        if (!seconds) return '0:00:00';
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    function formatETA(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function updateTicker() {
+        if (!eventSlug) return;
+
+        try {
+            const url = `/api/schedule/${eventSlug}/ticker${scheduleSlug ? '?schedule=' + scheduleSlug : ''}`;
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.error) return;
+
+            const ticker = data.ticker;
+            if (ticker) {
+                // Previous
+                if (ticker.previous) {
+                    document.getElementById('prev-game').textContent = ticker.previous.game_name;
+                    document.getElementById('prev-category').textContent = ticker.previous.category || '';
+                    document.getElementById('prev-runners').textContent = ticker.previous.runners || '';
+                } else {
+                    document.getElementById('prev-game').textContent = '-';
+                    document.getElementById('prev-category').textContent = '';
+                    document.getElementById('prev-runners').textContent = '';
+                }
+
+                // Current
+                if (ticker.current) {
+                    document.getElementById('current-game').textContent = ticker.current.game_name;
+                    document.getElementById('current-category').textContent = ticker.current.category || '';
+                    document.getElementById('current-runners').textContent = ticker.current.runners || '';
+                    document.getElementById('current-estimate').textContent = 'Est: ' + formatTime(ticker.current.estimate_seconds);
+                } else {
+                    document.getElementById('current-game').textContent = 'No active run';
+                    document.getElementById('current-category').textContent = '';
+                    document.getElementById('current-runners').textContent = '';
+                    document.getElementById('current-estimate').textContent = '';
+                }
+
+                // Next
+                if (ticker.next) {
+                    document.getElementById('next-game').textContent = ticker.next.game_name;
+                    document.getElementById('next-category').textContent = ticker.next.category || '';
+                    document.getElementById('next-runners').textContent = ticker.next.runners || '';
+                    if (ticker.next.estimated_start) {
+                        document.getElementById('next-eta').textContent = 'ETA: ' + formatETA(ticker.next.estimated_start);
+                    }
+                } else {
+                    document.getElementById('next-game').textContent = '-';
+                    document.getElementById('next-category').textContent = '';
+                    document.getElementById('next-runners').textContent = '';
+                    document.getElementById('next-eta').textContent = '';
+                }
+
+                // Progress
+                const percent = ticker.total_runs > 0
+                    ? Math.round((ticker.completed_runs / ticker.total_runs) * 100)
+                    : 0;
+                document.getElementById('progress-text').textContent = `${ticker.completed_runs} of ${ticker.total_runs} runs completed`;
+                document.getElementById('progress-percent').textContent = `${percent}%`;
+                document.getElementById('progress-fill').style.width = `${percent}%`;
+            }
+
+            // Update row statuses
+            if (data.items) {
+                data.items.forEach(item => {
+                    const row = document.querySelector(`tr[data-item-id="${item.id}"]`);
+                    if (row) {
+                        row.className = `status-${item.status || 'pending'}`;
+                        const badge = row.querySelector('.status-badge');
+                        if (badge) {
+                            badge.className = `status-badge status-${item.status || 'pending'}`;
+                            badge.textContent = item.status || 'pending';
+                        }
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error('Error updating ticker:', error);
+        }
+    }
+
+    // Initial update and set interval
+    if (eventSlug) {
+        updateTicker();
+        setInterval(updateTicker, 30000);
+    }
+</script>
+
+<%
+function formatTime(seconds) {
+    if (!seconds) return '0:00:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatETA(date) {
+    if (!date) return '-';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+%>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

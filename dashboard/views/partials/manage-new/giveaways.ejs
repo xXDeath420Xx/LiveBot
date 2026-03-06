@@ -1,0 +1,390 @@
+<%# Giveaways Settings - Tailwind Version %>
+
+<%
+const activeCount = locals.giveaways?.filter(g => g.is_active).length || 0;
+const endedCount = locals.giveaways?.filter(g => !g.is_active).length || 0;
+const totalWinners = locals.giveaways?.reduce((sum, g) => sum + (g.winner_count || 1), 0) || 0;
+%>
+
+<div class="space-y-6">
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-3 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Giveaways',
+            value: activeCount,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+
+        <%- include('../../components/cards/statCard', {
+            title: 'Ended',
+            value: endedCount,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'primary'
+        }) %>
+
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Winners',
+            value: totalWinners,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>',
+            color: 'warning'
+        }) %>
+    </div>
+
+    <!-- Giveaways Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Giveaways</h3>
+                <p class="text-sm text-gray-400">Create and manage server giveaways</p>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="openGiveawayModal()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Giveaway
+            </button>
+        </div>
+
+        <% if (locals.giveaways && locals.giveaways.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="data-table w-full">
+                    <thead>
+                        <tr>
+                            <th>Prize</th>
+                            <th>Channel</th>
+                            <th>Ends At</th>
+                            <th>Winners</th>
+                            <th>Entries</th>
+                            <th>Status</th>
+                            <th class="w-32"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% locals.giveaways.forEach(giveaway => { %>
+                            <tr data-giveaway-id="<%= giveaway.id %>">
+                                <td>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xl">🎁</span>
+                                        <span class="font-medium text-white"><%= giveaway.prize %></span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-primary-400">#</span>
+                                    <span class="text-gray-300"><%= Array.from(channels.values()).find(c => c.id === giveaway.channel_id)?.name || 'Unknown' %></span>
+                                </td>
+                                <td class="text-gray-400">
+                                    <% if (giveaway.is_active) { %>
+                                        <div class="text-sm">
+                                            <span class="countdown" data-ends="<%= giveaway.ends_at %>">
+                                                <%= new Date(giveaway.ends_at).toLocaleString() %>
+                                            </span>
+                                        </div>
+                                    <% } else { %>
+                                        <span class="text-sm text-gray-500">Ended</span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <span class="badge badge-primary"><%= giveaway.winner_count || 1 %></span>
+                                </td>
+                                <td>
+                                    <span class="text-white font-medium"><%= giveaway.entries_count || 0 %></span>
+                                </td>
+                                <td>
+                                    <% if (giveaway.is_active) { %>
+                                        <span class="badge badge-success">Active</span>
+                                    <% } else { %>
+                                        <span class="badge badge-secondary">Ended</span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div class="flex gap-1">
+                                        <% if (giveaway.is_active) { %>
+                                            <button type="button" class="p-1.5 rounded hover:bg-dark-500 text-gray-400 hover:text-accent-red" title="End Now" onclick="endGiveaway(<%= giveaway.id %>)">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+                                                </svg>
+                                            </button>
+                                        <% } else { %>
+                                            <button type="button" class="p-1.5 rounded hover:bg-dark-500 text-gray-400 hover:text-primary-400" title="Reroll" onclick="rerollGiveaway(<%= giveaway.id %>)">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                                </svg>
+                                            </button>
+                                        <% } %>
+                                        <button type="button" class="p-1.5 rounded hover:bg-dark-500 text-gray-400 hover:text-accent-red" title="Delete" onclick="deleteGiveaway(<%= giveaway.id %>)">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <svg class="empty-state-icon mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/>
+                </svg>
+                <p class="empty-state-title">No Giveaways</p>
+                <p class="empty-state-text">Create your first giveaway to engage your community</p>
+                <button type="button" class="btn btn-primary mt-4" onclick="openGiveawayModal()">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Create First Giveaway
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-accent-purple/10 to-primary-500/10 border-accent-purple/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-accent-purple/20 flex items-center justify-center text-2xl">
+                    🎉
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How Giveaways Work</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-300">
+                    <div class="flex items-start gap-2">
+                        <span class="text-accent-purple font-bold">1.</span>
+                        <span>Set prize, channel, duration, and winner count</span>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="text-accent-purple font-bold">2.</span>
+                        <span>Bot posts giveaway embed with reaction button</span>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="text-accent-purple font-bold">3.</span>
+                        <span>Members react or click to enter</span>
+                    </div>
+                    <div class="flex items-start gap-2">
+                        <span class="text-accent-purple font-bold">4.</span>
+                        <span>Winners randomly selected when time ends</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Giveaway Modal -->
+<div id="giveaway-modal" class="modal hidden">
+    <div class="modal-overlay" onclick="closeGiveawayModal()"></div>
+    <div class="modal-content max-w-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Create Giveaway</h3>
+            <button type="button" class="modal-close" onclick="closeGiveawayModal()">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="giveaway-form" class="modal-body space-y-4">
+            <div class="form-group">
+                <label class="form-label">Prize *</label>
+                <input type="text" name="prize" class="form-input w-full" placeholder="e.g., Discord Nitro" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Channel *</label>
+                <%- include('../../components/forms/channelSelect', {
+                    name: 'channel_id',
+                    channels: Array.from(channels.values()),
+                    placeholder: 'Select giveaway channel'
+                }) %>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Winners</label>
+                <input type="number" name="winner_count" class="form-input w-24" value="1" min="1" max="20">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Duration</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="text-xs text-gray-500">Months</label>
+                        <input type="number" name="dur_months" class="form-input w-full" value="0" min="0" max="12">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Weeks</label>
+                        <input type="number" name="dur_weeks" class="form-input w-full" value="0" min="0" max="52">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Days</label>
+                        <input type="number" name="dur_days" class="form-input w-full" value="0" min="0" max="365">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Hours</label>
+                        <input type="number" name="dur_hours" class="form-input w-full" value="0" min="0" max="23">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Minutes</label>
+                        <input type="number" name="dur_minutes" class="form-input w-full" value="0" min="0" max="59">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Seconds</label>
+                        <input type="number" name="dur_seconds" class="form-input w-full" value="0" min="0" max="59">
+                    </div>
+                </div>
+                <p class="form-hint">Set any combination — all fields add up</p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Description (Optional)</label>
+                <textarea name="description" class="form-input w-full h-20 resize-none" placeholder="Additional details about the giveaway..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Required Role (Optional)</label>
+                <%- include('../../components/forms/roleSelect', {
+                    name: 'required_role_id',
+                    roles: Array.from(roles.values()),
+                    placeholder: 'Anyone can enter'
+                }) %>
+                <p class="form-hint">Only members with this role can enter</p>
+            </div>
+        </form>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeGiveawayModal()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="createGiveaway()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Giveaway
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+function openGiveawayModal() {
+    document.getElementById('giveaway-form').reset();
+    document.getElementById('giveaway-modal').classList.remove('hidden');
+}
+
+function closeGiveawayModal() {
+    document.getElementById('giveaway-modal').classList.add('hidden');
+}
+
+async function createGiveaway() {
+    const form = document.getElementById('giveaway-form');
+    const formData = new FormData(form);
+
+    const durationSeconds =
+        (parseInt(formData.get('dur_months')) || 0) * 2592000 +
+        (parseInt(formData.get('dur_weeks')) || 0) * 604800 +
+        (parseInt(formData.get('dur_days')) || 0) * 86400 +
+        (parseInt(formData.get('dur_hours')) || 0) * 3600 +
+        (parseInt(formData.get('dur_minutes')) || 0) * 60 +
+        (parseInt(formData.get('dur_seconds')) || 0);
+
+    if (durationSeconds < 10) {
+        showToast('error', 'Duration must be at least 10 seconds');
+        return;
+    }
+
+    const data = {
+        prize: formData.get('prize'),
+        channel_id: formData.get('channel_id'),
+        duration_seconds: durationSeconds,
+        winner_count: parseInt(formData.get('winner_count')) || 1,
+        description: formData.get('description') || null,
+        required_role_id: formData.get('required_role_id') || null
+    };
+
+    if (!data.prize || !data.channel_id) {
+        showToast('error', 'Please fill in required fields');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/giveaways', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Giveaway created!');
+            closeGiveawayModal();
+            location.reload();
+        } else {
+            const err = await response.json();
+            throw new Error(err.error || 'Failed to create');
+        }
+    } catch (error) {
+        showToast('error', error.message);
+    }
+}
+
+async function endGiveaway(giveawayId) {
+    if (!confirm('End this giveaway now and pick winners?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/giveaways/${giveawayId}/end`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            showToast('success', 'Giveaway ended! Winners have been selected.');
+            location.reload();
+        } else {
+            throw new Error('Failed to end');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to end giveaway');
+    }
+}
+
+async function rerollGiveaway(giveawayId) {
+    if (!confirm('Reroll winners for this giveaway?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/giveaways/${giveawayId}/reroll`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            showToast('success', 'New winners selected!');
+            location.reload();
+        } else {
+            throw new Error('Failed to reroll');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to reroll giveaway');
+    }
+}
+
+async function deleteGiveaway(giveawayId) {
+    if (!confirm('Delete this giveaway? This cannot be undone.')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/giveaways/${giveawayId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast('success', 'Giveaway deleted');
+            document.querySelector(`[data-giveaway-id="${giveawayId}"]`)?.remove();
+        } else {
+            throw new Error('Failed to delete');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to delete giveaway');
+    }
+}
+
+// Close modal on escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeGiveawayModal();
+});
+</script>

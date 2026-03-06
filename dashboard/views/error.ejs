@@ -1,0 +1,96 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'Error',
+    additionalCSS: []
+}) %>
+
+<style>
+.error-container {
+    min-height: calc(100vh - 200px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-8);
+}
+
+.error-content {
+    text-align: center;
+    max-width: 600px;
+}
+
+.error-icon {
+    font-size: 6rem;
+    color: var(--color-danger);
+    margin-bottom: var(--spacing-6);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.error-code {
+    font-size: var(--font-size-8xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-danger);
+    line-height: 1;
+    margin-bottom: var(--spacing-4);
+    font-family: var(--font-family-mono);
+}
+
+.error-title {
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-4);
+}
+
+.error-message {
+    font-size: var(--font-size-lg);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-8);
+    line-height: 1.6;
+}
+
+.error-actions {
+    display: flex;
+    gap: var(--spacing-4);
+    justify-content: center;
+    flex-wrap: wrap;
+}
+</style>
+
+<div class="error-container">
+    <div class="error-content">
+        <div class="error-icon">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+
+        <div class="error-code">ERROR</div>
+
+        <h1 class="error-title">Something Went Wrong</h1>
+
+        <p class="error-message">
+            <%= error || 'An unexpected error occurred. Our team has been notified and will look into it.' %>
+        </p>
+
+        <div class="error-actions">
+            <a href="/" class="btn btn-primary">
+                <i class="fas fa-home"></i>
+                Go Home
+            </a>
+            <a href="/dashboard" class="btn btn-secondary">
+                <i class="fas fa-tachometer-alt"></i>
+                Dashboard
+            </a>
+            <a href="javascript:history.back()" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i>
+                Go Back
+            </a>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/modern-footer', {
+    additionalScripts: []
+}) %>

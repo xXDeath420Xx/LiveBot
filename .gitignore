@@ -1,0 +1,59 @@
+# Environment variables
+.env
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Logs
+logs/
+*.log
+
+# Dashboard specific
+dashboard/sessions/
+uploads/
+
+# Build output
+dist/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+
+# IDE config
+.vscode/
+.idea/
+
+# Ralph loop state
+.ralph/
+
+# Audit data files (keep scripts, exclude data)
+audit-*.json
+audit-*.csv
+
+# Playwright user data
+user-data-dir/
+/.claude/settings.local.json
+/temp_audio/1ALX6hwPxoM.webm
+/fix-ytdlp.sh
+/install-playwright.sh
+/test-oxylabs-proxy.sh
+/test-proxy.js
+/test_proxy.sh
+/update-ytdlp.sh
+# Large ebook/audio files
+dashboard/public/ebook/
+piper_models/*
+temp_audio/*
+test*
+cookies.txt
+test-leveling.js
+test-security-insert.mjs
+test-trovo-api.mjs
+test-trovo-debug.mjs
+test-trovo.mjs
+test_db.js
+test_db2.js

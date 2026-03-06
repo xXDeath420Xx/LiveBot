@@ -1,0 +1,532 @@
+<%# Leveling System Settings - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Leveling Configuration Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Leveling System</h3>
+                <p class="text-sm text-gray-400">Reward members for their activity with XP and levels</p>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'leveling_enabled',
+                id: 'leveling_enabled',
+                checked: locals.settings?.leveling_enabled || false,
+                label: 'Enable Leveling',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="leveling-form" action="/api/guilds/<%= guildId %>/leveling/config" method="PUT" data-track-changes>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- XP Settings -->
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label class="form-label">XP Per Message</label>
+                        <input
+                            type="number"
+                            name="leveling_xp_rate"
+                            class="form-input w-full"
+                            value="<%= locals.settings?.leveling_xp_rate || 15 %>"
+                            min="1"
+                            max="100"
+                        >
+                        <p class="form-hint">XP earned per eligible message (1-100)</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">XP Cooldown (seconds)</label>
+                        <input
+                            type="number"
+                            name="leveling_xp_cooldown"
+                            class="form-input w-full"
+                            value="<%= locals.settings?.leveling_xp_cooldown || 60 %>"
+                            min="10"
+                            max="300"
+                        >
+                        <p class="form-hint">Time before earning XP again (10-300)</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Level-Up Channel</label>
+                        <%- include('../../components/forms/channelSelect', {
+                            name: 'level_up_channel_id',
+                            channels: Array.from(channels.values()),
+                            selected: locals.settings?.level_up_channel_id,
+                            placeholder: 'Same channel as message'
+                        }) %>
+                        <p class="form-hint">Where level-up messages are announced</p>
+                    </div>
+                </div>
+
+                <!-- Ignored Settings -->
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label class="form-label">Ignored Channels</label>
+                        <%- include('../../components/forms/channelSelect', {
+                            name: 'leveling_ignored_channels',
+                            channels: Array.from(channels.values()),
+                            selected: locals.settings?.leveling_ignored_channels || [],
+                            multiple: true,
+                            placeholder: 'Select channels to ignore'
+                        }) %>
+                        <p class="form-hint">Messages in these channels won't earn XP</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Ignored Roles</label>
+                        <%- include('../../components/forms/roleSelect', {
+                            name: 'leveling_ignored_roles',
+                            roles: Array.from(roles.values()),
+                            selected: locals.settings?.leveling_ignored_roles || [],
+                            multiple: true,
+                            placeholder: 'Select roles to ignore'
+                        }) %>
+                        <p class="form-hint">Users with these roles won't earn XP</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Additional Settings -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div class="flex items-center justify-between p-4 bg-dark-700 rounded-lg">
+                    <div>
+                        <p class="font-medium text-white">Stack Roles</p>
+                        <p class="text-xs text-gray-500">Keep previous role rewards</p>
+                    </div>
+                    <%- include('../../components/forms/toggle', {
+                        name: 'stack_roles',
+                        checked: locals.settings?.stack_roles !== false,
+                        size: 'sm'
+                    }) %>
+                </div>
+
+                <div class="flex items-center justify-between p-4 bg-dark-700 rounded-lg">
+                    <div>
+                        <p class="font-medium text-white">DM Level-Ups</p>
+                        <p class="text-xs text-gray-500">Send via direct message</p>
+                    </div>
+                    <%- include('../../components/forms/toggle', {
+                        name: 'dm_level_ups',
+                        checked: locals.settings?.dm_level_ups || false,
+                        size: 'sm'
+                    }) %>
+                </div>
+
+                <div class="flex items-center justify-between p-4 bg-dark-700 rounded-lg">
+                    <div>
+                        <p class="font-medium text-white">Show Leaderboard</p>
+                        <p class="text-xs text-gray-500">Enable /leaderboard command</p>
+                    </div>
+                    <%- include('../../components/forms/toggle', {
+                        name: 'leaderboard_enabled',
+                        checked: locals.settings?.leaderboard_enabled !== false,
+                        size: 'sm'
+                    }) %>
+                </div>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Role Rewards Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Role Rewards</h3>
+                <p class="text-sm text-gray-400">Automatically assign roles when members reach certain levels</p>
+            </div>
+        </div>
+
+        <!-- Add Role Reward Form -->
+        <form id="add-reward-form" class="p-4 bg-dark-700 rounded-lg mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div class="form-group">
+                    <label class="form-label">Level Required</label>
+                    <input
+                        type="number"
+                        name="level"
+                        class="form-input w-full"
+                        placeholder="10"
+                        min="1"
+                        max="1000"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Role to Award</label>
+                    <%- include('../../components/forms/roleSelect', {
+                        name: 'role_id',
+                        roles: Array.from(roles.values()),
+                        placeholder: 'Select role...',
+                        excludeManaged: true
+                    }) %>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-full">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Reward
+                </button>
+            </div>
+        </form>
+
+        <!-- Existing Rewards Table -->
+        <% if (locals.rewards && locals.rewards.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="data-table w-full">
+                    <thead>
+                        <tr>
+                            <th>Level</th>
+                            <th>Role</th>
+                            <th class="w-20"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% locals.rewards.sort((a, b) => a.level - b.level).forEach(reward => {
+                            const role = Array.from(roles.values()).find(r => r.id === reward.role_id);
+                        %>
+                        <tr data-reward-id="<%= reward.id %>">
+                            <td>
+                                <span class="badge badge-primary text-base">
+                                    Level <%= reward.level %>
+                                </span>
+                            </td>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    <% if (role) { %>
+                                        <span class="w-3 h-3 rounded-full" style="background-color: <%= role.color ? '#' + role.color.toString(16).padStart(6, '0') : '#99AAB5' %>;"></span>
+                                        <span class="font-medium text-white"><%= role.name %></span>
+                                    <% } else { %>
+                                        <span class="text-gray-500">Unknown Role</span>
+                                    <% } %>
+                                </div>
+                            </td>
+                            <td>
+                                <button
+                                    type="button"
+                                    class="p-1.5 rounded hover:bg-dark-400 text-gray-400 hover:text-accent-red transition-colors"
+                                    title="Delete"
+                                    onclick="deleteReward(<%= reward.id %>)"
+                                >
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <svg class="empty-state-icon mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                </svg>
+                <p class="empty-state-title">No Role Rewards</p>
+                <p class="empty-state-text">Add rewards to automatically give roles when members level up</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- XP Multipliers Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">XP Multipliers</h3>
+                <p class="text-sm text-gray-400">Boost XP for specific roles or channels</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Role Multipliers -->
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <h4 class="font-medium text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    Role Multipliers
+                </h4>
+
+                <form id="role-multiplier-form" class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <%- include('../../components/forms/roleSelect', {
+                            name: 'multiplier_role_id',
+                            roles: Array.from(roles.values()),
+                            placeholder: 'Select role...'
+                        }) %>
+                        <div class="flex gap-2">
+                            <input
+                                type="number"
+                                name="multiplier_value"
+                                class="form-input w-20"
+                                placeholder="1.5"
+                                step="0.1"
+                                min="0.1"
+                                max="10"
+                            >
+                            <button type="submit" class="btn btn-primary btn-sm">Add</button>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="mt-4 space-y-2" id="role-multipliers-list">
+                    <% if (locals.roleMultipliers && locals.roleMultipliers.length > 0) { %>
+                        <% locals.roleMultipliers.forEach(m => {
+                            const role = Array.from(roles.values()).find(r => r.id === m.role_id);
+                        %>
+                            <div class="flex items-center justify-between p-2 bg-dark-600 rounded">
+                                <span class="text-sm text-white"><%= role?.name || 'Unknown' %></span>
+                                <div class="flex items-center gap-2">
+                                    <span class="badge badge-success"><%= m.multiplier %>x</span>
+                                    <button type="button" class="text-gray-400 hover:text-accent-red" onclick="deleteRoleMultiplier('<%= m.role_id %>')">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        <% }); %>
+                    <% } else { %>
+                        <p class="text-sm text-gray-500 text-center py-4">No role multipliers configured</p>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Channel Multipliers -->
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <h4 class="font-medium text-white mb-4 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+                    </svg>
+                    Channel Multipliers
+                </h4>
+
+                <form id="channel-multiplier-form" class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <%- include('../../components/forms/channelSelect', {
+                            name: 'multiplier_channel_id',
+                            channels: Array.from(channels.values()),
+                            placeholder: 'Select channel...'
+                        }) %>
+                        <div class="flex gap-2">
+                            <input
+                                type="number"
+                                name="channel_multiplier_value"
+                                class="form-input w-20"
+                                placeholder="2.0"
+                                step="0.1"
+                                min="0.1"
+                                max="10"
+                            >
+                            <button type="submit" class="btn btn-primary btn-sm">Add</button>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="mt-4 space-y-2" id="channel-multipliers-list">
+                    <% if (locals.channelMultipliers && locals.channelMultipliers.length > 0) { %>
+                        <% locals.channelMultipliers.forEach(m => {
+                            const channel = Array.from(channels.values()).find(c => c.id === m.channel_id);
+                        %>
+                            <div class="flex items-center justify-between p-2 bg-dark-600 rounded">
+                                <span class="text-sm text-white">#<%= channel?.name || 'Unknown' %></span>
+                                <div class="flex items-center gap-2">
+                                    <span class="badge badge-success"><%= m.multiplier %>x</span>
+                                    <button type="button" class="text-gray-400 hover:text-accent-red" onclick="deleteChannelMultiplier('<%= m.channel_id %>')">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        <% }); %>
+                    <% } else { %>
+                        <p class="text-sm text-gray-500 text-center py-4">No channel multipliers configured</p>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Form submission handler
+document.getElementById('leveling-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = {};
+
+    formData.forEach((value, key) => {
+        if (value === 'on') data[key] = true;
+        else if (!isNaN(value) && value !== '') data[key] = Number(value);
+        else data[key] = value;
+    });
+
+    // Handle unchecked toggles
+    ['stack_roles', 'dm_level_ups', 'leaderboard_enabled'].forEach(key => {
+        if (!data[key]) data[key] = false;
+    });
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Leveling settings saved');
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save settings');
+    }
+});
+
+// Add reward form
+document.getElementById('add-reward-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = {
+        level: parseInt(formData.get('level')),
+        role_id: formData.get('role_id')
+    };
+
+    if (!data.level || !data.role_id) {
+        showToast('error', 'Please fill in all fields');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/leveling/rewards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Role reward added');
+            location.reload();
+        } else {
+            const err = await response.json();
+            throw new Error(err.error || 'Failed to add');
+        }
+    } catch (error) {
+        showToast('error', error.message);
+    }
+});
+
+async function deleteReward(rewardId) {
+    if (!confirm('Remove this role reward?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/leveling/rewards/${rewardId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            showToast('success', 'Reward removed');
+            document.querySelector(`tr[data-reward-id="${rewardId}"]`)?.remove();
+        } else {
+            throw new Error('Failed to delete');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to remove reward');
+    }
+}
+
+// Multiplier handlers
+document.getElementById('role-multiplier-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/leveling/multipliers/role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                role_id: formData.get('multiplier_role_id'),
+                multiplier: parseFloat(formData.get('multiplier_value'))
+            })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Role multiplier added');
+            location.reload();
+        } else {
+            throw new Error('Failed to add');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to add multiplier');
+    }
+});
+
+document.getElementById('channel-multiplier-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/leveling/multipliers/channel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                channel_id: formData.get('multiplier_channel_id'),
+                multiplier: parseFloat(formData.get('channel_multiplier_value'))
+            })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Channel multiplier added');
+            location.reload();
+        } else {
+            throw new Error('Failed to add');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to add multiplier');
+    }
+});
+
+async function deleteRoleMultiplier(roleId) {
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/leveling/multipliers/role/${roleId}`, {
+            method: 'DELETE'
+        });
+        if (response.ok) {
+            showToast('success', 'Multiplier removed');
+            location.reload();
+        }
+    } catch (error) {
+        showToast('error', 'Failed to remove');
+    }
+}
+
+async function deleteChannelMultiplier(channelId) {
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/leveling/multipliers/channel/${channelId}`, {
+            method: 'DELETE'
+        });
+        if (response.ok) {
+            showToast('success', 'Multiplier removed');
+            location.reload();
+        }
+    } catch (error) {
+        showToast('error', 'Failed to remove');
+    }
+}
+</script>

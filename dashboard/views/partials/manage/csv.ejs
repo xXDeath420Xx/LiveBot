@@ -1,0 +1,208 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-file-csv"></i>
+                <span>CSV Import/Export</span>
+            </div>
+            <div class="page-section-subtitle">
+                Mass manage streamers using CSV files for bulk import and export operations
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Current Streamers</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= (consolidatedStreamers || []).length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Platforms Tracked</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= new Set((consolidatedStreamers || []).flatMap(s => s.platforms || [])).size %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Subscriptions</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= (consolidatedStreamers || []).reduce((sum, s) => sum + (s.subscriptions?.length || 0), 0) %></div>
+        </div>
+    </div>
+
+    <!-- Import/Export Grid -->
+    <div class="grid grid-cols-2" style="gap: var(--spacing-6);">
+        <!-- Import Section -->
+        <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
+            <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+                <div style="width: 48px; height: 48px; background: var(--color-primary-500); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-file-import" style="font-size: var(--font-size-xl); color: white;"></i>
+                </div>
+                <div>
+                    <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Import Streamers</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">Add or update streamers in bulk</div>
+                </div>
+            </div>
+
+            <div style="padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md); margin-bottom: var(--spacing-4);">
+                <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                    <i class="fas fa-info-circle"></i> CSV Format
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-2);">
+                    Required columns: <code>platform</code>, <code>username</code>
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    Optional: <code>discord_user_id</code>, <code>announcement_channel_id</code>
+                </div>
+            </div>
+
+            <form action="/manage/<%= guild.id %>/import-csv" method="POST" enctype="multipart/form-data">
+                <div style="margin-bottom: var(--spacing-4);">
+                    <label class="form-label">Upload CSV File</label>
+                    <div style="position: relative;">
+                        <input class="form-control" type="file" name="csvFile" id="csvFile" accept=".csv" required>
+                    </div>
+                    <div class="form-help">Select a CSV file containing streamer data</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    <i class="fas fa-upload"></i>
+                    <span>Import CSV</span>
+                </button>
+            </form>
+
+            <div style="margin-top: var(--spacing-4); padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md); border-left: 3px solid var(--color-warning);">
+                <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-warning); margin-bottom: var(--spacing-1);">
+                    <i class="fas fa-exclamation-triangle"></i> Important
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    Importing will add new streamers and update existing ones. Existing subscriptions will not be removed.
+                </div>
+            </div>
+        </div>
+
+        <!-- Export Section -->
+        <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
+            <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+                <div style="width: 48px; height: 48px; background: var(--color-success); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-file-export" style="font-size: var(--font-size-xl); color: white;"></i>
+                </div>
+                <div>
+                    <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Export Streamers</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">Download all streamer data</div>
+                </div>
+            </div>
+
+            <div style="padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md); margin-bottom: var(--spacing-4);">
+                <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
+                    <i class="fas fa-download"></i> Export Includes
+                </div>
+                <ul style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin: 0; padding-left: var(--spacing-5);">
+                    <li>Streamer usernames and platforms</li>
+                    <li>Announcement channel settings</li>
+                    <li>Discord user linkage (if set)</li>
+                    <li>Custom messages and settings</li>
+                </ul>
+            </div>
+
+            <a href="/manage/<%= guild.id %>/export-csv" class="btn btn-success" style="width: 100%; display: inline-block; text-align: center; text-decoration: none;">
+                <i class="fas fa-download"></i>
+                <span>Export as CSV</span>
+            </a>
+
+            <div style="margin-top: var(--spacing-4); padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary-400);">
+                <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-primary-400); margin-bottom: var(--spacing-1);">
+                    <i class="fas fa-lightbulb"></i> Use Cases
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    Export data for backups, transferring to another server, or bulk editing in a spreadsheet.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CSV Template Section -->
+    <div style="margin-top: var(--spacing-6); padding: var(--spacing-6); background: var(--color-dark-600); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
+            <div>
+                <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                    <i class="fas fa-file-alt" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
+                    CSV Template Example
+                </div>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                    Use this format for your CSV imports
+                </div>
+            </div>
+        </div>
+
+        <div style="background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); overflow-x: auto;">
+            <pre style="margin: 0; color: var(--color-text-secondary); font-size: var(--font-size-sm); font-family: monospace;">platform,username,discord_user_id,announcement_channel_id
+twitch,example_streamer,123456789012345678,987654321098765432
+youtube,AnotherStreamer,,987654321098765432
+kick,cool_gamer,456789012345678901,
+twitch,pro_player,789012345678901234,123456789012345678</pre>
+        </div>
+
+        <div style="margin-top: var(--spacing-4); display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-4);">
+            <div style="padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">Supported Platforms</div>
+                <div style="display: flex; flex-wrap: wrap; gap: var(--spacing-2);">
+                    <span class="badge" style="background: #9146FF;">Twitch</span>
+                    <span class="badge" style="background: #FF0000;">YouTube</span>
+                    <span class="badge" style="background: #53FC18; color: black;">Kick</span>
+                    <span class="badge" style="background: #000000;">TikTok</span>
+                    <span class="badge" style="background: #1BC981;">Trovo</span>
+                    <span class="badge" style="background: #1877F2;">Facebook</span>
+                    <span class="badge" style="background: #E4405F;">Instagram</span>
+                </div>
+            </div>
+            <div style="padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">Tips</div>
+                <ul style="margin: 0; padding-left: var(--spacing-5); font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                    <li>Leave optional fields empty (but keep commas)</li>
+                    <li>Use Discord IDs, not usernames</li>
+                    <li>Platform names are case-insensitive</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const fileInput = document.getElementById('csvFile');
+
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && !file.name.endsWith('.csv')) {
+                alert('Please select a CSV file (.csv extension)');
+                e.target.value = '';
+            }
+        });
+    }
+});
+</script>

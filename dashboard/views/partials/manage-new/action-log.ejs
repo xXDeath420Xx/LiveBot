@@ -1,0 +1,165 @@
+<%# Action Log - Tailwind Version %>
+
+<%
+const actionLogsData = actionLogs || auditLogs || [];
+%>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Events',
+            value: actionLogsData.length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Moderation Events',
+            value: actionLogsData.filter(l => l.event_type === 'moderation' || l.moderator_id).length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'User Events',
+            value: actionLogsData.filter(l => l.user_id).length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Retention',
+            value: '90 Days',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Header with Search -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Action Log</h3>
+                    <p class="text-sm text-gray-400">Detailed history of all server events and moderation actions</p>
+                </div>
+            </div>
+            <div class="relative">
+                <input type="text" id="action-log-search" class="form-input pl-10 w-64" placeholder="Search events...">
+                <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </div>
+        </div>
+
+        <% if (actionLogsData.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Event</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Action</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">User</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Target</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Moderator</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Details</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="action-log-table-body" class="divide-y divide-dark-400">
+                        <% actionLogsData.forEach(log => {
+                            const eventColors = {
+                                'moderation': 'bg-accent-red',
+                                'messageDelete': 'bg-accent-yellow',
+                                'messageUpdate': 'bg-primary-500',
+                                'memberUpdate': 'bg-purple-500',
+                                'memberLeave': 'bg-gray-500',
+                                'ban': 'bg-accent-red',
+                                'unban': 'bg-accent-green'
+                            };
+                            const bgColor = eventColors[log.event_type] || 'bg-gray-500';
+                        %>
+                            <tr class="hover:bg-dark-600 transition-colors action-log-row" data-search="<%= log.event_type %> <%= log.action %> <%= log.user_id || '' %> <%= log.target_id || '' %>">
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full <%= bgColor %> text-white"><%= log.event_type %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="font-medium text-white"><%= log.action %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (log.user_id) { %>
+                                        <code class="text-xs bg-dark-700 px-2 py-1 rounded text-gray-400"><%= log.user_id.substring(0, 8) %>...</code>
+                                    <% } else { %>
+                                        <span class="text-gray-500 text-sm">N/A</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (log.target_id) { %>
+                                        <code class="text-xs bg-dark-700 px-2 py-1 rounded text-gray-400"><%= log.target_id.substring(0, 8) %>...</code>
+                                    <% } else { %>
+                                        <span class="text-gray-500 text-sm">N/A</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (log.moderator_id) { %>
+                                        <code class="text-xs bg-dark-700 px-2 py-1 rounded text-gray-400"><%= log.moderator_id.substring(0, 8) %>...</code>
+                                    <% } else { %>
+                                        <span class="text-gray-500 text-sm">N/A</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4 max-w-xs">
+                                    <% if (log.old_value || log.new_value) { %>
+                                        <div class="text-xs text-gray-400">
+                                            <% if (log.old_value) { %><div class="truncate"><span class="text-gray-500">Old:</span> <%= log.old_value.substring(0, 30) %></div><% } %>
+                                            <% if (log.new_value) { %><div class="truncate"><span class="text-gray-500">New:</span> <%= log.new_value.substring(0, 30) %></div><% } %>
+                                        </div>
+                                    <% } else if (log.reason) { %>
+                                        <div class="text-xs text-gray-400 truncate"><span class="text-gray-500">Reason:</span> <%= log.reason %></div>
+                                    <% } else { %>
+                                        <span class="text-gray-500">-</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-xs text-gray-500"><%= new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) %></span>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4 p-3 bg-dark-700 rounded-lg border-l-4 border-primary-500">
+                <div class="flex items-center gap-2 text-sm text-gray-400">
+                    <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Showing <%= actionLogsData.length %> most recent entries. Action logs are retained for 90 days.
+                </div>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Action Logs</h4>
+                <p class="text-gray-400">Server events and actions will appear here once logging is enabled</p>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<script>
+document.getElementById('action-log-search')?.addEventListener('input', function(e) {
+    const query = e.target.value.toLowerCase();
+    document.querySelectorAll('.action-log-row').forEach(row => {
+        const searchData = row.dataset.search.toLowerCase();
+        const cells = Array.from(row.querySelectorAll('td')).map(td => td.textContent.toLowerCase()).join(' ');
+        row.style.display = (searchData.includes(query) || cells.includes(query)) ? '' : 'none';
+    });
+});
+</script>

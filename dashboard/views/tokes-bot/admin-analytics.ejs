@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .chart-container {
+            position: relative;
+            background: var(--ember-bg-card);
+            border: 1px solid var(--ember-border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .chart-container canvas {
+            max-height: 300px;
+        }
+        .chart-title {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--ember-text-primary);
+        }
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        .heatmap-container {
+            background: var(--ember-bg-card);
+            border: 1px solid var(--ember-border);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(24, 1fr);
+            gap: 2px;
+        }
+        .heatmap-cell {
+            aspect-ratio: 1;
+            border-radius: 2px;
+            min-height: 20px;
+        }
+        .heatmap-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.5rem;
+            font-size: 0.7rem;
+            color: var(--ember-text-muted);
+        }
+        .activity-feed {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .activity-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--ember-border);
+        }
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+        .activity-time {
+            font-size: 0.75rem;
+            color: var(--ember-text-muted);
+            min-width: 80px;
+        }
+        .activity-user {
+            font-weight: 500;
+            color: var(--ember-text-primary);
+        }
+        .activity-action {
+            color: var(--ember-text-secondary);
+        }
+        .stat-card {
+            background: var(--ember-bg-card);
+            border: 1px solid var(--ember-border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--ember-primary);
+        }
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--ember-text-muted);
+            margin-top: 0.25rem;
+        }
+        .stat-change {
+            font-size: 0.8rem;
+            margin-top: 0.5rem;
+        }
+        .stat-change.positive { color: var(--ember-success); }
+        .stat-change.negative { color: var(--ember-error); }
+        .date-range {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+                <span class="ember-badge ember-badge-error">Admin</span>
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Public Site</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/admin" class="ember-nav-link">Overview</a>
+                <a href="/tokes-bot/admin/users" class="ember-nav-link">Users</a>
+                <a href="/tokes-bot/admin/moderation" class="ember-nav-link">Moderation</a>
+                <a href="/tokes-bot/admin/analytics" class="ember-nav-link active">Analytics</a>
+                <a href="/tokes-bot/admin/health" class="ember-nav-link">Health</a>
+                <a href="/tokes-bot/admin/commands" class="ember-nav-link">Commands</a>
+                <a href="/tokes-bot/admin/sessions" class="ember-nav-link">Sessions</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Analytics</h1>
+                <p class="ember-dashboard-subtitle">Usage statistics and trends</p>
+            </div>
+
+            <div class="date-range">
+                <select id="dateRange" class="ember-input" style="width: auto;">
+                    <option value="7">Last 7 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                </select>
+                <button class="ember-btn ember-btn-ghost" onclick="loadAnalytics()">Refresh</button>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="analytics-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalTokes">-</div>
+                    <div class="stat-label">Total Tokes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="activeUsers">-</div>
+                    <div class="stat-label">Active Users (24h)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="commandsUsed">-</div>
+                    <div class="stat-label">Activity (24h)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="newChannels">-</div>
+                    <div class="stat-label">Active Channels</div>
+                </div>
+            </div>
+
+            <!-- Activity Chart -->
+            <div class="chart-container">
+                <div class="chart-title">Daily Activity</div>
+                <div class="chart-wrapper">
+                    <canvas id="tokesChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Activity Heatmap -->
+            <div class="heatmap-container">
+                <div class="chart-title">Activity by Hour (UTC)</div>
+                <div class="heatmap-grid" id="heatmap"></div>
+                <div class="heatmap-labels">
+                    <span>12am</span>
+                    <span>6am</span>
+                    <span>12pm</span>
+                    <span>6pm</span>
+                    <span>12am</span>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="ember-card" style="padding: 1.5rem;">
+                <div class="chart-title">Recent Activity</div>
+                <div class="activity-feed" id="activityFeed">
+                    <p class="ember-text-muted">Loading activity...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="ember-footer">
+        <div class="ember-container">
+            <div class="ember-footer-content">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        let tokesChart = null;
+
+        async function loadAnalytics() {
+            const days = document.getElementById('dateRange').value;
+
+            try {
+                // Load analytics overview
+                const res = await fetch('/tokes-bot/api/admin/analytics/overview?days=' + days);
+                if (!res.ok) {
+                    console.error('Analytics API error:', res.status);
+                    return;
+                }
+                const data = await res.json();
+
+                // Update stats from the stats object
+                const stats = data.stats || {};
+                document.getElementById('totalTokes').textContent = formatNumber(stats.total_tokes || 0);
+                document.getElementById('activeUsers').textContent = formatNumber(stats.active_users_24h || 0);
+                document.getElementById('commandsUsed').textContent = formatNumber(stats.activity_24h || 0);
+                document.getElementById('newChannels').textContent = formatNumber(stats.active_channels || 0);
+
+                // Update chart with daily activity
+                console.log('Daily activity data:', data.dailyActivity);
+                updateChart(data.dailyActivity || []);
+
+                // Update heatmap with hourly distribution
+                updateHeatmap(data.hourlyDistribution || []);
+
+                // Load real-time activity separately
+                try {
+                    const actRes = await fetch('/tokes-bot/api/admin/analytics/realtime?limit=20');
+                    if (actRes.ok) {
+                        const actData = await actRes.json();
+                        updateActivityFeed(actData.activity || []);
+                    }
+                } catch (actError) {
+                    console.error('Failed to load realtime activity:', actError);
+                }
+
+            } catch (error) {
+                console.error('Failed to load analytics:', error);
+                // Show error in stats
+                document.getElementById('totalTokes').textContent = '-';
+                document.getElementById('activeUsers').textContent = '-';
+                document.getElementById('commandsUsed').textContent = '-';
+                document.getElementById('newChannels').textContent = '-';
+            }
+        }
+
+        function formatNumber(n) {
+            if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+            if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+            return n.toString();
+        }
+
+        function updateChange(elementId, change) {
+            const el = document.getElementById(elementId);
+            if (change === undefined || change === null) {
+                el.textContent = '';
+                return;
+            }
+            const prefix = change >= 0 ? '+' : '';
+            el.textContent = prefix + change + '% vs previous period';
+            el.className = 'stat-change ' + (change >= 0 ? 'positive' : 'negative');
+        }
+
+        function updateChart(dailyData) {
+            const ctx = document.getElementById('tokesChart').getContext('2d');
+
+            if (tokesChart) {
+                tokesChart.destroy();
+            }
+
+            // Handle empty or invalid data
+            if (!dailyData || !Array.isArray(dailyData) || dailyData.length === 0) {
+                // Create chart with placeholder data showing no activity
+                tokesChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['No data available'],
+                        datasets: [{
+                            label: 'Events',
+                            data: [0],
+                            borderColor: '#a78bfa',
+                            backgroundColor: 'rgba(167, 139, 250, 0.1)'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: true, labels: { color: '#9ca3af' } }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#9ca3af' } },
+                            x: { grid: { display: false }, ticks: { color: '#9ca3af' } }
+                        }
+                    }
+                });
+                return;
+            }
+
+            const labels = dailyData.map(function(d) {
+                try {
+                    const date = new Date(d.date);
+                    if (isNaN(date.getTime())) return 'Invalid';
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                } catch(e) {
+                    return 'Error';
+                }
+            });
+            const events = dailyData.map(function(d) { return parseInt(d.events) || 0; });
+            const users = dailyData.map(function(d) { return parseInt(d.unique_users) || 0; });
+
+            tokesChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Events',
+                        data: events,
+                        borderColor: '#a78bfa',
+                        backgroundColor: 'rgba(167, 139, 250, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }, {
+                        label: 'Unique Users',
+                        data: users,
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true, labels: { color: '#9ca3af' } }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            ticks: { color: '#9ca3af' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#9ca3af' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateHeatmap(hourlyData) {
+            const container = document.getElementById('heatmap');
+            container.textContent = '';
+
+            // Aggregate by hour across all days
+            const hourTotals = {};
+            hourlyData.forEach(function(h) {
+                if (!hourTotals[h.hour]) hourTotals[h.hour] = 0;
+                hourTotals[h.hour] += h.count || 0;
+            });
+
+            const counts = Object.values(hourTotals);
+            const maxCount = Math.max.apply(null, counts.concat([1]));
+
+            for (let hour = 0; hour < 24; hour++) {
+                const cell = document.createElement('div');
+                cell.className = 'heatmap-cell';
+
+                const count = hourTotals[hour] || 0;
+                const intensity = count / maxCount;
+
+                cell.style.backgroundColor = 'rgba(167, 139, 250, ' + (intensity * 0.8 + 0.1) + ')';
+                cell.title = hour + ':00 - ' + count + ' events';
+                container.appendChild(cell);
+            }
+        }
+
+        function updateActivityFeed(activity) {
+            const container = document.getElementById('activityFeed');
+            container.textContent = '';
+
+            if (!activity.length) {
+                const msg = document.createElement('p');
+                msg.className = 'ember-text-muted';
+                msg.textContent = 'No recent activity';
+                container.appendChild(msg);
+                return;
+            }
+
+            activity.forEach(function(a) {
+                const item = document.createElement('div');
+                item.className = 'activity-item';
+
+                const time = document.createElement('span');
+                time.className = 'activity-time';
+                time.textContent = timeAgo(a.logged_at);
+
+                const user = document.createElement('span');
+                user.className = 'activity-user';
+                user.textContent = a.actor || 'System';
+
+                const action = document.createElement('span');
+                action.className = 'activity-action';
+                action.textContent = a.event_type + (a.channel_name ? ' in ' + a.channel_name : '');
+
+                item.appendChild(time);
+                item.appendChild(user);
+                item.appendChild(action);
+                container.appendChild(item);
+            });
+        }
+
+        function timeAgo(date) {
+            const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+            if (seconds < 60) return 'just now';
+            if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+            return Math.floor(seconds / 86400) + 'd ago';
+        }
+
+        document.getElementById('dateRange').addEventListener('change', loadAnalytics);
+
+        loadAnalytics();
+    </script>
+</body>
+</html>

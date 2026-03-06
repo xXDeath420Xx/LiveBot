@@ -1,0 +1,381 @@
+<%# Games System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Trivia Questions',
+            value: (locals.triviaQuestions || []).length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Hangman Words',
+            value: (locals.hangmanWords || []).length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/></svg>',
+            color: 'success'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Games Played',
+            value: locals.gameStats?.total_games || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Players',
+            value: locals.gameStats?.total_players || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: 'warning'
+        }) %>
+    </div>
+
+    <!-- Trivia Questions -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Trivia Questions</h3>
+                <p class="text-sm text-gray-400">Custom trivia questions for your server</p>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="openTriviaModal()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Question
+            </button>
+        </div>
+
+        <% if (locals.triviaQuestions && triviaQuestions.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Category</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Difficulty</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Question</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Answer</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% triviaQuestions.forEach(q => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-primary-500/20 text-primary-400 capitalize"><%= q.category %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full <%= q.difficulty === 'easy' ? 'bg-accent-green/20 text-accent-green' : q.difficulty === 'medium' ? 'bg-accent-yellow/20 text-accent-yellow' : 'bg-accent-red/20 text-accent-red' %> capitalize"><%= q.difficulty %></span>
+                                </td>
+                                <td class="py-3 px-4 max-w-xs">
+                                    <span class="text-white truncate block"><%= q.question %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-accent-green font-medium"><%= q.correct_answer %></span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deleteTrivia('<%= q.question_id %>')" class="p-2 text-gray-400 hover:text-accent-red hover:bg-dark-600 rounded-lg transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Trivia Questions</h4>
+                <p class="text-gray-400 mb-4">Add custom questions to play trivia</p>
+                <button type="button" class="btn btn-primary" onclick="openTriviaModal()">Add First Question</button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Hangman Words -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Hangman Words</h3>
+                <p class="text-sm text-gray-400">Custom words for hangman games</p>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="openHangmanModal()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Word
+            </button>
+        </div>
+
+        <% if (locals.hangmanWords && hangmanWords.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Word</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Difficulty</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Category</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Hint</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% hangmanWords.forEach(w => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <span class="text-white font-mono tracking-wider"><%= w.word %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full <%= w.difficulty === 'easy' ? 'bg-accent-green/20 text-accent-green' : w.difficulty === 'medium' ? 'bg-accent-yellow/20 text-accent-yellow' : 'bg-accent-red/20 text-accent-red' %> capitalize"><%= w.difficulty %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-dark-400 text-gray-300 capitalize"><%= w.category %></span>
+                                </td>
+                                <td class="py-3 px-4 text-gray-400 max-w-xs truncate"><%= w.hint || '-' %></td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deleteHangman('<%= w.word_id %>')" class="p-2 text-gray-400 hover:text-accent-red hover:bg-dark-600 rounded-lg transition-colors">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center text-2xl">
+                    📝
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Hangman Words</h4>
+                <p class="text-gray-400 mb-4">Add custom words to play hangman</p>
+                <button type="button" class="btn btn-primary" onclick="openHangmanModal()">Add First Word</button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Counting Channels -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Counting Game Channels</h3>
+
+        <% if (locals.countingChannels && countingChannels.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Channel</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Current</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Highest</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Last User</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% countingChannels.forEach(c => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <code class="text-primary-400">#<%= c.channel_id %></code>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-2xl font-bold text-white"><%= c.current_count %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-1 text-sm font-medium rounded-full bg-accent-green/20 text-accent-green"><%= c.highest_count %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <code class="text-xs text-gray-400"><%= c.last_user_id || 'None' %></code>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="resetCounting('<%= c.channel_id %>')" class="btn btn-secondary btn-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                        </svg>
+                                        Reset
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 bg-dark-700 rounded-lg">
+                <p class="text-gray-400 mb-2">No counting channels configured</p>
+                <p class="text-sm text-gray-500">Use <code class="bg-dark-600 px-2 py-1 rounded">/fun counting setup</code> to set up counting</p>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Trivia Modal -->
+<div id="trivia-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-lg">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Add Trivia Question</h3>
+            <button onclick="closeTriviaModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="trivia-form">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Question</label>
+                    <textarea name="question" class="form-input w-full h-20" required placeholder="What is the capital of France?"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <input type="text" name="category" class="form-input w-full" required placeholder="e.g., science, history">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Difficulty</label>
+                        <select name="difficulty" class="form-input w-full" required>
+                            <option value="easy">Easy</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="hard">Hard</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Correct Answer</label>
+                    <input type="text" name="correct_answer" class="form-input w-full" required placeholder="Paris">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Incorrect Answers (comma-separated)</label>
+                    <input type="text" name="incorrect_answers" class="form-input w-full" required placeholder="London, Berlin, Madrid">
+                    <p class="form-hint">Enter 3 incorrect answers separated by commas</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Points</label>
+                    <input type="number" name="points_value" class="form-input w-24" value="10" min="1">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeTriviaModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Question</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Hangman Modal -->
+<div id="hangman-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Add Hangman Word</h3>
+            <button onclick="closeHangmanModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="hangman-form">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Word</label>
+                    <input type="text" name="word" class="form-input w-full uppercase tracking-wider" required placeholder="ELEPHANT">
+                    <p class="form-hint">Letters only, will be converted to uppercase</p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label">Difficulty</label>
+                        <select name="difficulty" class="form-input w-full" required>
+                            <option value="easy">Easy (3-5 letters)</option>
+                            <option value="medium" selected>Medium (6-8)</option>
+                            <option value="hard">Hard (9+)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <input type="text" name="category" class="form-input w-full" required placeholder="e.g., animals">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Hint (optional)</label>
+                    <input type="text" name="hint" class="form-input w-full" placeholder="A large mammal with a trunk">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeHangmanModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Add Word</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openTriviaModal() { document.getElementById('trivia-modal').classList.remove('hidden'); }
+function closeTriviaModal() { document.getElementById('trivia-modal').classList.add('hidden'); document.getElementById('trivia-form').reset(); }
+function openHangmanModal() { document.getElementById('hangman-modal').classList.remove('hidden'); }
+function closeHangmanModal() { document.getElementById('hangman-modal').classList.add('hidden'); document.getElementById('hangman-form').reset(); }
+
+document.getElementById('trivia-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        question: formData.get('question'),
+        category: formData.get('category'),
+        difficulty: formData.get('difficulty'),
+        correct_answer: formData.get('correct_answer'),
+        incorrect_answers: formData.get('incorrect_answers').split(',').map(a => a.trim()),
+        points_value: parseInt(formData.get('points_value')) || 10
+    };
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/games/trivia', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (response.ok) { showToast('success', 'Question added'); closeTriviaModal(); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to add question'); }
+});
+
+document.getElementById('hangman-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        word: formData.get('word').toUpperCase(),
+        category: formData.get('category'),
+        difficulty: formData.get('difficulty'),
+        hint: formData.get('hint') || null
+    };
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/games/hangman', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (response.ok) { showToast('success', 'Word added'); closeHangmanModal(); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to add word'); }
+});
+
+async function deleteTrivia(id) {
+    if (!confirm('Delete this question?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/games/trivia/${id}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Question deleted'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete'); }
+}
+
+async function deleteHangman(id) {
+    if (!confirm('Delete this word?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/games/hangman/${id}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Word deleted'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete'); }
+}
+
+async function resetCounting(channelId) {
+    if (!confirm('Reset counting for this channel?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/games/counting/${channelId}/reset`, { method: 'POST' });
+        if (response.ok) { showToast('success', 'Counting reset'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to reset'); }
+}
+</script>

@@ -1,0 +1,228 @@
+<%# Tag Management - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Tags',
+            value: (tags || []).length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Unique Creators',
+            value: new Set((tags || []).map(t => t.creator_id)).size,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Avg Length',
+            value: ((tags || []).length > 0 ? Math.round((tags || []).reduce((sum, t) => sum + (t.tag_content?.length || 0), 0) / tags.length) : 0) + ' chars',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>',
+            color: 'warning'
+        }) %>
+        <% const mostUsed = (tags || []).length > 0 ? tags.reduce((max, t) => (t.use_count || 0) > (max.use_count || 0) ? t : max, tags[0]) : null; %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Most Used',
+            value: mostUsed ? mostUsed.tag_name : 'N/A',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Header -->
+    <div class="card">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-primary-500/10 rounded-lg">
+                <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Tag Management</h3>
+                <p class="text-sm text-gray-400">View and manage custom tags. Users create tags with <code class="bg-dark-700 px-1.5 py-0.5 rounded text-primary-400">/tag create</code></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search & Tags Table -->
+    <% if (tags && tags.length > 0) { %>
+        <div class="card">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">All Tags</h3>
+                <div class="relative">
+                    <input type="text" id="tagSearch" class="form-input pl-10 w-64" placeholder="Search tags...">
+                    <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Tag Name</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Content</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Creator</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Uses</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tagsTableBody" class="divide-y divide-dark-400">
+                        <% tags.forEach(tag => { %>
+                            <tr class="hover:bg-dark-600 transition-colors tag-row"
+                                data-tag-name="<%= tag.tag_name.toLowerCase() %>"
+                                data-content="<%= (tag.tag_content || '').toLowerCase() %>"
+                                data-creator="<%= (tag.creator_tag || tag.creator_id || '').toLowerCase() %>">
+                                <td class="py-3 px-4">
+                                    <div class="flex items-center gap-2">
+                                        <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                                        </svg>
+                                        <code class="px-2 py-1 bg-dark-700 rounded font-mono text-primary-400 font-semibold"><%= tag.tag_name %></code>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <div class="max-w-md truncate text-gray-400 text-sm"><%= tag.tag_content %></div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-sm text-gray-500">
+                                        <%= tag.creator_tag || (tag.creator_id ? tag.creator_id.substring(0, 8) + '...' : 'Unknown') %>
+                                    </span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (tag.use_count) { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-primary-500/20 text-primary-400"><%= tag.use_count %> uses</span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-dark-400 text-gray-500">0 uses</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <div class="flex items-center justify-end gap-2">
+                                        <button onclick="viewTag('<%= tag.tag_name %>', `<%= tag.tag_content.replace(/`/g, '\\`').replace(/\n/g, '\\n') %>`)" class="btn btn-secondary btn-sm">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                            </svg>
+                                        </button>
+                                        <button onclick="deleteTag('<%= tag.id %>')" class="btn btn-danger btn-sm">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    <% } else { %>
+        <div class="card text-center py-12">
+            <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                </svg>
+            </div>
+            <h4 class="text-lg font-semibold text-white mb-2">No Tags Created Yet</h4>
+            <p class="text-gray-400">Users can create custom tags using <code class="bg-dark-700 px-1.5 py-0.5 rounded text-primary-400">/tag create</code></p>
+        </div>
+    <% } %>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-primary-500/10 to-primary-500/5 border-primary-500/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How Tags Work</h4>
+                <ul class="text-sm text-gray-300 space-y-1.5">
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">1.</span>
+                        Users create tags with <code class="bg-dark-700 px-1.5 py-0.5 rounded text-primary-400">/tag create name:mytag content:Hello!</code>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">2.</span>
+                        Anyone can use tags with <code class="bg-dark-700 px-1.5 py-0.5 rounded text-primary-400">/tag use name:mytag</code>
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">3.</span>
+                        Tag creators can edit or delete their own tags
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">4.</span>
+                        Moderators can delete any tag from this dashboard
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Tag Modal -->
+<div id="view-tag-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-2xl">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+                </svg>
+                <span id="modal-tag-name">Tag Content</span>
+            </h3>
+            <button onclick="closeViewTagModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="modal-tag-content" class="p-4 bg-dark-700 border border-dark-400 rounded-lg whitespace-pre-wrap font-mono text-sm max-h-96 overflow-y-auto text-gray-300">
+                <!-- Content will be inserted here -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" onclick="closeViewTagModal()" class="btn btn-secondary">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Search functionality
+document.getElementById('tagSearch')?.addEventListener('input', function(e) {
+    const query = e.target.value.toLowerCase();
+    document.querySelectorAll('.tag-row').forEach(row => {
+        const name = row.dataset.tagName;
+        const content = row.dataset.content;
+        const creator = row.dataset.creator;
+        row.style.display = (name.includes(query) || content.includes(query) || creator.includes(query)) ? '' : 'none';
+    });
+});
+
+function viewTag(tagName, content) {
+    document.getElementById('modal-tag-name').textContent = tagName;
+    document.getElementById('modal-tag-content').textContent = content.replace(/\\n/g, '\n');
+    document.getElementById('view-tag-modal').classList.remove('hidden');
+}
+
+function closeViewTagModal() {
+    document.getElementById('view-tag-modal').classList.add('hidden');
+}
+
+async function deleteTag(id) {
+    if (!confirm('Are you sure you want to delete this tag?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/tags/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+            showToast('success', 'Tag deleted');
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete tag'); }
+}
+</script>

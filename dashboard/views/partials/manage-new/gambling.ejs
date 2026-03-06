@@ -1,0 +1,264 @@
+<%# Gambling System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Games',
+            value: locals.gamblingStats?.total_games || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Wagered',
+            value: (locals.gamblingStats?.total_wagered || 0).toLocaleString(),
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Won',
+            value: (locals.gamblingStats?.total_won || 0).toLocaleString(),
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'House Edge',
+            value: ((locals.gamblingStats?.house_edge || 0) > 0 ? '+' : '') + (locals.gamblingStats?.house_edge || 0).toLocaleString(),
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>',
+            color: (locals.gamblingStats?.house_edge || 0) > 0 ? 'success' : 'danger'
+        }) %>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-accent-yellow/10 rounded-lg">
+                    <svg class="w-5 h-5 text-accent-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Gambling Configuration</h3>
+                    <p class="text-sm text-gray-400">Configure gambling games and limits</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'gambling_enabled',
+                id: 'gambling_enabled',
+                checked: locals.gamblingConfig?.enabled || false,
+                label: 'Enable Gambling',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="gambling-form" action="/api/guilds/<%= guildId %>/gambling/config" method="PUT">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-group">
+                    <label class="form-label">Minimum Bet</label>
+                    <input type="number" name="min_bet" class="form-input w-full" value="<%= locals.gamblingConfig?.min_bet || 10 %>" min="1">
+                    <p class="form-hint">Smallest amount users can bet</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Maximum Bet</label>
+                    <input type="number" name="max_bet" class="form-input w-full" value="<%= locals.gamblingConfig?.max_bet || 10000 %>" min="1">
+                    <p class="form-hint">Largest amount users can bet</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Cooldown (seconds)</label>
+                    <input type="number" name="cooldown" class="form-input w-full" value="<%= locals.gamblingConfig?.cooldown || 5 %>" min="0">
+                    <p class="form-hint">Time between gambling commands</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Win Rate Modifier (%)</label>
+                    <input type="number" name="win_rate" class="form-input w-full" value="<%= locals.gamblingConfig?.win_rate || 45 %>" min="1" max="99">
+                    <p class="form-hint">Base chance to win (default 45%)</p>
+                </div>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Configuration
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Recent Gambling Activity</h3>
+
+        <% if (locals.gamblingHistory && gamblingHistory.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Time</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">User</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Game</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Bet</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Result</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Profit/Loss</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% gamblingHistory.forEach(g => {
+                            const profitLoss = (g.payout || 0) - g.bet_amount;
+                        %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4 text-sm text-gray-400"><%= new Date(g.timestamp).toLocaleString() %></td>
+                                <td class="py-3 px-4"><code class="text-xs text-gray-400"><%= g.user_id %></code></td>
+                                <td class="py-3 px-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-dark-400 text-gray-300 capitalize"><%= g.game_type %></span>
+                                </td>
+                                <td class="py-3 px-4 text-right text-accent-yellow"><%= g.bet_amount.toLocaleString() %></td>
+                                <td class="py-3 px-4">
+                                    <% if (g.result === 'win') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-green/20 text-accent-green">Win</span>
+                                    <% } else if (g.result === 'loss') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-red/20 text-accent-red">Loss</span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-purple-500/20 text-purple-400">Draw</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4 text-right font-semibold <%= profitLoss > 0 ? 'text-accent-green' : profitLoss < 0 ? 'text-accent-red' : 'text-gray-400' %>">
+                                    <%= profitLoss > 0 ? '+' : '' %><%= profitLoss.toLocaleString() %>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 text-gray-400">
+                <svg class="w-12 h-12 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                </svg>
+                <p>No gambling activity yet</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Top Gamblers -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Top Gamblers</h3>
+
+        <% if (locals.topGamblers && topGamblers.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Rank</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">User</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Games</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Wagered</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Won</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Net</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Win Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% topGamblers.forEach((user, index) => {
+                            const netProfit = (user.total_won || 0) - (user.total_wagered || 0);
+                            const winRate = user.games_played > 0 ? ((user.wins / user.games_played) * 100).toFixed(1) : 0;
+                        %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4 text-lg">
+                                    <% if (index === 0) { %>🥇
+                                    <% } else if (index === 1) { %>🥈
+                                    <% } else if (index === 2) { %>🥉
+                                    <% } else { %>
+                                        <span class="text-gray-500 font-semibold">#<%= index + 1 %></span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4"><code class="text-sm text-gray-400"><%= user.user_id %></code></td>
+                                <td class="py-3 px-4 text-right text-white"><%= user.games_played %></td>
+                                <td class="py-3 px-4 text-right text-accent-yellow"><%= user.total_wagered.toLocaleString() %></td>
+                                <td class="py-3 px-4 text-right text-accent-green"><%= user.total_won.toLocaleString() %></td>
+                                <td class="py-3 px-4 text-right font-semibold <%= netProfit > 0 ? 'text-accent-green' : netProfit < 0 ? 'text-accent-red' : 'text-gray-400' %>">
+                                    <%= netProfit > 0 ? '+' : '' %><%= netProfit.toLocaleString() %>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full <%= winRate >= 50 ? 'bg-accent-green/20 text-accent-green' : 'bg-accent-red/20 text-accent-red' %>">
+                                        <%= winRate %>%
+                                    </span>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 text-gray-400">
+                <p>No gambling data yet</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Available Games -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Available Games</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <div class="text-2xl mb-2">🎰</div>
+                <code class="text-primary-400">/gamble slots [amount]</code>
+                <p class="text-xs text-gray-500 mt-1">Spin the slot machine</p>
+            </div>
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <div class="text-2xl mb-2">🎲</div>
+                <code class="text-primary-400">/gamble dice [amount]</code>
+                <p class="text-xs text-gray-500 mt-1">Roll dice against the house</p>
+            </div>
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <div class="text-2xl mb-2">🪙</div>
+                <code class="text-primary-400">/gamble coinflip [amount]</code>
+                <p class="text-xs text-gray-500 mt-1">50/50 coin flip</p>
+            </div>
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <div class="text-2xl mb-2">🃏</div>
+                <code class="text-primary-400">/gamble blackjack [amount]</code>
+                <p class="text-xs text-gray-500 mt-1">Play blackjack</p>
+            </div>
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <div class="text-2xl mb-2">🎯</div>
+                <code class="text-primary-400">/gamble roulette [amount]</code>
+                <p class="text-xs text-gray-500 mt-1">Spin the roulette wheel</p>
+            </div>
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <div class="text-2xl mb-2">📊</div>
+                <code class="text-primary-400">/gamble stats</code>
+                <p class="text-xs text-gray-500 mt-1">View your gambling stats</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('gambling-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        enabled: document.getElementById('gambling_enabled').checked,
+        min_bet: parseInt(formData.get('min_bet')) || 10,
+        max_bet: parseInt(formData.get('max_bet')) || 10000,
+        cooldown: parseInt(formData.get('cooldown')) || 5,
+        win_rate: parseInt(formData.get('win_rate')) || 45
+    };
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Gambling settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save settings'); }
+});
+</script>

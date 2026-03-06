@@ -1,0 +1,393 @@
+<style>
+/* Compact Welcome Page Styles */
+.welcome-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.welcome-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.welcome-section-header i { font-size: 1rem; color: #a78bfa; }
+.welcome-section-header.farewell i { color: #f87171; }
+.welcome-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
+.welcome-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
+
+.welcome-section-body { padding: 18px; }
+
+/* Form Group */
+.welcome-form-group { margin-bottom: 16px; }
+
+.welcome-form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+
+.welcome-form-label i { color: #a78bfa; margin-right: 6px; }
+
+.welcome-form-input,
+.welcome-form-select,
+.welcome-form-textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.welcome-form-textarea {
+    min-height: 70px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.welcome-form-input:focus,
+.welcome-form-select:focus,
+.welcome-form-textarea:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+
+.welcome-form-select option { background: #1a1d21; color: #ffffff; }
+
+.welcome-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.welcome-form-hint code {
+    background: rgba(167, 139, 250, 0.15);
+    padding: 2px 5px;
+    border-radius: 3px;
+    color: #a78bfa;
+    font-size: 0.7rem;
+}
+
+/* Toggle Switch */
+.welcome-toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+}
+
+.welcome-toggle-wrapper:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.welcome-toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.welcome-toggle input { opacity: 0; width: 0; height: 0; }
+
+.welcome-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: 0.2s;
+    border-radius: 24px;
+}
+
+.welcome-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+.welcome-toggle input:checked + .welcome-toggle-slider {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    border-color: #a78bfa;
+}
+
+.welcome-toggle input:checked + .welcome-toggle-slider:before {
+    transform: translateX(20px);
+}
+
+.welcome-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
+.welcome-toggle-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
+
+/* Banner Subsection */
+.welcome-banner-section {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 14px;
+    margin-top: 16px;
+}
+
+.welcome-banner-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.welcome-banner-header i { color: #a78bfa; font-size: 0.9rem; }
+.welcome-banner-header h4 { font-size: 0.9rem; font-weight: 600; color: #ffffff; margin: 0; }
+
+.welcome-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+/* Placeholder Tags */
+.placeholder-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.placeholder-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 4px;
+    color: #a78bfa;
+    font-size: 0.7rem;
+    font-family: monospace;
+    font-weight: 600;
+}
+
+/* Button Group */
+.welcome-button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.welcome-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.welcome-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
+
+.welcome-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.welcome-reset-btn:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
+
+@media (max-width: 768px) {
+    .welcome-form-grid { grid-template-columns: 1fr; }
+    .welcome-button-group { flex-direction: column; }
+    .welcome-save-btn, .welcome-reset-btn { width: 100%; justify-content: center; }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-door-open"></i>
+                <span>Welcome & Farewell</span>
+            </div>
+            <div class="page-section-subtitle">
+                Set up messages to greet new members and say goodbye to those who leave
+            </div>
+        </div>
+    </div>
+
+    <form action="/manage/<%= guild.id %>/update-welcome" method="POST">
+        <!-- Welcome Settings Section -->
+        <div class="welcome-section-card">
+            <div class="welcome-section-header">
+                <i class="fas fa-hand-sparkles"></i>
+                <div>
+                    <h3>Welcome Settings</h3>
+                    <p>Greet new members when they join your server</p>
+                </div>
+            </div>
+            <div class="welcome-section-body">
+                <!-- Channel Select -->
+                <div class="welcome-form-group">
+                    <label class="welcome-form-label">
+                        <i class="fas fa-hashtag"></i>Welcome Channel
+                    </label>
+                    <select class="welcome-form-select" name="channel_id">
+                        <option value="">Disabled</option>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= (welcomeSettings && welcomeSettings.channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                    <span class="welcome-form-hint">Channel where welcome messages will be posted</span>
+                </div>
+
+                <!-- Welcome Message -->
+                <div class="welcome-form-group">
+                    <label class="welcome-form-label">
+                        <i class="fas fa-comment-dots"></i>Welcome Message
+                    </label>
+                    <textarea class="welcome-form-textarea" name="message" placeholder="Welcome {user} to {server}! We now have {memberCount} members!"><%= (welcomeSettings && welcomeSettings.message) ? welcomeSettings.message : '' %></textarea>
+                    <span class="welcome-form-hint">Available placeholders:</span>
+                    <div class="placeholder-tags">
+                        <span class="placeholder-tag">{user}</span>
+                        <span class="placeholder-tag">{server}</span>
+                        <span class="placeholder-tag">{memberCount}</span>
+                    </div>
+                </div>
+
+                <!-- Welcome Banner Section -->
+                <div class="welcome-banner-section">
+                    <div class="welcome-banner-header">
+                        <i class="fas fa-image"></i>
+                        <h4>Welcome Banner</h4>
+                    </div>
+
+                    <label class="welcome-toggle-wrapper">
+                        <div class="welcome-toggle">
+                            <input type="checkbox" id="banner_enabled" name="banner_enabled" <%= (welcomeSettings && welcomeSettings.banner_enabled) ? 'checked' : '' %>>
+                            <span class="welcome-toggle-slider"></span>
+                        </div>
+                        <div>
+                            <div class="welcome-toggle-label">Enable Welcome Banner Image</div>
+                            <div class="welcome-toggle-desc">Generate a custom welcome image for new members</div>
+                        </div>
+                    </label>
+
+                    <div class="welcome-form-grid">
+                        <div class="welcome-form-group" style="margin-bottom: 0;">
+                            <label class="welcome-form-label">Title Text</label>
+                            <input type="text" class="welcome-form-input" name="card_title_text" value="<%= (welcomeSettings && welcomeSettings.card_title_text) ? welcomeSettings.card_title_text : 'Welcome, {user}!' %>" placeholder="Welcome, {user}!">
+                        </div>
+                        <div class="welcome-form-group" style="margin-bottom: 0;">
+                            <label class="welcome-form-label">Subtitle Text</label>
+                            <input type="text" class="welcome-form-input" name="card_subtitle_text" value="<%= (welcomeSettings && welcomeSettings.card_subtitle_text) ? welcomeSettings.card_subtitle_text : 'Welcome to {server}!' %>" placeholder="Welcome to {server}!">
+                        </div>
+                    </div>
+
+                    <div class="welcome-form-group" style="margin-top: 16px; margin-bottom: 0;">
+                        <label class="welcome-form-label">Background Image URL</label>
+                        <input type="text" class="welcome-form-input" name="card_background_url" value="<%= (welcomeSettings && welcomeSettings.card_background_url) ? welcomeSettings.card_background_url : '' %>" placeholder="https://i.imgur.com/example.png">
+                        <span class="welcome-form-hint">Custom background for welcome banner. <strong>Supported formats: JPG, PNG</strong> (WebP not supported)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Farewell Settings Section -->
+        <div class="welcome-section-card">
+            <div class="welcome-section-header farewell">
+                <i class="fas fa-door-closed"></i>
+                <div>
+                    <h3>Farewell Settings</h3>
+                    <p>Announce when a member leaves the server</p>
+                </div>
+            </div>
+            <div class="welcome-section-body">
+                <!-- Enable Toggle -->
+                <label class="welcome-toggle-wrapper">
+                    <div class="welcome-toggle">
+                        <input type="checkbox" id="goodbye_enabled" name="goodbye_enabled" <%= (welcomeSettings && welcomeSettings.goodbye_enabled) ? 'checked' : '' %>>
+                        <span class="welcome-toggle-slider"></span>
+                    </div>
+                    <div>
+                        <div class="welcome-toggle-label">Enable Farewell Messages</div>
+                        <div class="welcome-toggle-desc">Post a message when members leave</div>
+                    </div>
+                </label>
+
+                <!-- Channel Select -->
+                <div class="welcome-form-group">
+                    <label class="welcome-form-label">
+                        <i class="fas fa-hashtag"></i>Farewell Channel
+                    </label>
+                    <select class="welcome-form-select" name="goodbye_channel_id">
+                        <option value="">Disabled</option>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= (welcomeSettings && welcomeSettings.goodbye_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                    <span class="welcome-form-hint">Channel where farewell messages will be posted</span>
+                </div>
+
+                <!-- Farewell Message -->
+                <div class="welcome-form-group" style="margin-bottom: 0;">
+                    <label class="welcome-form-label">
+                        <i class="fas fa-comment-dots"></i>Farewell Message
+                    </label>
+                    <textarea class="welcome-form-textarea" name="goodbye_message" placeholder="Goodbye {user}, thanks for being part of {server}!"><%= (welcomeSettings && welcomeSettings.goodbye_message) ? welcomeSettings.goodbye_message : '' %></textarea>
+                    <span class="welcome-form-hint">Available placeholders:</span>
+                    <div class="placeholder-tags">
+                        <span class="placeholder-tag">{user}</span>
+                        <span class="placeholder-tag">{server}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Button Group -->
+        <div class="welcome-button-group">
+            <button type="submit" class="welcome-save-btn">
+                <i class="fas fa-save"></i>
+                Save Settings
+            </button>
+            <button type="button" class="welcome-reset-btn" onclick="location.reload()">
+                <i class="fas fa-undo"></i>
+                Reset Form
+            </button>
+        </div>
+    </form>
+</div>

@@ -1,0 +1,191 @@
+<%
+const seSubscriptions = typeof streamEndedSubs !== 'undefined' ? streamEndedSubs : [];
+%>
+
+<style>
+.se-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(245, 158, 11, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+.se-card-header {
+    background: rgba(245, 158, 11, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.se-card-header i { font-size: 1rem; color: #f59e0b; }
+.se-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #fff; margin: 0; }
+.se-card-header span { font-size: 0.75rem; color: rgba(255,255,255,0.5); }
+.se-table { width: 100%; border-collapse: collapse; }
+.se-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.se-table td {
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    color: rgba(255,255,255,0.8);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.se-table tr:hover td { background: rgba(255,255,255,0.02); }
+.se-platform-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.se-platform-twitch { background: rgba(145, 70, 255, 0.2); color: #9146ff; }
+.se-platform-kick { background: rgba(83, 252, 24, 0.2); color: #53fc18; }
+.se-platform-youtube { background: rgba(255, 0, 0, 0.2); color: #ff4444; }
+.se-platform-default { background: rgba(255, 255, 255, 0.1); color: rgba(255,255,255,0.6); }
+.se-toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    display: inline-block;
+    cursor: pointer;
+}
+.se-toggle input { opacity: 0; width: 0; height: 0; }
+.se-toggle-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    transition: 0.2s;
+}
+.se-toggle-dot {
+    position: absolute;
+    top: 2px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+.se-empty {
+    text-align: center;
+    padding: 32px;
+    color: rgba(255,255,255,0.4);
+    font-size: 0.9rem;
+}
+.se-status-msg {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    display: none;
+}
+.se-status-msg.success { display: block; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+.se-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-edit"></i>
+                <span>Stream-Ended Behavior</span>
+            </div>
+            <div class="page-section-subtitle">
+                Control whether announcements are edited to "stream ended" or deleted when a stream goes offline
+            </div>
+        </div>
+    </div>
+
+    <div id="se-status" class="se-status-msg"></div>
+
+    <div class="se-card">
+        <div class="se-card-header">
+            <i class="fas fa-list"></i>
+            <h3>Subscriptions</h3>
+            <span>(<%= seSubscriptions.length %> total)</span>
+        </div>
+
+        <% if (seSubscriptions.length === 0) { %>
+            <div class="se-empty">
+                <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 8px; display: block;"></i>
+                No subscriptions found for this server.
+            </div>
+        <% } else { %>
+            <table class="se-table">
+                <thead>
+                    <tr>
+                        <th>Streamer</th>
+                        <th>Platform</th>
+                        <th>Channel</th>
+                        <th>Edit on End</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% seSubscriptions.forEach(sub => { %>
+                        <tr>
+                            <td><%= sub.username %></td>
+                            <td>
+                                <span class="se-platform-badge se-platform-<%= sub.platform || 'default' %>">
+                                    <%= sub.platform %>
+                                </span>
+                            </td>
+                            <td><%= sub.channel_id ? '#' + (channels.find(c => c.id === sub.channel_id)?.name || sub.channel_id) : 'Default' %></td>
+                            <td>
+                                <label class="se-toggle">
+                                    <input type="checkbox"
+                                        data-sub-id="<%= sub.subscription_id %>"
+                                        <%= sub.edit_on_end ? 'checked' : '' %>
+                                        onchange="toggleEditOnEnd(this)">
+                                    <span class="se-toggle-track" style="background: <%= sub.edit_on_end ? '#f59e0b' : 'rgba(255,255,255,0.1)' %>;"></span>
+                                    <span class="se-toggle-dot" style="left: <%= sub.edit_on_end ? '18px' : '2px' %>;"></span>
+                                </label>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        <% } %>
+    </div>
+</div>
+
+<script>
+async function toggleEditOnEnd(checkbox) {
+    const subId = checkbox.dataset.subId;
+    const editOnEnd = checkbox.checked;
+    const status = document.getElementById('se-status');
+    const track = checkbox.parentElement.querySelector('.se-toggle-track');
+    const dot = checkbox.parentElement.querySelector('.se-toggle-dot');
+
+    try {
+        const res = await fetch('/api/guilds/<%= guild.id %>/stream-ended/subscriptions/' + subId, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ edit_on_end: editOnEnd })
+        });
+        const data = await res.json();
+        if (data.success) {
+            track.style.background = editOnEnd ? '#f59e0b' : 'rgba(255,255,255,0.1)';
+            dot.style.left = editOnEnd ? '18px' : '2px';
+            status.textContent = 'Updated!';
+            status.className = 'se-status-msg success';
+        } else {
+            checkbox.checked = !editOnEnd;
+            status.textContent = data.error || 'Failed to update';
+            status.className = 'se-status-msg error';
+        }
+    } catch (err) {
+        checkbox.checked = !editOnEnd;
+        status.textContent = 'Network error';
+        status.className = 'se-status-msg error';
+    }
+    setTimeout(() => { status.className = 'se-status-msg'; }, 3000);
+}
+</script>

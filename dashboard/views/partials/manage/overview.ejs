@@ -1,0 +1,537 @@
+<style>
+/* Overview/Hub Page Styles */
+.hub-hero {
+    background: linear-gradient(135deg, #0a0e27 0%, #1e2028 50%, #16181d 100%);
+    border-radius: 20px;
+    padding: 48px 40px;
+    margin-bottom: 40px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(167, 139, 250, 0.2);
+}
+
+.hub-hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 30% 50%, rgba(167, 139, 250, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 70% 50%, rgba(155, 89, 182, 0.15) 0%, transparent 50%);
+    pointer-events: none;
+}
+
+.hub-hero-content {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+}
+
+.hub-hero h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #ffffff 0%, #b9bbbe 50%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+}
+
+.hub-hero p {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin: 0;
+}
+
+.modules-section {
+    margin-bottom: 56px;
+}
+
+.section-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(167, 139, 250, 0.3), transparent);
+}
+
+.module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.module-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 16px;
+    padding: 28px 24px;
+    text-align: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    text-decoration: none;
+    display: block;
+    position: relative;
+    overflow: hidden;
+}
+
+.module-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #a78bfa 0%, #b959f6 100%);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.3s ease;
+}
+
+.module-card:hover {
+    transform: translateY(-8px);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 16px 40px rgba(167, 139, 250, 0.25);
+}
+
+.module-card:hover::before {
+    transform: scaleX(1);
+}
+
+.module-icon {
+    font-size: 2.5rem;
+    margin-bottom: 16px;
+    color: #a78bfa;
+    transition: all 0.3s ease;
+}
+
+.module-card:hover .module-icon {
+    transform: scale(1.15);
+    color: #6b77f4;
+    filter: drop-shadow(0 0 12px rgba(167, 139, 250, 0.5));
+}
+
+.module-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0;
+}
+
+.module-description {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.55);
+    margin-top: 6px;
+    line-height: 1.4;
+}
+
+/* Quick Stats */
+.quick-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin-bottom: 48px;
+}
+
+.quick-stat {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 14px;
+    padding: 24px 20px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.quick-stat:hover {
+    transform: translateY(-4px);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(167, 139, 250, 0.4);
+}
+
+.quick-stat-icon {
+    font-size: 1.75rem;
+    color: #a78bfa;
+    margin-bottom: 12px;
+}
+
+.quick-stat-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #a78bfa 0%, #b959f6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.quick-stat-label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+</style>
+
+<!-- Hub Hero -->
+<div class="hub-hero">
+    <div class="hub-hero-content">
+        <h1>Management Hub</h1>
+        <p>Configure and manage all aspects of <%= guild.name %></p>
+    </div>
+</div>
+
+<!-- Quick Stats -->
+<div class="quick-stats">
+    <div class="quick-stat">
+        <i class="fas fa-video quick-stat-icon"></i>
+        <div class="quick-stat-value"><%= consolidatedStreamers.length %></div>
+        <div class="quick-stat-label">Streamers</div>
+    </div>
+    <div class="quick-stat">
+        <i class="fas fa-users quick-stat-icon"></i>
+        <div class="quick-stat-value"><%= guild.memberCount ? guild.memberCount.toLocaleString() : '0' %></div>
+        <div class="quick-stat-label">Members</div>
+    </div>
+    <div class="quick-stat">
+        <i class="fas fa-hashtag quick-stat-icon"></i>
+        <div class="quick-stat-value"><%= channels.length %></div>
+        <div class="quick-stat-label">Channels</div>
+    </div>
+    <div class="quick-stat">
+        <i class="fas fa-shield-alt quick-stat-icon"></i>
+        <div class="quick-stat-value"><%= roles.length %></div>
+        <div class="quick-stat-label">Roles</div>
+    </div>
+</div>
+
+<!-- Core Settings -->
+<div class="modules-section">
+    <h2 class="section-title">
+        <i class="fas fa-cog" style="color: #a78bfa;"></i>
+        Core
+    </h2>
+    <div class="module-grid">
+        <a href="/manage/<%= guild.id %>?page=streamers" class="module-card">
+            <i class="fas fa-users module-icon"></i>
+            <div class="module-name">Streamers</div>
+            <div class="module-description">Track and announce streamers</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=teams" class="module-card">
+            <i class="fas fa-user-friends module-icon"></i>
+            <div class="module-name">Teams</div>
+            <div class="module-description">Manage streaming teams</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=appearance" class="module-card">
+            <i class="fas fa-paint-brush module-icon"></i>
+            <div class="module-name">Appearance</div>
+            <div class="module-description">Bot customization</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=core" class="module-card">
+            <i class="fas fa-cog module-icon"></i>
+            <div class="module-name">Core Settings</div>
+            <div class="module-description">Basic configuration</div>
+        </a>
+    </div>
+</div>
+
+<!-- Community Features -->
+<div class="modules-section">
+    <h2 class="section-title">
+        <i class="fas fa-users-cog" style="color: #a78bfa;"></i>
+        Community
+    </h2>
+    <div class="module-grid">
+        <a href="/manage/<%= guild.id %>?page=welcome" class="module-card">
+            <i class="fas fa-hand-sparkles module-icon"></i>
+            <div class="module-name">Welcome</div>
+            <div class="module-description">Welcome messages & autoroles</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=reaction-roles" class="module-card">
+            <i class="fas fa-smile-beam module-icon"></i>
+            <div class="module-name">Reaction Roles</div>
+            <div class="module-description">Role assignment panels</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=starboard" class="module-card">
+            <i class="fas fa-star module-icon"></i>
+            <div class="module-name">Starboard</div>
+            <div class="module-description">Highlight popular messages</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=leveling" class="module-card">
+            <i class="fas fa-trophy module-icon"></i>
+            <div class="module-name">Leveling</div>
+            <div class="module-description">XP and level rewards</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=giveaways" class="module-card">
+            <i class="fas fa-gift module-icon"></i>
+            <div class="module-name">Giveaways</div>
+            <div class="module-description">Run giveaway events</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=polls" class="module-card">
+            <i class="fas fa-poll module-icon"></i>
+            <div class="module-name">Polls</div>
+            <div class="module-description">Create community polls</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=suggestions" class="module-card">
+            <i class="fas fa-lightbulb module-icon"></i>
+            <div class="module-name">Suggestions</div>
+            <div class="module-description">Suggestion system</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=music" class="module-card">
+            <i class="fas fa-music module-icon"></i>
+            <div class="module-name">Music</div>
+            <div class="module-description">Music player settings</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=schedule" class="module-card">
+            <i class="fas fa-calendar-alt module-icon"></i>
+            <div class="module-name">Schedule</div>
+            <div class="module-description">Scheduled events</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=birthday" class="module-card">
+            <i class="fas fa-birthday-cake module-icon"></i>
+            <div class="module-name">Birthdays</div>
+            <div class="module-description">Birthday announcements</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=weather" class="module-card">
+            <i class="fas fa-cloud-sun module-icon"></i>
+            <div class="module-name">Weather</div>
+            <div class="module-description">Weather alerts & updates</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=confessions" class="module-card">
+            <i class="fas fa-user-secret module-icon"></i>
+            <div class="module-name">Confessions</div>
+            <div class="module-description">Anonymous confessions</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=timecapsules" class="module-card">
+            <i class="fas fa-hourglass-half module-icon"></i>
+            <div class="module-name">Time Capsules</div>
+            <div class="module-description">Future message delivery</div>
+        </a>
+    </div>
+</div>
+
+<!-- Economy & Games -->
+<div class="modules-section">
+    <h2 class="section-title">
+        <i class="fas fa-gamepad" style="color: #a78bfa;"></i>
+        Economy & Games
+    </h2>
+    <div class="module-grid">
+        <a href="/manage/<%= guild.id %>?page=economy" class="module-card">
+            <i class="fas fa-coins module-icon"></i>
+            <div class="module-name">Economy</div>
+            <div class="module-description">Currency & shop system</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=games" class="module-card">
+            <i class="fas fa-gamepad module-icon"></i>
+            <div class="module-name">Games</div>
+            <div class="module-description">Trivia, hangman & more</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=gambling" class="module-card">
+            <i class="fas fa-dice module-icon"></i>
+            <div class="module-name">Gambling</div>
+            <div class="module-description">Casino games</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=trading" class="module-card">
+            <i class="fas fa-exchange-alt module-icon"></i>
+            <div class="module-name">Trading</div>
+            <div class="module-description">Item trading system</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=rpg" class="module-card">
+            <i class="fas fa-dragon module-icon"></i>
+            <div class="module-name">RPG</div>
+            <div class="module-description">RPG game system</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=achievements" class="module-card">
+            <i class="fas fa-medal module-icon"></i>
+            <div class="module-name">Achievements</div>
+            <div class="module-description">Achievement system</div>
+        </a>
+    </div>
+</div>
+
+<!-- Moderation & Security -->
+<div class="modules-section">
+    <h2 class="section-title">
+        <i class="fas fa-shield-alt" style="color: #a78bfa;"></i>
+        Moderation
+    </h2>
+    <div class="module-grid">
+        <a href="/manage/<%= guild.id %>?page=moderation" class="module-card">
+            <i class="fas fa-shield-alt module-icon"></i>
+            <div class="module-name">Moderation</div>
+            <div class="module-description">Infractions & punishments</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=automod" class="module-card">
+            <i class="fas fa-robot module-icon"></i>
+            <div class="module-name">AutoMod</div>
+            <div class="module-description">Automated moderation</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=security" class="module-card">
+            <i class="fas fa-lock module-icon"></i>
+            <div class="module-name">Security</div>
+            <div class="module-description">Anti-raid & join gate</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=advanced-protection" class="module-card">
+            <i class="fas fa-shield-virus module-icon"></i>
+            <div class="module-name">Advanced Protection</div>
+            <div class="module-description">Raid detection & anti-nuke</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=quarantine" class="module-card">
+            <i class="fas fa-user-shield module-icon"></i>
+            <div class="module-name">Quarantine</div>
+            <div class="module-description">Quarantine suspicious users</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=mass" class="module-card">
+            <i class="fas fa-users-cog module-icon"></i>
+            <div class="module-name">Mass Actions</div>
+            <div class="module-description">Bulk moderation tools</div>
+        </a>
+    </div>
+</div>
+
+<!-- Analytics -->
+<div class="modules-section">
+    <h2 class="section-title">
+        <i class="fas fa-chart-bar" style="color: #a78bfa;"></i>
+        Analytics
+    </h2>
+    <div class="module-grid">
+        <a href="/manage/<%= guild.id %>?page=stat-roles" class="module-card">
+            <i class="fas fa-chart-line module-icon"></i>
+            <div class="module-name">Stat Roles</div>
+            <div class="module-description">Dynamic stat channels</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=logging" class="module-card">
+            <i class="fas fa-file-alt module-icon"></i>
+            <div class="module-name">Logging</div>
+            <div class="module-description">Server activity logs</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=action-log" class="module-card">
+            <i class="fas fa-history module-icon"></i>
+            <div class="module-name">Action Log</div>
+            <div class="module-description">Bot action history</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=analytics" class="module-card">
+            <i class="fas fa-chart-bar module-icon"></i>
+            <div class="module-name">Analytics</div>
+            <div class="module-description">Server statistics</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=serverstats" class="module-card">
+            <i class="fas fa-server module-icon"></i>
+            <div class="module-name">Server Stats</div>
+            <div class="module-description">Server metrics</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=emojistats" class="module-card">
+            <i class="fas fa-smile module-icon"></i>
+            <div class="module-name">Emoji Stats</div>
+            <div class="module-description">Emoji usage tracking</div>
+        </a>
+    </div>
+</div>
+
+<!-- Feeds -->
+<div class="modules-section">
+    <h2 class="section-title">
+        <i class="fas fa-rss" style="color: #a78bfa;"></i>
+        Feeds
+    </h2>
+    <div class="module-grid">
+        <a href="/manage/<%= guild.id %>?page=feeds" class="module-card">
+            <i class="fas fa-rss module-icon"></i>
+            <div class="module-name">Social Feeds</div>
+            <div class="module-description">Reddit, YouTube, Twitter</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=twitch-schedules" class="module-card">
+            <i class="fab fa-twitch module-icon"></i>
+            <div class="module-name">Twitch Schedules</div>
+            <div class="module-description">Sync Twitch schedules</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=announcements" class="module-card">
+            <i class="fas fa-bullhorn module-icon"></i>
+            <div class="module-name">Announcements</div>
+            <div class="module-description">Announcement settings</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=automemes" class="module-card">
+            <i class="fas fa-laugh-squint module-icon"></i>
+            <div class="module-name">Auto-Memes</div>
+            <div class="module-description">Automatic meme posting</div>
+        </a>
+    </div>
+</div>
+
+<!-- Utility -->
+<div class="modules-section">
+    <h2 class="section-title">
+        <i class="fas fa-wrench" style="color: #a78bfa;"></i>
+        Utility
+    </h2>
+    <div class="module-grid">
+        <a href="/manage/<%= guild.id %>?page=utilities" class="module-card">
+            <i class="fas fa-wrench module-icon"></i>
+            <div class="module-name">Utilities</div>
+            <div class="module-description">Helpful tools</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=custom-commands" class="module-card">
+            <i class="fas fa-terminal module-icon"></i>
+            <div class="module-name">Custom Commands</div>
+            <div class="module-description">Create custom commands</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=commands" class="module-card">
+            <i class="fas fa-code module-icon"></i>
+            <div class="module-name">Commands</div>
+            <div class="module-description">Command configuration</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=forms" class="module-card">
+            <i class="fas fa-file-alt module-icon"></i>
+            <div class="module-name">Forms</div>
+            <div class="module-description">Custom forms</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=tickets" class="module-card">
+            <i class="fas fa-ticket-alt module-icon"></i>
+            <div class="module-name">Tickets</div>
+            <div class="module-description">Support ticket system</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=backups" class="module-card">
+            <i class="fas fa-save module-icon"></i>
+            <div class="module-name">Backups</div>
+            <div class="module-description">Server backups</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=permissions" class="module-card">
+            <i class="fas fa-user-lock module-icon"></i>
+            <div class="module-name">Permissions</div>
+            <div class="module-description">Bot permission overrides</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=reminders" class="module-card">
+            <i class="fas fa-clock module-icon"></i>
+            <div class="module-name">Reminders</div>
+            <div class="module-description">Scheduled reminders</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=tags" class="module-card">
+            <i class="fas fa-tag module-icon"></i>
+            <div class="module-name">Tags</div>
+            <div class="module-description">Quick response tags</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=csv" class="module-card">
+            <i class="fas fa-file-csv module-icon"></i>
+            <div class="module-name">CSV Import/Export</div>
+            <div class="module-description">Bulk data management</div>
+        </a>
+        <a href="/manage/<%= guild.id %>?page=sticky" class="module-card">
+            <i class="fas fa-thumbtack module-icon"></i>
+            <div class="module-name">Sticky Messages</div>
+            <div class="module-description">Persistent channel messages</div>
+        </a>
+    </div>
+</div>

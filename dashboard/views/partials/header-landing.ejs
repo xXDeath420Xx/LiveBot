@@ -1,0 +1,21 @@
+<nav class="navbar navbar-expand-lg">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/">
+            <img src="/images/CertiFried.png?v=3" alt="CertiFried Logo" style="height: 40px; width: auto; object-fit: contain; margin-right: 10px;">
+            <span style="font-size: 1.25rem; font-weight: 600; color: var(--text-normal, #dcddde);">CertiFried</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="mainNav">
+            <div class="ms-auto d-flex gap-2 align-items-center">
+                <a href="/dashboard" class="btn btn-secondary">Dashboard</a>
+                <% if (user) { %>
+                    <a href="/logout" class="btn btn-danger">Log Out</a>
+                <% } else { %>
+                    <a href="/auth/discord" class="btn btn-primary">Login with Discord</a>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</nav>

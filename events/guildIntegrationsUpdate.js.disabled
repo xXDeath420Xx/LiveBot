@@ -1,0 +1,18 @@
+import { Events } from 'discord.js';
+import logger from '../utils/logger.js';
+import { logIntegrationUpdate } from '../core/log-manager.js';
+
+export default {
+  name: Events.GuildIntegrationsUpdate,
+  async execute(guild) {
+    try {
+      await logIntegrationUpdate(guild);
+    } catch (error) {
+      logger.error('[GuildIntegrationsUpdate] Error logging integration update', {
+        error: error.message,
+        stack: error.stack,
+        guildId: guild.id
+      });
+    }
+  }
+};

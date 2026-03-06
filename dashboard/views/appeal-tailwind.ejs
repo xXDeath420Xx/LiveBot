@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Appeal a global ban on CertiFried MultiTool.">
+    <meta name="theme-color" content="#a78bfa">
+    <meta property="og:title" content="Global Ban Appeal - CertiFried MultiTool">
+    <meta property="og:description" content="Submit an appeal for your global ban.">
+    <meta property="og:image" content="/images/CertiFried.png">
+    <meta name="robots" content="noindex">
+    <title>Global Ban Appeal - CertiFried MultiTool</title>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-blue: #60a5fa;
+            --accent-cyan: #22d3ee;
+            --accent-green: #34d399;
+            --accent-red: #f87171;
+            --accent-amber: #fbbf24;
+        }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; line-height: 1.6; }
+        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; animation: float 20s ease-in-out infinite; }
+        .orb-1 { width: clamp(300px, 40vw, 500px); height: clamp(300px, 40vw, 500px); background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -10%; right: -10%; }
+        .orb-2 { width: clamp(250px, 35vw, 450px); height: clamp(250px, 35vw, 450px); background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: 10%; left: -10%; animation-delay: -10s; }
+        @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(20px, 20px) scale(1.02); } }
+        .container { width: 100%; max-width: 700px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
+        .navbar-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
+        .navbar-logo { width: 36px; height: 36px; aspect-ratio: 1/1; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover, .navbar-links a.active { color: var(--text-primary); }
+        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; text-decoration: none; transition: all 0.2s; }
+        .user-menu:hover { border-color: var(--accent-purple); }
+        .user-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+        .user-name { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+        main { position: relative; z-index: 1; padding: 100px 0 4rem; min-height: 100vh; }
+        .page-header { margin-bottom: 2rem; text-align: center; }
+        .page-header h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-red)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem; }
+        .page-header p { color: var(--text-secondary); font-size: 0.95rem; }
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 20px; padding: 2rem; margin-bottom: 1.5rem; backdrop-filter: blur(10px); }
+        .card-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .card-text { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 10px; font-size: 0.9rem; font-weight: 600; text-decoration: none; transition: all 0.2s; border: none; cursor: pointer; font-family: inherit; }
+        .btn svg { width: 18px; height: 18px; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(167, 139, 250, 0.3); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-danger { background: rgba(248, 113, 113, 0.15); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--accent-red); }
+        .btn-danger:hover { background: var(--accent-red); color: white; }
+        .badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.75rem; border-radius: 50px; font-size: 0.75rem; font-weight: 600; }
+        .badge-red { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+        .badge-amber { background: rgba(251, 191, 36, 0.15); color: var(--accent-amber); }
+        .badge-green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+        .badge-blue { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); }
+        .badge-muted { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); }
+        .detail-row { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-label { font-size: 0.85rem; color: var(--text-muted); }
+        .detail-value { font-weight: 600; font-size: 0.9rem; }
+        .form-group { margin-bottom: 1.25rem; }
+        .form-label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; }
+        .form-textarea { width: 100%; min-height: 120px; padding: 0.875rem; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; line-height: 1.5; resize: vertical; transition: border-color 0.2s; }
+        .form-textarea:focus { outline: none; border-color: var(--accent-purple); }
+        .form-textarea::placeholder { color: var(--text-muted); }
+        .form-input { width: 100%; padding: 0.75rem; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; transition: border-color 0.2s; }
+        .form-input:focus { outline: none; border-color: var(--accent-purple); }
+        .form-input::placeholder { color: var(--text-muted); }
+        .form-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem; }
+        .char-count { font-size: 0.75rem; color: var(--text-muted); text-align: right; margin-top: 0.25rem; }
+        .char-count.warn { color: var(--accent-amber); }
+        .char-count.ok { color: var(--accent-green); }
+        .alert { padding: 1rem 1.25rem; border-radius: 12px; font-size: 0.9rem; margin-bottom: 1.5rem; display: none; }
+        .alert-success { background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); color: var(--accent-green); }
+        .alert-error { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--accent-red); }
+        .alert.show { display: block; }
+        .icon-shield { display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: 16px; margin: 0 auto 1.5rem; }
+        .icon-shield.red { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+        .icon-shield.green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+        .icon-shield.blue { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); }
+        .icon-shield.amber { background: rgba(251, 191, 36, 0.15); color: var(--accent-amber); }
+        .icon-shield svg { width: 32px; height: 32px; }
+        .loading { text-align: center; padding: 3rem; color: var(--text-muted); }
+        .spinner { width: 32px; height: 32px; border: 3px solid var(--border-color); border-top-color: var(--accent-purple); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .response-card { background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem 1.25rem; margin-top: 1rem; }
+        .response-card .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
+        .response-card .text { font-size: 0.9rem; color: var(--text-secondary); }
+        .mobile-menu-btn {
+            display: none;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            z-index: 1001;
+        }
+        .mobile-menu-btn svg { width: 24px; height: 24px; }
+        .mobile-menu {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(11, 15, 17, 0.98);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 999;
+            padding-top: 80px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .mobile-menu.active { display: block; opacity: 1; visibility: visible; }
+        .mobile-menu-inner { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; padding: 2rem; }
+        .mobile-menu-link { color: var(--text-primary); text-decoration: none; font-size: 1.25rem; font-weight: 600; padding: 0.75rem 1.5rem; transition: color 0.3s ease; }
+        .mobile-menu-link:hover { color: var(--accent-purple); }
+        .mobile-menu-divider { width: 60%; max-width: 200px; height: 1px; background: var(--border-color); margin: 0.5rem 0; }
+        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 2rem; }
+        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
+        .footer-link:hover { color: var(--accent-purple); }
+        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
+        @media (max-width: 768px) {
+            .navbar-links { display: none; }
+            .mobile-menu-btn { display: block; }
+            .footer-links { flex-direction: column; gap: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-content">
+                <a href="/" class="navbar-brand">
+                    <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                    <span>CertiFried</span>
+                </a>
+                <div class="navbar-links">
+                    <a href="/">Home</a>
+                    <a href="/commands">Commands</a>
+                    <a href="/status">Status</a>
+                    <% if (user) { %>
+                    <a href="/dashboard">Dashboard</a>
+                    <% } %>
+                </div>
+                <% if (user) { %>
+                <a href="/profile" class="user-menu">
+                    <img src="<%= user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="" class="user-avatar">
+                    <span class="user-name"><%= user.username %></span>
+                </a>
+                <% } else { %>
+                <a href="/auth/discord?returnTo=/appeal" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">Login</a>
+                <% } %>
+                <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle mobile menu" aria-expanded="false">
+                    <svg id="menuIconBars" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    <svg id="menuIconClose" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: none;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="mobile-menu-inner">
+            <a href="/" class="mobile-menu-link">Home</a>
+            <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/status" class="mobile-menu-link">Status</a>
+            <% if (user) { %>
+            <a href="/dashboard" class="mobile-menu-link">Dashboard</a>
+            <div class="mobile-menu-divider"></div>
+            <a href="/profile" class="mobile-menu-link">Profile</a>
+            <a href="/logout" class="btn btn-danger">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                Logout
+            </a>
+            <% } else { %>
+            <div class="mobile-menu-divider"></div>
+            <a href="/auth/discord?returnTo=/appeal" class="btn btn-primary">Login with Discord</a>
+            <% } %>
+        </div>
+    </div>
+
+    <main>
+        <div class="container">
+            <div class="page-header">
+                <h1>Global Ban Appeal</h1>
+                <p>Submit an appeal if you believe your global ban was issued in error</p>
+            </div>
+
+            <% if (!user) { %>
+            <!-- State: Not logged in -->
+            <div class="card" style="text-align: center;">
+                <div class="icon-shield blue">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                </div>
+                <h2 class="card-title">Login Required</h2>
+                <p class="card-text">To submit a global ban appeal, you need to log in with your Discord account. This helps us verify your identity and look up your ban record.</p>
+                <p class="card-text" style="font-size: 0.85rem; color: var(--text-muted);">You don't need to be in any server — just log in with the Discord account that was banned.</p>
+                <a href="/auth/discord?returnTo=/appeal" class="btn btn-primary" style="margin-top: 0.5rem;">
+                    <svg viewBox="0 0 24 24" fill="currentColor" style="width: 18px; height: 18px;"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
+                    Login with Discord
+                </a>
+            </div>
+
+            <div class="card">
+                <h3 class="card-title" style="font-size: 1rem;">Other ways to appeal</h3>
+                <p class="card-text">You can also submit an appeal by sending a direct message to the bot. Simply DM the bot with your appeal reason (minimum 20 characters).</p>
+            </div>
+
+            <% } else { %>
+            <!-- State: Logged in — JS will determine which view to show -->
+            <div id="loadingState" class="loading">
+                <div class="spinner"></div>
+                <p>Checking your ban status...</p>
+            </div>
+
+            <div id="alertBox" class="alert"></div>
+
+            <!-- State: No active ban -->
+            <div id="noBanState" class="card" style="display: none; text-align: center;">
+                <div class="icon-shield green">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                </div>
+                <h2 class="card-title">No Active Global Ban</h2>
+                <p class="card-text">Your account does not have an active global ban record. No appeal is needed.</p>
+                <a href="/dashboard" class="btn btn-primary">Go to Dashboard</a>
+            </div>
+
+            <!-- State: Banned — show appeal form -->
+            <div id="bannedState" style="display: none;">
+                <div class="card">
+                    <div class="icon-shield red">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                    </div>
+                    <h2 class="card-title" style="text-align: center;">Active Global Ban</h2>
+                    <p class="card-text" style="text-align: center;">Your account has an active global ban. Review the details below and submit an appeal.</p>
+                    <div id="banDetails"></div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">Submit Appeal</h3>
+                    <p class="card-text">Explain why you believe this ban should be reversed. Be honest and specific — vague appeals are less likely to be approved.</p>
+                    <form id="appealForm">
+                        <div class="form-group">
+                            <label class="form-label" for="appealReason">Appeal Reason *</label>
+                            <textarea class="form-textarea" id="appealReason" name="reason" placeholder="Explain why you believe this ban was issued in error, or why it should be reconsidered..." minlength="20" maxlength="2000" required></textarea>
+                            <div class="char-count" id="reasonCount">0 / 2000 (minimum 20)</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="appealEvidence">Supporting Evidence (optional)</label>
+                            <input class="form-input" id="appealEvidence" name="evidence" type="text" placeholder="Links to screenshots, context, or other evidence...">
+                            <p class="form-hint">Provide any links or references that support your appeal.</p>
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                            Submit Appeal
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- State: Pending appeal -->
+            <div id="pendingState" style="display: none;">
+                <div class="card" style="text-align: center;">
+                    <div class="icon-shield amber">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <h2 class="card-title">Appeal Pending Review</h2>
+                    <p class="card-text">Your appeal has been submitted and is waiting for a reviewer. You'll be notified when a decision is made.</p>
+                </div>
+                <div class="card" id="appealDetails"></div>
+            </div>
+
+            <!-- State: Appeal denied (can see response) -->
+            <div id="deniedState" style="display: none;">
+                <div class="card" style="text-align: center;">
+                    <div class="icon-shield red">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    </div>
+                    <h2 class="card-title">Appeal Denied</h2>
+                    <p class="card-text">Your most recent appeal was reviewed and denied.</p>
+                </div>
+                <div class="card" id="deniedDetails"></div>
+            </div>
+
+            <% } %>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container" style="max-width: 1400px;">
+            <div class="footer-links">
+                <a href="/commands" class="footer-link">Commands</a>
+                <a href="/status" class="footer-link">Status</a>
+                <a href="/docs" class="footer-link">Documentation</a>
+                <a href="/terms" class="footer-link">Terms</a>
+                <a href="/privacy" class="footer-link">Privacy</a>
+            </div>
+            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile menu toggle
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const menuIconBars = document.getElementById('menuIconBars');
+        const menuIconClose = document.getElementById('menuIconClose');
+
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', () => {
+                const isOpen = mobileMenu.classList.toggle('active');
+                mobileMenuBtn.setAttribute('aria-expanded', isOpen);
+                menuIconBars.style.display = isOpen ? 'none' : 'block';
+                menuIconClose.style.display = isOpen ? 'block' : 'none';
+                document.body.style.overflow = isOpen ? 'hidden' : '';
+            });
+        }
+
+        <% if (user) { %>
+        // Appeal page logic
+        const loadingState = document.getElementById('loadingState');
+        const noBanState = document.getElementById('noBanState');
+        const bannedState = document.getElementById('bannedState');
+        const pendingState = document.getElementById('pendingState');
+        const deniedState = document.getElementById('deniedState');
+        const alertBox = document.getElementById('alertBox');
+
+        function showAlert(message, type) {
+            alertBox.className = `alert alert-${type} show`;
+            alertBox.textContent = message;
+            alertBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function hideAlert() {
+            alertBox.className = 'alert';
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return 'N/A';
+            return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function severityBadge(severity) {
+            const colors = { critical: 'red', high: 'red', medium: 'amber', low: 'blue' };
+            return `<span class="badge badge-${colors[severity] || 'muted'}">${(severity || 'unknown').toUpperCase()}</span>`;
+        }
+
+        function renderBanDetails(entry) {
+            const el = document.getElementById('banDetails');
+            el.innerHTML = `
+                <div class="detail-row"><span class="detail-label">Entry ID</span><span class="detail-value">#${entry.id}</span></div>
+                <div class="detail-row"><span class="detail-label">Severity</span><span class="detail-value">${severityBadge(entry.severity)}</span></div>
+                <div class="detail-row"><span class="detail-label">Category</span><span class="detail-value">${entry.category || 'N/A'}</span></div>
+                <div class="detail-row"><span class="detail-label">Date Issued</span><span class="detail-value">${formatDate(entry.created_at)}</span></div>
+                ${entry.reason ? `<div class="detail-row"><span class="detail-label">Reason</span><span class="detail-value" style="max-width: 60%; text-align: right;">${entry.reason}</span></div>` : ''}
+            `;
+        }
+
+        function renderAppealDetails(appeal, container) {
+            const el = document.getElementById(container);
+            el.innerHTML = `
+                <h3 class="card-title" style="font-size: 1rem;">Appeal #${appeal.id}</h3>
+                <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">${severityBadge(appeal.status === 'pending' || appeal.status === 'under_review' ? 'medium' : 'red').replace(/(MEDIUM|RED)/, appeal.status.toUpperCase().replace('_', ' '))}</span></div>
+                <div class="detail-row"><span class="detail-label">Submitted</span><span class="detail-value">${formatDate(appeal.created_at)}</span></div>
+                <div class="detail-row"><span class="detail-label">Your Reason</span><span class="detail-value" style="max-width: 60%; text-align: right;">${appeal.reason}</span></div>
+                ${appeal.reviewer_response ? `
+                <div class="response-card">
+                    <div class="label">Reviewer Response</div>
+                    <div class="text">${appeal.reviewer_response}</div>
+                    ${appeal.reviewed_at ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">${formatDate(appeal.reviewed_at)}</div>` : ''}
+                </div>` : ''}
+            `;
+        }
+
+        async function loadStatus() {
+            try {
+                const res = await fetch('/api/appeal/status');
+                const data = await res.json();
+
+                loadingState.style.display = 'none';
+
+                if (!data.success) {
+                    showAlert(data.message || 'Failed to load status.', 'error');
+                    return;
+                }
+
+                const { activeEntry, appeals } = data;
+
+                // No active ban
+                if (!activeEntry) {
+                    noBanState.style.display = 'block';
+                    return;
+                }
+
+                // Check for pending/under_review appeal
+                const pendingAppeal = appeals.find(a => a.status === 'pending' || a.status === 'under_review');
+                if (pendingAppeal) {
+                    renderAppealDetails(pendingAppeal, 'appealDetails');
+                    pendingState.style.display = 'block';
+                    return;
+                }
+
+                // Check for recently denied appeal (most recent)
+                const deniedAppeal = appeals.find(a => a.status === 'denied');
+                if (deniedAppeal && appeals.every(a => a.status !== 'pending' && a.status !== 'under_review')) {
+                    renderBanDetails(activeEntry);
+                    renderAppealDetails(deniedAppeal, 'deniedDetails');
+                    deniedState.style.display = 'block';
+                    // Also show the appeal form below for re-appeal
+                    bannedState.style.display = 'block';
+                    return;
+                }
+
+                // Banned, no appeal yet
+                renderBanDetails(activeEntry);
+                bannedState.style.display = 'block';
+
+            } catch (err) {
+                loadingState.style.display = 'none';
+                showAlert('Failed to connect to server. Please try again later.', 'error');
+            }
+        }
+
+        // Character counter
+        const reasonField = document.getElementById('appealReason');
+        const reasonCount = document.getElementById('reasonCount');
+        if (reasonField) {
+            reasonField.addEventListener('input', () => {
+                const len = reasonField.value.length;
+                reasonCount.textContent = `${len} / 2000 (minimum 20)`;
+                reasonCount.className = 'char-count' + (len < 20 ? ' warn' : ' ok');
+            });
+        }
+
+        // Form submission
+        const appealForm = document.getElementById('appealForm');
+        if (appealForm) {
+            appealForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                hideAlert();
+
+                const reason = document.getElementById('appealReason').value.trim();
+                const evidence = document.getElementById('appealEvidence').value.trim() || null;
+
+                if (reason.length < 20) {
+                    showAlert('Your appeal reason must be at least 20 characters.', 'error');
+                    return;
+                }
+
+                const submitBtn = document.getElementById('submitBtn');
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<div class="spinner" style="width: 18px; height: 18px; margin: 0;"></div> Submitting...';
+
+                try {
+                    const res = await fetch('/api/appeal', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ reason, evidence })
+                    });
+                    const data = await res.json();
+
+                    if (data.success) {
+                        showAlert(`Appeal #${data.appealId} submitted successfully! A reviewer will look at it soon.`, 'success');
+                        // Refresh to show pending state
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        showAlert(data.message || 'Failed to submit appeal.', 'error');
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg> Submit Appeal';
+                    }
+                } catch (err) {
+                    showAlert('Network error. Please try again.', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg> Submit Appeal';
+                }
+            });
+        }
+
+        // Load on page ready
+        loadStatus();
+        <% } %>
+    </script>
+</body>
+</html>

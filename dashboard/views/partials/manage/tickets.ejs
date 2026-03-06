@@ -1,0 +1,2070 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-ticket-alt"></i>
+                <span>Ticket System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Create multiple customizable ticket panels for different support categories
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="openCreatePanelModal()">
+            <i class="fas fa-plus"></i>
+            <span>New Panel</span>
+        </button>
+    </div>
+
+    <!-- Ticket Panels List -->
+    <div style="margin-bottom: 18px;">
+        <% if (ticketPanels && ticketPanels.length > 0) { %>
+            <div class="panels-grid">
+                <% ticketPanels.forEach(panel => { %>
+                <div class="panel-card" data-panel-id="<%= panel.panel_id %>">
+                    <div class="panel-card-header">
+                        <div>
+                            <div class="panel-card-title"><%= panel.panel_name %></div>
+                            <div class="panel-card-status">
+                                <% if (panel.panel_message_id) { %>
+                                    <span class="status-badge status-deployed">
+                                        <i class="fas fa-check-circle"></i> Deployed
+                                    </span>
+                                <% } else { %>
+                                    <span class="status-badge status-not-deployed">
+                                        <i class="fas fa-clock"></i> Not Deployed
+                                    </span>
+                                <% } %>
+                            </div>
+                        </div>
+                        <div class="panel-card-actions">
+                            <button class="panel-action-btn" onclick="editPanel(<%= panel.panel_id %>)" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="panel-action-btn" onclick="deployPanel(<%= panel.panel_id %>)" title="Deploy">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                            <button class="panel-action-btn panel-action-delete" onclick="deletePanel(<%= panel.panel_id %>)" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="panel-card-body">
+                        <div class="panel-preview">
+                            <div class="panel-preview-embed" style="border-left-color: <%= panel.embed_color || '#a78bfa' %>;">
+                                <div class="panel-preview-embed-title" style="color: <%= panel.embed_color || '#a78bfa' %>;">
+                                    <%= panel.embed_title || 'Support Ticket' %>
+                                </div>
+                                <div class="panel-preview-embed-desc">
+                                    <%= (panel.embed_description || 'Click the button below to create a support ticket.').substring(0, 100) %><%= (panel.embed_description && panel.embed_description.length > 100) ? '...' : '' %>
+                                </div>
+                                <div class="panel-preview-button">
+                                    <% if (panel.button_emoji) { %>
+                                        <span><%= panel.button_emoji %></span>
+                                    <% } %>
+                                    <span><%= panel.button_text || 'Create Ticket' %></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="panel-details">
+                            <div class="panel-detail-item">
+                                <i class="fas fa-folder"></i>
+                                <span>Category: <%= categories.find(c => c.id === panel.ticket_category_id)?.name || 'Unknown' %></span>
+                            </div>
+                            <div class="panel-detail-item">
+                                <i class="fas fa-user-shield"></i>
+                                <span>Role: <%= roles.find(r => r.id === panel.support_role_id)?.name || 'Unknown' %></span>
+                            </div>
+                            <% if (panel.panel_channel_id) { %>
+                            <div class="panel-detail-item">
+                                <i class="fas fa-hashtag"></i>
+                                <span>Channel: <%= channels.find(c => c.id === panel.panel_channel_id)?.name || 'Unknown' %></span>
+                            </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+                <% }); %>
+            </div>
+        <% } else { %>
+            <div style="background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 12px; padding: 40px 24px; text-align: center;">
+                <i class="fas fa-ticket-alt" style="font-size: 2.5rem; color: #a78bfa; margin-bottom: 14px; opacity: 0.5;"></i>
+                <div style="font-size: 1rem; font-weight: 600; color: #ffffff; margin-bottom: 8px;">
+                    No ticket panels yet
+                </div>
+                <div style="font-size: 0.85rem; color: rgba(255, 255, 255, 0.5); margin-bottom: 16px;">
+                    Create your first ticket panel to get started with your support system
+                </div>
+                <button class="btn btn-primary" onclick="openCreatePanelModal()">
+                    <i class="fas fa-plus"></i>
+                    <span>Create First Panel</span>
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Configuration Card (Legacy - kept for backward compatibility) -->
+    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(167, 139, 250, 0.15); border-radius: 12px; padding: 18px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+            <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #7c3aed, #a78bfa); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i class="fas fa-cog" style="color: white; font-size: 0.9rem;"></i>
+            </div>
+            <div>
+                <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: #ffffff;">Ticket Configuration</h4>
+                <p style="margin: 0; font-size: 0.75rem; color: rgba(255, 255, 255, 0.5);">Configure ticket panel, category, and support team</p>
+            </div>
+        </div>
+
+        <form action="/manage/<%= guild.id %>/update-tickets" method="POST">
+            <div class="grid grid-cols-2" style="gap: 14px; margin-bottom: 14px;">
+                <div>
+                    <label class="form-label">Ticket Panel Channel</label>
+                    <select class="form-select" id="ticketPanelChannel" name="panel_channel_id">
+                        <option value="">Select a channel</option>
+                        <% channels.forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= ticketConfig && ticketConfig.panel_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                    <div class="form-help">The bot will post a "Create Ticket" button in this channel</div>
+                </div>
+
+                <div>
+                    <label class="form-label">Ticket Category</label>
+                    <select class="form-select" id="ticketCategory" name="ticket_category_id">
+                        <option value="">Select a category</option>
+                        <% categories.forEach(category => { %>
+                            <option value="<%= category.id %>" <%= ticketConfig && ticketConfig.ticket_category_id === category.id ? 'selected' : '' %>><%= category.name %></option>
+                        <% }) %>
+                    </select>
+                    <div class="form-help">New ticket channels will be created in this category</div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 14px;">
+                <label class="form-label">Support Team Role</label>
+                <select class="form-select" id="ticketSupportRole" name="support_role_id">
+                    <option value="">Select a role</option>
+                    <% roles.forEach(role => { %>
+                        <option value="<%= role.id %>" <%= ticketConfig && ticketConfig.support_role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                    <% }) %>
+                </select>
+                <div class="form-help">Users with this role will be able to view and manage tickets</div>
+            </div>
+
+            <% if (ticketConfig && ticketConfig.panel_channel_id && ticketConfig.ticket_category_id && ticketConfig.support_role_id) { %>
+                <div style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05)); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-check-circle" style="color: #22c55e;"></i>
+                        <span style="font-size: 0.85rem; color: #ffffff;">Ticket system is fully configured</span>
+                    </div>
+                </div>
+            <% } %>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Ticket Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Create Panel Card -->
+    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(167, 139, 250, 0.15); border-radius: 12px; padding: 18px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+            <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #60a5fa, #a78bfa); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i class="fas fa-paper-plane" style="color: white; font-size: 0.9rem;"></i>
+            </div>
+            <div style="flex: 1;">
+                <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: #ffffff;">Deploy Ticket Panel</h4>
+                <p style="margin: 0; font-size: 0.75rem; color: rgba(255, 255, 255, 0.5);">Post the ticket creation button to the configured channel</p>
+            </div>
+        </div>
+
+        <% if (ticketConfig && ticketConfig.panel_channel_id && ticketConfig.ticket_category_id) { %>
+            <form action="/manage/<%= guild.id %>/create-ticket-panel" method="POST">
+                <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.05)); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 14px;">
+                    <div style="display: flex; gap: 10px;">
+                        <i class="fas fa-info-circle" style="color: #60a5fa; margin-top: 2px;"></i>
+                        <div style="font-size: 0.85rem; color: #ffffff;">
+                            <strong>Ready to deploy!</strong><br>
+                            <span style="color: rgba(255, 255, 255, 0.6);">
+                                Click the button below to post a ticket creation panel to
+                                <% const panelChannel = channels.find(c => c.id === ticketConfig.panel_channel_id); %>
+                                <strong>#<%= panelChannel ? panelChannel.name : 'Unknown' %></strong>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i>
+                    <span>Create Ticket Panel</span>
+                </button>
+            </form>
+        <% } else { %>
+            <div style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05)); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 12px;">
+                <div style="display: flex; gap: 10px;">
+                    <i class="fas fa-exclamation-triangle" style="color: #fbbf24; margin-top: 2px;"></i>
+                    <div style="font-size: 0.85rem; color: #ffffff;">
+                        <strong>Configuration Required</strong><br>
+                        <span style="color: rgba(255, 255, 255, 0.6);">Please configure the ticket panel channel and category above before creating the panel</span>
+                    </div>
+                </div>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- How It Works -->
+    <div style="margin-top: 16px; background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 12px; padding: 14px;">
+        <div style="display: flex; gap: 10px;">
+            <i class="fas fa-lightbulb" style="color: #a78bfa; font-size: 1rem; margin-top: 2px;"></i>
+            <div>
+                <div style="font-size: 0.85rem; font-weight: 600; color: #ffffff; margin-bottom: 6px;">
+                    How the ticket system works
+                </div>
+                <div style="font-size: 0.8rem; color: rgba(255, 255, 255, 0.6); line-height: 1.6;">
+                    <strong style="color: #ffffff;">1.</strong> Users click the "Create Ticket" button in the panel channel<br>
+                    <strong style="color: #ffffff;">2.</strong> Bot creates a private ticket channel in the configured category<br>
+                    <strong style="color: #ffffff;">3.</strong> Only the user and support team can see the ticket<br>
+                    <strong style="color: #ffffff;">4.</strong> Support team can close tickets when resolved
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ticket Analytics -->
+<% if (ticketConfig && ticketConfig.panel_channel_id && ticketConfig.ticket_category_id) { %>
+<div class="page-section" style="margin-top: 16px;">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-chart-line"></i>
+                <span>Ticket Analytics</span>
+            </div>
+            <div class="page-section-subtitle">
+                View statistics and performance metrics
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-4" style="gap: 12px; margin-bottom: 18px;">
+        <div class="ticket-stat-card" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.05)); border: 1px solid rgba(59, 130, 246, 0.3);">
+            <div class="ticket-stat-icon" style="background: linear-gradient(135deg, #60a5fa, #a78bfa);">
+                <i class="fas fa-ticket-alt"></i>
+            </div>
+            <div class="ticket-stat-content">
+                <div class="ticket-stat-value"><%= data.ticketStats ? data.ticketStats.totalTickets : 0 %></div>
+                <div class="ticket-stat-label">Total Tickets</div>
+            </div>
+        </div>
+
+        <div class="ticket-stat-card" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05)); border: 1px solid rgba(34, 197, 94, 0.3);">
+            <div class="ticket-stat-icon" style="background: linear-gradient(135deg, #22c55e, #16a34a);">
+                <i class="fas fa-folder-open"></i>
+            </div>
+            <div class="ticket-stat-content">
+                <div class="ticket-stat-value"><%= data.ticketStats ? data.ticketStats.openTickets : 0 %></div>
+                <div class="ticket-stat-label">Open Tickets</div>
+            </div>
+        </div>
+
+        <div class="ticket-stat-card" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.1), rgba(168, 85, 247, 0.05)); border: 1px solid rgba(168, 85, 247, 0.3);">
+            <div class="ticket-stat-icon" style="background: linear-gradient(135deg, #a855f7, #9333ea);">
+                <i class="fas fa-clock"></i>
+            </div>
+            <div class="ticket-stat-content">
+                <div class="ticket-stat-value"><%= data.ticketStats ? data.ticketStats.avgResponseTime : '0m' %></div>
+                <div class="ticket-stat-label">Avg Response</div>
+            </div>
+        </div>
+
+        <div class="ticket-stat-card" style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.1), rgba(236, 72, 153, 0.05)); border: 1px solid rgba(236, 72, 153, 0.3);">
+            <div class="ticket-stat-icon" style="background: linear-gradient(135deg, #ec4899, #db2777);">
+                <i class="fas fa-check-double"></i>
+            </div>
+            <div class="ticket-stat-content">
+                <div class="ticket-stat-value"><%= data.ticketStats ? data.ticketStats.avgResolutionTime : '0m' %></div>
+                <div class="ticket-stat-label">Avg Resolution</div>
+            </div>
+        </div>
+    </div>
+
+    <% if (data.ticketStats && data.ticketStats.staffStats) { %>
+    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(167, 139, 250, 0.15); border-radius: 12px; padding: 18px;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px;">
+            <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #a855f7, #7c3aed); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i class="fas fa-users" style="color: white; font-size: 0.9rem;"></i>
+            </div>
+            <div>
+                <h4 style="margin: 0; font-size: 0.95rem; font-weight: 600; color: #ffffff;">Support Team Performance</h4>
+                <p style="margin: 0; font-size: 0.75rem; color: rgba(255, 255, 255, 0.5);">Tickets handled by each staff member</p>
+            </div>
+        </div>
+
+        <div class="ticket-staff-stats">
+            <% data.ticketStats.staffStats.forEach(staff => { %>
+            <div class="ticket-staff-stat-row">
+                <div class="ticket-staff-info">
+                    <img src="<%= staff.avatar %>" alt="<%= staff.username %>" class="ticket-staff-avatar">
+                    <div>
+                        <div class="ticket-staff-name"><%= staff.username %></div>
+                        <div class="ticket-staff-tag">@<%= staff.tag %></div>
+                    </div>
+                </div>
+                <div class="ticket-staff-metrics">
+                    <div class="ticket-staff-metric">
+                        <div class="ticket-staff-metric-value"><%= staff.ticketsHandled %></div>
+                        <div class="ticket-staff-metric-label">Handled</div>
+                    </div>
+                    <div class="ticket-staff-metric">
+                        <div class="ticket-staff-metric-value"><%= staff.currentTickets %></div>
+                        <div class="ticket-staff-metric-label">Active</div>
+                    </div>
+                    <div class="ticket-staff-metric">
+                        <div class="ticket-staff-metric-value"><%= staff.avgResponseTime %></div>
+                        <div class="ticket-staff-metric-label">Avg Response</div>
+                    </div>
+                </div>
+            </div>
+            <% }); %>
+        </div>
+    </div>
+    <% } %>
+</div>
+
+<!-- Active Tickets Management -->
+<div class="page-section" style="margin-top: 16px;">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-list-ul"></i>
+                <span>Active Tickets</span>
+            </div>
+            <div class="page-section-subtitle">
+                Manage all open and active tickets
+            </div>
+        </div>
+    </div>
+
+    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(167, 139, 250, 0.15); border-radius: 12px; padding: 18px;">
+        <!-- Search and Filter -->
+        <div style="display: flex; gap: 12px; margin-bottom: 14px;">
+            <div style="flex: 1;">
+                <div style="position: relative;">
+                    <i class="fas fa-search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: rgba(255, 255, 255, 0.45); font-size: 0.8rem;"></i>
+                    <input type="text" id="ticketSearchInput" class="form-select" placeholder="Search tickets..." style="padding-left: 36px;">
+                </div>
+            </div>
+            <select id="ticketStatusFilter" class="form-select" style="width: 180px;">
+                <option value="">All Statuses</option>
+                <option value="open">Open</option>
+                <option value="claimed">Claimed</option>
+                <option value="pending">Pending</option>
+                <option value="resolved">Resolved</option>
+            </select>
+            <select id="ticketAssigneeFilter" class="form-select" style="width: 180px;">
+                <option value="">All Assignees</option>
+                <option value="unassigned">Unassigned</option>
+                <% if (data.ticketStats && data.ticketStats.staffStats) { %>
+                    <% data.ticketStats.staffStats.forEach(staff => { %>
+                        <option value="<%= staff.userId %>"><%= staff.username %></option>
+                    <% }); %>
+                <% } %>
+            </select>
+        </div>
+
+        <!-- Tickets Table -->
+        <div class="ticket-table-wrapper">
+            <table class="ticket-table">
+                <thead>
+                    <tr>
+                        <th>Ticket ID</th>
+                        <th>User</th>
+                        <th>Subject</th>
+                        <th>Status</th>
+                        <th>Assigned To</th>
+                        <th>Created</th>
+                        <th>Last Activity</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ticketsTableBody">
+                    <% if (data.activeTickets && data.activeTickets.length > 0) { %>
+                        <% data.activeTickets.forEach(ticket => { %>
+                        <tr class="ticket-row" data-ticket-id="<%= ticket.ticket_id %>" data-status="<%= ticket.status %>" data-assignee="<%= ticket.claimed_by || 'unassigned' %>">
+                            <td>
+                                <div class="ticket-id-cell">
+                                    <i class="fas fa-ticket-alt" style="color: var(--color-primary-400); margin-right: 8px;"></i>
+                                    <span>#<%= ticket.ticket_id %></span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="ticket-user-cell">
+                                    <img src="<%= ticket.user_avatar %>" alt="<%= ticket.user_name %>" class="ticket-user-avatar">
+                                    <div>
+                                        <div class="ticket-user-name"><%= ticket.user_name %></div>
+                                        <div class="ticket-user-tag">@<%= ticket.user_tag %></div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="ticket-subject"><%= ticket.subject || 'Support Request' %></div>
+                            </td>
+                            <td>
+                                <span class="ticket-status-badge ticket-status-<%= ticket.status %>">
+                                    <%= ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1) %>
+                                </span>
+                            </td>
+                            <td>
+                                <% if (ticket.claimed_by) { %>
+                                <div class="ticket-assignee-cell">
+                                    <img src="<%= ticket.assignee_avatar %>" alt="<%= ticket.assignee_name %>" class="ticket-assignee-avatar">
+                                    <span><%= ticket.assignee_name %></span>
+                                </div>
+                                <% } else { %>
+                                <span style="color: var(--color-text-muted); font-size: var(--font-size-sm);">Unassigned</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <div class="ticket-date">
+                                    <div><%= new Date(ticket.created_at).toLocaleDateString() %></div>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= new Date(ticket.created_at).toLocaleTimeString() %></div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="ticket-date">
+                                    <div><%= new Date(ticket.last_activity).toLocaleDateString() %></div>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= new Date(ticket.last_activity).toLocaleTimeString() %></div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="ticket-actions">
+                                    <button class="ticket-action-btn" onclick="viewTicketDetails('<%= ticket.ticket_id %>')" title="View Details">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button class="ticket-action-btn" onclick="assignTicket('<%= ticket.ticket_id %>')" title="Assign">
+                                        <i class="fas fa-user-plus"></i>
+                                    </button>
+                                    <button class="ticket-action-btn" onclick="addTicketNote('<%= ticket.ticket_id %>')" title="Add Note">
+                                        <i class="fas fa-sticky-note"></i>
+                                    </button>
+                                    <button class="ticket-action-btn ticket-action-close" onclick="closeTicket('<%= ticket.ticket_id %>')" title="Close Ticket">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <% }); %>
+                    <% } else { %>
+                        <tr>
+                            <td colspan="8" style="text-align: center; padding: 32px; color: rgba(255, 255, 255, 0.5);">
+                                <i class="fas fa-inbox" style="font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5;"></i>
+                                <div>No active tickets</div>
+                            </td>
+                        </tr>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<% } %>
+
+<!-- Ticket Details Modal -->
+<div id="ticketDetailsModal" class="ticket-modal" style="display: none;">
+    <div class="ticket-modal-overlay" onclick="closeTicketDetailsModal()"></div>
+    <div class="ticket-modal-content">
+        <div class="ticket-modal-header">
+            <div>
+                <h3 class="ticket-modal-title">
+                    <i class="fas fa-ticket-alt"></i>
+                    <span id="modalTicketTitle">Ticket Details</span>
+                </h3>
+                <p class="ticket-modal-subtitle" id="modalTicketSubtitle">Loading...</p>
+            </div>
+            <button class="ticket-modal-close" onclick="closeTicketDetailsModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="ticket-modal-body">
+            <div class="ticket-modal-layout">
+                <!-- Main Content -->
+                <div class="ticket-modal-main">
+                    <!-- Messages Section -->
+                    <div class="ticket-section">
+                        <div class="ticket-section-header">
+                            <i class="fas fa-comments"></i>
+                            <span>Conversation</span>
+                        </div>
+                        <div class="ticket-messages" id="ticketMessagesContainer">
+                            <!-- Messages will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Internal Notes Section -->
+                    <div class="ticket-section" style="margin-top: var(--spacing-4);">
+                        <div class="ticket-section-header">
+                            <i class="fas fa-file-alt"></i>
+                            <span>Internal Notes</span>
+                            <span style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-left: auto;">(Staff Only)</span>
+                        </div>
+                        <div class="ticket-notes" id="ticketNotesContainer">
+                            <!-- Notes will be loaded here -->
+                        </div>
+                        <div class="ticket-add-note">
+                            <textarea id="newNoteTextarea" class="ticket-note-input" placeholder="Add an internal note..."></textarea>
+                            <button class="btn btn-primary" onclick="submitTicketNote()" style="margin-top: var(--spacing-2);">
+                                <i class="fas fa-plus"></i>
+                                <span>Add Note</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar -->
+                <div class="ticket-modal-sidebar">
+                    <!-- Actions Card -->
+                    <div class="ticket-sidebar-card">
+                        <div class="ticket-sidebar-card-header">
+                            <i class="fas fa-cog"></i>
+                            <span>Actions</span>
+                        </div>
+                        <div class="ticket-sidebar-actions">
+                            <button class="ticket-sidebar-btn" onclick="assignTicketFromModal()">
+                                <i class="fas fa-user-plus"></i>
+                                <span>Assign Ticket</span>
+                            </button>
+                            <button class="ticket-sidebar-btn" onclick="transferTicketFromModal()">
+                                <i class="fas fa-exchange-alt"></i>
+                                <span>Transfer Ticket</span>
+                            </button>
+                            <button class="ticket-sidebar-btn ticket-sidebar-btn-danger" onclick="closeTicketFromModal()">
+                                <i class="fas fa-times-circle"></i>
+                                <span>Close Ticket</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- User Info Card -->
+                    <div class="ticket-sidebar-card">
+                        <div class="ticket-sidebar-card-header">
+                            <i class="fas fa-user"></i>
+                            <span>User Information</span>
+                        </div>
+                        <div class="ticket-user-info" id="ticketUserInfo">
+                            <!-- User info will be loaded here -->
+                        </div>
+                    </div>
+
+                    <!-- Ticket Info Card -->
+                    <div class="ticket-sidebar-card">
+                        <div class="ticket-sidebar-card-header">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Ticket Information</span>
+                        </div>
+                        <div class="ticket-info-details" id="ticketInfoDetails">
+                            <!-- Ticket details will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 6px;
+}
+
+.form-help {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+    margin-top: 4px;
+}
+
+/* Ticket Analytics Styles */
+.ticket-stat-card {
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ticket-stat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ticket-stat-icon i {
+    color: white;
+    font-size: 1rem;
+}
+
+.ticket-stat-content {
+    flex: 1;
+}
+
+.ticket-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #ffffff;
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+.ticket-stat-label {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 500;
+}
+
+/* Staff Stats */
+.ticket-staff-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ticket-staff-stat-row {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ticket-staff-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ticket-staff-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid #a78bfa;
+}
+
+.ticket-staff-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.ticket-staff-tag {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ticket-staff-metrics {
+    display: flex;
+    gap: 24px;
+}
+
+.ticket-staff-metric {
+    text-align: center;
+}
+
+.ticket-staff-metric-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.ticket-staff-metric-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 2px;
+}
+
+/* Ticket Table Styles */
+.ticket-table-wrapper {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ticket-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ticket-table thead {
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.ticket-table th {
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.ticket-table tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    transition: background-color 0.2s;
+}
+
+.ticket-table tbody tr:hover {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.ticket-table td {
+    padding: 12px;
+    font-size: 0.8rem;
+    color: #ffffff;
+}
+
+.ticket-id-cell {
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    color: #a78bfa;
+}
+
+.ticket-user-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ticket-user-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+}
+
+.ticket-user-name {
+    font-weight: 500;
+    color: #ffffff;
+}
+
+.ticket-user-tag {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ticket-subject {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ticket-status-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.ticket-status-open {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.5);
+}
+
+.ticket-status-claimed {
+    background: rgba(168, 85, 247, 0.2);
+    color: #c084fc;
+    border: 1px solid rgba(168, 85, 247, 0.5);
+}
+
+.ticket-status-pending {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.ticket-status-resolved {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.5);
+}
+
+.ticket-assignee-cell {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ticket-assignee-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+}
+
+.ticket-date {
+    font-size: 0.8rem;
+}
+
+.ticket-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.ticket-action-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.ticket-action-btn:hover {
+    background: #a78bfa;
+    border-color: #a78bfa;
+    color: white;
+}
+
+.ticket-action-btn.ticket-action-close:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+}
+
+/* Modal Styles */
+.ticket-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.ticket-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+}
+
+.ticket-modal-content {
+    position: relative;
+    width: 90%;
+    max-width: 1200px;
+    max-height: 90vh;
+    background: rgba(26, 29, 33, 0.98);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.ticket-modal-header {
+    padding: 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ticket-modal-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ticket-modal-title i {
+    color: #a78bfa;
+}
+
+.ticket-modal-subtitle {
+    margin: 4px 0 0 0;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ticket-modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.ticket-modal-close:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: white;
+}
+
+.ticket-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px;
+}
+
+.ticket-modal-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 18px;
+}
+
+.ticket-modal-main {
+    min-width: 0;
+}
+
+.ticket-section {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.ticket-section-header {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #ffffff;
+}
+
+.ticket-messages {
+    padding: 12px;
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.ticket-message {
+    margin-bottom: 12px;
+    display: flex;
+    gap: 10px;
+}
+
+.ticket-message:last-child {
+    margin-bottom: 0;
+}
+
+.ticket-message-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.ticket-message-content {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.ticket-message-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.ticket-message-author {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #ffffff;
+}
+
+.ticket-message-time {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ticket-message-text {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+}
+
+.ticket-notes {
+    padding: 12px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.ticket-note {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-left: 3px solid #a78bfa;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 10px;
+}
+
+.ticket-note:last-child {
+    margin-bottom: 0;
+}
+
+.ticket-note-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.ticket-note-author {
+    font-weight: 600;
+    color: #a78bfa;
+    font-size: 0.8rem;
+}
+
+.ticket-note-time {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ticket-note-text {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+}
+
+.ticket-add-note {
+    padding: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ticket-note-input {
+    width: 100%;
+    min-height: 70px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 0.85rem;
+    color: #ffffff;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.ticket-note-input:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+}
+
+.ticket-modal-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ticket-sidebar-card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.ticket-sidebar-card-header {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 0.8rem;
+}
+
+.ticket-sidebar-actions {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ticket-sidebar-btn {
+    width: 100%;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ticket-sidebar-btn:hover {
+    background: #a78bfa;
+    border-color: #a78bfa;
+}
+
+.ticket-sidebar-btn.ticket-sidebar-btn-danger:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+}
+
+.ticket-user-info {
+    padding: 12px;
+}
+
+.ticket-user-info-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.ticket-user-info-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 2px solid #a78bfa;
+}
+
+.ticket-user-info-name {
+    font-weight: 700;
+    color: #ffffff;
+    font-size: 0.95rem;
+}
+
+.ticket-user-info-tag {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.ticket-user-info-field {
+    margin-bottom: 10px;
+}
+
+.ticket-user-info-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+}
+
+.ticket-user-info-value {
+    font-size: 0.8rem;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.ticket-info-details {
+    padding: 12px;
+}
+
+.ticket-info-field {
+    margin-bottom: 10px;
+}
+
+.ticket-info-field:last-child {
+    margin-bottom: 0;
+}
+
+.ticket-info-label {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+}
+
+.ticket-info-value {
+    font-size: 0.8rem;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .ticket-modal-layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .grid.grid-cols-4 {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .ticket-staff-stat-row {
+        flex-direction: column;
+        gap: var(--spacing-3);
+    }
+
+    .ticket-staff-metrics {
+        width: 100%;
+        justify-content: space-around;
+    }
+}
+</style>
+
+<script>
+let currentTicketId = null;
+
+// Search and filter functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('ticketSearchInput');
+    const statusFilter = document.getElementById('ticketStatusFilter');
+    const assigneeFilter = document.getElementById('ticketAssigneeFilter');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', filterTickets);
+    }
+    if (statusFilter) {
+        statusFilter.addEventListener('change', filterTickets);
+    }
+    if (assigneeFilter) {
+        assigneeFilter.addEventListener('change', filterTickets);
+    }
+});
+
+function filterTickets() {
+    const searchTerm = document.getElementById('ticketSearchInput')?.value.toLowerCase() || '';
+    const statusFilter = document.getElementById('ticketStatusFilter')?.value || '';
+    const assigneeFilter = document.getElementById('ticketAssigneeFilter')?.value || '';
+
+    const rows = document.querySelectorAll('.ticket-row');
+
+    rows.forEach(row => {
+        const ticketId = row.querySelector('.ticket-id-cell span').textContent.toLowerCase();
+        const userName = row.querySelector('.ticket-user-name')?.textContent.toLowerCase() || '';
+        const subject = row.querySelector('.ticket-subject')?.textContent.toLowerCase() || '';
+        const status = row.dataset.status || '';
+        const assignee = row.dataset.assignee || '';
+
+        const matchesSearch = ticketId.includes(searchTerm) ||
+                            userName.includes(searchTerm) ||
+                            subject.includes(searchTerm);
+        const matchesStatus = !statusFilter || status === statusFilter;
+        const matchesAssignee = !assigneeFilter || assignee === assigneeFilter;
+
+        if (matchesSearch && matchesStatus && matchesAssignee) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// View ticket details
+async function viewTicketDetails(ticketId) {
+    currentTicketId = ticketId;
+    const modal = document.getElementById('ticketDetailsModal');
+    modal.style.display = 'flex';
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/ticket/${ticketId}`);
+        const data = await response.json();
+
+        // Update modal title
+        document.getElementById('modalTicketTitle').textContent = `Ticket #${ticketId}`;
+        document.getElementById('modalTicketSubtitle').textContent = data.subject || 'Support Request';
+
+        // Load messages
+        const messagesContainer = document.getElementById('ticketMessagesContainer');
+        messagesContainer.innerHTML = '';
+
+        if (data.messages && data.messages.length > 0) {
+            data.messages.forEach(msg => {
+                messagesContainer.innerHTML += `
+                    <div class="ticket-message">
+                        <img src="${msg.author_avatar}" alt="${msg.author_name}" class="ticket-message-avatar">
+                        <div class="ticket-message-content">
+                            <div class="ticket-message-header">
+                                <span class="ticket-message-author">${msg.author_name}</span>
+                                <span class="ticket-message-time">${new Date(msg.timestamp).toLocaleString()}</span>
+                            </div>
+                            <div class="ticket-message-text">${escapeHtml(msg.content)}</div>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            messagesContainer.innerHTML = '<div style="text-align: center; padding: var(--spacing-8); color: var(--color-text-muted);">No messages yet</div>';
+        }
+
+        // Load notes
+        const notesContainer = document.getElementById('ticketNotesContainer');
+        notesContainer.innerHTML = '';
+
+        if (data.notes && data.notes.length > 0) {
+            data.notes.forEach(note => {
+                notesContainer.innerHTML += `
+                    <div class="ticket-note">
+                        <div class="ticket-note-header">
+                            <span class="ticket-note-author">${note.staff_name}</span>
+                            <span class="ticket-note-time">${new Date(note.timestamp).toLocaleString()}</span>
+                        </div>
+                        <div class="ticket-note-text">${escapeHtml(note.note)}</div>
+                    </div>
+                `;
+            });
+        } else {
+            notesContainer.innerHTML = '<div style="text-align: center; padding: var(--spacing-4); color: var(--color-text-muted); font-size: var(--font-size-sm);">No internal notes</div>';
+        }
+
+        // Load user info
+        const userInfoContainer = document.getElementById('ticketUserInfo');
+        userInfoContainer.innerHTML = `
+            <div class="ticket-user-info-row">
+                <img src="${data.user.avatar}" alt="${data.user.name}" class="ticket-user-info-avatar">
+                <div>
+                    <div class="ticket-user-info-name">${data.user.name}</div>
+                    <div class="ticket-user-info-tag">@${data.user.tag}</div>
+                </div>
+            </div>
+            <div class="ticket-user-info-field">
+                <div class="ticket-user-info-label">User ID</div>
+                <div class="ticket-user-info-value">${data.user.id}</div>
+            </div>
+            <div class="ticket-user-info-field">
+                <div class="ticket-user-info-label">Account Created</div>
+                <div class="ticket-user-info-value">${new Date(data.user.created_at).toLocaleDateString()}</div>
+            </div>
+        `;
+
+        // Load ticket info
+        const ticketInfoContainer = document.getElementById('ticketInfoDetails');
+        ticketInfoContainer.innerHTML = `
+            <div class="ticket-info-field">
+                <div class="ticket-info-label">Status</div>
+                <div class="ticket-info-value">
+                    <span class="ticket-status-badge ticket-status-${data.status}">
+                        ${data.status.charAt(0).toUpperCase() + data.status.slice(1)}
+                    </span>
+                </div>
+            </div>
+            <div class="ticket-info-field">
+                <div class="ticket-info-label">Created</div>
+                <div class="ticket-info-value">${new Date(data.created_at).toLocaleString()}</div>
+            </div>
+            <div class="ticket-info-field">
+                <div class="ticket-info-label">Last Activity</div>
+                <div class="ticket-info-value">${new Date(data.last_activity).toLocaleString()}</div>
+            </div>
+            <div class="ticket-info-field">
+                <div class="ticket-info-label">Assigned To</div>
+                <div class="ticket-info-value">${data.assigned_to ? data.assigned_to.name : 'Unassigned'}</div>
+            </div>
+            <div class="ticket-info-field">
+                <div class="ticket-info-label">Channel</div>
+                <div class="ticket-info-value">#${data.channel_name || 'Unknown'}</div>
+            </div>
+        `;
+
+    } catch (error) {
+        console.error('Error loading ticket details:', error);
+        showNotification('Failed to load ticket details', 'error');
+    }
+}
+
+function closeTicketDetailsModal() {
+    document.getElementById('ticketDetailsModal').style.display = 'none';
+    currentTicketId = null;
+    document.getElementById('newNoteTextarea').value = '';
+}
+
+// Assign ticket
+async function assignTicket(ticketId) {
+    const staffId = prompt('Enter staff member ID to assign this ticket:');
+    if (!staffId) return;
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/ticket/${ticketId}/assign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ staff_id: staffId })
+        });
+
+        if (response.ok) {
+            showNotification('Ticket assigned successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('Failed to assign ticket', 'error');
+        }
+    } catch (error) {
+        console.error('Error assigning ticket:', error);
+        showNotification('Failed to assign ticket', 'error');
+    }
+}
+
+function assignTicketFromModal() {
+    if (currentTicketId) {
+        assignTicket(currentTicketId);
+    }
+}
+
+// Transfer ticket
+async function transferTicketFromModal() {
+    if (!currentTicketId) return;
+
+    const staffId = prompt('Enter staff member ID to transfer this ticket:');
+    if (!staffId) return;
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/ticket/${currentTicketId}/transfer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ staff_id: staffId })
+        });
+
+        if (response.ok) {
+            showNotification('Ticket transferred successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('Failed to transfer ticket', 'error');
+        }
+    } catch (error) {
+        console.error('Error transferring ticket:', error);
+        showNotification('Failed to transfer ticket', 'error');
+    }
+}
+
+// Close ticket
+async function closeTicket(ticketId) {
+    if (!confirm('Are you sure you want to close this ticket?')) return;
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/ticket/${ticketId}/close`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            showNotification('Ticket closed successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('Failed to close ticket', 'error');
+        }
+    } catch (error) {
+        console.error('Error closing ticket:', error);
+        showNotification('Failed to close ticket', 'error');
+    }
+}
+
+function closeTicketFromModal() {
+    if (currentTicketId) {
+        closeTicket(currentTicketId);
+    }
+}
+
+// Add ticket note
+async function addTicketNote(ticketId) {
+    const note = prompt('Enter internal note:');
+    if (!note) return;
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/ticket/${ticketId}/note`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note })
+        });
+
+        if (response.ok) {
+            showNotification('Note added successfully', 'success');
+        } else {
+            showNotification('Failed to add note', 'error');
+        }
+    } catch (error) {
+        console.error('Error adding note:', error);
+        showNotification('Failed to add note', 'error');
+    }
+}
+
+async function submitTicketNote() {
+    if (!currentTicketId) return;
+
+    const textarea = document.getElementById('newNoteTextarea');
+    const note = textarea.value.trim();
+
+    if (!note) {
+        showNotification('Please enter a note', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/ticket/${currentTicketId}/note`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note })
+        });
+
+        if (response.ok) {
+            showNotification('Note added successfully', 'success');
+            textarea.value = '';
+            // Reload ticket details
+            viewTicketDetails(currentTicketId);
+        } else {
+            showNotification('Failed to add note', 'error');
+        }
+    } catch (error) {
+        console.error('Error adding note:', error);
+        showNotification('Failed to add note', 'error');
+    }
+}
+
+// Utility functions
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showNotification(message, type) {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 16px 24px;
+        background: ${type === 'success' ? 'rgba(34, 197, 94, 0.9)' : 'rgba(239, 68, 68, 0.9)'};
+        color: white;
+        border-radius: 8px;
+        font-weight: 500;
+        z-index: 10000;
+        animation: slideInRight 0.3s ease;
+    `;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.animation = 'slideOutRight 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeTicketDetailsModal();
+        closePanelModal();
+    }
+});
+
+// ============================================================================
+// Ticket Panel Management Functions
+// ============================================================================
+
+let currentEditingPanelId = null;
+
+function openCreatePanelModal() {
+    currentEditingPanelId = null;
+    document.getElementById('panelModalTitle').textContent = 'Create Ticket Panel';
+    document.getElementById('panelForm').reset();
+    document.getElementById('panelModal').style.display = 'flex';
+}
+
+async function editPanel(panelId) {
+    currentEditingPanelId = panelId;
+    document.getElementById('panelModalTitle').textContent = 'Edit Ticket Panel';
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/ticket-panels/${panelId}`);
+        const data = await response.json();
+
+        if (data.success && data.panel) {
+            const panel = data.panel;
+            document.getElementById('panel_name').value = panel.panel_name || '';
+            document.getElementById('panel_channel_id').value = panel.panel_channel_id || '';
+            document.getElementById('embed_title').value = panel.embed_title || '';
+            document.getElementById('embed_description').value = panel.embed_description || '';
+            document.getElementById('embed_color').value = panel.embed_color || '#a78bfa';
+            document.getElementById('button_text').value = panel.button_text || '';
+            document.getElementById('button_emoji').value = panel.button_emoji || '';
+            document.getElementById('ticket_category_id').value = panel.ticket_category_id || '';
+            document.getElementById('support_role_id').value = panel.support_role_id || '';
+            document.getElementById('ticket_name_format').value = panel.ticket_name_format || '';
+            document.getElementById('save_transcripts').checked = panel.save_transcripts !== 0;
+            document.getElementById('log_channel_id').value = panel.log_channel_id || '';
+
+            document.getElementById('panelModal').style.display = 'flex';
+        } else {
+            showNotification('Failed to load panel data', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading panel:', error);
+        showNotification('Failed to load panel data', 'error');
+    }
+}
+
+function closePanelModal() {
+    document.getElementById('panelModal').style.display = 'none';
+    currentEditingPanelId = null;
+}
+
+async function savePanelForm() {
+    const formData = {
+        panel_name: document.getElementById('panel_name').value,
+        panel_channel_id: document.getElementById('panel_channel_id').value || null,
+        embed_title: document.getElementById('embed_title').value,
+        embed_description: document.getElementById('embed_description').value,
+        embed_color: document.getElementById('embed_color').value,
+        button_text: document.getElementById('button_text').value,
+        button_emoji: document.getElementById('button_emoji').value || null,
+        ticket_category_id: document.getElementById('ticket_category_id').value,
+        support_role_id: document.getElementById('support_role_id').value,
+        ticket_name_format: document.getElementById('ticket_name_format').value,
+        save_transcripts: document.getElementById('save_transcripts').checked,
+        log_channel_id: document.getElementById('log_channel_id').value || null
+    };
+
+    // Validate required fields
+    if (!formData.panel_name || !formData.ticket_category_id || !formData.support_role_id) {
+        showNotification('Panel name, category, and support role are required', 'error');
+        return;
+    }
+
+    try {
+        let response;
+        if (currentEditingPanelId) {
+            // Update existing panel
+            response = await fetch(`/manage/<%= guild.id %>/ticket-panels/${currentEditingPanelId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+        } else {
+            // Create new panel
+            response = await fetch(`/manage/<%= guild.id %>/ticket-panels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(formData)
+            });
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification(currentEditingPanelId ? 'Panel updated successfully' : 'Panel created successfully', 'success');
+            closePanelModal();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification(data.error || 'Failed to save panel', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving panel:', error);
+        showNotification('Failed to save panel', 'error');
+    }
+}
+
+async function deployPanel(panelId) {
+    if (!confirm('Deploy this panel to its configured channel?')) return;
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/ticket-panels/${panelId}/deploy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification('Panel deployed successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification(data.error || 'Failed to deploy panel', 'error');
+        }
+    } catch (error) {
+        console.error('Error deploying panel:', error);
+        showNotification('Failed to deploy panel', 'error');
+    }
+}
+
+async function deletePanel(panelId) {
+    if (!confirm('Are you sure you want to delete this panel? This action cannot be undone.')) return;
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/ticket-panels/${panelId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification('Panel deleted successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification(data.error || 'Failed to delete panel', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting panel:', error);
+        showNotification('Failed to delete panel', 'error');
+    }
+}
+</script>
+
+<!-- Panel Create/Edit Modal -->
+<div id="panelModal" class="ticket-modal" style="display: none;">
+    <div class="ticket-modal-overlay" onclick="closePanelModal()"></div>
+    <div class="ticket-modal-content" style="max-width: 800px;">
+        <div class="ticket-modal-header">
+            <div>
+                <h3 class="ticket-modal-title">
+                    <i class="fas fa-ticket-alt"></i>
+                    <span id="panelModalTitle">Create Ticket Panel</span>
+                </h3>
+                <p class="ticket-modal-subtitle">Configure a customizable ticket panel for your server</p>
+            </div>
+            <button class="ticket-modal-close" onclick="closePanelModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="ticket-modal-body">
+            <form id="panelForm" onsubmit="event.preventDefault(); savePanelForm();">
+                <!-- Basic Settings -->
+                <div style="margin-bottom: var(--spacing-6);">
+                    <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                        <i class="fas fa-cog"></i> Basic Settings
+                    </h4>
+
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Panel Name *</label>
+                        <input type="text" id="panel_name" class="form-control" placeholder="e.g., General Support, Bug Reports" required>
+                        <div class="form-help">A name to identify this panel in the dashboard</div>
+                    </div>
+
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Panel Channel</label>
+                            <select id="panel_channel_id" class="form-select">
+                                <option value="">Select channel...</option>
+                                <% channels.forEach(channel => { %>
+                                    <option value="<%= channel.id %>">#<%= channel.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="form-help">Where the panel button will be posted</div>
+                        </div>
+
+                        <div>
+                            <label class="form-label">Ticket Category *</label>
+                            <select id="ticket_category_id" class="form-select" required>
+                                <option value="">Select category...</option>
+                                <% categories.forEach(category => { %>
+                                    <option value="<%= category.id %>"><%= category.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="form-help">Where ticket channels will be created</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Embed Customization -->
+                <div style="margin-bottom: var(--spacing-6);">
+                    <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                        <i class="fas fa-palette"></i> Embed Customization
+                    </h4>
+
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Embed Title</label>
+                        <input type="text" id="embed_title" class="form-control" placeholder="Support Ticket" value="Support Ticket">
+                    </div>
+
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Embed Description</label>
+                        <textarea id="embed_description" class="form-control" rows="3" placeholder="Click the button below to create a support ticket. Our team will assist you shortly!">Click the button below to create a support ticket. Our team will assist you shortly!</textarea>
+                    </div>
+
+                    <div class="grid grid-cols-3" style="gap: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Embed Color</label>
+                            <input type="color" id="embed_color" class="form-control" value="#a78bfa" style="height: 45px;">
+                        </div>
+                        <div>
+                            <label class="form-label">Button Text</label>
+                            <input type="text" id="button_text" class="form-control" placeholder="Create Ticket" value="Create Ticket">
+                        </div>
+                        <div>
+                            <label class="form-label">Button Emoji</label>
+                            <input type="text" id="button_emoji" class="form-control" placeholder="🎫">
+                            <div class="form-help">Optional emoji for button</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ticket Settings -->
+                <div style="margin-bottom: var(--spacing-6);">
+                    <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+                        <i class="fas fa-ticket-alt"></i> Ticket Settings
+                    </h4>
+
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                        <div>
+                            <label class="form-label">Support Role *</label>
+                            <select id="support_role_id" class="form-select" required>
+                                <option value="">Select role...</option>
+                                <% roles.forEach(role => { %>
+                                    <option value="<%= role.id %>"><%= role.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="form-help">Role that can view/manage tickets</div>
+                        </div>
+
+                        <div>
+                            <label class="form-label">Log Channel</label>
+                            <select id="log_channel_id" class="form-select">
+                                <option value="">None</option>
+                                <% channels.forEach(channel => { %>
+                                    <option value="<%= channel.id %>">#<%= channel.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="form-help">Optional channel for ticket logs</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Ticket Name Format</label>
+                        <input type="text" id="ticket_name_format" class="form-control" placeholder="ticket-{username}" value="ticket-{username}">
+                        <div class="form-help">Placeholders: {username}, {number}, {id}</div>
+                    </div>
+
+                    <div class="form-check">
+                        <input type="checkbox" id="save_transcripts" class="form-check-input" checked>
+                        <label class="form-check-label" for="save_transcripts">
+                            Save transcripts when tickets are closed
+                        </label>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: var(--spacing-3);">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        <span>Save Panel</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closePanelModal()">
+                        <i class="fas fa-times"></i>
+                        <span>Cancel</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Panel Grid */
+.panels-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 14px;
+}
+
+/* Panel Card */
+.panel-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+
+.panel-card:hover {
+    border-color: rgba(167, 139, 250, 0.4);
+}
+
+.panel-card-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.panel-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 2px;
+}
+
+.panel-card-status {
+    display: flex;
+    gap: 6px;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.65rem;
+    font-weight: 600;
+}
+
+.status-deployed {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.5);
+}
+
+.status-not-deployed {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.panel-card-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.panel-action-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.panel-action-btn:hover {
+    background: #a78bfa;
+    border-color: #a78bfa;
+    color: white;
+}
+
+.panel-action-btn.panel-action-delete:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+}
+
+.panel-card-body {
+    padding: 12px 14px;
+}
+
+/* Panel Preview */
+.panel-preview {
+    margin-bottom: 12px;
+}
+
+.panel-preview-embed {
+    background: rgba(0, 0, 0, 0.2);
+    border-left: 3px solid #a78bfa;
+    border-radius: 6px;
+    padding: 12px;
+}
+
+.panel-preview-embed-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.panel-preview-embed-desc {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 10px;
+    line-height: 1.5;
+}
+
+.panel-preview-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #a78bfa;
+    color: white;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* Panel Details */
+.panel-details {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.panel-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.panel-detail-item i {
+    color: #a78bfa;
+    width: 14px;
+    font-size: 0.75rem;
+}
+
+@media (max-width: 768px) {
+    .panels-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>

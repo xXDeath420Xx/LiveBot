@@ -1,0 +1,122 @@
+<!-- Loading States & Skeleton Screens Partial -->
+
+<!-- Page Loading Overlay -->
+<div id="page-loading-overlay" class="loading-overlay">
+    <div class="page-loading">
+        <div class="page-loading-spinner">
+            <div class="spinner lg"></div>
+            <div class="page-loading-text">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Server List Skeleton (for servers page) -->
+<template id="server-card-skeleton-template">
+    <div class="col-md-6 col-lg-4">
+        <div class="server-card-skeleton">
+            <div class="skeleton-card-header">
+                <div class="skeleton skeleton-avatar"></div>
+                <div class="skeleton-info flex-grow-1">
+                    <div class="skeleton skeleton-text lg"></div>
+                    <div class="skeleton skeleton-text"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Manage Page Skeleton -->
+<template id="manage-page-skeleton-template">
+    <div class="manage-page-skeleton">
+        <!-- Sidebar Skeleton -->
+        <aside class="sidebar-skeleton">
+            <div class="skeleton skeleton-item"></div>
+            <div class="skeleton skeleton-item"></div>
+            <div class="skeleton skeleton-item"></div>
+            <div style="margin-top: 1rem;"></div>
+            <div class="skeleton skeleton-item"></div>
+            <div class="skeleton skeleton-item"></div>
+            <div class="skeleton skeleton-item"></div>
+            <div style="margin-top: 1rem;"></div>
+            <div class="skeleton skeleton-item"></div>
+            <div class="skeleton skeleton-item"></div>
+        </aside>
+
+        <!-- Content Skeleton -->
+        <div class="content-skeleton flex-grow-1">
+            <!-- Header -->
+            <div class="content-skeleton skeleton-header">
+                <div class="skeleton skeleton-avatar lg"></div>
+                <div class="skeleton-header-info flex-grow-1">
+                    <div class="skeleton skeleton-text lg"></div>
+                    <div class="skeleton skeleton-text"></div>
+                </div>
+            </div>
+
+            <!-- Content Section -->
+            <div class="skeleton-section">
+                <div class="skeleton skeleton-text lg" style="width: 30%; margin-bottom: 1rem;"></div>
+
+                <!-- List Items -->
+                <div class="skeleton-list-item">
+                    <div class="skeleton skeleton-list-item-avatar"></div>
+                    <div class="skeleton-list-item-content flex-grow-1">
+                        <div class="skeleton skeleton-text"></div>
+                        <div class="skeleton skeleton-text"></div>
+                    </div>
+                </div>
+
+                <div class="skeleton-list-item">
+                    <div class="skeleton skeleton-list-item-avatar"></div>
+                    <div class="skeleton-list-item-content flex-grow-1">
+                        <div class="skeleton skeleton-text"></div>
+                        <div class="skeleton skeleton-text"></div>
+                    </div>
+                </div>
+
+                <div class="skeleton-list-item">
+                    <div class="skeleton skeleton-list-item-avatar"></div>
+                    <div class="skeleton-list-item-content flex-grow-1">
+                        <div class="skeleton skeleton-text"></div>
+                        <div class="skeleton skeleton-text"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Simple Spinner Loader -->
+<template id="spinner-template">
+    <div class="spinner-text">
+        <div class="spinner sm"></div>
+        <span>Loading...</span>
+    </div>
+</template>
+
+<!-- Spinner Dots Loader -->
+<template id="spinner-dots-template">
+    <div class="spinner-dots">
+        <div></div>
+        <div></div>
+        <div></div>
+    </div>
+</template>
+
+<!-- Data Loading Container -->
+<template id="data-loading-template">
+    <div class="api-loading-container">
+        <div class="api-loading-icon">
+            <i class="fas fa-circle-notch"></i>
+        </div>
+        <div class="api-loading-text">
+            <span id="loading-message">Loading data...</span>
+        </div>
+    </div>
+</template>
+
+<!-- Loading Bar (for page transitions) -->
+<div id="page-loading-bar" class="loading-bar" style="display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 10000;"></div>
+
+<!-- Toast Container for notifications -->
+<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>

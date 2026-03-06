@@ -1,0 +1,157 @@
+<%# Data Table Component
+    Props:
+    - id: string - Table ID
+    - columns: Array - Column definitions { key, label, sortable, width, align, render }
+    - data: Array - Row data
+    - emptyMessage: string - Message when no data
+    - sortable: boolean - Enable sorting
+    - searchable: boolean - Enable search
+    - paginated: boolean - Enable pagination
+    - pageSize: number - Rows per page
+    - actions: Array - Row action buttons { label, icon, class, onclick }
+    - selectable: boolean - Enable row selection
+    - class: string - Additional CSS classes
+%>
+<%
+const columns = locals.columns || [];
+const data = locals.data || [];
+const pageSize = locals.pageSize || 25;
+const emptyMessage = locals.emptyMessage || 'No data available';
+%>
+
+<div class="data-table-wrapper <%= locals.class || '' %>" <% if (locals.id) { %>id="<%= locals.id %>"<% } %>>
+    <% if (locals.searchable) { %>
+    <div class="flex items-center justify-between mb-4">
+        <div class="relative">
+            <input
+                type="text"
+                placeholder="Search..."
+                class="form-input pl-10 w-64"
+                data-table-search
+            >
+            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+        </div>
+
+        <% if (locals.paginated) { %>
+        <div class="text-sm text-gray-400" data-table-info>
+            Showing <span data-showing>0</span> of <span data-total><%= data.length %></span> entries
+        </div>
+        <% } %>
+    </div>
+    <% } %>
+
+    <div class="overflow-x-auto rounded-lg border border-dark-400">
+        <table class="data-table w-full" <%= locals.sortable ? 'data-sortable' : '' %>>
+            <thead>
+                <tr class="bg-dark-700">
+                    <% if (locals.selectable) { %>
+                    <th class="w-10 px-4 py-3">
+                        <input type="checkbox" class="rounded bg-dark-600 border-dark-400" data-select-all>
+                    </th>
+                    <% } %>
+
+                    <% columns.forEach(col => { %>
+                    <th
+                        class="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider <%= col.width ? `w-[${col.width}]` : '' %> <%= col.align === 'center' ? 'text-center' : '' %> <%= col.align === 'right' ? 'text-right' : '' %>"
+                        <%= col.sortable ? `data-sort="${col.key}"` : '' %>
+                    >
+                        <div class="flex items-center gap-1 <%= col.sortable ? 'cursor-pointer hover:text-white' : '' %>">
+                            <%= col.label %>
+                            <% if (col.sortable) { %>
+                            <svg class="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
+                            </svg>
+                            <% } %>
+                        </div>
+                    </th>
+                    <% }); %>
+
+                    <% if (locals.actions && locals.actions.length > 0) { %>
+                    <th class="w-20 px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase">Actions</th>
+                    <% } %>
+                </tr>
+            </thead>
+
+            <tbody class="divide-y divide-dark-500">
+                <% if (data.length === 0) { %>
+                <tr>
+                    <td colspan="<%= columns.length + (locals.selectable ? 1 : 0) + (locals.actions ? 1 : 0) %>" class="px-4 py-12 text-center">
+                        <div class="empty-state">
+                            <svg class="empty-state-icon mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+                            </svg>
+                            <p class="empty-state-title"><%= emptyMessage %></p>
+                        </div>
+                    </td>
+                </tr>
+                <% } else { %>
+                    <% data.forEach((row, index) => { %>
+                    <tr class="hover:bg-dark-500/50 transition-colors" data-row-index="<%= index %>">
+                        <% if (locals.selectable) { %>
+                        <td class="px-4 py-3">
+                            <input type="checkbox" class="rounded bg-dark-600 border-dark-400" data-select-row value="<%= row.id || index %>">
+                        </td>
+                        <% } %>
+
+                        <% columns.forEach(col => { %>
+                        <td class="px-4 py-3 text-sm text-gray-300 <%= col.align === 'center' ? 'text-center' : '' %> <%= col.align === 'right' ? 'text-right' : '' %>">
+                            <% if (col.render) { %>
+                                <%- col.render(row[col.key], row) %>
+                            <% } else { %>
+                                <%= row[col.key] || '-' %>
+                            <% } %>
+                        </td>
+                        <% }); %>
+
+                        <% if (locals.actions && locals.actions.length > 0) { %>
+                        <td class="px-4 py-3 text-right">
+                            <div class="flex items-center justify-end gap-1">
+                                <% locals.actions.forEach(action => { %>
+                                <button
+                                    type="button"
+                                    class="p-1.5 rounded hover:bg-dark-400 transition-colors <%= action.class || 'text-gray-400 hover:text-white' %>"
+                                    title="<%= action.label %>"
+                                    onclick="<%= action.onclick ? action.onclick.replace('{id}', row.id || index) : '' %>"
+                                >
+                                    <%- action.icon %>
+                                </button>
+                                <% }); %>
+                            </div>
+                        </td>
+                        <% } %>
+                    </tr>
+                    <% }); %>
+                <% } %>
+            </tbody>
+        </table>
+    </div>
+
+    <% if (locals.paginated && data.length > pageSize) { %>
+    <div class="flex items-center justify-between mt-4">
+        <div class="flex items-center gap-2">
+            <button type="button" class="btn btn-secondary btn-sm" data-page="prev" disabled>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Previous
+            </button>
+            <div class="flex gap-1" data-page-numbers></div>
+            <button type="button" class="btn btn-secondary btn-sm" data-page="next">
+                Next
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+            </button>
+        </div>
+
+        <select class="form-select w-auto text-sm" data-page-size>
+            <option value="10">10 per page</option>
+            <option value="25" selected>25 per page</option>
+            <option value="50">50 per page</option>
+            <option value="100">100 per page</option>
+        </select>
+    </div>
+    <% } %>
+</div>

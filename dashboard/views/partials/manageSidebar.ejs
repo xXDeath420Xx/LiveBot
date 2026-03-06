@@ -1,0 +1,145 @@
+<%# Manage Sidebar Partial
+    Available variables:
+    - guild: Guild object
+    - activeSection: Current active section
+    - user: User object
+%>
+<%
+const guildId = locals.guild?.id || locals.guildId || '';
+const activeSection = locals.activeSection || 'overview';
+
+const sections = [
+    {
+        title: 'General',
+        items: [
+            { id: 'overview', label: 'Overview', icon: 'home', href: `/manage/${guildId}` },
+            { id: 'core', label: 'Core Settings', icon: 'cog', href: `/manage/${guildId}?section=core` },
+            { id: 'appearance', label: 'Appearance', icon: 'palette', href: `/manage/${guildId}?section=appearance` }
+        ]
+    },
+    {
+        title: 'Moderation',
+        items: [
+            { id: 'moderation', label: 'Moderation', icon: 'shield', href: `/manage/${guildId}?section=moderation` },
+            { id: 'automod', label: 'AutoMod', icon: 'robot', href: `/manage/${guildId}?section=automod` },
+            { id: 'logging', label: 'Logging', icon: 'clipboard', href: `/manage/${guildId}?section=logging` },
+            { id: 'security', label: 'Security', icon: 'lock', href: `/manage/${guildId}?section=security` }
+        ]
+    },
+    {
+        title: 'Engagement',
+        items: [
+            { id: 'welcome', label: 'Welcome', icon: 'hand-wave', href: `/manage/${guildId}?section=welcome` },
+            { id: 'leveling', label: 'Leveling', icon: 'trending-up', href: `/manage/${guildId}?section=leveling` },
+            { id: 'rankcard', label: 'Rank Card', icon: 'id-card', href: `/manage/${guildId}?section=rankcard` },
+            { id: 'economy', label: 'Economy', icon: 'coins', href: `/manage/${guildId}?section=economy` },
+            { id: 'reaction-roles', label: 'Reaction Roles', icon: 'tag', href: `/manage/${guildId}?section=reaction-roles` }
+        ]
+    },
+    {
+        title: 'Content',
+        items: [
+            { id: 'streamers', label: 'Streamers', icon: 'video', href: `/manage/${guildId}?section=streamers` },
+            { id: 'starboard', label: 'Starboard', icon: 'star', href: `/manage/${guildId}?section=starboard` },
+            { id: 'feeds', label: 'Feeds', icon: 'rss', href: `/manage/${guildId}?section=feeds` }
+        ]
+    },
+    {
+        title: 'Community',
+        items: [
+            { id: 'tickets', label: 'Tickets', icon: 'ticket', href: `/manage/${guildId}?section=tickets` },
+            { id: 'suggestions', label: 'Suggestions', icon: 'lightbulb', href: `/manage/${guildId}?section=suggestions` },
+            { id: 'polls', label: 'Polls', icon: 'chart-bar', href: `/manage/${guildId}?section=polls` },
+            { id: 'giveaways', label: 'Giveaways', icon: 'gift', href: `/manage/${guildId}?section=giveaways` }
+        ]
+    },
+    {
+        title: 'Games & Fun',
+        items: [
+            { id: 'games', label: 'Games', icon: 'gamepad', href: `/manage/${guildId}?section=games` },
+            { id: 'music', label: 'Music', icon: 'music', href: `/manage/${guildId}?section=music` }
+        ]
+    }
+];
+
+const icons = {
+    'home': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>',
+    'cog': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>',
+    'palette': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>',
+    'shield': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>',
+    'robot': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>',
+    'clipboard': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>',
+    'lock': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>',
+    'hand-wave': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"/>',
+    'trending-up': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>',
+    'coins': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
+    'tag': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>',
+    'video': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>',
+    'star': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>',
+    'rss': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"/>',
+    'ticket': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"/>',
+    'lightbulb': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>',
+    'chart-bar': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>',
+    'gift': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/>',
+    'gamepad': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
+    'music': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>',
+    'id-card': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>'
+};
+%>
+
+<aside class="w-64 bg-dark-800 border-r border-dark-400 min-h-screen flex flex-col">
+    <!-- Guild Header -->
+    <div class="p-4 border-b border-dark-400">
+        <a href="/dashboard" class="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-3 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+            Back to Servers
+        </a>
+
+        <div class="flex items-center gap-3">
+            <% if (locals.guild?.icon) { %>
+            <img src="https://cdn.discordapp.com/icons/<%= locals.guild.id %>/<%= locals.guild.icon %>.webp?size=64" alt="" class="w-10 h-10 rounded-full">
+            <% } else { %>
+            <div class="w-10 h-10 rounded-full bg-dark-600 flex items-center justify-center text-lg font-bold text-gray-400">
+                <%= (locals.guild?.name || 'S').charAt(0) %>
+            </div>
+            <% } %>
+            <div class="flex-1 min-w-0">
+                <h2 class="font-semibold text-white truncate"><%= locals.guild?.name || 'Server' %></h2>
+                <p class="text-xs text-gray-500"><%= locals.guild?.memberCount?.toLocaleString() || 0 %> members</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="flex-1 overflow-y-auto p-3">
+        <% sections.forEach(section => { %>
+        <div class="mb-4">
+            <h3 class="px-3 mb-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <%= section.title %>
+            </h3>
+            <ul class="space-y-1">
+                <% section.items.forEach(item => { %>
+                <li>
+                    <a
+                        href="<%= item.href %>"
+                        class="nav-link <%= activeSection === item.id ? 'active' : '' %>"
+                    >
+                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <%- icons[item.icon] || icons['cog'] %>
+                        </svg>
+                        <span><%= item.label %></span>
+                    </a>
+                </li>
+                <% }); %>
+            </ul>
+        </div>
+        <% }); %>
+    </nav>
+
+    <!-- Footer -->
+    <div class="p-4 border-t border-dark-400">
+        <%- include('../partials/botSwitcher') %>
+    </div>
+</aside>

@@ -1,0 +1,538 @@
+<style>
+/* Compact Confessions Page Styles */
+.confessions-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.confessions-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.confessions-section-header i { font-size: 1rem; color: #a78bfa; }
+.confessions-section-header.pending i { color: #fbbf24; }
+.confessions-section-header.recent i { color: #22c55e; }
+.confessions-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
+.confessions-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
+
+.confessions-section-body { padding: 18px; }
+
+/* Toggle Switch */
+.confessions-toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 16px;
+}
+
+.confessions-toggle-wrapper:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.confessions-toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.confessions-toggle input { opacity: 0; width: 0; height: 0; }
+
+.confessions-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: 0.2s;
+    border-radius: 24px;
+}
+
+.confessions-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+.confessions-toggle input:checked + .confessions-toggle-slider {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    border-color: #a78bfa;
+}
+
+.confessions-toggle input:checked + .confessions-toggle-slider:before {
+    transform: translateX(20px);
+}
+
+.confessions-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
+.confessions-toggle-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
+
+/* Form Styles */
+.confessions-form-group { margin-bottom: 16px; }
+
+.confessions-form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+
+.confessions-form-label i { color: #a78bfa; margin-right: 6px; }
+
+.confessions-form-select {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.confessions-form-select:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+
+.confessions-form-select option { background: #1a1d21; color: #ffffff; }
+
+.confessions-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Save Button */
+.confessions-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.confessions-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
+
+/* Confession Item */
+.confession-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 12px;
+    transition: all 0.2s;
+}
+
+.confession-item:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.confession-item:last-child { margin-bottom: 0; }
+
+.confession-content {
+    background: rgba(167, 139, 250, 0.08);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 8px;
+    padding: 12px;
+    color: rgba(255, 255, 255, 0.9);
+    font-style: italic;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin-bottom: 12px;
+}
+
+.confession-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.confession-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.confession-approve-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 6px;
+    color: #22c55e;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.confession-approve-btn:hover {
+    background: rgba(34, 197, 94, 0.25);
+    border-color: rgba(34, 197, 94, 0.5);
+}
+
+.confession-reject-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    color: #ef4444;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.confession-reject-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+/* Status Badge */
+.confession-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.confession-status-badge.pending {
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: #fbbf24;
+}
+
+.confession-status-badge.approved {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #22c55e;
+}
+
+.confession-status-badge.rejected {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+/* Empty State */
+.confessions-empty {
+    text-align: center;
+    padding: 32px 20px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.confessions-empty i { font-size: 2rem; margin-bottom: 12px; opacity: 0.5; }
+.confessions-empty p { margin: 0; font-size: 0.85rem; }
+
+/* Loading State */
+.confessions-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 20px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+}
+
+.confessions-loading i {
+    font-size: 1.5rem;
+    color: #a78bfa;
+    margin-bottom: 12px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-secret"></i>
+                <span>Anonymous Confessions</span>
+            </div>
+            <div class="page-section-subtitle">
+                Allow users to submit anonymous confessions to a channel
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Section -->
+    <div class="confessions-section-card">
+        <div class="confessions-section-header">
+            <i class="fas fa-cog"></i>
+            <h3>Configuration</h3>
+        </div>
+        <div class="confessions-section-body">
+            <form id="confession-config-form" onsubmit="saveConfessionConfig(event)">
+                <div class="confessions-form-group">
+                    <label class="confessions-form-label">
+                        <i class="fas fa-hashtag"></i>Confession Channel
+                    </label>
+                    <select id="confession-channel" name="channel_id" class="confessions-form-select" required>
+                        <option value="">Select a channel...</option>
+                        <% if (channels) { %>
+                            <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                            <% }); %>
+                        <% } %>
+                    </select>
+                    <span class="confessions-form-hint">Channel where approved confessions will be posted</span>
+                </div>
+
+                <label class="confessions-toggle-wrapper">
+                    <div class="confessions-toggle">
+                        <input type="checkbox" id="require-approval" name="require_approval">
+                        <span class="confessions-toggle-slider"></span>
+                    </div>
+                    <div>
+                        <div class="confessions-toggle-label">Require Approval</div>
+                        <div class="confessions-toggle-desc">Confessions must be approved by staff before posting</div>
+                    </div>
+                </label>
+
+                <div class="confessions-form-group" style="margin-bottom: 0;">
+                    <label class="confessions-form-label">
+                        <i class="fas fa-shield-alt"></i>Moderation Channel
+                    </label>
+                    <select id="mod-channel" name="mod_channel_id" class="confessions-form-select">
+                        <option value="">None (disable moderation queue)</option>
+                        <% if (channels) { %>
+                            <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                            <% }); %>
+                        <% } %>
+                    </select>
+                    <span class="confessions-form-hint">Where pending confessions will be sent for review</span>
+                </div>
+
+                <div style="margin-top: 18px;">
+                    <button type="submit" class="confessions-save-btn">
+                        <i class="fas fa-save"></i>
+                        Save Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Pending Confessions Section -->
+    <div class="confessions-section-card">
+        <div class="confessions-section-header pending">
+            <i class="fas fa-clock"></i>
+            <h3>Pending Confessions</h3>
+        </div>
+        <div class="confessions-section-body" id="pending-confessions">
+            <div class="confessions-loading">
+                <i class="fas fa-spinner"></i>
+                <span>Loading pending confessions...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Confessions Section -->
+    <div class="confessions-section-card">
+        <div class="confessions-section-header recent">
+            <i class="fas fa-check-circle"></i>
+            <h3>Recent Confessions</h3>
+        </div>
+        <div class="confessions-section-body" id="recent-confessions">
+            <div class="confessions-loading">
+                <i class="fas fa-spinner"></i>
+                <span>Loading recent confessions...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadConfessions() {
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/confessions');
+        const data = await response.json();
+
+        // Load config
+        if (data.config) {
+            document.getElementById('confession-channel').value = data.config.channel_id || '';
+            document.getElementById('require-approval').checked = data.config.require_approval || false;
+            document.getElementById('mod-channel').value = data.config.mod_channel_id || '';
+        }
+
+        // Pending confessions
+        if (data.pendingConfessions && data.pendingConfessions.length > 0) {
+            const pendingHtml = data.pendingConfessions.map(confession => `
+                <div class="confession-item">
+                    <div class="confession-content">"${confession.content}"</div>
+                    <div class="confession-meta">
+                        <span><i class="fas fa-calendar"></i> ${new Date(confession.submitted_at).toLocaleString()}</span>
+                        <span class="confession-status-badge pending"><i class="fas fa-clock"></i> Pending</span>
+                    </div>
+                    <div class="confession-actions">
+                        <button class="confession-approve-btn" onclick="approveConfession(${confession.id})">
+                            <i class="fas fa-check"></i> Approve
+                        </button>
+                        <button class="confession-reject-btn" onclick="rejectConfession(${confession.id})">
+                            <i class="fas fa-times"></i> Reject
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('pending-confessions').innerHTML = pendingHtml;
+        } else {
+            document.getElementById('pending-confessions').innerHTML = `
+                <div class="confessions-empty">
+                    <i class="fas fa-inbox"></i>
+                    <p>No pending confessions</p>
+                </div>
+            `;
+        }
+
+        // Recent confessions
+        if (data.recentConfessions && data.recentConfessions.length > 0) {
+            const recentHtml = data.recentConfessions.map(confession => {
+                const statusClass = confession.approved === 1 ? 'approved' : 'rejected';
+                const statusText = confession.approved === 1 ? 'Approved' : 'Rejected';
+                const statusIcon = confession.approved === 1 ? 'check' : 'times';
+                return `
+                    <div class="confession-item">
+                        <div class="confession-content">"${confession.content}"</div>
+                        <div class="confession-meta">
+                            <span><i class="fas fa-calendar"></i> ${new Date(confession.submitted_at).toLocaleString()}</span>
+                            <span class="confession-status-badge ${statusClass}"><i class="fas fa-${statusIcon}"></i> ${statusText}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('recent-confessions').innerHTML = recentHtml;
+        } else {
+            document.getElementById('recent-confessions').innerHTML = `
+                <div class="confessions-empty">
+                    <i class="fas fa-inbox"></i>
+                    <p>No recent confessions</p>
+                </div>
+            `;
+        }
+
+    } catch (error) {
+        console.error('Error loading confessions:', error);
+        document.getElementById('pending-confessions').innerHTML = `
+            <div class="confessions-empty">
+                <i class="fas fa-exclamation-triangle"></i>
+                <p>Error loading data</p>
+            </div>
+        `;
+    }
+}
+
+async function saveConfessionConfig(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const config = {
+        channel_id: formData.get('channel_id'),
+        require_approval: document.getElementById('require-approval').checked,
+        mod_channel_id: formData.get('mod_channel_id') || null
+    };
+
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/confessions/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+
+        if (response.ok) {
+            alert('Configuration saved successfully!');
+        } else {
+            alert('Failed to save configuration');
+        }
+    } catch (error) {
+        console.error('Error saving config:', error);
+        alert('Error saving configuration');
+    }
+}
+
+async function approveConfession(id) {
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/confessions/${id}/approve`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            alert('Confession approved!');
+            loadConfessions();
+        } else {
+            alert('Failed to approve confession');
+        }
+    } catch (error) {
+        console.error('Error approving confession:', error);
+        alert('Error approving confession');
+    }
+}
+
+async function rejectConfession(id) {
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/confessions/${id}/reject`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            alert('Confession rejected');
+            loadConfessions();
+        } else {
+            alert('Failed to reject confession');
+        }
+    } catch (error) {
+        console.error('Error rejecting confession:', error);
+        alert('Error rejecting confession');
+    }
+}
+
+loadConfessions();
+</script>

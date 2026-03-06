@@ -1,0 +1,78 @@
+<%# Color Picker Component
+    Props:
+    - name: string (required) - Form field name
+    - id: string - Element ID
+    - value: string - Current color value (hex format)
+    - label: string - Label text
+    - hint: string - Help text
+    - presets: Array - Preset color options
+    - required: boolean - Whether field is required
+    - disabled: boolean - Whether picker is disabled
+    - class: string - Additional CSS classes
+%>
+<%
+const defaultPresets = [
+    '#a78bfa', // Discord Blurple
+    '#57F287', // Green
+    '#FEE75C', // Yellow
+    '#EB459E', // Pink
+    '#ED4245', // Red
+    '#9B59B6', // Purple
+    '#00B8D9', // Cyan
+    '#FFFFFF'  // White
+];
+const presets = locals.presets || defaultPresets;
+const currentValue = locals.value || '#a78bfa';
+%>
+
+<div class="form-group <%= locals.class || '' %>">
+    <% if (locals.label) { %>
+        <label for="<%= locals.id || locals.name %>" class="form-label"><%= locals.label %></label>
+    <% } %>
+
+    <div class="color-picker-wrapper flex items-center gap-3">
+        <div class="relative">
+            <input
+                type="color"
+                name="<%= locals.name %>"
+                id="<%= locals.id || locals.name %>"
+                value="<%= currentValue %>"
+                class="w-12 h-10 rounded-lg cursor-pointer bg-transparent border-0"
+                <%= locals.required ? 'required' : '' %>
+                <%= locals.disabled ? 'disabled' : '' %>
+            >
+        </div>
+
+        <input
+            type="text"
+            value="<%= currentValue.toUpperCase() %>"
+            class="form-input w-28 font-mono text-sm uppercase"
+            pattern="^#[0-9A-Fa-f]{6}$"
+            maxlength="7"
+            <%= locals.disabled ? 'disabled' : '' %>
+        >
+
+        <% if (presets.length > 0) { %>
+            <div class="flex gap-1">
+                <% presets.slice(0, 8).forEach(color => { %>
+                    <button
+                        type="button"
+                        class="w-6 h-6 rounded border border-dark-400 hover:scale-110 transition-transform"
+                        style="background-color: <%= color %>"
+                        data-color="<%= color %>"
+                        title="<%= color %>"
+                        onclick="
+                            const wrapper = this.closest('.color-picker-wrapper');
+                            wrapper.querySelector('input[type=color]').value = '<%= color %>';
+                            wrapper.querySelector('input[type=text]').value = '<%= color.toUpperCase() %>';
+                        "
+                    ></button>
+                <% }); %>
+            </div>
+        <% } %>
+    </div>
+
+    <% if (locals.hint) { %>
+        <p class="form-hint"><%= locals.hint %></p>
+    <% } %>
+</div>

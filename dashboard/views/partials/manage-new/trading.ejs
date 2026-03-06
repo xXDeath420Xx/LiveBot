@@ -1,0 +1,229 @@
+<%# Trading System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Trades',
+            value: tradeStats?.active_trades || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Completed Trades',
+            value: tradeStats?.completed_trades || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Cancelled Trades',
+            value: tradeStats?.cancelled_trades || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>',
+            color: 'warning'
+        }) %>
+    </div>
+
+    <!-- Active Trades -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+            </svg>
+            Active Trades
+        </h3>
+
+        <% if (activeTrades && activeTrades.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">ID</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Initiator</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Partner</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Initiator Offer</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Partner Offer</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% activeTrades.forEach(trade => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <code class="text-primary-400 font-semibold">#<%= trade.trade_id %></code>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <code class="text-xs text-gray-400"><%= trade.initiator_id %></code>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <code class="text-xs text-gray-400"><%= trade.partner_id %></code>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <div class="flex gap-2 flex-wrap">
+                                        <% if (trade.initiator_currency > 0) { %>
+                                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-yellow/20 text-accent-yellow"><%= trade.initiator_currency.toLocaleString() %> coins</span>
+                                        <% } %>
+                                        <% if (trade.initiator_items && trade.initiator_items.length > 0) { %>
+                                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-purple-500/20 text-purple-400"><%= trade.initiator_items.split(',').length %> items</span>
+                                        <% } %>
+                                        <% if (!trade.initiator_currency && (!trade.initiator_items || !trade.initiator_items.length)) { %>
+                                            <span class="text-gray-500 text-xs">Nothing</span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <div class="flex gap-2 flex-wrap">
+                                        <% if (trade.partner_currency > 0) { %>
+                                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-yellow/20 text-accent-yellow"><%= trade.partner_currency.toLocaleString() %> coins</span>
+                                        <% } %>
+                                        <% if (trade.partner_items && trade.partner_items.length > 0) { %>
+                                            <span class="px-2 py-1 text-xs font-medium rounded-full bg-purple-500/20 text-purple-400"><%= trade.partner_items.split(',').length %> items</span>
+                                        <% } %>
+                                        <% if (!trade.partner_currency && (!trade.partner_items || !trade.partner_items.length)) { %>
+                                            <span class="text-gray-500 text-xs">Nothing</span>
+                                        <% } %>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (trade.status === 'pending') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-yellow/20 text-accent-yellow">Pending</span>
+                                    <% } else if (trade.status === 'accepted') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-green/20 text-accent-green">Accepted</span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-dark-400 text-gray-400 capitalize"><%= trade.status %></span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="cancelTrade('<%= trade.trade_id %>')" class="btn btn-danger btn-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                        Cancel
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Active Trades</h4>
+                <p class="text-gray-400">No trades are currently in progress</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Trade History -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Recent Trade History (Last 50)
+        </h3>
+
+        <% if (tradeHistory && tradeHistory.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">ID</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Initiator</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Partner</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Initiator Gave</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Partner Gave</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Completed</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% tradeHistory.forEach(trade => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <code class="text-primary-400 font-semibold">#<%= trade.trade_id %></code>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <code class="text-xs text-gray-400"><%= trade.initiator_id %></code>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <code class="text-xs text-gray-400"><%= trade.partner_id %></code>
+                                </td>
+                                <td class="py-3 px-4 text-sm">
+                                    <% if (trade.initiator_currency > 0) { %>
+                                        <span class="text-accent-yellow"><%= trade.initiator_currency.toLocaleString() %> coins</span>
+                                    <% } %>
+                                    <% if (trade.initiator_items && trade.initiator_items.length > 0) { %>
+                                        <% if (trade.initiator_currency > 0) { %> + <% } %>
+                                        <span class="text-purple-400"><%= trade.initiator_items.split(',').length %> items</span>
+                                    <% } %>
+                                    <% if (!trade.initiator_currency && (!trade.initiator_items || !trade.initiator_items.length)) { %>
+                                        <span class="text-gray-500">Nothing</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4 text-sm">
+                                    <% if (trade.partner_currency > 0) { %>
+                                        <span class="text-accent-yellow"><%= trade.partner_currency.toLocaleString() %> coins</span>
+                                    <% } %>
+                                    <% if (trade.partner_items && trade.partner_items.length > 0) { %>
+                                        <% if (trade.partner_currency > 0) { %> + <% } %>
+                                        <span class="text-purple-400"><%= trade.partner_items.split(',').length %> items</span>
+                                    <% } %>
+                                    <% if (!trade.partner_currency && (!trade.partner_items || !trade.partner_items.length)) { %>
+                                        <span class="text-gray-500">Nothing</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (trade.status === 'completed') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-green/20 text-accent-green">Completed</span>
+                                    <% } else if (trade.status === 'cancelled') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-red/20 text-accent-red">Cancelled</span>
+                                    <% } else if (trade.status === 'declined') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-yellow/20 text-accent-yellow">Declined</span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-dark-400 text-gray-400 capitalize"><%= trade.status %></span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-xs text-gray-500"><%= new Date(trade.updated_at || trade.created_at).toLocaleString() %></span>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="p-8 bg-dark-700 rounded-lg text-center">
+                <p class="text-gray-500">No trade history yet</p>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<script>
+async function cancelTrade(tradeId) {
+    if (!confirm('Are you sure you want to cancel this trade?')) return;
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/trading/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trade_id: tradeId })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Trade cancelled');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to cancel trade');
+    }
+}
+</script>

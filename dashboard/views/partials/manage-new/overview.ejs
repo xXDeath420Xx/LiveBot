@@ -1,0 +1,264 @@
+<%# Overview/Hub Page - Tailwind Version %>
+
+<div class="space-y-8">
+    <!-- Hero Section -->
+    <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-dark-800 via-dark-700 to-dark-800 border border-primary-500/20 p-8 md:p-12">
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(167,139,250,0.15),transparent_50%),radial-gradient(circle_at_70%_50%,rgba(155,89,182,0.15),transparent_50%)]"></div>
+        <div class="relative z-10 text-center">
+            <h1 class="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-white via-gray-300 to-primary-400 bg-clip-text text-transparent mb-3">
+                Management Hub
+            </h1>
+            <p class="text-gray-400 text-lg">Configure and manage all aspects of <%= guild.name %></p>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Members',
+            value: guild.memberCount ? guild.memberCount.toLocaleString() : '0',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Channels',
+            value: Array.from(channels.values()).length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Roles',
+            value: Array.from(roles.values()).length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Streamers',
+            value: locals.consolidatedStreamers?.length || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>',
+            color: 'danger'
+        }) %>
+    </div>
+
+    <!-- Streaming & Content -->
+    <div>
+        <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-3">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z"/>
+            </svg>
+            Streaming & Content
+            <span class="flex-1 h-px bg-gradient-to-r from-primary-500/30 to-transparent"></span>
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <a href="/manage/<%= guild.id %>?section=streamers" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">📹</div>
+                <p class="font-semibold text-white">Streamers</p>
+                <p class="text-xs text-gray-500">Track and announce</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=teams" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">👥</div>
+                <p class="font-semibold text-white">Teams</p>
+                <p class="text-xs text-gray-500">Streaming teams</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=twitch-schedules" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">📅</div>
+                <p class="font-semibold text-white">Twitch Schedules</p>
+                <p class="text-xs text-gray-500">Sync schedules</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=feeds" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">📡</div>
+                <p class="font-semibold text-white">Social Feeds</p>
+                <p class="text-xs text-gray-500">Reddit, YouTube, Twitter</p>
+            </a>
+        </div>
+    </div>
+
+    <!-- Community Features -->
+    <div>
+        <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-3">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+            Community Features
+            <span class="flex-1 h-px bg-gradient-to-r from-primary-500/30 to-transparent"></span>
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <a href="/manage/<%= guild.id %>?section=welcome" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">👋</div>
+                <p class="font-semibold text-white">Welcome</p>
+                <p class="text-xs text-gray-500">Greetings & autoroles</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=reaction-roles" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🏷️</div>
+                <p class="font-semibold text-white">Reaction Roles</p>
+                <p class="text-xs text-gray-500">Self-assign roles</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=leveling" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">📈</div>
+                <p class="font-semibold text-white">Leveling</p>
+                <p class="text-xs text-gray-500">XP and rewards</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=starboard" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">⭐</div>
+                <p class="font-semibold text-white">Starboard</p>
+                <p class="text-xs text-gray-500">Highlight messages</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=polls" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">📊</div>
+                <p class="font-semibold text-white">Polls</p>
+                <p class="text-xs text-gray-500">Community polls</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=suggestions" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">💡</div>
+                <p class="font-semibold text-white">Suggestions</p>
+                <p class="text-xs text-gray-500">Idea system</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=giveaways" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🎁</div>
+                <p class="font-semibold text-white">Giveaways</p>
+                <p class="text-xs text-gray-500">Run events</p>
+            </a>
+        </div>
+    </div>
+
+    <!-- Fun & Games -->
+    <div>
+        <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-3">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Fun & Games
+            <span class="flex-1 h-px bg-gradient-to-r from-primary-500/30 to-transparent"></span>
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <a href="/manage/<%= guild.id %>?section=economy" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">💰</div>
+                <p class="font-semibold text-white">Economy</p>
+                <p class="text-xs text-gray-500">Currency & shop</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=games" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🎮</div>
+                <p class="font-semibold text-white">Games</p>
+                <p class="text-xs text-gray-500">Trivia & more</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=gambling" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🎰</div>
+                <p class="font-semibold text-white">Gambling</p>
+                <p class="text-xs text-gray-500">Casino games</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=trading" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🔄</div>
+                <p class="font-semibold text-white">Trading</p>
+                <p class="text-xs text-gray-500">Item trading</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=rpg" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🐉</div>
+                <p class="font-semibold text-white">RPG</p>
+                <p class="text-xs text-gray-500">Adventure system</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=music" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🎵</div>
+                <p class="font-semibold text-white">Music</p>
+                <p class="text-xs text-gray-500">Music player</p>
+            </a>
+        </div>
+    </div>
+
+    <!-- Moderation & Security -->
+    <div>
+        <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-3">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+            </svg>
+            Moderation & Security
+            <span class="flex-1 h-px bg-gradient-to-r from-primary-500/30 to-transparent"></span>
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <a href="/manage/<%= guild.id %>?section=moderation" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">⚖️</div>
+                <p class="font-semibold text-white">Moderation</p>
+                <p class="text-xs text-gray-500">Infractions & bans</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=automod" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🤖</div>
+                <p class="font-semibold text-white">AutoMod</p>
+                <p class="text-xs text-gray-500">Auto moderation</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=security" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🔒</div>
+                <p class="font-semibold text-white">Security</p>
+                <p class="text-xs text-gray-500">Anti-raid & nuke</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=quarantine" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🚫</div>
+                <p class="font-semibold text-white">Quarantine</p>
+                <p class="text-xs text-gray-500">Suspicious users</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=logging" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">📝</div>
+                <p class="font-semibold text-white">Logging</p>
+                <p class="text-xs text-gray-500">Activity logs</p>
+            </a>
+        </div>
+    </div>
+
+    <!-- Utilities & Config -->
+    <div>
+        <h2 class="text-xl font-bold text-white mb-4 flex items-center gap-3">
+            <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            Utilities & Configuration
+            <span class="flex-1 h-px bg-gradient-to-r from-primary-500/30 to-transparent"></span>
+        </h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <a href="/manage/<%= guild.id %>?section=core" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">⚙️</div>
+                <p class="font-semibold text-white">Core Settings</p>
+                <p class="text-xs text-gray-500">Basic config</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=tickets" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🎫</div>
+                <p class="font-semibold text-white">Tickets</p>
+                <p class="text-xs text-gray-500">Support system</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=custom-commands" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">💻</div>
+                <p class="font-semibold text-white">Custom Commands</p>
+                <p class="text-xs text-gray-500">Create commands</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=backups" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">💾</div>
+                <p class="font-semibold text-white">Backups</p>
+                <p class="text-xs text-gray-500">Server backups</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=forms" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">📋</div>
+                <p class="font-semibold text-white">Forms</p>
+                <p class="text-xs text-gray-500">Custom forms</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=analytics" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">📊</div>
+                <p class="font-semibold text-white">Analytics</p>
+                <p class="text-xs text-gray-500">Server stats</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=birthday" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🎂</div>
+                <p class="font-semibold text-white">Birthdays</p>
+                <p class="text-xs text-gray-500">Birthday tracking</p>
+            </a>
+            <a href="/manage/<%= guild.id %>?section=weather" class="module-card group">
+                <div class="text-3xl mb-3 group-hover:scale-110 transition-transform">🌤️</div>
+                <p class="font-semibold text-white">Weather</p>
+                <p class="text-xs text-gray-500">Weather alerts</p>
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+.module-card {
+    @apply block p-5 bg-dark-700/50 border border-dark-400 rounded-xl text-center transition-all duration-300 hover:bg-dark-600 hover:border-primary-500/50 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary-500/10;
+}
+</style>

@@ -1,0 +1,520 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-lightbulb"></i>
+                <span>Suggestions System</span>
+            </div>
+            <div class="page-section-subtitle">
+                Manage user suggestions, voting, and suggestion settings
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="suggestions-stats-grid">
+        <div class="suggestions-stat-card">
+            <div class="suggestions-stat-icon warning"><i class="fas fa-clock"></i></div>
+            <div>
+                <div class="suggestions-stat-label">Pending</div>
+                <div class="suggestions-stat-value warning"><%= suggestionStats?.pending || 0 %></div>
+            </div>
+        </div>
+        <div class="suggestions-stat-card">
+            <div class="suggestions-stat-icon success"><i class="fas fa-check"></i></div>
+            <div>
+                <div class="suggestions-stat-label">Approved</div>
+                <div class="suggestions-stat-value success"><%= suggestionStats?.approved || 0 %></div>
+            </div>
+        </div>
+        <div class="suggestions-stat-card">
+            <div class="suggestions-stat-icon primary"><i class="fas fa-check-double"></i></div>
+            <div>
+                <div class="suggestions-stat-label">Implemented</div>
+                <div class="suggestions-stat-value primary"><%= suggestionStats?.implemented || 0 %></div>
+            </div>
+        </div>
+        <div class="suggestions-stat-card">
+            <div class="suggestions-stat-icon danger"><i class="fas fa-times"></i></div>
+            <div>
+                <div class="suggestions-stat-label">Rejected</div>
+                <div class="suggestions-stat-value danger"><%= suggestionStats?.rejected || 0 %></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div class="suggestions-section-card">
+        <div class="suggestions-section-header">
+            <i class="fas fa-cog"></i>
+            <div>
+                <h3>Configuration</h3>
+                <p>Set up the suggestions system</p>
+            </div>
+        </div>
+        <div class="suggestions-section-body">
+            <form action="/manage/<%= guild.id %>/suggestions/config" method="POST">
+                <div class="suggestions-form-grid">
+                    <div>
+                        <div class="suggestions-toggle-wrapper">
+                            <div class="suggestions-toggle">
+                                <input type="checkbox" id="suggestionsEnabled" name="enabled" <%= suggestionConfig?.enabled ? 'checked' : '' %>>
+                                <span class="suggestions-toggle-slider"></span>
+                            </div>
+                            <div>
+                                <div class="suggestions-toggle-label">Enable Suggestions</div>
+                            </div>
+                        </div>
+                        <div class="suggestions-form-group">
+                            <label class="suggestions-form-label"><i class="fas fa-hashtag"></i>Suggestions Channel</label>
+                            <select class="suggestions-form-select" name="suggestion_channel_id">
+                                <option value="">Select channel...</option>
+                                <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                                    <option value="<%= channel.id %>" <%= suggestionConfig?.suggestions_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="suggestions-toggle-wrapper">
+                            <div class="suggestions-toggle">
+                                <input type="checkbox" id="approvalRequired" name="approval_required" <%= suggestionConfig?.require_approval ? 'checked' : '' %>>
+                                <span class="suggestions-toggle-slider"></span>
+                            </div>
+                            <div>
+                                <div class="suggestions-toggle-label">Require Staff Approval</div>
+                            </div>
+                        </div>
+                        <div class="suggestions-form-group">
+                            <label class="suggestions-form-label"><i class="fas fa-hashtag"></i>Staff Review Channel</label>
+                            <select class="suggestions-form-select" name="staff_review_channel_id">
+                                <option value="">None</option>
+                                <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                                    <option value="<%= channel.id %>" <%= suggestionConfig?.staff_review_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="suggestions-form-group" style="margin-bottom: 0;">
+                    <label class="suggestions-form-label"><i class="fas fa-user-shield"></i>Staff Role</label>
+                    <select class="suggestions-form-select" name="staff_role_id">
+                        <option value="">None</option>
+                        <% roles.forEach(role => { %>
+                            <option value="<%= role.id %>" <%= suggestionConfig?.approved_role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                        <% }); %>
+                    </select>
+                    <span class="suggestions-form-hint">Role that can manage suggestions</span>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <button type="submit" class="suggestions-save-btn">
+                        <i class="fas fa-save"></i>
+                        Save Configuration
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Filter Suggestions -->
+    <div class="suggestions-section-card">
+        <div class="suggestions-section-header filter">
+            <i class="fas fa-filter"></i>
+            <div>
+                <h3>Filter Suggestions</h3>
+                <p>Search and filter the suggestions list</p>
+            </div>
+        </div>
+        <div class="suggestions-section-body">
+            <form method="GET">
+                <div class="suggestions-filter-grid">
+                    <div class="suggestions-form-group" style="margin-bottom: 0;">
+                        <label class="suggestions-form-label">Status</label>
+                        <select class="suggestions-form-select" name="status">
+                            <option value="">All</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="implemented">Implemented</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="under_review">Under Review</option>
+                        </select>
+                    </div>
+                    <div class="suggestions-form-group" style="margin-bottom: 0;">
+                        <label class="suggestions-form-label">Tag</label>
+                        <select class="suggestions-form-select" name="tag">
+                            <option value="">All</option>
+                            <% (suggestionTags || []).forEach(tag => { %>
+                                <option value="<%= tag.tag_id %>"><%= tag.tag_name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="suggestions-form-group" style="margin-bottom: 0;">
+                        <label class="suggestions-form-label">Sort By</label>
+                        <select class="suggestions-form-select" name="sort">
+                            <option value="newest">Newest First</option>
+                            <option value="oldest">Oldest First</option>
+                            <option value="most_voted">Most Voted</option>
+                        </select>
+                    </div>
+                    <div class="suggestions-form-group" style="margin-bottom: 0; display: flex; align-items: flex-end;">
+                        <button type="submit" class="suggestions-filter-btn">
+                            <i class="fas fa-search"></i>
+                            Filter
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Suggestions List -->
+    <% if (suggestions && suggestions.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Suggestion</th>
+                        <th>Author</th>
+                        <th>Status</th>
+                        <th>Votes</th>
+                        <th>Created</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% suggestions.forEach(suggestion => {
+                        const upvotes = suggestion.upvotes || 0;
+                        const downvotes = suggestion.downvotes || 0;
+                        const netVotes = upvotes - downvotes;
+                    %>
+                        <tr>
+                            <td>
+                                <code style="font-size: var(--font-size-sm); color: var(--color-primary-400);">#<%= suggestion.suggestion_id %></code>
+                            </td>
+                            <td style="max-width: 300px;">
+                                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                    <%= suggestion.title || 'No Title' %>
+                                </div>
+                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                                    <%= (suggestion.content || '').substring(0, 80) %><%= (suggestion.content || '').length > 80 ? '...' : '' %>
+                                </div>
+                            </td>
+                            <td>
+                                <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= suggestion.author_id %></code>
+                            </td>
+                            <td>
+                                <% if (suggestion.status === 'pending') { %>
+                                    <span class="badge badge-warning">Pending</span>
+                                <% } else if (suggestion.status === 'approved') { %>
+                                    <span class="badge badge-success">Approved</span>
+                                <% } else if (suggestion.status === 'implemented') { %>
+                                    <span class="badge badge-primary">Implemented</span>
+                                <% } else if (suggestion.status === 'rejected') { %>
+                                    <span class="badge badge-danger">Rejected</span>
+                                <% } else if (suggestion.status === 'under_review') { %>
+                                    <span class="badge" style="background: var(--color-accent-purple);">Under Review</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <div style="display: flex; flex-direction: column; gap: var(--spacing-1);">
+                                    <span class="badge badge-success" style="font-size: var(--font-size-xs);">👍 <%= upvotes %></span>
+                                    <span class="badge badge-danger" style="font-size: var(--font-size-xs);">👎 <%= downvotes %></span>
+                                </div>
+                            </td>
+                            <td>
+                                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                                    <%= new Date(suggestion.created_at).toLocaleDateString() %>
+                                </div>
+                            </td>
+                            <td class="text-end">
+                                <div style="display: flex; gap: var(--spacing-1); justify-content: flex-end; flex-wrap: wrap;">
+                                    <% if (suggestion.status === 'pending' || suggestion.status === 'under_review') { %>
+                                        <form action="/manage/<%= guild.id %>/suggestions/approve" method="POST" style="display: inline;">
+                                            <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
+                                            <button type="submit" class="btn btn-sm btn-success" title="Approve">
+                                                <i class="fas fa-check"></i>
+                                            </button>
+                                        </form>
+                                        <form action="/manage/<%= guild.id %>/suggestions/reject" method="POST" style="display: inline;">
+                                            <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Reject">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </form>
+                                    <% } %>
+                                    <% if (suggestion.status === 'approved') { %>
+                                        <form action="/manage/<%= guild.id %>/suggestions/implement" method="POST" style="display: inline;">
+                                            <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
+                                            <button type="submit" class="btn btn-sm btn-primary" title="Mark as Implemented">
+                                                <i class="fas fa-check-double"></i>
+                                            </button>
+                                        </form>
+                                    <% } %>
+                                    <form action="/manage/<%= guild.id %>/suggestions/delete" method="POST" style="display: inline;">
+                                        <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
+                                        <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Delete this suggestion?')" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-8); text-align: center;">
+            <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
+                <i class="fas fa-lightbulb"></i>
+                No suggestions yet. Enable the system and set a suggestions channel to get started.
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<style>
+/* Compact Suggestions Page Styles */
+.suggestions-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.suggestions-stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s;
+}
+
+.suggestions-stat-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.suggestions-stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.suggestions-stat-icon i { font-size: 0.9rem; }
+.suggestions-stat-icon.warning { background: rgba(251, 191, 36, 0.15); }
+.suggestions-stat-icon.warning i { color: #fbbf24; }
+.suggestions-stat-icon.success { background: rgba(34, 197, 94, 0.15); }
+.suggestions-stat-icon.success i { color: #22c55e; }
+.suggestions-stat-icon.primary { background: rgba(167, 139, 250, 0.15); }
+.suggestions-stat-icon.primary i { color: #a78bfa; }
+.suggestions-stat-icon.danger { background: rgba(248, 113, 113, 0.15); }
+.suggestions-stat-icon.danger i { color: #f87171; }
+
+.suggestions-stat-label { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.04em; }
+.suggestions-stat-value { font-size: 1.25rem; font-weight: 700; }
+.suggestions-stat-value.warning { color: #fbbf24; }
+.suggestions-stat-value.success { color: #22c55e; }
+.suggestions-stat-value.primary { color: #a78bfa; }
+.suggestions-stat-value.danger { color: #f87171; }
+
+/* Section Cards */
+.suggestions-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.suggestions-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.suggestions-section-header i { font-size: 1rem; color: #a78bfa; }
+.suggestions-section-header.filter i { color: #60a5fa; }
+.suggestions-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
+.suggestions-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
+
+.suggestions-section-body { padding: 18px; }
+
+/* Toggle Switch */
+.suggestions-toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 14px;
+}
+
+.suggestions-toggle {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+}
+
+.suggestions-toggle input { opacity: 0; width: 0; height: 0; }
+
+.suggestions-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: 0.2s;
+    border-radius: 22px;
+}
+
+.suggestions-toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+.suggestions-toggle input:checked + .suggestions-toggle-slider {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    border-color: #a78bfa;
+}
+
+.suggestions-toggle input:checked + .suggestions-toggle-slider:before {
+    transform: translateX(18px);
+}
+
+.suggestions-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.8rem; }
+
+/* Form Styles */
+.suggestions-form-group { margin-bottom: 14px; }
+.suggestions-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255, 255, 255, 0.9); margin-bottom: 6px; }
+.suggestions-form-label i { color: #a78bfa; margin-right: 6px; }
+
+.suggestions-form-select {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.suggestions-form-select:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+
+.suggestions-form-select option { background: #1a1d21; color: #ffffff; }
+.suggestions-form-hint { display: block; margin-top: 4px; font-size: 0.7rem; color: rgba(255, 255, 255, 0.45); }
+
+.suggestions-form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 14px; }
+.suggestions-filter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+/* Buttons */
+.suggestions-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.suggestions-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
+
+.suggestions-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    justify-content: center;
+}
+
+.suggestions-filter-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
+
+/* Table */
+.table-container {
+    overflow-x: auto;
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead { background: rgba(167, 139, 250, 0.08); }
+
+.data-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.data-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.85rem;
+}
+
+.data-table tbody tr { transition: all 0.2s; }
+.data-table tbody tr:hover { background: rgba(167, 139, 250, 0.05); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+@media (max-width: 1200px) {
+    .suggestions-stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .suggestions-filter-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .suggestions-stats-grid { grid-template-columns: 1fr; }
+    .suggestions-form-grid { grid-template-columns: 1fr; }
+    .suggestions-filter-grid { grid-template-columns: 1fr; }
+}
+</style>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+    <style>
+        .command-card {
+            background: var(--ember-bg-card);
+            border: 1px solid var(--ember-border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .command-card:hover {
+            border-color: var(--ember-primary);
+        }
+        .command-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            color: var(--ember-primary);
+            font-weight: 600;
+        }
+        .command-aliases {
+            font-size: 0.8rem;
+            color: var(--ember-text-muted);
+            margin-top: 0.25rem;
+        }
+        .command-desc {
+            margin-top: 0.5rem;
+            color: var(--ember-text-secondary);
+        }
+        .command-example {
+            margin-top: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            background: var(--ember-bg-elevated);
+            border-radius: 6px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--ember-text-muted);
+        }
+        .category-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin: 2rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--ember-border);
+            color: var(--ember-text-primary);
+        }
+        .category-title:first-of-type {
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Home</a>
+                <a href="/tokes-bot/commands" class="ember-nav-link active">Commands</a>
+                <a href="/tokes-bot/leaderboards" class="ember-nav-link">Leaderboards</a>
+                <a href="/tokes-bot/status" class="ember-nav-link">Status</a>
+            </div>
+
+            <div class="ember-nav-actions">
+                <% if (user) { %>
+                    <div class="ember-nav-user">
+                        <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                        <span><%= user.name %></span>
+                    </div>
+                    <a href="/tokes-bot/dashboard" class="ember-btn ember-btn-primary">Dashboard</a>
+                <% } else { %>
+                    <a href="/tokes-bot/auth/twitch" class="ember-btn ember-btn-outline">Login with Twitch</a>
+                <% } %>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Commands Content -->
+    <main class="ember-dashboard">
+        <div class="ember-container ember-container-sm">
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Bot Commands</h1>
+                <p class="ember-dashboard-subtitle">Complete list of CertiFriedUtility commands for Twitch and Kick</p>
+            </div>
+
+            <!-- Toke Tracking -->
+            <h2 class="category-title">Toke Tracking</h2>
+
+            <div class="command-card">
+                <div class="command-name">!lit</div>
+                <div class="command-aliases">Aliases: !blaze, !burn</div>
+                <div class="command-desc">Add a toke to your count and see your total. Tracks both channel-specific and global tokes.</div>
+                <div class="command-example">!lit &rarr; "CertiFried is lit! Total tokes: 420"</div>
+            </div>
+
+            <div class="command-card">
+                <div class="command-name">!spark</div>
+                <div class="command-aliases">Aliases: !daily, !ignite</div>
+                <div class="command-desc">Claim your daily tokes bonus. Build a streak for extra rewards! Resets at midnight UTC.</div>
+                <div class="command-example">!spark &rarr; "+5 tokes! 3-day streak bonus: +3 tokes"</div>
+            </div>
+
+            <div class="command-card">
+                <div class="command-name">!embers</div>
+                <div class="command-aliases">Aliases: !globallit</div>
+                <div class="command-desc">View global statistics - total tokes across all channels and users.</div>
+                <div class="command-example">!embers &rarr; "Global stats: 1.2M total tokes, 5K users"</div>
+            </div>
+
+            <!-- Leaderboards -->
+            <h2 class="category-title">Leaderboards</h2>
+
+            <div class="command-card">
+                <div class="command-name">!fireboard</div>
+                <div class="command-aliases">Aliases: !fb, !top</div>
+                <div class="command-desc">View the channel's top tokers leaderboard. Shows top 10 by default.</div>
+                <div class="command-example">!fireboard &rarr; "Top tokers: 1. User420 (1337) 2. BlazeMaster (999)..."</div>
+            </div>
+
+            <div class="command-card">
+                <div class="command-name">!rank</div>
+                <div class="command-aliases">Aliases: !position</div>
+                <div class="command-desc">Check your position on the channel leaderboard.</div>
+                <div class="command-example">!rank &rarr; "You're #15 with 69 tokes"</div>
+            </div>
+
+            <!-- Smoke Sessions -->
+            <h2 class="category-title">Smoke Sessions</h2>
+
+            <div class="command-card">
+                <div class="command-name">!sesh [piece]</div>
+                <div class="command-aliases">Aliases: !circle</div>
+                <div class="command-desc">Start a group smoke session. Optional piece type: joint, blunt, bong, pipe, dab, vape.</div>
+                <div class="command-example">!sesh bong &rarr; "CertiFried started a session with the bong! Type !hit to join"</div>
+            </div>
+
+            <div class="command-card">
+                <div class="command-name">!hit</div>
+                <div class="command-aliases">Aliases: !puff, !toke</div>
+                <div class="command-desc">Take a hit during an active session. Also joins you to the session if you haven't already.</div>
+                <div class="command-example">!hit &rarr; "CertiFried takes a hit! (Session: 5 hits total)"</div>
+            </div>
+
+            <div class="command-card">
+                <div class="command-name">!pass</div>
+                <div class="command-aliases">Aliases: !next</div>
+                <div class="command-desc">Pass the piece to the next person in the session rotation.</div>
+                <div class="command-example">!pass &rarr; "CertiFried passes to BlazeMaster"</div>
+            </div>
+
+            <div class="command-card">
+                <div class="command-name">!doused</div>
+                <div class="command-aliases">Aliases: !endsesh</div>
+                <div class="command-desc">End the current smoke session. Only the session starter or mods can do this.</div>
+                <div class="command-example">!doused &rarr; "Session ended! 8 participants, 24 total hits"</div>
+            </div>
+
+            <!-- Strain Info -->
+            <h2 class="category-title">Strain Information</h2>
+
+            <div class="command-card">
+                <div class="command-name">!strain [name]</div>
+                <div class="command-aliases">Aliases: !lookup</div>
+                <div class="command-desc">Look up information about a cannabis strain including type, effects, and flavors.</div>
+                <div class="command-example">!strain blue dream &rarr; "Blue Dream (Hybrid) - THC: 17-24% - Effects: Relaxed, Happy, Euphoric"</div>
+            </div>
+
+            <div class="command-card">
+                <div class="command-name">!lineage [name]</div>
+                <div class="command-aliases">Aliases: !genetics, !tree</div>
+                <div class="command-desc">View the genetic lineage/parent strains of a strain.</div>
+                <div class="command-example">!lineage blue dream &rarr; "Blue Dream = Blueberry x Haze"</div>
+            </div>
+
+            <!-- Fun & Games -->
+            <h2 class="category-title">Fun & Games</h2>
+
+            <div class="command-card">
+                <div class="command-name">!cannatrivia</div>
+                <div class="command-aliases">Aliases: !ct</div>
+                <div class="command-desc">Start a cannabis trivia question. First correct answer wins XP!</div>
+                <div class="command-example">!cannatrivia &rarr; "What terpene gives lavender its scent? A) Limonene B) Linalool C) Myrcene D) Pinene"</div>
+            </div>
+
+            <div class="command-card">
+                <div class="command-name">!elevated</div>
+                <div class="command-aliases">Aliases: !thoughts</div>
+                <div class="command-desc">Get a random stoned thought or shower thought to ponder.</div>
+                <div class="command-example">!elevated &rarr; "If we're all made of star stuff, does that make us all space cakes?"</div>
+            </div>
+
+            <!-- Utility -->
+            <h2 class="category-title">Utility</h2>
+
+            <div class="command-card">
+                <div class="command-name">!canna</div>
+                <div class="command-aliases">Aliases: !help, !commands</div>
+                <div class="command-desc">Show available commands and link to this page.</div>
+                <div class="command-example">!canna &rarr; "Commands: !lit, !spark, !sesh, !strain - Full list: certifriedmultitool.com/tokes-bot/commands"</div>
+            </div>
+
+            <div class="command-card">
+                <div class="command-name">!ember @user</div>
+                <div class="command-aliases">Aliases: !so</div>
+                <div class="command-desc">Give a shoutout to another user (if enabled by channel owner, mods only by default).</div>
+                <div class="command-example">!ember @FriendlyStreamer &rarr; "Go check out FriendlyStreamer! twitch.tv/friendlystreamer"</div>
+            </div>
+
+            <!-- Note -->
+            <div class="ember-card ember-mt-4" style="background: var(--ember-primary-dim); border-color: var(--ember-primary);">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title" style="color: var(--ember-primary);">Note</h2>
+                </div>
+                <div class="ember-card-body">
+                    <p>The default command prefix is <code>!</code> but channel owners can customize this in their dashboard settings.</p>
+                    <p class="ember-mt-2">Some features may be disabled per-channel by the channel owner.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+                <a href="/tokes-bot/status" class="ember-footer-link">Status</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

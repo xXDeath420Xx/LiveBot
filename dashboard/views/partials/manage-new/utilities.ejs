@@ -1,0 +1,287 @@
+<%# Server Utilities - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Auto Publisher',
+            value: autoPublisherConfig && autoPublisherConfig.is_enabled ? 'Active' : 'Disabled',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>',
+            color: autoPublisherConfig && autoPublisherConfig.is_enabled ? 'success' : 'secondary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Autoroles',
+            value: autorolesConfig && autorolesConfig.is_enabled ? 'Active' : 'Disabled',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>',
+            color: autorolesConfig && autorolesConfig.is_enabled ? 'success' : 'secondary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Temp Channels',
+            value: tempChannels && tempChannels.creator_channel_id ? 'Configured' : 'Not Set',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>',
+            color: tempChannels && tempChannels.creator_channel_id ? 'success' : 'secondary'
+        }) %>
+    </div>
+
+    <!-- Auto Publisher Section -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center flex-shrink-0">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Auto Publisher</h3>
+                <p class="text-sm text-gray-400">Automatically publish messages in announcement channels</p>
+            </div>
+        </div>
+
+        <form id="auto-publisher-form" class="space-y-4">
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <%- include('../../components/forms/toggle', {
+                    name: 'is_enabled',
+                    label: 'Enable Auto Publisher',
+                    description: 'Automatically cross-post all messages from announcement channels',
+                    checked: autoPublisherConfig && autoPublisherConfig.is_enabled
+                }) %>
+            </div>
+
+            <% if (autoPublisherConfig && autoPublisherConfig.is_enabled) { %>
+                <div class="p-4 bg-accent-green/10 rounded-lg border-l-4 border-accent-green">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-5 h-5 text-accent-green" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span class="text-sm text-white">Auto Publisher is active - messages will be published automatically</span>
+                    </div>
+                </div>
+            <% } %>
+
+            <div class="flex justify-end pt-4 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Auto Publisher Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Autoroles Section -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center flex-shrink-0">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Autoroles</h3>
+                <p class="text-sm text-gray-400">Automatically assign roles when members join your server</p>
+            </div>
+        </div>
+
+        <form id="autoroles-form" class="space-y-4">
+            <div class="p-4 bg-dark-700 rounded-lg">
+                <%- include('../../components/forms/toggle', {
+                    name: 'is_enabled',
+                    label: 'Enable Autoroles',
+                    description: 'New members will automatically receive the selected role',
+                    checked: autorolesConfig && autorolesConfig.is_enabled
+                }) %>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Role to Assign</label>
+                <%- include('../../components/forms/roleSelect', {
+                    name: 'roles_to_assign',
+                    roles: roles,
+                    selected: autorolesConfig?.roles_to_assign?.[0],
+                    placeholder: 'Select a role...'
+                }) %>
+                <p class="form-hint">This role will be assigned to all new members when they join</p>
+            </div>
+
+            <% if (autorolesConfig && autorolesConfig.is_enabled && autorolesConfig.roles_to_assign && autorolesConfig.roles_to_assign.length > 0) { %>
+                <% const roleObj = roles.find(r => r.id === autorolesConfig.roles_to_assign[0]); %>
+                <% if (roleObj) { %>
+                    <div class="p-4 bg-purple-500/10 rounded-lg border-l-4 border-purple-500">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <span class="text-sm text-white">New members will receive the <strong><%= roleObj.name %></strong> role</span>
+                        </div>
+                    </div>
+                <% } %>
+            <% } %>
+
+            <div class="flex justify-end pt-4 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Autorole Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Temporary Voice Channels Section -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-6">
+            <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-primary-500 flex items-center justify-center flex-shrink-0">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Temporary Voice Channels</h3>
+                <p class="text-sm text-gray-400">Create temporary voice channels that delete when empty</p>
+            </div>
+        </div>
+
+        <form id="temp-channels-form" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Creator Channel</label>
+                    <select name="creator_channel_id" class="form-input w-full">
+                        <option value="">Select a voice channel</option>
+                        <% voiceChannels.forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= tempChannels && tempChannels.creator_channel_id === channel.id ? 'selected' : '' %>>
+                                <%= channel.name %>
+                            </option>
+                        <% }) %>
+                    </select>
+                    <p class="form-hint">Users join this channel to create their own temporary channel</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Channel Category</label>
+                    <select name="category_id" class="form-input w-full">
+                        <option value="">Select a category</option>
+                        <% categories.forEach(category => { %>
+                            <option value="<%= category.id %>" <%= tempChannels && tempChannels.category_id === category.id ? 'selected' : '' %>>
+                                <%= category.name %>
+                            </option>
+                        <% }) %>
+                    </select>
+                    <p class="form-hint">New temporary channels will be created in this category</p>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Channel Name Format</label>
+                <input type="text" name="naming_template" class="form-input w-full" value="<%= tempChannels ? tempChannels.naming_template : '{username}\'s Channel' %>" placeholder="{username}'s Channel">
+                <p class="form-hint">Use <code class="px-2 py-0.5 bg-dark-700 rounded text-primary-400">{username}</code> as a placeholder for the user's name</p>
+            </div>
+
+            <% if (tempChannels && tempChannels.creator_channel_id) { %>
+                <div class="p-4 bg-info-500/10 rounded-lg border-l-4 border-info-500">
+                    <div class="flex gap-3">
+                        <svg class="w-5 h-5 text-info-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                        </svg>
+                        <div class="text-sm text-gray-300">
+                            <strong class="text-white">How it works:</strong>
+                            <ol class="mt-2 space-y-1 list-decimal list-inside">
+                                <li>User joins the creator channel</li>
+                                <li>Bot creates a new temporary channel with custom name</li>
+                                <li>User is moved to their new channel</li>
+                                <li>Channel is deleted when empty</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            <% } %>
+
+            <div class="flex justify-end pt-4 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Temp Channel Settings
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('auto-publisher-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/utilities/auto-publisher', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                is_enabled: formData.get('is_enabled') === 'on'
+            })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Auto Publisher settings saved');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save Auto Publisher settings');
+    }
+});
+
+document.getElementById('autoroles-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/utilities/autoroles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                is_enabled: formData.get('is_enabled') === 'on',
+                roles_to_assign: formData.get('roles_to_assign') ? [formData.get('roles_to_assign')] : []
+            })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Autorole settings saved');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save Autorole settings');
+    }
+});
+
+document.getElementById('temp-channels-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/utilities/temp-channels', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                creator_channel_id: formData.get('creator_channel_id'),
+                category_id: formData.get('category_id'),
+                naming_template: formData.get('naming_template')
+            })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Temp Channel settings saved');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save Temp Channel settings');
+    }
+});
+</script>

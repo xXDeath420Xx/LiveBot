@@ -1,0 +1,305 @@
+<%# Welcome Settings - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Welcome Messages Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Welcome Messages</h3>
+                <p class="text-sm text-gray-400">Greet new members when they join your server</p>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'welcome_enabled',
+                id: 'welcome_enabled',
+                checked: locals.welcomeSettings?.enabled || false,
+                label: 'Enable Welcome Messages',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="welcome-form" action="/api/guilds/<%= guildId %>/welcome/config" method="PUT" data-track-changes>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Left Column - Settings -->
+                <div class="space-y-6">
+                    <!-- Welcome Channel -->
+                    <div class="form-group">
+                        <label class="form-label">Welcome Channel</label>
+                        <%- include('../../components/forms/channelSelect', {
+                            name: 'channel_id',
+                            channels: Array.from(channels.values()),
+                            selected: locals.welcomeSettings?.channel_id,
+                            placeholder: 'Select welcome channel'
+                        }) %>
+                    </div>
+
+                    <!-- Welcome Message -->
+                    <div class="form-group">
+                        <label class="form-label">Welcome Message</label>
+                        <textarea
+                            name="message"
+                            class="form-input w-full h-32 resize-none"
+                            placeholder="Welcome to {server}, {user}!"
+                        ><%= locals.welcomeSettings?.message || 'Welcome to the server, {user}!' %></textarea>
+                        <p class="form-hint">
+                            Variables: {user}, {server}, {memberCount}, {username}
+                        </p>
+                    </div>
+
+                    <!-- Embed Settings -->
+                    <div class="p-4 bg-dark-700 rounded-lg space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="font-medium text-white">Use Embed</p>
+                                <p class="text-xs text-gray-500">Send welcome as an embed message</p>
+                            </div>
+                            <%- include('../../components/forms/toggle', {
+                                name: 'embed_enabled',
+                                checked: locals.welcomeSettings?.embed_enabled || false,
+                                size: 'sm'
+                            }) %>
+                        </div>
+
+                        <div class="embed-settings space-y-4" style="<%= !locals.welcomeSettings?.embed_enabled ? 'display:none' : '' %>">
+                            <div class="form-group">
+                                <label class="form-label">Embed Title</label>
+                                <input
+                                    type="text"
+                                    name="embed_title"
+                                    class="form-input w-full"
+                                    value="<%= locals.welcomeSettings?.embed_title || 'Welcome!' %>"
+                                >
+                            </div>
+
+                            <%- include('../../components/forms/colorPicker', {
+                                name: 'embed_color',
+                                label: 'Embed Color',
+                                value: locals.welcomeSettings?.embed_color || '#a78bfa'
+                            }) %>
+                        </div>
+                    </div>
+
+                    <!-- DM Welcome -->
+                    <div class="p-4 bg-dark-700 rounded-lg">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <p class="font-medium text-white">DM Welcome</p>
+                                <p class="text-xs text-gray-500">Also send welcome message via DM</p>
+                            </div>
+                            <%- include('../../components/forms/toggle', {
+                                name: 'dm_enabled',
+                                checked: locals.welcomeSettings?.dm_enabled || false,
+                                size: 'sm'
+                            }) %>
+                        </div>
+
+                        <div class="dm-settings" style="<%= !locals.welcomeSettings?.dm_enabled ? 'display:none' : '' %>">
+                            <textarea
+                                name="dm_message"
+                                class="form-input w-full h-24 resize-none"
+                                placeholder="Welcome to {server}! Check out our rules..."
+                            ><%= locals.welcomeSettings?.dm_message || '' %></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column - Preview -->
+                <div class="space-y-6">
+                    <div class="form-group">
+                        <label class="form-label">Preview</label>
+                        <div class="bg-dark-700 rounded-lg p-4 border border-dark-400">
+                            <div class="flex items-start gap-3">
+                                <div class="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center flex-shrink-0">
+                                    <span class="text-white font-bold">C</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <span class="font-medium text-white">CertiFried Utility</span>
+                                        <span class="badge badge-info text-xs">BOT</span>
+                                        <span class="text-xs text-gray-500">Today at 12:00 PM</span>
+                                    </div>
+                                    <div id="message-preview" class="mt-2 text-gray-300">
+                                        Welcome to the server, <span class="text-primary-400">@NewUser</span>!
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Test Button -->
+                    <button
+                        type="button"
+                        class="btn btn-secondary w-full"
+                        onclick="sendTestWelcome()"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                        Send Test Message
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Goodbye Messages Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Goodbye Messages</h3>
+                <p class="text-sm text-gray-400">Send a message when members leave</p>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'goodbye_enabled',
+                id: 'goodbye_enabled',
+                checked: locals.welcomeSettings?.goodbye_enabled || false,
+                label: 'Enable Goodbye Messages',
+                size: 'md'
+            }) %>
+        </div>
+
+        <div class="goodbye-settings space-y-4" style="<%= !locals.welcomeSettings?.goodbye_enabled ? 'display:none' : '' %>">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-group">
+                    <label class="form-label">Goodbye Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'goodbye_channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: locals.welcomeSettings?.goodbye_channel_id,
+                        placeholder: 'Select goodbye channel'
+                    }) %>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Goodbye Message</label>
+                    <textarea
+                        name="goodbye_message"
+                        class="form-input w-full h-20 resize-none"
+                        placeholder="Goodbye {user}, we'll miss you!"
+                    ><%= locals.welcomeSettings?.goodbye_message || 'Goodbye {user}, we\'ll miss you!' %></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auto Roles Card -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Auto Roles</h3>
+                <p class="text-sm text-gray-400">Automatically assign roles to new members</p>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'autoroles_enabled',
+                id: 'autoroles_enabled',
+                checked: locals.autorolesConfig?.is_enabled || false,
+                label: 'Enable Auto Roles',
+                size: 'md'
+            }) %>
+        </div>
+
+        <div class="autoroles-settings" style="<%= !locals.autorolesConfig?.is_enabled ? 'display:none' : '' %>">
+            <div class="form-group">
+                <label class="form-label">Roles to Assign</label>
+                <%- include('../../components/forms/roleSelect', {
+                    name: 'autoroles',
+                    roles: Array.from(roles.values()),
+                    selected: locals.autorolesConfig?.roles_to_assign || [],
+                    multiple: true,
+                    placeholder: 'Select roles to auto-assign',
+                    excludeManaged: true
+                }) %>
+                <p class="form-hint">These roles will be given to all new members automatically</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Toggle visibility handlers
+document.querySelectorAll('[name="embed_enabled"], [name="dm_enabled"], [name="goodbye_enabled"], [name="autoroles_enabled"]').forEach(toggle => {
+    toggle.addEventListener('change', function() {
+        const settingsClass = this.name.replace('_enabled', '-settings').replace('autoroles', 'autoroles');
+        const settings = document.querySelector('.' + settingsClass) ||
+                        document.querySelector('.' + this.name.replace('_enabled', '_settings'));
+        if (settings) {
+            settings.style.display = this.checked ? 'block' : 'none';
+        }
+    });
+});
+
+// Live preview
+const messageInput = document.querySelector('[name="message"]');
+const previewEl = document.getElementById('message-preview');
+
+if (messageInput && previewEl) {
+    messageInput.addEventListener('input', function() {
+        let preview = this.value
+            .replace(/{user}/g, '<span class="text-primary-400">@NewUser</span>')
+            .replace(/{server}/g, '<%= guild?.name || "Server" %>')
+            .replace(/{memberCount}/g, '<%= guild?.memberCount || 0 %>')
+            .replace(/{username}/g, 'NewUser');
+        previewEl.innerHTML = preview || 'Welcome message preview will appear here...';
+    });
+}
+
+async function sendTestWelcome() {
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/welcome/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            showToast('success', 'Test message sent!');
+        } else {
+            const data = await response.json();
+            throw new Error(data.error || 'Failed to send');
+        }
+    } catch (error) {
+        showToast('error', error.message);
+    }
+}
+
+// Form submission
+document.getElementById('welcome-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = {};
+
+    formData.forEach((value, key) => {
+        if (value === 'on') data[key] = true;
+        else data[key] = value;
+    });
+
+    // Handle checkboxes that might not be in formData when unchecked
+    ['embed_enabled', 'dm_enabled', 'goodbye_enabled'].forEach(key => {
+        if (!data[key]) data[key] = false;
+    });
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Welcome settings saved');
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save settings');
+    }
+});
+</script>

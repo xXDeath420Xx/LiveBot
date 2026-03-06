@@ -1,0 +1,589 @@
+/**
+ * Dashboard Polish & Cleanup CSS
+ * Improves overall consistency, spacing, and professional appearance
+ */
+
+/* ==================== GLOBAL IMPROVEMENTS ==================== */
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+}
+
+/* Improve selection colors */
+::selection {
+    background: rgba(167, 139, 250, 0.4);
+    color: #ffffff;
+}
+
+::-moz-selection {
+    background: rgba(167, 139, 250, 0.4);
+    color: #ffffff;
+}
+
+/* ==================== CONSISTENT SPACING ==================== */
+
+.page-container,
+.manage-content,
+.content-wrapper {
+    padding: 32px;
+}
+
+@media (max-width: 768px) {
+    .page-container,
+    .manage-content,
+    .content-wrapper {
+        padding: 20px;
+    }
+}
+
+/* Consistent section spacing */
+section,
+.section,
+.page-section {
+    margin-bottom: 40px;
+}
+
+section:last-child,
+.section:last-child,
+.page-section:last-child {
+    margin-bottom: 0;
+}
+
+/* ==================== CARD IMPROVEMENTS ==================== */
+
+.card,
+.module-card,
+.stat-card,
+.server-card,
+.subscription-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Add subtle animations on hover */
+.card:hover,
+.module-card:hover,
+.server-card:hover {
+    transform: translateY(-4px);
+}
+
+/* Ensure cards have consistent padding */
+.card-body {
+    padding: 24px;
+}
+
+/* ==================== BUTTON IMPROVEMENTS ==================== */
+
+.btn {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+/* Ripple effect for buttons */
+.btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn:active::after {
+    width: 300px;
+    height: 300px;
+}
+
+/* Disabled button styles */
+.btn:disabled,
+.btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Button group spacing */
+.btn-group .btn,
+.action-buttons .btn,
+.action-buttons button {
+    margin-right: 8px;
+}
+
+.btn-group .btn:last-child,
+.action-buttons .btn:last-child,
+.action-buttons button:last-child {
+    margin-right: 0;
+}
+
+/* ==================== FORM IMPROVEMENTS ==================== */
+
+/* Consistent form spacing */
+.form-group,
+.mb-3,
+.mb-4 {
+    margin-bottom: 20px;
+}
+
+/* Better form focus states */
+.form-control:focus,
+.form-select:focus,
+textarea.form-control:focus {
+    transform: scale(1.01);
+    transition: all 0.2s ease;
+}
+
+/* Form validation styles */
+.form-control.is-invalid {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.form-control.is-valid {
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+/* Better checkbox and radio styles */
+.form-check-input {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.form-check-input:hover {
+    transform: scale(1.05);
+}
+
+/* ==================== TABLE IMPROVEMENTS ==================== */
+
+/* Consistent table spacing */
+table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+/* Better table row hover */
+tbody tr {
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+tbody tr:hover {
+    background: rgba(255, 255, 255, 0.06);
+    transform: scale(1.005);
+}
+
+/* Table cell padding consistency */
+th, td {
+    padding: 16px;
+}
+
+@media (max-width: 768px) {
+    th, td {
+        padding: 12px 8px;
+    }
+}
+
+/* ==================== NAVIGATION IMPROVEMENTS ==================== */
+
+/* Smooth navigation transitions */
+.manage-nav-link,
+.nav-link {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Active indicator for navigation */
+.manage-nav-link.active::before,
+.nav-link.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, #a78bfa 0%, #b959f6 100%);
+    box-shadow: 0 0 8px rgba(167, 139, 250, 0.5);
+}
+
+/* Better hover effect for navigation */
+.manage-nav-link:not(.active):hover,
+.nav-link:not(.active):hover {
+    background: rgba(255, 255, 255, 0.05);
+    padding-left: calc(var(--spacing-4) + 4px);
+}
+
+/* ==================== BADGE IMPROVEMENTS ==================== */
+
+.badge,
+.platform-badge,
+.status-badge,
+.subscription-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.badge:hover,
+.platform-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* ==================== LOADING STATES ==================== */
+
+/* Skeleton loader */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.05) 0%,
+        rgba(255, 255, 255, 0.1) 50%,
+        rgba(255, 255, 255, 0.05) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: 8px;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+.skeleton-text {
+    height: 16px;
+    margin-bottom: 8px;
+}
+
+.skeleton-title {
+    height: 24px;
+    width: 60%;
+    margin-bottom: 12px;
+}
+
+.skeleton-card {
+    height: 200px;
+    width: 100%;
+}
+
+/* Spinner */
+.spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.2);
+    border-top-color: #a78bfa;
+    border-radius: 50%;
+    animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spinner-lg {
+    width: 40px;
+    height: 40px;
+    border-width: 4px;
+}
+
+/* Loading overlay */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(10, 14, 39, 0.8);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.loading-overlay.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+/* ==================== EMPTY STATES ==================== */
+
+.empty-state,
+.empty-state-modern {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 40px;
+    text-align: center;
+    animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.empty-state i,
+.empty-state-icon,
+.empty-state-icon-modern {
+    font-size: 3rem;
+    margin-bottom: 20px;
+    opacity: 0.4;
+    animation: floatIcon 3s ease-in-out infinite;
+}
+
+@keyframes floatIcon {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+/* ==================== SCROLLBAR STYLING ==================== */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(167, 139, 250, 0.3);
+    border-radius: 5px;
+    transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(167, 139, 250, 0.5);
+}
+
+/* ==================== MODAL IMPROVEMENTS ==================== */
+
+/* Modal backdrop */
+.modal-backdrop {
+    backdrop-filter: blur(8px);
+    transition: opacity 0.3s ease;
+}
+
+/* Modal animations */
+.modal.fade .modal-dialog {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+
+.modal.show .modal-dialog {
+    transform: scale(1);
+}
+
+/* ==================== TOOLTIP IMPROVEMENTS ==================== */
+
+.tooltip {
+    font-size: 0.85rem;
+}
+
+.tooltip-inner {
+    background: rgba(10, 14, 39, 0.95);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    padding: 8px 12px;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* ==================== ALERT IMPROVEMENTS ==================== */
+
+.alert {
+    border-radius: 12px;
+    border: none;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    animation: slideInDown 0.3s ease;
+}
+
+@keyframes slideInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.alert-success {
+    background: rgba(16, 185, 129, 0.15);
+    border-left: 4px solid #10b981;
+    color: #34d399;
+}
+
+.alert-danger {
+    background: rgba(239, 68, 68, 0.15);
+    border-left: 4px solid #ef4444;
+    color: #f87171;
+}
+
+.alert-warning {
+    background: rgba(251, 191, 36, 0.15);
+    border-left: 4px solid #fbbf24;
+    color: #fcd34d;
+}
+
+.alert-info {
+    background: rgba(167, 139, 250, 0.15);
+    border-left: 4px solid #a78bfa;
+    color: #6b77f4;
+}
+
+/* ==================== TRANSITION IMPROVEMENTS ==================== */
+
+/* Page transitions */
+.page-enter {
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+.page-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==================== ACCESSIBILITY IMPROVEMENTS ==================== */
+
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+    outline: 2px solid #a78bfa;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Remove outline for mouse users */
+*:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Skip to content link */
+.skip-to-content {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #a78bfa;
+    color: white;
+    padding: 8px;
+    text-decoration: none;
+    z-index: 9999;
+}
+
+.skip-to-content:focus {
+    top: 0;
+}
+
+/* ==================== RESPONSIVE IMPROVEMENTS ==================== */
+
+@media (max-width: 992px) {
+    /* Adjust card grids for tablets */
+    .server-grid,
+    .module-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    }
+}
+
+@media (max-width: 576px) {
+    /* Stack everything on mobile */
+    .server-grid,
+    .module-grid,
+    .quick-stats,
+    .dashboard-stats {
+        grid-template-columns: 1fr;
+    }
+
+    /* Reduce padding on mobile */
+    .modal-body {
+        padding: 20px;
+    }
+
+    .modal-header,
+    .modal-footer {
+        padding: 16px 20px;
+    }
+}
+
+/* ==================== PRINT STYLES ==================== */
+
+@media print {
+    .manage-sidebar,
+    .navbar,
+    footer,
+    .btn,
+    .modal {
+        display: none !important;
+    }
+
+    body {
+        background: white;
+        color: black;
+    }
+
+    .manage-content {
+        margin: 0;
+        padding: 0;
+    }
+}
+
+/* ==================== PERFORMANCE OPTIMIZATIONS ==================== */
+
+/* GPU acceleration for animated elements */
+.card:hover,
+.btn:hover,
+.module-card:hover,
+.server-card:hover {
+    will-change: transform;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

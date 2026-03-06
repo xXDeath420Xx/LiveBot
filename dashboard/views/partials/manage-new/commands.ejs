@@ -1,0 +1,191 @@
+<%# Bot Commands - Tailwind Version %>
+
+<%
+const groupedCommands = commands.reduce((acc, cmd) => {
+    const category = cmd.category || 'General';
+    if (!acc[category]) { acc[category] = []; }
+    acc[category].push(cmd);
+    return acc;
+}, {});
+
+const categoryIcons = {
+    'Streamer': 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
+    'Team': 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
+    'Admin': 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+    'Moderation': 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
+    'Utility': 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z',
+    'Fun': 'M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+    'Music': 'M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3',
+    'Economy': 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+    'RPG': 'M13 10V3L4 14h7v7l9-11h-7z',
+    'General': 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+    'Ticket': 'M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z',
+    'Form': 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+    'Birthday': 'M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.701 2.701 0 00-1.5-.454M9 6v2m3-2v2m3-2v2M9 3h.01M12 3h.01M15 3h.01M21 21v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7h18z',
+    'Weather': 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z'
+};
+
+const totalCommands = Object.values(groupedCommands).reduce((sum, cmds) => sum + cmds.length, 0);
+const categoryCount = Object.keys(groupedCommands).length;
+%>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-3 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Commands',
+            value: totalCommands,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Categories',
+            value: categoryCount,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Command Type',
+            value: 'Slash',
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Search -->
+    <div class="card">
+        <div class="relative">
+            <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input type="text" id="commandSearch" class="form-input w-full pl-10" placeholder="Search commands by name or description...">
+        </div>
+    </div>
+
+    <!-- Command Categories -->
+    <% for (const category in groupedCommands) { %>
+        <div class="card command-category" data-category="<%= category.toLowerCase() %>">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<%= categoryIcons[category] || categoryIcons['General'] %>"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h4 class="font-semibold text-white"><%= category %></h4>
+                        <p class="text-sm text-gray-400"><%= groupedCommands[category].length %> command<%= groupedCommands[category].length !== 1 ? 's' : '' %></p>
+                    </div>
+                </div>
+                <button onclick="toggleCategory('<%= category.replace(/'/g, "\\'").replace(/\s+/g, '-') %>')" class="btn btn-secondary btn-sm">
+                    <svg class="w-4 h-4 transition-transform category-toggle" id="toggle-<%= category.replace(/\s+/g, '-') %>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="category-commands" id="category-<%= category.replace(/\s+/g, '-') %>">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-dark-400">
+                                <th class="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider w-48">Command</th>
+                                <th class="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-dark-500">
+                            <% groupedCommands[category].forEach(command => { %>
+                                <tr class="command-row hover:bg-dark-600 transition-colors" data-name="<%= command.name.toLowerCase() %>" data-description="<%= command.description.toLowerCase() %>">
+                                    <td class="py-2 px-3">
+                                        <code class="px-2 py-1 text-sm font-mono font-semibold rounded bg-dark-700 text-primary-400">/<%= command.name %></code>
+                                    </td>
+                                    <td class="py-2 px-3 text-sm text-gray-400">
+                                        <%= command.description %>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Info Banner -->
+    <div class="card bg-gradient-to-r from-primary-500/10 to-primary-500/5 border-primary-500/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <svg class="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-1">How to use commands</h4>
+                <p class="text-sm text-gray-300">
+                    All commands use Discord's slash command system. Type <code class="px-1.5 py-0.5 rounded bg-dark-700 text-primary-400">/</code> in any channel and Discord will show available commands with auto-complete.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.category-commands {
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.category-commands.collapsed {
+    max-height: 0;
+    opacity: 0;
+}
+
+.category-toggle.rotated {
+    transform: rotate(-90deg);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('commandSearch');
+    const categories = document.querySelectorAll('.command-category');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+
+            categories.forEach(category => {
+                let hasVisibleCommand = false;
+                const rows = category.querySelectorAll('.command-row');
+
+                rows.forEach(row => {
+                    const commandName = row.dataset.name;
+                    const description = row.dataset.description;
+
+                    if (query === '' || commandName.includes(query) || description.includes(query)) {
+                        row.style.display = '';
+                        hasVisibleCommand = true;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+
+                category.style.display = hasVisibleCommand ? '' : 'none';
+            });
+        });
+    }
+});
+
+function toggleCategory(categoryId) {
+    const commandsDiv = document.getElementById(`category-${categoryId}`);
+    const toggleIcon = document.getElementById(`toggle-${categoryId}`);
+
+    if (commandsDiv.classList.contains('collapsed')) {
+        commandsDiv.classList.remove('collapsed');
+        toggleIcon.classList.remove('rotated');
+    } else {
+        commandsDiv.classList.add('collapsed');
+        toggleIcon.classList.add('rotated');
+    }
+}
+</script>

@@ -1,0 +1,291 @@
+<%
+const actionLogsData = actionLogs || auditLogs || [];
+%>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-history"></i>
+                <span>Action Log</span>
+            </div>
+            <div class="page-section-subtitle">
+                Detailed history of all server events and moderation actions
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Events</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= actionLogsData.length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Moderation Events</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= actionLogsData.filter(l => l.event_type === 'moderation' || l.moderator_id).length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">User Events</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= actionLogsData.filter(l => l.user_id).length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Retention Period</div>
+            <div style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-success);">90 Days</div>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div style="margin-bottom: var(--spacing-4);">
+        <div class="input-group">
+            <span class="input-group-icon">
+                <i class="fas fa-search"></i>
+            </span>
+            <input type="text" id="action-log-search" class="form-control" placeholder="Search by event type, user ID, action, or details...">
+        </div>
+    </div>
+
+    <!-- Action Log Table -->
+    <% if (actionLogsData.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 12%;">Event Type</th>
+                        <th style="width: 18%;">Action</th>
+                        <th style="width: 12%;">User</th>
+                        <th style="width: 12%;">Target</th>
+                        <th style="width: 12%;">Moderator</th>
+                        <th style="width: 22%;">Details</th>
+                        <th style="width: 12%;">Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody id="action-log-table-body">
+                    <% actionLogsData.forEach(log => { %>
+                        <tr class="action-log-row" data-search="<%= log.event_type %> <%= log.action %> <%= log.user_id || '' %> <%= log.target_id || '' %>">
+                            <td>
+                                <%
+                                const eventColors = {
+                                    'moderation': 'var(--color-danger)',
+                                    'messageDelete': 'var(--color-warning)',
+                                    'messageUpdate': 'var(--color-primary-400)',
+                                    'memberUpdate': 'var(--color-accent-purple)',
+                                    'memberLeave': 'var(--color-text-muted)',
+                                    'ban': 'var(--color-danger)',
+                                    'unban': 'var(--color-success)'
+                                };
+                                const bgColor = eventColors[log.event_type] || 'var(--color-text-muted)';
+                                %>
+                                <span class="badge" style="background: <%= bgColor %>; color: white; font-size: var(--font-size-xs);">
+                                    <%= log.event_type %>
+                                </span>
+                            </td>
+                            <td>
+                                <span style="font-weight: var(--font-weight-medium); color: var(--color-text-primary);">
+                                    <%= log.action %>
+                                </span>
+                            </td>
+                            <td>
+                                <% if (log.user_id) { %>
+                                    <code style="font-size: var(--font-size-xs); background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
+                                        <%= log.user_id.substring(0, 8) %>...
+                                    </code>
+                                <% } else { %>
+                                    <span style="color: var(--color-text-muted); font-size: var(--font-size-sm);">N/A</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <% if (log.target_id) { %>
+                                    <code style="font-size: var(--font-size-xs); background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
+                                        <%= log.target_id.substring(0, 8) %>...
+                                    </code>
+                                <% } else { %>
+                                    <span style="color: var(--color-text-muted); font-size: var(--font-size-sm);">N/A</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <% if (log.moderator_id) { %>
+                                    <code style="font-size: var(--font-size-xs); background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
+                                        <%= log.moderator_id.substring(0, 8) %>...
+                                    </code>
+                                <% } else { %>
+                                    <span style="color: var(--color-text-muted); font-size: var(--font-size-sm);">N/A</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <% if (log.old_value || log.new_value) { %>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">
+                                        <% if (log.old_value) { %>
+                                            <div style="margin-bottom: var(--spacing-1);">
+                                                <strong style="color: var(--color-text-muted);">Old:</strong>
+                                                <%= log.old_value.substring(0, 30) %><%= log.old_value.length > 30 ? '...' : '' %>
+                                            </div>
+                                        <% } %>
+                                        <% if (log.new_value) { %>
+                                            <div>
+                                                <strong style="color: var(--color-text-muted);">New:</strong>
+                                                <%= log.new_value.substring(0, 30) %><%= log.new_value.length > 30 ? '...' : '' %>
+                                            </div>
+                                        <% } %>
+                                    </div>
+                                <% } else if (log.reason) { %>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">
+                                        <strong style="color: var(--color-text-muted);">Reason:</strong> <%= log.reason %>
+                                    </div>
+                                <% } else if (log.details) { %>
+                                    <%
+                                    let details;
+                                    try {
+                                        details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
+                                    } catch (e) {
+                                        details = {};
+                                    }
+                                    %>
+                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">
+                                        <%= Object.entries(details).slice(0, 2).map(([k, v]) => `${k}: ${String(v).substring(0, 20)}`).join(', ') %>
+                                    </div>
+                                <% } else { %>
+                                    <span style="color: var(--color-text-muted);">-</span>
+                                <% } %>
+                            </td>
+                            <td>
+                                <span style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">
+                                    <%= new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) %>
+                                </span>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+
+        <div style="margin-top: var(--spacing-4); padding: var(--spacing-3); background: var(--color-dark-600); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary-500);">
+            <div style="display: flex; align-items: center; gap: var(--spacing-2); color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                <i class="fas fa-info-circle" style="color: var(--color-primary-400);"></i>
+                <span>Showing <%= actionLogsData.length %> most recent entries. Action logs are retained for 90 days.</span>
+            </div>
+        </div>
+    <% } else { %>
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-history"></i>
+            </div>
+            <div class="empty-state-title">No Action Logs</div>
+            <div class="empty-state-description">
+                Server events and actions will appear here once logging is enabled
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<style>
+.input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-group-icon {
+    position: absolute;
+    left: var(--spacing-3);
+    color: var(--color-text-muted);
+    z-index: 1;
+}
+
+.input-group .form-control {
+    padding-left: var(--spacing-10);
+}
+
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-700);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+    vertical-align: top;
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-700);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('action-log-search');
+    const tableBody = document.getElementById('action-log-table-body');
+
+    if (searchInput && tableBody) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const rows = tableBody.querySelectorAll('.action-log-row');
+
+            rows.forEach(row => {
+                const searchData = row.dataset.search.toLowerCase();
+                const cells = Array.from(row.querySelectorAll('td')).map(td => td.textContent.toLowerCase()).join(' ');
+
+                if (searchData.includes(query) || cells.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+});
+</script>

@@ -1,0 +1,250 @@
+<%# Achievements System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Achievements',
+            value: 25,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Unlocks',
+            value: locals.achievementStats?.totalUnlocks || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>',
+            color: 'success'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Hunters',
+            value: locals.achievementStats?.activeUsers || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Unlocks Today',
+            value: locals.achievementStats?.unlocksToday || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'warning'
+        }) %>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-accent-yellow/10 rounded-lg">
+                    <svg class="w-5 h-5 text-accent-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Achievement Configuration</h3>
+                    <p class="text-sm text-gray-400">Track and announce user achievements</p>
+                </div>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'achievements_enabled',
+                id: 'achievements_enabled',
+                checked: locals.achievementConfig?.enabled || false,
+                label: 'Enable Achievements',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="achievements-form" action="/api/guilds/<%= guildId %>/achievements/config" method="PUT">
+            <div class="form-group">
+                <label class="form-label">Announcement Channel</label>
+                <%- include('../../components/forms/channelSelect', {
+                    name: 'announcement_channel_id',
+                    channels: Array.from(channels.values()),
+                    selected: locals.achievementConfig?.announcement_channel_id,
+                    placeholder: 'No announcements'
+                }) %>
+                <p class="form-hint">Channel where achievement unlocks will be announced</p>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Settings
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Achievement Leaderboard</h3>
+        <% if (locals.topUsers && topUsers.length > 0) { %>
+            <div class="space-y-2">
+                <% topUsers.forEach((user, index) => { %>
+                    <div class="flex items-center justify-between p-3 bg-dark-700 rounded-lg hover:bg-dark-600 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg w-8">
+                                <% if (index === 0) { %>🥇
+                                <% } else if (index === 1) { %>🥈
+                                <% } else if (index === 2) { %>🥉
+                                <% } else { %>
+                                    <span class="text-gray-500 font-bold">#<%= index + 1 %></span>
+                                <% } %>
+                            </span>
+                            <code class="text-sm text-gray-400"><%= user.user_id %></code>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-primary-400 font-semibold"><%= user.completed_achievements %>/<%= user.total_achievements %></span>
+                            <span class="text-gray-500 text-sm ml-1">completed</span>
+                        </div>
+                    </div>
+                <% }) %>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 text-gray-400">
+                <p>No achievements unlocked yet</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- All Achievements -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">All Achievements (25 Total)</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <% if (locals.achievements && achievements.length > 0) { %>
+                <% achievements.forEach(achievement => { %>
+                    <div class="flex items-center gap-3 p-3 bg-dark-700 rounded-lg border border-dark-400">
+                        <span class="text-2xl"><%= achievement.icon_emoji || '🏆' %></span>
+                        <div class="flex-1">
+                            <div class="font-semibold text-white"><%= achievement.name %></div>
+                            <p class="text-sm text-gray-400"><%= achievement.description %></p>
+                            <span class="text-xs text-primary-400 capitalize"><%= achievement.category %></span>
+                        </div>
+                    </div>
+                <% }) %>
+            <% } else { %>
+                <!-- Default Achievements List -->
+                <div class="flex items-center gap-3 p-3 bg-dark-700 rounded-lg border border-dark-400">
+                    <span class="text-2xl">🎯</span>
+                    <div class="flex-1">
+                        <div class="font-semibold text-white">First Message</div>
+                        <p class="text-sm text-gray-400">Send your first message in the server</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-dark-700 rounded-lg border border-dark-400">
+                    <span class="text-2xl">💬</span>
+                    <div class="flex-1">
+                        <div class="font-semibold text-white">Chatterbox</div>
+                        <p class="text-sm text-gray-400">Send 1,000 messages</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-dark-700 rounded-lg border border-dark-400">
+                    <span class="text-2xl">⭐</span>
+                    <div class="flex-1">
+                        <div class="font-semibold text-white">Rising Star</div>
+                        <p class="text-sm text-gray-400">Reach level 10</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-dark-700 rounded-lg border border-dark-400">
+                    <span class="text-2xl">🌟</span>
+                    <div class="flex-1">
+                        <div class="font-semibold text-white">Superstar</div>
+                        <p class="text-sm text-gray-400">Reach level 50</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-dark-700 rounded-lg border border-dark-400">
+                    <span class="text-2xl">👋</span>
+                    <div class="flex-1">
+                        <div class="font-semibold text-white">Welcoming</div>
+                        <p class="text-sm text-gray-400">Greet 10 new members</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3 p-3 bg-dark-700 rounded-lg border border-dark-400">
+                    <span class="text-2xl">🎂</span>
+                    <div class="flex-1">
+                        <div class="font-semibold text-white">Anniversary</div>
+                        <p class="text-sm text-gray-400">Be a member for 1 year</p>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Recent Unlocks -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Recent Unlocks</h3>
+        <% if (locals.recentAchievements && recentAchievements.length > 0) { %>
+            <div class="space-y-2">
+                <% recentAchievements.slice(0, 10).forEach(unlock => { %>
+                    <div class="flex items-center justify-between p-3 bg-dark-700 rounded-lg">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xl"><%= unlock.icon %></span>
+                            <div>
+                                <div class="font-medium text-white"><%= unlock.name %></div>
+                                <code class="text-xs text-gray-500"><%= unlock.user_id %></code>
+                            </div>
+                        </div>
+                        <span class="text-xs text-gray-400"><%= new Date(unlock.completed_at).toLocaleDateString() %></span>
+                    </div>
+                <% }) %>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 text-gray-400">
+                <p>No recent achievements</p>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-accent-yellow/10 to-primary-500/10 border-accent-yellow/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-accent-yellow/20 flex items-center justify-center text-2xl">
+                    🏆
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How Achievements Work</h4>
+                <ul class="text-sm text-gray-300 space-y-1.5">
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">1.</span>
+                        Achievements are automatically tracked based on user activity
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">2.</span>
+                        Users earn achievements for messaging, leveling up, and participating
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">3.</span>
+                        Unlocks can be announced in a designated channel
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-accent-yellow">4.</span>
+                        Users can view their progress with <code class="text-primary-400">/achievements</code>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('achievements-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        enabled: document.getElementById('achievements_enabled').checked,
+        announcement_channel_id: formData.get('announcement_channel_id') || null
+    };
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Achievement settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save settings'); }
+});
+</script>

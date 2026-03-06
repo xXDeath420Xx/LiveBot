@@ -1,0 +1,151 @@
+<%# Add Team Modal - Tailwind Version %>
+
+<div id="add-team-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-2xl">
+        <form id="add-team-form">
+            <div class="modal-header">
+                <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-purple-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>
+                    </svg>
+                    Add Twitch Team
+                </h3>
+                <button type="button" onclick="closeAddTeamModal()" class="text-gray-400 hover:text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="modal-body space-y-6">
+                <div class="form-group">
+                    <label class="form-label">Twitch Team Name</label>
+                    <input type="text" name="teamName" class="form-input w-full" placeholder="e.g., 'livebot'" required>
+                    <p class="form-hint">This is the team's slug from the URL (e.g., twitch.tv/team/<strong class="text-primary-400">livebot</strong>)</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label">Announcement Channel</label>
+                        <select name="announcementChannelId" class="form-input w-full">
+                            <option value="">-- Use Server Default --</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Live Role</label>
+                        <select name="liveRoleId" class="form-input w-full">
+                            <option value="">-- None --</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>">@<%= role.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Custom Message</label>
+                    <textarea name="customMessage" class="form-input w-full" rows="2" placeholder="e.g. Hey @everyone, the {team} is live with {streamer}!"></textarea>
+                    <p class="form-hint">Variables: {team}, {streamer}, {game}, {title}, {url}</p>
+                </div>
+
+                <div class="p-4 bg-dark-700 rounded-lg">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="keepSummary" class="toggle-input">
+                        <span class="text-sm text-gray-300">Keep announcement message after stream ends (do not delete or edit)</span>
+                    </label>
+                </div>
+
+                <hr class="border-dark-400">
+
+                <!-- Webhook Overrides -->
+                <div>
+                    <h4 class="text-base font-semibold text-white mb-2 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+                        </svg>
+                        Webhook Overrides
+                    </h4>
+                    <p class="text-sm text-gray-400 mb-4">Customize the webhook's appearance for this team's announcements</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label">Webhook Name</label>
+                            <input type="text" name="webhookName" class="form-input w-full" placeholder="Leave blank for default">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Webhook Avatar URL</label>
+                            <input type="url" name="webhookAvatarUrl" class="form-input w-full" placeholder="Leave blank for default">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" onclick="closeAddTeamModal()" class="btn btn-secondary">
+                    Close
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Add and Synchronize Team
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddTeamModal() {
+    document.getElementById('add-team-form').reset();
+    document.getElementById('add-team-modal').classList.remove('hidden');
+}
+
+function closeAddTeamModal() {
+    document.getElementById('add-team-modal').classList.add('hidden');
+}
+
+document.getElementById('add-team-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    const data = {
+        teamName: formData.get('teamName'),
+        announcementChannelId: formData.get('announcementChannelId'),
+        liveRoleId: formData.get('liveRoleId'),
+        customMessage: formData.get('customMessage'),
+        keepSummary: formData.get('keepSummary') === 'on',
+        webhookName: formData.get('webhookName'),
+        webhookAvatarUrl: formData.get('webhookAvatarUrl')
+    };
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/teams', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Team added and synchronized');
+            closeAddTeamModal();
+            location.reload();
+        } else {
+            const result = await response.json();
+            throw new Error(result.error || 'Failed to add team');
+        }
+    } catch (error) {
+        showToast('error', error.message);
+    }
+});
+
+// Close modal on background click
+document.getElementById('add-team-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeAddTeamModal();
+    }
+});
+</script>

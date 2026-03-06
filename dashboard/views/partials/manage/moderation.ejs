@@ -1,0 +1,555 @@
+<style>
+/* Compact Moderation Page Styles */
+.mod-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.mod-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.mod-section-header i { font-size: 1rem; color: #a78bfa; }
+.mod-section-header.infractions i { color: #f87171; }
+.mod-section-header.escalation i { color: #fbbf24; }
+.mod-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
+.mod-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
+
+.mod-section-body { padding: 18px; }
+
+/* Form Styles */
+.mod-form-group { margin-bottom: 16px; }
+
+.mod-form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+
+.mod-form-label i { color: #a78bfa; margin-right: 6px; }
+
+.mod-form-input,
+.mod-form-select {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.mod-form-input:focus,
+.mod-form-select:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+
+.mod-form-select option { background: #1a1d21; color: #ffffff; }
+
+.mod-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.mod-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+/* Save Button */
+.mod-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.mod-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
+
+/* Infractions Table */
+.mod-table-wrapper {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.mod-infractions-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.mod-infractions-table thead { background: rgba(0, 0, 0, 0.2); }
+
+.mod-infractions-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.mod-infractions-table th:first-child {
+    border-radius: 12px 0 0 0;
+}
+
+.mod-infractions-table th:last-child {
+    border-radius: 0 12px 0 0;
+}
+
+.mod-infractions-table td {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mod-infractions-table tbody tr {
+    transition: all 0.2s ease;
+}
+
+.mod-infractions-table tbody tr:hover {
+    background: rgba(167, 139, 250, 0.05);
+}
+
+.mod-infractions-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* User Info */
+.mod-user-info {
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.mod-moderator-info {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* Type Badges */
+.mod-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.mod-type-badge.warn {
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: #fbbf24;
+}
+
+.mod-type-badge.timeout {
+    background: rgba(251, 146, 60, 0.15);
+    border: 1px solid rgba(251, 146, 60, 0.3);
+    color: #fb923c;
+}
+
+.mod-type-badge.kick {
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    color: #a78bfa;
+}
+
+.mod-type-badge.ban {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+/* Reason */
+.mod-reason {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.9rem;
+}
+
+/* Date */
+.mod-date {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Add Rule Form */
+.mod-add-rule-form {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.mod-add-rule-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 16px;
+    align-items: end;
+}
+
+.mod-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 24px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.mod-add-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+}
+
+/* Escalation Rule Card */
+.mod-rule-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    transition: all 0.2s ease;
+}
+
+.mod-rule-card:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.mod-rule-card:last-child {
+    margin-bottom: 0;
+}
+
+.mod-rule-text {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.95rem;
+}
+
+.mod-rule-highlight {
+    font-weight: 700;
+}
+
+.mod-rule-highlight.count {
+    color: #a78bfa;
+}
+
+.mod-rule-highlight.hours {
+    color: #60a5fa;
+}
+
+.mod-rule-highlight.action {
+    color: #f87171;
+    text-transform: uppercase;
+}
+
+/* Delete Button */
+.mod-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: 10px;
+    color: #f87171;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mod-delete-btn:hover {
+    background: rgba(248, 113, 113, 0.2);
+    border-color: rgba(248, 113, 113, 0.5);
+    transform: translateY(-2px);
+}
+
+/* Empty State */
+.mod-empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 2px dashed rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+}
+
+.mod-empty-icon {
+    font-size: 2.5rem;
+    color: rgba(167, 139, 250, 0.3);
+    margin-bottom: 16px;
+}
+
+.mod-empty-text {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.95rem;
+}
+
+@media (max-width: 992px) {
+    .mod-add-rule-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .mod-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mod-add-rule-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mod-add-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .mod-rule-card {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-shield-alt"></i>
+                <span>Moderation</span>
+            </div>
+            <div class="page-section-subtitle">
+                Configure moderation tools, infractions, and escalation rules
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration Section -->
+    <div class="mod-section-card">
+        <div class="mod-section-header">
+            <i class="fas fa-cog"></i>
+            <div>
+                <h3>Configuration</h3>
+                <p>Set up moderation logging and mute settings</p>
+            </div>
+        </div>
+        <div class="mod-section-body">
+            <form action="/manage/<%= guild.id %>/update-moderation" method="POST">
+                <div class="mod-form-grid">
+                    <div class="mod-form-group">
+                        <label class="mod-form-label">
+                            <i class="fas fa-hashtag"></i>Moderation Log Channel
+                        </label>
+                        <select class="mod-form-select" name="mod_log_channel_id">
+                            <option value="">Select a channel</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>" <%= settings && settings.mod_log_channel_id === channel.id ? 'selected' : '' %>>
+                                    #<%= channel.name %>
+                                </option>
+                            <% }) %>
+                        </select>
+                        <span class="mod-form-hint">Where moderation actions will be logged</span>
+                    </div>
+
+                    <div class="mod-form-group">
+                        <label class="mod-form-label">
+                            <i class="fas fa-volume-mute"></i>Mute Role
+                        </label>
+                        <select class="mod-form-select" name="muted_role_id">
+                            <option value="">Select a role</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>" <%= settings && settings.muted_role_id === role.id ? 'selected' : '' %>>
+                                    <%= role.name %>
+                                </option>
+                            <% }) %>
+                        </select>
+                        <span class="mod-form-hint">Role assigned to muted users</span>
+                    </div>
+                </div>
+
+                <button type="submit" class="mod-save-btn">
+                    <i class="fas fa-save"></i>
+                    Save Configuration
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Recent Infractions Section -->
+    <div class="mod-section-card">
+        <div class="mod-section-header infractions">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div>
+                <h3>Recent Infractions</h3>
+                <p>View recent moderation actions in your server</p>
+            </div>
+        </div>
+        <div class="mod-section-body">
+            <% if (infractions && infractions.length > 0) { %>
+                <div class="mod-table-wrapper">
+                    <table class="mod-infractions-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Moderator</th>
+                                <th>Type</th>
+                                <th>Reason</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% infractions.forEach(infraction => { %>
+                                <tr>
+                                    <td>
+                                        <div class="mod-user-info">
+                                            <%= infraction.user_tag || infraction.user_id %>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="mod-moderator-info">
+                                            <%= infraction.moderator_tag || infraction.moderator_id %>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="mod-type-badge <%= infraction.type %>">
+                                            <i class="fas fa-<%= infraction.type === 'warn' ? 'exclamation' : infraction.type === 'timeout' ? 'clock' : infraction.type === 'kick' ? 'boot' : 'gavel' %>"></i>
+                                            <%= infraction.type %>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="mod-reason" title="<%= infraction.reason || 'No reason provided' %>">
+                                            <%= infraction.reason || 'No reason provided' %>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="mod-date">
+                                            <%= new Date(infraction.created_at).toLocaleDateString() %>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
+            <% } else { %>
+                <div class="mod-empty-state">
+                    <div class="mod-empty-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="mod-empty-text">No recent infractions found</div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Escalation Rules Section -->
+    <div class="mod-section-card">
+        <div class="mod-section-header escalation">
+            <i class="fas fa-layer-group"></i>
+            <div>
+                <h3>Escalation Rules</h3>
+                <p>Automatically apply stricter punishments for repeat offenders</p>
+            </div>
+        </div>
+        <div class="mod-section-body">
+            <!-- Add Rule Form -->
+            <form action="/manage/<%= guild.id %>/add-escalation-rule" method="POST" class="mod-add-rule-form">
+                <div class="mod-add-rule-grid">
+                    <div class="mod-form-group" style="margin-bottom: 0;">
+                        <label class="mod-form-label">Infraction Count</label>
+                        <input type="number" name="infraction_count" class="mod-form-input" required min="1" placeholder="3">
+                    </div>
+                    <div class="mod-form-group" style="margin-bottom: 0;">
+                        <label class="mod-form-label">Within Hours</label>
+                        <input type="number" name="time_period_hours" class="mod-form-input" required min="1" placeholder="24">
+                    </div>
+                    <div class="mod-form-group" style="margin-bottom: 0;">
+                        <label class="mod-form-label">Action</label>
+                        <select name="action" class="mod-form-select" required>
+                            <option value="timeout">Timeout</option>
+                            <option value="kick">Kick</option>
+                            <option value="ban">Ban</option>
+                        </select>
+                    </div>
+                    <div>
+                        <button type="submit" class="mod-add-btn">
+                            <i class="fas fa-plus"></i>
+                            Add Rule
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Existing Rules -->
+            <% if (escalationRules && escalationRules.length > 0) { %>
+                <% escalationRules.forEach(rule => { %>
+                    <div class="mod-rule-card">
+                        <div class="mod-rule-text">
+                            After <span class="mod-rule-highlight count"><%= rule.infraction_count %></span> infractions
+                            within <span class="mod-rule-highlight hours"><%= rule.time_period_hours %></span> hours,
+                            apply <span class="mod-rule-highlight action"><%= rule.action %></span>
+                        </div>
+                        <form action="/manage/<%= guild.id %>/remove-escalation-rule" method="POST" style="display: inline;">
+                            <input type="hidden" name="ruleId" value="<%= rule.id %>">
+                            <button type="submit" class="mod-delete-btn">
+                                <i class="fas fa-trash"></i>
+                                Remove
+                            </button>
+                        </form>
+                    </div>
+                <% }) %>
+            <% } else { %>
+                <div class="mod-empty-state">
+                    <div class="mod-empty-icon">
+                        <i class="fas fa-layer-group"></i>
+                    </div>
+                    <div class="mod-empty-text">No escalation rules configured</div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>

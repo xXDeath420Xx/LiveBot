@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/channels" class="ember-nav-link active">Channels</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Breadcrumb -->
+            <div style="margin-bottom: 1.5rem;">
+                <a href="/tokes-bot/channels/<%= channel.id %>" style="color: var(--ember-text-muted); text-decoration: none;">
+                    &larr; Back to <%= channel.channel_name %>
+                </a>
+            </div>
+
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">
+                    Command Settings
+                    <span class="ember-badge <%= channel.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>" style="font-size: 0.7rem;">
+                        <%= channel.channel_name %>
+                    </span>
+                </h1>
+                <p class="ember-dashboard-subtitle">Toggle commands, customize aliases, and set custom responses</p>
+            </div>
+
+            <!-- Built-in Commands -->
+            <% const categories = [...new Set(commands.map(c => c.category))]; %>
+            <% categories.forEach(category => { %>
+                <div class="ember-card" style="margin-bottom: 1.5rem;">
+                    <div class="ember-card-header">
+                        <h2 class="ember-card-title" style="text-transform: capitalize;"><%= category %> Commands</h2>
+                    </div>
+                    <div class="ember-card-body">
+                        <div class="command-list">
+                            <% commands.filter(c => c.category === category).forEach(cmd => { %>
+                                <%
+                                    const override = channelCommands.find(cc => cc.command_key === cmd.command_key);
+                                    const isEnabled = override ? override.is_enabled === 1 : true;
+                                    const customAliases = override?.custom_aliases ? JSON.parse(override.custom_aliases) : [];
+                                    const defaultAliases = cmd.default_aliases ? JSON.parse(cmd.default_aliases) : [];
+                                    const activeAliases = customAliases.length > 0 ? customAliases : defaultAliases;
+                                    const customResponse = override?.custom_response || '';
+                                    const cooldown = override?.cooldown_override ?? cmd.cooldown_default;
+                                %>
+                                <div class="command-item" data-key="<%= cmd.command_key %>" style="padding: 1rem; background: rgba(255,255,255,0.03); border-radius: 8px; margin-bottom: 0.75rem;">
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                                        <div>
+                                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                <code style="font-size: 1.1rem; color: var(--ember-primary);">!<%= cmd.command_key %></code>
+                                                <% if (cmd.mod_only) { %>
+                                                    <span class="ember-badge ember-badge-warning" style="font-size: 0.6rem;">MOD</span>
+                                                <% } %>
+                                            </div>
+                                            <p style="font-size: 0.85rem; color: var(--ember-text-muted); margin-top: 0.25rem;">
+                                                <%= cmd.description || 'No description' %>
+                                            </p>
+                                        </div>
+                                        <label class="toggle-switch">
+                                            <input type="checkbox" class="cmd-toggle" data-key="<%= cmd.command_key %>" <%= isEnabled ? 'checked' : '' %>>
+                                            <span class="toggle-slider"></span>
+                                        </label>
+                                    </div>
+
+                                    <div class="command-details" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; <%= isEnabled ? '' : 'opacity: 0.5; pointer-events: none;' %>">
+                                        <div>
+                                            <label class="ember-label" style="font-size: 0.75rem;">Aliases (comma-separated)</label>
+                                            <input type="text" class="ember-input cmd-aliases" data-key="<%= cmd.command_key %>"
+                                                   value="<%= activeAliases.join(', ') %>"
+                                                   placeholder="<%= defaultAliases.join(', ') %>"
+                                                   style="font-size: 0.85rem;">
+                                            <small style="color: var(--ember-text-muted); font-size: 0.7rem;">Default: <%= defaultAliases.join(', ') || 'none' %></small>
+                                        </div>
+                                        <div>
+                                            <label class="ember-label" style="font-size: 0.75rem;">Cooldown (seconds)</label>
+                                            <input type="number" class="ember-input cmd-cooldown" data-key="<%= cmd.command_key %>"
+                                                   value="<%= cooldown %>" min="0" max="300"
+                                                   style="font-size: 0.85rem;">
+                                            <small style="color: var(--ember-text-muted); font-size: 0.7rem;">Default: <%= cmd.cooldown_default %>s</small>
+                                        </div>
+                                        <div style="grid-column: span 2;">
+                                            <label class="ember-label" style="font-size: 0.75rem;">Custom Response (optional)</label>
+                                            <input type="text" class="ember-input cmd-response" data-key="<%= cmd.command_key %>"
+                                                   value="<%= customResponse %>"
+                                                   placeholder="Leave empty for default response"
+                                                   style="font-size: 0.85rem;">
+                                            <small style="color: var(--ember-text-muted); font-size: 0.7rem;">
+                                                Variables: {{username}}, {{lifetime_tokes}}, {{today_tokes}}, {{level}}, {{streak}}
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <div style="margin-top: 0.75rem; text-align: right;">
+                                        <button class="ember-btn ember-btn-sm ember-btn-primary save-cmd-btn" data-key="<%= cmd.command_key %>">
+                                            Save Changes
+                                        </button>
+                                    </div>
+                                </div>
+                            <% }); %>
+                        </div>
+                    </div>
+                </div>
+            <% }); %>
+
+            <!-- Custom Commands -->
+            <div class="ember-card">
+                <div class="ember-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2 class="ember-card-title">Custom Commands</h2>
+                    <button class="ember-btn ember-btn-sm ember-btn-primary" onclick="showAddCustomModal()">
+                        + Add Command
+                    </button>
+                </div>
+                <div class="ember-card-body">
+                    <% if (customCommands.length === 0) { %>
+                        <p class="ember-text-muted ember-text-center" style="padding: 2rem;">
+                            No custom commands yet. Click "Add Command" to create one.
+                        </p>
+                    <% } else { %>
+                        <div class="custom-command-list">
+                            <% customCommands.forEach(cmd => { %>
+                                <div class="custom-command-item" data-id="<%= cmd.id %>" style="padding: 1rem; background: rgba(255,255,255,0.03); border-radius: 8px; margin-bottom: 0.75rem;">
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                        <div style="flex: 1;">
+                                            <code style="font-size: 1.1rem; color: var(--ember-success);">!<%= cmd.command_name %></code>
+                                            <% if (cmd.mod_only) { %>
+                                                <span class="ember-badge ember-badge-warning" style="font-size: 0.6rem;">MOD</span>
+                                            <% } %>
+                                            <p style="font-size: 0.85rem; color: var(--ember-text-secondary); margin-top: 0.5rem; word-break: break-word;">
+                                                <%= cmd.response.length > 100 ? cmd.response.substring(0, 100) + '...' : cmd.response %>
+                                            </p>
+                                            <small style="color: var(--ember-text-muted);">
+                                                Used <%= cmd.use_count %> times | Cooldown: <%= cmd.cooldown %>s
+                                            </small>
+                                        </div>
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            <button class="ember-btn ember-btn-sm ember-btn-ghost" onclick="editCustomCommand(<%= cmd.id %>)">Edit</button>
+                                            <button class="ember-btn ember-btn-sm ember-btn-danger" onclick="deleteCustomCommand(<%= cmd.id %>, '<%= cmd.command_name %>')">Delete</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            <% }); %>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Custom Command Modal -->
+    <div id="customModal" class="ember-modal" style="display: none;">
+        <div class="ember-modal-content">
+            <div class="ember-modal-header">
+                <h3 class="ember-modal-title" id="modalTitle">Add Custom Command</h3>
+                <button onclick="closeCustomModal()" class="ember-modal-close">&times;</button>
+            </div>
+            <div class="ember-modal-body">
+                <form id="customForm">
+                    <input type="hidden" id="custom-id">
+                    <div class="ember-form-group">
+                        <label class="ember-label">Command Name (without !)</label>
+                        <input type="text" id="custom-name" class="ember-input" placeholder="mycommand" maxlength="50" required>
+                    </div>
+                    <div class="ember-form-group">
+                        <label class="ember-label">Response</label>
+                        <textarea id="custom-response" class="ember-input" rows="3" placeholder="Hello {{username}}!" required></textarea>
+                        <small class="ember-text-muted">
+                            Variables: {{username}}, {{lifetime_tokes}}, {{today_tokes}}, {{level}}, {{streak}}, {{random_number}}
+                        </small>
+                    </div>
+                    <div class="ember-form-group">
+                        <label class="ember-label">Cooldown (seconds)</label>
+                        <input type="number" id="custom-cooldown" class="ember-input" value="5" min="0" max="300">
+                    </div>
+                    <div class="ember-form-group">
+                        <label class="ember-checkbox">
+                            <input type="checkbox" id="custom-mod-only">
+                            <span>Mod Only</span>
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="ember-modal-footer">
+                <button onclick="closeCustomModal()" class="ember-btn ember-btn-ghost">Cancel</button>
+                <button onclick="saveCustomCommand()" class="ember-btn ember-btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+            flex-shrink: 0;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #444;
+            transition: .3s;
+            border-radius: 26px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: var(--ember-success);
+        }
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+        .ember-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .ember-modal-content {
+            background: var(--ember-card-bg, #1a1a2e);
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+        }
+        .ember-modal-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .ember-modal-title { margin: 0; font-size: 1.25rem; }
+        .ember-modal-close {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.5rem;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        .ember-modal-close:hover { opacity: 1; }
+        .ember-modal-body { padding: 1.5rem; }
+        .ember-modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+        }
+        .ember-form-group { margin-bottom: 1rem; }
+        .ember-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+    </style>
+
+    <script>
+        const channelId = '<%= channel.id %>';
+        const customCommandsData = <%- JSON.stringify(customCommands) %>;
+
+        // Toggle command enabled/disabled
+        document.querySelectorAll('.cmd-toggle').forEach(toggle => {
+            toggle.addEventListener('change', async function() {
+                const key = this.dataset.key;
+                const enabled = this.checked;
+                const details = this.closest('.command-item').querySelector('.command-details');
+
+                if (enabled) {
+                    details.style.opacity = '1';
+                    details.style.pointerEvents = 'auto';
+                } else {
+                    details.style.opacity = '0.5';
+                    details.style.pointerEvents = 'none';
+                }
+
+                try {
+                    await fetch(`/tokes-bot/api/channels/${channelId}/commands/${key}/toggle`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ enabled })
+                    });
+                } catch (err) {
+                    console.error('Toggle failed:', err);
+                }
+            });
+        });
+
+        // Save command settings
+        document.querySelectorAll('.save-cmd-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const key = this.dataset.key;
+                const item = document.querySelector(`.command-item[data-key="${key}"]`);
+                const aliasesInput = item.querySelector('.cmd-aliases');
+                const cooldownInput = item.querySelector('.cmd-cooldown');
+                const responseInput = item.querySelector('.cmd-response');
+
+                const aliases = aliasesInput.value.split(',').map(a => a.trim().toLowerCase()).filter(a => a);
+                const cooldown = parseInt(cooldownInput.value) || 5;
+                const response = responseInput.value.trim();
+
+                try {
+                    const res = await fetch(`/tokes-bot/api/channels/${channelId}/commands/${key}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            custom_aliases: aliases.length > 0 ? aliases : null,
+                            cooldown_override: cooldown,
+                            custom_response: response || null
+                        })
+                    });
+
+                    if (res.ok) {
+                        this.textContent = 'Saved!';
+                        setTimeout(() => { this.textContent = 'Save Changes'; }, 2000);
+                    } else {
+                        alert('Failed to save');
+                    }
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            });
+        });
+
+        // Custom command modal functions
+        function showAddCustomModal() {
+            document.getElementById('modalTitle').textContent = 'Add Custom Command';
+            document.getElementById('custom-id').value = '';
+            document.getElementById('custom-name').value = '';
+            document.getElementById('custom-name').disabled = false;
+            document.getElementById('custom-response').value = '';
+            document.getElementById('custom-cooldown').value = '5';
+            document.getElementById('custom-mod-only').checked = false;
+            document.getElementById('customModal').style.display = 'flex';
+        }
+
+        function editCustomCommand(id) {
+            const cmd = customCommandsData.find(c => c.id === id);
+            if (!cmd) return;
+
+            document.getElementById('modalTitle').textContent = 'Edit Custom Command';
+            document.getElementById('custom-id').value = cmd.id;
+            document.getElementById('custom-name').value = cmd.command_name;
+            document.getElementById('custom-name').disabled = true;
+            document.getElementById('custom-response').value = cmd.response;
+            document.getElementById('custom-cooldown').value = cmd.cooldown;
+            document.getElementById('custom-mod-only').checked = cmd.mod_only === 1;
+            document.getElementById('customModal').style.display = 'flex';
+        }
+
+        function closeCustomModal() {
+            document.getElementById('customModal').style.display = 'none';
+        }
+
+        async function saveCustomCommand() {
+            const id = document.getElementById('custom-id').value;
+            const name = document.getElementById('custom-name').value.trim().toLowerCase();
+            const response = document.getElementById('custom-response').value.trim();
+            const cooldown = parseInt(document.getElementById('custom-cooldown').value) || 5;
+            const modOnly = document.getElementById('custom-mod-only').checked;
+
+            if (!name || !response) {
+                alert('Name and response are required');
+                return;
+            }
+
+            try {
+                const url = id
+                    ? `/tokes-bot/api/channels/${channelId}/custom/${id}`
+                    : `/tokes-bot/api/channels/${channelId}/custom`;
+                const method = id ? 'PUT' : 'POST';
+
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        command_name: name,
+                        response,
+                        cooldown,
+                        mod_only: modOnly
+                    })
+                });
+
+                if (res.ok) {
+                    closeCustomModal();
+                    location.reload();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Failed to save');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function deleteCustomCommand(id, name) {
+            if (!confirm(`Delete command !${name}?`)) return;
+
+            try {
+                const res = await fetch(`/tokes-bot/api/channels/${channelId}/custom/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    location.reload();
+                } else {
+                    alert('Failed to delete');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // Close modal on outside click
+        document.getElementById('customModal').addEventListener('click', function(e) {
+            if (e.target === this) closeCustomModal();
+        });
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

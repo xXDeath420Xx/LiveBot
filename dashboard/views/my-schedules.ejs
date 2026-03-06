@@ -1,0 +1,705 @@
+<%- include('partials/modern-header', {
+    pageTitle: 'My Schedules',
+    additionalCSS: []
+}) %>
+
+<style>
+.my-schedules-page {
+    min-height: 100vh;
+    background: var(--color-dark-800);
+    padding-bottom: var(--spacing-12);
+}
+
+.my-schedules-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-6);
+}
+
+/* User Header */
+.user-header {
+    background: var(--gradient-purple);
+    padding: var(--spacing-8) var(--spacing-6);
+    border-radius: var(--radius-xl);
+    margin-bottom: var(--spacing-6);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--spacing-4);
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-4);
+}
+
+.user-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-full);
+    border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.user-details h1 {
+    font-size: var(--font-size-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.user-details p {
+    color: rgba(255, 255, 255, 0.8);
+    margin: var(--spacing-1) 0 0 0;
+    font-size: var(--font-size-sm);
+}
+
+.user-actions {
+    display: flex;
+    gap: var(--spacing-3);
+}
+
+.btn-create {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-3) var(--spacing-5);
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    font-weight: var(--font-weight-semibold);
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-create:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.btn-logout {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-3) var(--spacing-5);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--radius-md);
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-logout:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--color-text-primary);
+}
+
+/* Stats */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-4);
+    margin-bottom: var(--spacing-6);
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.stat-card {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-5);
+    text-align: center;
+}
+
+.stat-value {
+    font-size: var(--font-size-3xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-primary-400);
+}
+
+.stat-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-1);
+}
+
+/* Events Grid */
+.events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: var(--spacing-4);
+}
+
+.event-card {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-5);
+    transition: all 0.2s ease;
+}
+
+.event-card:hover {
+    border-color: var(--color-primary-500);
+    transform: translateY(-2px);
+}
+
+.event-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-3);
+}
+
+.event-card-title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.event-card-slug {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-1);
+}
+
+.event-card-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-4);
+}
+
+.event-card-stats {
+    display: flex;
+    gap: var(--spacing-4);
+    margin-bottom: var(--spacing-4);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.event-card-stat {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-2);
+}
+
+.event-card-stat i {
+    color: var(--color-primary-400);
+}
+
+.event-card-actions {
+    display: flex;
+    gap: var(--spacing-2);
+    flex-wrap: wrap;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-2);
+    padding: var(--spacing-2) var(--spacing-3);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    border: none;
+}
+
+.btn-primary {
+    background: var(--color-primary-500);
+    color: var(--color-text-primary);
+}
+
+.btn-primary:hover {
+    background: var(--color-primary-600);
+}
+
+.btn-secondary {
+    background: var(--color-dark-500);
+    color: var(--color-text-secondary);
+}
+
+.btn-secondary:hover {
+    background: var(--color-dark-400);
+    color: var(--color-text-primary);
+}
+
+.btn-success {
+    background: var(--color-success);
+    color: white;
+}
+
+.btn-success:hover {
+    background: var(--color-success-dark);
+}
+
+.btn-danger {
+    background: var(--color-danger);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: var(--color-danger-dark);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: var(--spacing-1) var(--spacing-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+}
+
+.status-active {
+    background: rgba(67, 181, 129, 0.2);
+    color: var(--color-success);
+}
+
+.status-inactive {
+    background: var(--color-dark-500);
+    color: var(--color-text-muted);
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-6);
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.empty-state i {
+    font-size: 4rem;
+    color: var(--color-dark-400);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state h3 {
+    font-size: var(--font-size-xl);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state p {
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+/* Modal Styles */
+.custom-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+}
+
+.custom-modal.active {
+    display: flex !important;
+}
+
+.modal-content {
+    background: var(--color-dark-700);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    padding: var(--spacing-5);
+    border-bottom: 1px solid var(--color-dark-400);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: var(--font-size-lg);
+    color: var(--color-text-primary);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xl);
+    cursor: pointer;
+}
+
+.modal-close:hover {
+    color: var(--color-text-primary);
+}
+
+.modal-body {
+    padding: var(--spacing-5);
+}
+
+.modal-footer {
+    padding: var(--spacing-5);
+    border-top: 1px solid var(--color-dark-400);
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--spacing-3);
+}
+
+.form-group {
+    margin-bottom: var(--spacing-4);
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-control {
+    width: 100%;
+    padding: var(--spacing-3);
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-md);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-base);
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--color-primary-500);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-1);
+}
+</style>
+
+<div class="my-schedules-page">
+    <div class="my-schedules-container">
+        <!-- User Header -->
+        <div class="user-header">
+            <div class="user-info">
+                <img src="<%= user.avatar %>" alt="<%= user.display_name %>" class="user-avatar">
+                <div class="user-details">
+                    <h1>My Schedules</h1>
+                    <p><i class="fab fa-twitch"></i> Logged in as <%= user.display_name %></p>
+                </div>
+            </div>
+            <div class="user-actions">
+                <button class="btn-create" onclick="showCreateEventModal()">
+                    <i class="fas fa-plus"></i> Create Event
+                </button>
+                <a href="/schedule" class="btn-logout">
+                    <i class="fas fa-calendar"></i> Calendar
+                </a>
+                <a href="/auth/twitch/logout" class="btn-logout">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-events"><%= events.length %></div>
+                <div class="stat-label">Total Events</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-schedules"><%= events.reduce((sum, e) => sum + (e.schedule_count || 0), 0) %></div>
+                <div class="stat-label">Total Schedules</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-runs"><%= events.reduce((sum, e) => sum + (e.run_count || 0), 0) %></div>
+                <div class="stat-label">Total Runs</div>
+            </div>
+        </div>
+
+        <!-- Events -->
+        <div id="events-container">
+            <% if (events && events.length > 0) { %>
+                <div class="events-grid">
+                    <% events.forEach(event => { %>
+                        <div class="event-card" data-event-id="<%= event.id %>">
+                            <div class="event-card-header">
+                                <div>
+                                    <h3 class="event-card-title"><%= event.name %></h3>
+                                    <div class="event-card-slug">
+                                        <i class="fas fa-link"></i> /schedule/<%= event.slug %>
+                                    </div>
+                                </div>
+                                <span class="status-badge <%= event.is_active ? 'status-active' : 'status-inactive' %>">
+                                    <%= event.is_active ? 'Active' : 'Inactive' %>
+                                </span>
+                            </div>
+                            <% if (event.description) { %>
+                                <p class="event-card-description"><%= event.description %></p>
+                            <% } %>
+                            <div class="event-card-stats">
+                                <span class="event-card-stat">
+                                    <i class="fas fa-calendar-day"></i> <%= event.schedule_count %> schedules
+                                </span>
+                                <span class="event-card-stat">
+                                    <i class="fas fa-running"></i> <%= event.run_count %> runs
+                                </span>
+                                <% if (event.twitch_channel) { %>
+                                    <span class="event-card-stat">
+                                        <i class="fab fa-twitch" style="color: #9146ff;"></i> <%= event.twitch_channel %>
+                                    </span>
+                                <% } %>
+                            </div>
+                            <div class="event-card-actions">
+                                <a href="/my-schedules/<%= event.id %>" class="btn btn-primary">
+                                    <i class="fas fa-edit"></i> Manage
+                                </a>
+                                <a href="/schedule/<%= event.slug %>" target="_blank" class="btn btn-secondary">
+                                    <i class="fas fa-external-link-alt"></i> View Public
+                                </a>
+                                <button class="btn btn-secondary" onclick="toggleEventStatus(<%= event.id %>, <%= !event.is_active %>)">
+                                    <i class="fas fa-<%= event.is_active ? 'pause' : 'play' %>"></i>
+                                </button>
+                                <button class="btn btn-danger" onclick="deleteEvent(<%= event.id %>)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    <% }); %>
+                </div>
+            <% } else { %>
+                <div class="empty-state">
+                    <i class="fas fa-calendar-plus"></i>
+                    <h3>No Events Yet</h3>
+                    <p>Create your first event to start building schedules for your speedrun marathon.</p>
+                    <button class="btn btn-primary" onclick="showCreateEventModal()">
+                        <i class="fas fa-plus"></i> Create First Event
+                    </button>
+                </div>
+            <% } %>
+        </div>
+    </div>
+</div>
+
+<!-- Create Event Modal -->
+<div class="custom-modal" id="createEventModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Create Event</h3>
+            <button class="modal-close" onclick="hideModal('createEventModal')">&times;</button>
+        </div>
+        <form id="createEventForm" action="javascript:void(0)" method="POST" onsubmit="return handleCreateEvent(event)">
+            <div class="modal-body">
+                <h4 style="color: var(--color-text-muted); margin-bottom: var(--spacing-4); border-bottom: 1px solid var(--color-dark-400); padding-bottom: var(--spacing-2);">Event Information</h4>
+                <div class="form-group">
+                    <label class="form-label">Name</label>
+                    <input type="text" class="form-control" name="name" required placeholder="Summer Speedathon 2025">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Slug</label>
+                    <input type="text" class="form-control" name="slug" required placeholder="summer-speedathon-2025" pattern="[a-z0-9\-]+">
+                    <div class="form-help">Lowercase letters, numbers, and hyphens only. URL: /schedule/<strong>your-slug</strong></div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" name="description" rows="2" placeholder="A weekend marathon featuring the best speedruns"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Website</label>
+                    <input type="url" class="form-control" name="website" placeholder="https://yourmarathon.com">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4);">
+                    <div class="form-group">
+                        <label class="form-label">Twitch Stream</label>
+                        <div style="display: flex; align-items: center;">
+                            <span style="background: var(--color-dark-500); padding: var(--spacing-3); border-radius: var(--radius-md) 0 0 var(--radius-md); border: 1px solid var(--color-dark-400); border-right: none; color: var(--color-text-muted);">twitch.tv/</span>
+                            <input type="text" class="form-control" name="twitchChannel" value="<%= user.login %>" placeholder="channel" style="border-radius: 0 var(--radius-md) var(--radius-md) 0;">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Twitter Account</label>
+                        <div style="display: flex; align-items: center;">
+                            <span style="background: var(--color-dark-500); padding: var(--spacing-3); border-radius: var(--radius-md) 0 0 var(--radius-md); border: 1px solid var(--color-dark-400); border-right: none; color: var(--color-text-muted);">@</span>
+                            <input type="text" class="form-control" name="twitter" placeholder="username" style="border-radius: 0 var(--radius-md) var(--radius-md) 0;">
+                        </div>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4);">
+                    <div class="form-group">
+                        <label class="form-label">Start Date</label>
+                        <input type="datetime-local" class="form-control" name="startDate">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">End Date</label>
+                        <input type="datetime-local" class="form-control" name="endDate">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4);">
+                    <div class="form-group">
+                        <label class="form-label">Theme</label>
+                        <select class="form-control" name="theme">
+                            <option value="default">Default</option>
+                            <option value="dark">Dark</option>
+                            <option value="light">Light</option>
+                            <option value="gdq">GDQ Style</option>
+                            <option value="esa">ESA Style</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Secret</label>
+                        <input type="text" class="form-control" name="secret" placeholder="Optional edit key">
+                        <div class="form-help">Share this to allow others to edit</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideModal('createEventModal')">Cancel</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Create Event
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showCreateEventModal() {
+    document.getElementById('createEventForm').reset();
+    document.getElementById('createEventModal').classList.add('active');
+}
+
+function hideModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+function handleCreateEvent(e) {
+    if (e) e.preventDefault();
+    console.log('createEvent called');
+
+    const form = document.getElementById('createEventForm');
+    const formData = new FormData(form);
+
+    const payload = {
+        name: formData.get('name'),
+        slug: formData.get('slug'),
+        description: formData.get('description'),
+        website: formData.get('website') || null,
+        twitchChannel: formData.get('twitchChannel') || null,
+        twitter: formData.get('twitter') || null,
+        startDate: formData.get('startDate') || null,
+        endDate: formData.get('endDate') || null,
+        theme: formData.get('theme') || 'default',
+        secret: formData.get('secret') || null
+    };
+    console.log('Sending payload:', payload);
+
+    fetch('/api/my-schedules/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        console.log('Response URL:', response.url);
+
+        if (response.redirected) {
+            alert('Session expired. Please log in again.');
+            window.location.href = '/auth/twitch?returnTo=/my-schedules';
+            return null;
+        }
+
+        return response.json();
+    })
+    .then(data => {
+        if (!data) return;
+
+        console.log('Response data:', data);
+        if (data.success) {
+            alert('Event created successfully!');
+            window.location.reload();
+        } else {
+            alert(data.error || 'Failed to create event');
+        }
+    })
+    .catch(error => {
+        console.error('Error creating event:', error);
+        alert('Error: ' + error.message);
+    });
+
+    return false;
+}
+
+async function toggleEventStatus(eventId, isActive) {
+    try {
+        const response = await fetch(`/api/my-schedules/events/${eventId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isActive })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.error || 'Failed to update event');
+        }
+    } catch (error) {
+        console.error('Error updating event:', error);
+        alert('Failed to update event');
+    }
+}
+
+async function deleteEvent(eventId) {
+    if (!confirm('Delete this event and all its schedules? This cannot be undone.')) return;
+
+    try {
+        const response = await fetch(`/api/my-schedules/events/${eventId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.error || 'Failed to delete event');
+        }
+    } catch (error) {
+        console.error('Error deleting event:', error);
+        alert('Failed to delete event');
+    }
+}
+
+// Close modal on background click
+document.querySelectorAll('.custom-modal').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.classList.remove('active');
+        }
+    });
+});
+</script>
+
+<%- include('partials/modern-footer') %>

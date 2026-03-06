@@ -1,0 +1,406 @@
+<%
+const atConfigs = typeof autoTrackConfigs !== 'undefined' ? autoTrackConfigs : [];
+const atRoles = typeof roles !== 'undefined' ? roles : [];
+const atChannels = typeof channels !== 'undefined' ? channels : [];
+%>
+
+<style>
+.at-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(251, 146, 60, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+.at-card-header {
+    background: rgba(251, 146, 60, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(251, 146, 60, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.at-card-header i { font-size: 1rem; color: #fb923c; }
+.at-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #fff; margin: 0; }
+.at-card-body { padding: 18px; }
+.at-callout {
+    background: rgba(251, 146, 60, 0.08);
+    border: 1px solid rgba(251, 146, 60, 0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+}
+.at-callout strong { color: #fb923c; }
+.at-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.at-badge-on { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.at-badge-off { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.at-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.at-btn:hover { opacity: 0.85; }
+.at-btn-save { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.at-btn-toggle { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
+.at-btn-delete { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.at-btn-add {
+    background: linear-gradient(135deg, #fb923c, #f97316);
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.at-btn-add:hover { opacity: 0.9; }
+.at-form-group { margin-bottom: 16px; }
+.at-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
+.at-form-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-top: 4px; }
+.at-form-select {
+    width: 100%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #fff;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+}
+.at-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.at-empty {
+    text-align: center;
+    padding: 24px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.85rem;
+}
+.at-status-msg {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    display: none;
+}
+.at-status-msg.success { display: block; background: rgba(251, 146, 60, 0.15); color: #fdba74; border: 1px solid rgba(251, 146, 60, 0.3); }
+.at-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+.at-mapping-card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.at-mapping-card:last-child { margin-bottom: 0; }
+.at-mapping-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.at-mapping-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.at-mapping-actions { display: flex; gap: 6px; }
+@media (max-width: 640px) { .at-form-grid { grid-template-columns: 1fr; } }
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-satellite-dish"></i>
+                <span>Auto-Track</span>
+            </div>
+            <div class="page-section-subtitle">
+                Automatically detect and track streamers via Discord presence
+            </div>
+        </div>
+    </div>
+
+    <div class="at-callout">
+        <strong>Fallback System:</strong> Auto-Track detects when guild members start streaming on Twitch
+        (via Discord presence) and automatically creates a streamer subscription. Members already tracked
+        by <strong>Self-Promo</strong>, <strong>Teams</strong>, or <strong>manual subscriptions</strong>
+        are automatically skipped to prevent duplicate announcements.
+    </div>
+
+    <div id="at-status" class="at-status-msg"></div>
+
+    <!-- Existing Mappings -->
+    <div class="at-card">
+        <div class="at-card-header">
+            <i class="fas fa-list"></i>
+            <h3>Active Mappings</h3>
+        </div>
+        <div class="at-card-body">
+            <% if (atConfigs.length === 0) { %>
+                <div class="at-empty">No auto-track mappings configured yet. Add one below.</div>
+            <% } else { %>
+                <% atConfigs.forEach((config, index) => {
+                    const deleteOnEnd = config.delete_on_end !== undefined ? config.delete_on_end : 1;
+                    const editOnEnd = config.edit_on_end !== undefined ? config.edit_on_end : 0;
+                    let streamEndVal = 'delete';
+                    if (deleteOnEnd && editOnEnd) streamEndVal = 'edit';
+                    else if (!deleteOnEnd && !editOnEnd) streamEndVal = 'keep';
+                %>
+                    <div class="at-mapping-card" data-auto-id="<%= config.auto_id %>">
+                        <div class="at-mapping-header">
+                            <div class="at-mapping-title">
+                                <span class="at-badge <%= config.enabled ? 'at-badge-on' : 'at-badge-off' %>">
+                                    <%= config.enabled ? 'Enabled' : 'Disabled' %>
+                                </span>
+                                Mapping #<%= index + 1 %>
+                            </div>
+                            <div class="at-mapping-actions">
+                                <button class="at-btn at-btn-save" onclick="atEdit(<%= config.auto_id %>)">
+                                    <i class="fas fa-save"></i> Save
+                                </button>
+                                <button class="at-btn at-btn-toggle" onclick="atToggle(<%= config.auto_id %>)">
+                                    <%= config.enabled ? 'Disable' : 'Enable' %>
+                                </button>
+                                <button class="at-btn at-btn-delete" onclick="atDelete(<%= config.auto_id %>)">Delete</button>
+                            </div>
+                        </div>
+                        <div class="at-form-grid">
+                            <div class="at-form-group">
+                                <label class="at-form-label">Role</label>
+                                <select id="at-role-<%= config.auto_id %>" class="at-form-select">
+                                    <option value="" <%= !config.role_id ? 'selected' : '' %>>Any Member</option>
+                                    <% atRoles.forEach(role => { %>
+                                        <option value="<%= role.id %>" <%= config.role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                            <div class="at-form-group">
+                                <label class="at-form-label">Announcement Channel</label>
+                                <select id="at-channel-<%= config.auto_id %>" class="at-form-select">
+                                    <% atChannels.forEach(ch => { %>
+                                        <option value="<%= ch.id %>" <%= config.announcement_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                            <div class="at-form-group">
+                                <label class="at-form-label">Live Role</label>
+                                <select id="at-liverole-<%= config.auto_id %>" class="at-form-select">
+                                    <option value="" <%= !config.live_role_id ? 'selected' : '' %>>Guild Default</option>
+                                    <% atRoles.forEach(role => { %>
+                                        <option value="<%= role.id %>" <%= config.live_role_id === role.id ? 'selected' : '' %>>@<%= role.name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                            <div class="at-form-group">
+                                <label class="at-form-label">When Stream Ends</label>
+                                <select id="at-streamend-<%= config.auto_id %>" class="at-form-select">
+                                    <option value="delete" <%= streamEndVal === 'delete' ? 'selected' : '' %>>Delete message</option>
+                                    <option value="edit" <%= streamEndVal === 'edit' ? 'selected' : '' %>>Edit to "Stream Ended"</option>
+                                    <option value="keep" <%= streamEndVal === 'keep' ? 'selected' : '' %>>Keep as-is</option>
+                                </select>
+                                <div class="at-form-hint">What happens to the announcement when the stream ends</div>
+                            </div>
+                        </div>
+                    </div>
+                <% }); %>
+            <% } %>
+        </div>
+    </div>
+
+    <!-- Add Mapping -->
+    <div class="at-card">
+        <div class="at-card-header">
+            <i class="fas fa-plus-circle"></i>
+            <h3>Add Mapping</h3>
+        </div>
+        <div class="at-card-body">
+            <form id="at-add-form">
+                <div class="at-form-grid">
+                    <div class="at-form-group">
+                        <label class="at-form-label">Role</label>
+                        <select name="role_id" class="at-form-select">
+                            <option value="">Any Member</option>
+                            <% atRoles.forEach(role => { %>
+                                <option value="<%= role.id %>"><%= role.name %></option>
+                            <% }); %>
+                        </select>
+                        <div class="at-form-hint">Select "Any Member" to track all streaming members</div>
+                    </div>
+                    <div class="at-form-group">
+                        <label class="at-form-label">Announcement Channel</label>
+                        <select name="announcement_channel_id" class="at-form-select" required>
+                            <option value="">Select a channel...</option>
+                            <% atChannels.forEach(ch => { %>
+                                <option value="<%= ch.id %>">#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                        <div class="at-form-hint">Where auto-tracked stream announcements will be posted</div>
+                    </div>
+                    <div class="at-form-group">
+                        <label class="at-form-label">Live Role</label>
+                        <select name="live_role_id" class="at-form-select">
+                            <option value="">Guild Default</option>
+                            <% atRoles.forEach(role => { %>
+                                <option value="<%= role.id %>">@<%= role.name %></option>
+                            <% }); %>
+                        </select>
+                        <div class="at-form-hint">Role assigned when streamer goes live (leave empty for guild default)</div>
+                    </div>
+                    <div class="at-form-group">
+                        <label class="at-form-label">When Stream Ends</label>
+                        <select name="stream_end" class="at-form-select">
+                            <option value="delete">Delete message</option>
+                            <option value="edit">Edit to "Stream Ended"</option>
+                            <option value="keep">Keep as-is</option>
+                        </select>
+                        <div class="at-form-hint">What happens to the announcement when the stream ends</div>
+                    </div>
+                </div>
+                <button type="submit" class="at-btn-add">
+                    <i class="fas fa-plus"></i> Add Mapping
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+const atGuildId = '<%= guild.id %>';
+
+function atShowStatus(msg, type) {
+    const el = document.getElementById('at-status');
+    el.textContent = msg;
+    el.className = 'at-status-msg ' + type;
+    setTimeout(() => { el.className = 'at-status-msg'; }, 4000);
+}
+
+function atParseStreamEnd(val) {
+    if (val === 'edit') return { delete_on_end: true, edit_on_end: true };
+    if (val === 'keep') return { delete_on_end: false, edit_on_end: false };
+    return { delete_on_end: true, edit_on_end: false }; // delete (default)
+}
+
+document.getElementById('at-add-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const streamEnd = atParseStreamEnd(e.target.stream_end.value);
+    const body = {
+        role_id: e.target.role_id.value || null,
+        announcement_channel_id: e.target.announcement_channel_id.value,
+        live_role_id: e.target.live_role_id.value || null,
+        delete_on_end: streamEnd.delete_on_end,
+        edit_on_end: streamEnd.edit_on_end
+    };
+    if (!body.announcement_channel_id) {
+        atShowStatus('Please select a channel.', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(`/api/guilds/${atGuildId}/auto-track/configs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            try { const data = JSON.parse(text); atShowStatus(data.error || `Error ${res.status}`, 'error'); }
+            catch { atShowStatus(`Server error ${res.status}`, 'error'); }
+            return;
+        }
+        const data = await res.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            atShowStatus(data.error || 'Failed to add mapping', 'error');
+        }
+    } catch (err) {
+        atShowStatus('Error: ' + err.message, 'error');
+    }
+});
+
+async function atEdit(autoId) {
+    try {
+        const streamEnd = atParseStreamEnd(document.getElementById(`at-streamend-${autoId}`).value);
+        const body = {
+            role_id: document.getElementById(`at-role-${autoId}`).value || null,
+            announcement_channel_id: document.getElementById(`at-channel-${autoId}`).value,
+            live_role_id: document.getElementById(`at-liverole-${autoId}`).value || null,
+            delete_on_end: streamEnd.delete_on_end,
+            edit_on_end: streamEnd.edit_on_end
+        };
+        const res = await fetch(`/api/guilds/${atGuildId}/auto-track/configs/${autoId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            try { const data = JSON.parse(text); atShowStatus(data.error || `Error ${res.status}`, 'error'); }
+            catch { atShowStatus(`Server error ${res.status}: ${text.substring(0, 100)}`, 'error'); }
+            return;
+        }
+        const data = await res.json();
+        if (data.success) {
+            atShowStatus('Mapping updated successfully', 'success');
+        } else {
+            atShowStatus(data.error || 'Failed to update mapping', 'error');
+        }
+    } catch (err) {
+        atShowStatus('Error: ' + err.message, 'error');
+    }
+}
+
+async function atToggle(autoId) {
+    try {
+        const res = await fetch(`/api/guilds/${atGuildId}/auto-track/configs/${autoId}/toggle`, { method: 'PATCH' });
+        if (!res.ok) {
+            const text = await res.text();
+            try { const data = JSON.parse(text); atShowStatus(data.error || `Error ${res.status}`, 'error'); }
+            catch { atShowStatus(`Server error ${res.status}`, 'error'); }
+            return;
+        }
+        const data = await res.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            atShowStatus(data.error || 'Failed to toggle mapping', 'error');
+        }
+    } catch (err) {
+        atShowStatus('Error: ' + err.message, 'error');
+    }
+}
+
+async function atDelete(autoId) {
+    if (!confirm('Remove this auto-track mapping?')) return;
+    try {
+        const res = await fetch(`/api/guilds/${atGuildId}/auto-track/configs/${autoId}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const text = await res.text();
+            try { const data = JSON.parse(text); atShowStatus(data.error || `Error ${res.status}`, 'error'); }
+            catch { atShowStatus(`Server error ${res.status}`, 'error'); }
+            return;
+        }
+        const data = await res.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            atShowStatus(data.error || 'Failed to delete mapping', 'error');
+        }
+    } catch (err) {
+        atShowStatus('Error: ' + err.message, 'error');
+    }
+}
+</script>

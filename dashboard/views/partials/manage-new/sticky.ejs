@@ -1,0 +1,219 @@
+<%# Sticky Messages - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="card">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Sticky Messages</h3>
+                    <p class="text-sm text-gray-400">Messages that stay at the bottom of channels</p>
+                </div>
+            </div>
+            <button onclick="openAddStickyModal()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Sticky
+            </button>
+        </div>
+    </div>
+
+    <!-- Sticky Messages List -->
+    <div class="card">
+        <h3 class="text-lg font-semibold text-white mb-4">Active Sticky Messages</h3>
+        <div id="sticky-list" class="space-y-4">
+            <div class="text-center py-8 text-gray-400">Loading...</div>
+        </div>
+    </div>
+
+    <!-- How It Works -->
+    <div class="card bg-gradient-to-r from-primary-500/10 to-primary-500/5 border-primary-500/30">
+        <div class="flex gap-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 rounded-lg bg-primary-500/20 flex items-center justify-center">
+                    <svg class="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+            </div>
+            <div>
+                <h4 class="font-semibold text-white mb-2">How Sticky Messages Work</h4>
+                <ul class="text-sm text-gray-300 space-y-1.5">
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">1.</span>
+                        Create a sticky message for any text channel
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">2.</span>
+                        The bot keeps the message at the bottom by reposting it
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">3.</span>
+                        Old sticky messages are automatically deleted
+                    </li>
+                    <li class="flex items-start gap-2">
+                        <span class="text-primary-400">4.</span>
+                        Great for rules, announcements, or important links
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Sticky Modal -->
+<div id="add-sticky-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Add Sticky Message</h3>
+            <button onclick="closeAddStickyModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="add-sticky-form">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'channel_id',
+                        channels: Array.from(channels.values()).filter(c => c.type === 0),
+                        selected: null,
+                        placeholder: 'Select a channel...'
+                    }) %>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Message Content</label>
+                    <textarea name="message_content" class="form-input w-full h-32 resize-y" required placeholder="Enter the sticky message content..."></textarea>
+                    <p class="form-hint">This message will be reposted whenever someone sends a message in the channel</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeAddStickyModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create Sticky</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddStickyModal() {
+    document.getElementById('add-sticky-form').reset();
+    document.getElementById('add-sticky-modal').classList.remove('hidden');
+}
+
+function closeAddStickyModal() {
+    document.getElementById('add-sticky-modal').classList.add('hidden');
+}
+
+async function loadStickyMessages() {
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/sticky');
+        const data = await response.json();
+
+        const listEl = document.getElementById('sticky-list');
+
+        if (!data.stickyMessages || data.stickyMessages.length === 0) {
+            listEl.innerHTML = `
+                <div class="text-center py-12">
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                        <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
+                        </svg>
+                    </div>
+                    <h4 class="text-lg font-semibold text-white mb-2">No Sticky Messages</h4>
+                    <p class="text-gray-400">Create your first sticky message to get started</p>
+                </div>
+            `;
+            return;
+        }
+
+        listEl.innerHTML = data.stickyMessages.map(sticky => {
+            const createdDate = new Date(sticky.created_at);
+            const channelName = sticky.channel_name || sticky.channel_id;
+
+            return `
+                <div class="p-4 bg-dark-700 rounded-lg border-l-4 border-primary-500">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+                            </svg>
+                            <span class="font-semibold text-primary-400">#${channelName}</span>
+                        </div>
+                        <button onclick="deleteStickyMessage('${sticky.channel_id}')" class="btn btn-danger btn-sm">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                            Delete
+                        </button>
+                    </div>
+                    <div class="p-3 bg-dark-600 rounded-lg mb-3 whitespace-pre-wrap text-gray-300 text-sm">${escapeHtml(sticky.message_content)}</div>
+                    <div class="flex items-center justify-between text-xs text-gray-500">
+                        <span>Created by ${sticky.created_by || 'Unknown'}</span>
+                        <span>${createdDate.toLocaleDateString()} ${createdDate.toLocaleTimeString()}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Error loading sticky messages:', error);
+        document.getElementById('sticky-list').innerHTML = '<div class="text-center py-8 text-accent-red">Error loading data</div>';
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+document.getElementById('add-sticky-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/sticky', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.fromEntries(formData))
+        });
+
+        if (response.ok) {
+            showToast('success', 'Sticky message created');
+            closeAddStickyModal();
+            loadStickyMessages();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to create sticky message');
+    }
+});
+
+async function deleteStickyMessage(channelId) {
+    if (!confirm('Are you sure you want to delete this sticky message?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/sticky/${channelId}`, { method: 'DELETE' });
+        if (response.ok) {
+            showToast('success', 'Sticky message deleted');
+            loadStickyMessages();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to delete sticky message');
+    }
+}
+
+loadStickyMessages();
+</script>

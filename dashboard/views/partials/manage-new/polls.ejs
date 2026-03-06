@@ -1,0 +1,247 @@
+<%# Polls System - Tailwind Version %>
+
+<%
+const activeCount = (locals.polls || []).filter(p => p.is_active).length;
+const endedCount = (locals.polls || []).filter(p => !p.is_active).length;
+%>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Polls',
+            value: (locals.polls || []).length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Active Polls',
+            value: activeCount,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>',
+            color: 'success'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Ended Polls',
+            value: endedCount,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'secondary'
+        }) %>
+    </div>
+
+    <!-- Polls List -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Server Polls</h3>
+                <p class="text-sm text-gray-400">Create and manage community polls</p>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="openCreatePollModal()">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Poll
+            </button>
+        </div>
+
+        <% if (locals.polls && polls.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Question</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Channel</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Ends At</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% polls.forEach(poll => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <span class="font-medium text-white"><%= poll.question %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-primary-400">#<%= channels.find(c => c.id === poll.channel_id)?.name || 'Unknown' %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-sm text-gray-400"><%= new Date(poll.ends_at).toLocaleString() %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (poll.is_active) { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-green/20 text-accent-green">Active</span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-dark-400 text-gray-400">Ended</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <div class="flex items-center justify-end gap-2">
+                                        <% if (poll.is_active) { %>
+                                            <button onclick="endPoll('<%= poll.id %>')" class="p-2 text-gray-400 hover:text-accent-yellow hover:bg-dark-600 rounded-lg transition-colors" title="End Now">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/>
+                                                </svg>
+                                            </button>
+                                        <% } %>
+                                        <button onclick="deletePoll('<%= poll.id %>')" class="p-2 text-gray-400 hover:text-accent-red hover:bg-dark-600 rounded-lg transition-colors" title="Delete">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Polls Yet</h4>
+                <p class="text-gray-400 mb-4">Create your first poll to gather feedback</p>
+                <button type="button" class="btn btn-primary" onclick="openCreatePollModal()">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Create First Poll
+                </button>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Create Poll Modal -->
+<div id="create-poll-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-lg">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Create Poll</h3>
+            <button onclick="closeCreatePollModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="create-poll-form">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Question</label>
+                    <input type="text" name="question" class="form-input w-full" placeholder="What should we do next?" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Options (comma-separated)</label>
+                    <input type="text" name="options" class="form-input w-full" placeholder="Option 1, Option 2, Option 3" required>
+                    <p class="form-hint">Poll options separated by commas</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label">Duration (optional)</label>
+                        <input type="text" name="duration" class="form-input w-full" placeholder="30m, 2h, 1d">
+                        <p class="form-hint">Leave blank for no limit</p>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Channel</label>
+                        <%- include('../../components/forms/channelSelect', {
+                            name: 'channel_id',
+                            channels: Array.from(channels.values()),
+                            selected: null,
+                            placeholder: 'Select channel'
+                        }) %>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-dark-700 rounded-lg space-y-3">
+                    <p class="text-sm font-semibold text-white mb-2">Poll Options</p>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="allow_multiple" class="form-checkbox">
+                        <span class="text-sm text-gray-300">Allow multiple choices</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="anonymous" class="form-checkbox">
+                        <span class="text-sm text-gray-300">Anonymous voting</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="allow_write_in" class="form-checkbox">
+                        <span class="text-sm text-gray-300">Allow write-in answers</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeCreatePollModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2z"/>
+                    </svg>
+                    Start Poll
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openCreatePollModal() {
+    document.getElementById('create-poll-modal').classList.remove('hidden');
+}
+
+function closeCreatePollModal() {
+    document.getElementById('create-poll-modal').classList.add('hidden');
+    document.getElementById('create-poll-form').reset();
+}
+
+document.getElementById('create-poll-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        question: formData.get('question'),
+        options: formData.get('options').split(',').map(o => o.trim()).filter(o => o),
+        duration: formData.get('duration') || null,
+        channel_id: formData.get('channel_id'),
+        allow_multiple: formData.has('allow_multiple'),
+        anonymous: formData.has('anonymous'),
+        allow_write_in: formData.has('allow_write_in')
+    };
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/polls', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            showToast('success', 'Poll created successfully');
+            closeCreatePollModal();
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to create poll'); }
+});
+
+async function endPoll(pollId) {
+    if (!confirm('End this poll now?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/polls/${pollId}/end`, { method: 'POST' });
+        if (response.ok) {
+            showToast('success', 'Poll ended');
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to end poll'); }
+}
+
+async function deletePoll(pollId) {
+    if (!confirm('Delete this poll?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/polls/${pollId}`, { method: 'DELETE' });
+        if (response.ok) {
+            showToast('success', 'Poll deleted');
+            location.reload();
+        } else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete poll'); }
+}
+</script>

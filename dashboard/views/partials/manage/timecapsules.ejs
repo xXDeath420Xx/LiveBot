@@ -1,0 +1,545 @@
+<style>
+/* Time Capsules Page Styles */
+.capsules-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.capsule-stat-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 14px;
+    padding: 24px 20px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.capsule-stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #7c3aed 0%, #a78bfa 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.capsule-stat-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(167, 139, 250, 0.4);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(167, 139, 250, 0.2);
+}
+
+.capsule-stat-card:hover::before {
+    opacity: 1;
+}
+
+.capsule-stat-label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.capsule-stat-value {
+    font-size: 2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Section Cards */
+.capsules-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.capsules-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.capsules-section-header i {
+    font-size: 1.25rem;
+    color: #a78bfa;
+}
+
+.capsules-section-header h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+
+.capsules-section-body {
+    padding: 24px;
+}
+
+/* Capsule Item */
+.capsule-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 4px solid #a78bfa;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: all 0.2s ease;
+}
+
+.capsule-item:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+    border-left-color: #a78bfa;
+}
+
+.capsule-item.revealed {
+    border-left-color: #34d399;
+    opacity: 0.85;
+}
+
+.capsule-item:last-child {
+    margin-bottom: 0;
+}
+
+.capsule-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.capsule-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    color: #ffffff;
+    font-size: 1rem;
+}
+
+.capsule-title i {
+    color: #a78bfa;
+}
+
+.capsule-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.capsule-status.pending {
+    background: rgba(251, 191, 36, 0.15);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    color: #fbbf24;
+}
+
+.capsule-status.revealed {
+    background: rgba(52, 211, 153, 0.15);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+    color: #34d399;
+}
+
+.capsule-content {
+    background: rgba(167, 139, 250, 0.08);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 16px;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.6;
+    font-style: italic;
+    margin-bottom: 16px;
+}
+
+.capsule-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.capsule-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.capsule-meta-item i {
+    color: #a78bfa;
+    width: 16px;
+    text-align: center;
+}
+
+.capsule-countdown {
+    font-weight: 700;
+    color: #a78bfa;
+}
+
+/* Empty State */
+.capsules-empty-state {
+    text-align: center;
+    padding: 60px 24px;
+}
+
+.capsules-empty-icon {
+    font-size: 3rem;
+    color: rgba(167, 139, 250, 0.3);
+    margin-bottom: 20px;
+}
+
+.capsules-empty-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 10px;
+}
+
+.capsules-empty-desc {
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Loading State */
+.capsules-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 20px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.capsules-loading i {
+    font-size: 2rem;
+    color: #a78bfa;
+    margin-bottom: 16px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Info Box */
+.capsules-info-box {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05));
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    gap: 14px;
+}
+
+.capsules-info-box i {
+    color: #a78bfa;
+    font-size: 1.25rem;
+    margin-top: 2px;
+}
+
+.capsules-info-box-content {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+    .capsule-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .capsule-meta {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-hourglass-half"></i>
+                <span>Time Capsules</span>
+            </div>
+            <div class="page-section-subtitle">
+                View and manage scheduled time capsules for this server
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="capsules-stats-grid" id="capsules-stats">
+        <div class="capsule-stat-card">
+            <div class="capsule-stat-label">Total Capsules</div>
+            <div class="capsule-stat-value" id="stat-total">-</div>
+        </div>
+        <div class="capsule-stat-card">
+            <div class="capsule-stat-label">Upcoming</div>
+            <div class="capsule-stat-value" id="stat-upcoming">-</div>
+        </div>
+        <div class="capsule-stat-card">
+            <div class="capsule-stat-label">Revealed</div>
+            <div class="capsule-stat-value" id="stat-revealed">-</div>
+        </div>
+    </div>
+
+    <!-- Info Box -->
+    <div class="capsules-info-box">
+        <i class="fas fa-info-circle"></i>
+        <div class="capsules-info-box-content">
+            <strong>How Time Capsules Work:</strong> Users create time capsules with a message that will be revealed at a future date.
+            When the reveal date arrives, the capsule is automatically opened and the message is posted in the designated channel.
+            Create time capsules using the <code style="background: rgba(167, 139, 250, 0.2); padding: 2px 6px; border-radius: 4px;">/timecapsule create</code> command.
+        </div>
+    </div>
+
+    <!-- Upcoming Capsules -->
+    <div class="capsules-section-card">
+        <div class="capsules-section-header">
+            <i class="fas fa-clock"></i>
+            <h3>Upcoming Time Capsules</h3>
+        </div>
+        <div class="capsules-section-body" id="upcoming-capsules">
+            <div class="capsules-loading">
+                <i class="fas fa-spinner"></i>
+                <span>Loading time capsules...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revealed Capsules -->
+    <div class="capsules-section-card">
+        <div class="capsules-section-header">
+            <i class="fas fa-box-open"></i>
+            <h3>Recently Revealed</h3>
+        </div>
+        <div class="capsules-section-body" id="revealed-capsules">
+            <div class="capsules-loading">
+                <i class="fas fa-spinner"></i>
+                <span>Loading revealed capsules...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function formatCountdown(revealDate) {
+    const now = new Date();
+    const reveal = new Date(revealDate);
+    const diff = reveal - now;
+
+    if (diff <= 0) return 'Ready to reveal';
+
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (days > 0) return `${days}d ${hours}h remaining`;
+    if (hours > 0) return `${hours}h ${minutes}m remaining`;
+    return `${minutes}m remaining`;
+}
+
+async function loadTimeCapsules() {
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/timecapsules');
+        const data = await response.json();
+
+        if (!data.capsules || data.capsules.length === 0) {
+            document.getElementById('stat-total').textContent = '0';
+            document.getElementById('stat-upcoming').textContent = '0';
+            document.getElementById('stat-revealed').textContent = '0';
+
+            document.getElementById('upcoming-capsules').innerHTML = `
+                <div class="capsules-empty-state">
+                    <div class="capsules-empty-icon">
+                        <i class="fas fa-hourglass-half"></i>
+                    </div>
+                    <div class="capsules-empty-title">No Upcoming Capsules</div>
+                    <div class="capsules-empty-desc">Create a time capsule using /timecapsule create</div>
+                </div>
+            `;
+            document.getElementById('revealed-capsules').innerHTML = `
+                <div class="capsules-empty-state">
+                    <div class="capsules-empty-icon">
+                        <i class="fas fa-box-open"></i>
+                    </div>
+                    <div class="capsules-empty-title">No Revealed Capsules</div>
+                    <div class="capsules-empty-desc">Revealed capsules will appear here</div>
+                </div>
+            `;
+            return;
+        }
+
+        const now = new Date();
+        const upcoming = data.capsules.filter(c => !c.revealed && new Date(c.reveal_date) > now);
+        const revealed = data.capsules.filter(c => c.revealed);
+
+        // Update stats
+        document.getElementById('stat-total').textContent = data.capsules.length;
+        document.getElementById('stat-upcoming').textContent = upcoming.length;
+        document.getElementById('stat-revealed').textContent = revealed.length;
+
+        // Upcoming capsules
+        if (upcoming.length > 0) {
+            const upcomingHtml = upcoming.map(capsule => {
+                const revealDate = new Date(capsule.reveal_date);
+                const createdDate = new Date(capsule.created_at);
+
+                return `
+                    <div class="capsule-item" data-reveal="${capsule.reveal_date}">
+                        <div class="capsule-header">
+                            <div class="capsule-title">
+                                <i class="fas fa-envelope"></i>
+                                Time Capsule #${capsule.id}
+                            </div>
+                            <span class="capsule-status pending">
+                                <i class="fas fa-clock"></i>
+                                Pending
+                            </span>
+                        </div>
+                        <div class="capsule-content">"${capsule.message}"</div>
+                        <div class="capsule-meta">
+                            <div class="capsule-meta-item">
+                                <i class="fas fa-user"></i>
+                                <span>Created by User ${capsule.user_id.slice(-6)}</span>
+                            </div>
+                            <div class="capsule-meta-item">
+                                <i class="fas fa-calendar-plus"></i>
+                                <span>Created ${createdDate.toLocaleDateString()}</span>
+                            </div>
+                            <div class="capsule-meta-item">
+                                <i class="fas fa-calendar-check"></i>
+                                <span>Reveals ${revealDate.toLocaleDateString()}</span>
+                            </div>
+                            <div class="capsule-meta-item">
+                                <i class="fas fa-hourglass-half"></i>
+                                <span class="capsule-countdown">${formatCountdown(capsule.reveal_date)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('upcoming-capsules').innerHTML = upcomingHtml;
+        } else {
+            document.getElementById('upcoming-capsules').innerHTML = `
+                <div class="capsules-empty-state">
+                    <div class="capsules-empty-icon">
+                        <i class="fas fa-hourglass-half"></i>
+                    </div>
+                    <div class="capsules-empty-title">No Upcoming Capsules</div>
+                    <div class="capsules-empty-desc">Create a time capsule using /timecapsule create</div>
+                </div>
+            `;
+        }
+
+        // Revealed capsules
+        if (revealed.length > 0) {
+            const revealedHtml = revealed.map(capsule => {
+                const revealDate = new Date(capsule.reveal_date);
+                const createdDate = new Date(capsule.created_at);
+
+                return `
+                    <div class="capsule-item revealed">
+                        <div class="capsule-header">
+                            <div class="capsule-title">
+                                <i class="fas fa-box-open"></i>
+                                Time Capsule #${capsule.id}
+                            </div>
+                            <span class="capsule-status revealed">
+                                <i class="fas fa-check"></i>
+                                Revealed
+                            </span>
+                        </div>
+                        <div class="capsule-content">"${capsule.message}"</div>
+                        <div class="capsule-meta">
+                            <div class="capsule-meta-item">
+                                <i class="fas fa-user"></i>
+                                <span>Created by User ${capsule.user_id.slice(-6)}</span>
+                            </div>
+                            <div class="capsule-meta-item">
+                                <i class="fas fa-calendar-plus"></i>
+                                <span>Created ${createdDate.toLocaleDateString()}</span>
+                            </div>
+                            <div class="capsule-meta-item">
+                                <i class="fas fa-calendar-check"></i>
+                                <span>Revealed ${revealDate.toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            document.getElementById('revealed-capsules').innerHTML = revealedHtml;
+        } else {
+            document.getElementById('revealed-capsules').innerHTML = `
+                <div class="capsules-empty-state">
+                    <div class="capsules-empty-icon">
+                        <i class="fas fa-box-open"></i>
+                    </div>
+                    <div class="capsules-empty-title">No Revealed Capsules</div>
+                    <div class="capsules-empty-desc">Revealed capsules will appear here</div>
+                </div>
+            `;
+        }
+
+    } catch (error) {
+        console.error('Error loading time capsules:', error);
+        document.getElementById('upcoming-capsules').innerHTML = `
+            <div class="capsules-empty-state">
+                <div class="capsules-empty-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="capsules-empty-title">Error Loading Data</div>
+                <div class="capsules-empty-desc">Please try refreshing the page</div>
+            </div>
+        `;
+        document.getElementById('revealed-capsules').innerHTML = `
+            <div class="capsules-empty-state">
+                <div class="capsules-empty-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="capsules-empty-title">Error Loading Data</div>
+                <div class="capsules-empty-desc">Please try refreshing the page</div>
+            </div>
+        `;
+    }
+}
+
+loadTimeCapsules();
+
+// Refresh countdown every minute
+setInterval(() => {
+    document.querySelectorAll('.capsule-item[data-reveal]').forEach(item => {
+        const revealDate = item.getAttribute('data-reveal');
+        const countdownEl = item.querySelector('.capsule-countdown');
+        if (countdownEl && revealDate) {
+            countdownEl.textContent = formatCountdown(revealDate);
+        }
+    });
+}, 60000);
+</script>

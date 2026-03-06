@@ -1,0 +1,114 @@
+<%# Bulk Actions Modal - Tailwind Version %>
+
+<div id="bulk-actions-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Bulk Actions</h3>
+            <button type="button" onclick="closeBulkActionsModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <div class="modal-body space-y-4">
+            <p class="text-sm text-gray-400">Perform actions on all selected streamers.</p>
+
+            <div class="form-group">
+                <label class="form-label">Resynchronize subscriptions to channels:</label>
+                <select id="bulk-channels-select" class="form-input w-full" multiple size="5">
+                    <option value="default">Server Default</option>
+                    <% channels.forEach(c => { %>
+                        <option value="<%= c.id %>">#<%= c.name %></option>
+                    <% }); %>
+                </select>
+                <p class="form-hint">This will replace existing channel subscriptions for the selected streamers. Hold Ctrl/Cmd to select multiple.</p>
+            </div>
+
+            <div id="bulk-actions-status" class="hidden p-3 rounded-lg text-sm"></div>
+        </div>
+
+        <div class="modal-footer">
+            <button type="button" onclick="closeBulkActionsModal()" class="btn btn-secondary">
+                Cancel
+            </button>
+            <button type="button" onclick="executeBulkUpdate()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                Apply Changes
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedStreamerIds = [];
+
+function openBulkActionsModal(streamerIds = []) {
+    selectedStreamerIds = streamerIds;
+    document.getElementById('bulk-channels-select').selectedIndex = -1;
+    document.getElementById('bulk-actions-status').classList.add('hidden');
+    document.getElementById('bulk-actions-modal').classList.remove('hidden');
+}
+
+function closeBulkActionsModal() {
+    document.getElementById('bulk-actions-modal').classList.add('hidden');
+}
+
+async function executeBulkUpdate() {
+    const select = document.getElementById('bulk-channels-select');
+    const selectedChannels = Array.from(select.selectedOptions).map(opt => opt.value);
+    const statusDiv = document.getElementById('bulk-actions-status');
+
+    if (selectedStreamerIds.length === 0) {
+        statusDiv.textContent = 'No streamers selected';
+        statusDiv.className = 'p-3 rounded-lg text-sm bg-accent-yellow/10 text-accent-yellow';
+        statusDiv.classList.remove('hidden');
+        return;
+    }
+
+    if (selectedChannels.length === 0) {
+        statusDiv.textContent = 'Please select at least one channel';
+        statusDiv.className = 'p-3 rounded-lg text-sm bg-accent-yellow/10 text-accent-yellow';
+        statusDiv.classList.remove('hidden');
+        return;
+    }
+
+    try {
+        statusDiv.textContent = 'Processing...';
+        statusDiv.className = 'p-3 rounded-lg text-sm bg-primary-500/10 text-primary-400';
+        statusDiv.classList.remove('hidden');
+
+        const response = await fetch('/api/guilds/<%= guildId %>/streamers/bulk-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                streamerIds: selectedStreamerIds,
+                channelIds: selectedChannels
+            })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            statusDiv.textContent = `Successfully updated ${result.updated} streamers`;
+            statusDiv.className = 'p-3 rounded-lg text-sm bg-accent-green/10 text-accent-green';
+            showToast('success', 'Bulk update completed');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            throw new Error('Failed to apply changes');
+        }
+    } catch (error) {
+        statusDiv.textContent = error.message;
+        statusDiv.className = 'p-3 rounded-lg text-sm bg-accent-red/10 text-accent-red';
+        showToast('error', 'Bulk update failed');
+    }
+}
+
+// Close modal on background click
+document.getElementById('bulk-actions-modal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeBulkActionsModal();
+    }
+});
+</script>

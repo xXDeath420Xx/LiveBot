@@ -1,0 +1,360 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-search"></i>
+                <span>Dashboard Search</span>
+            </div>
+            <div class="page-section-subtitle">
+                Search across bot settings, user data, infractions, and log entries for this server
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Form -->
+    <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
+        <div style="margin-bottom: var(--spacing-4);">
+            <label class="form-label">Search Query</label>
+            <div class="input-group">
+                <span class="input-group-icon">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" class="form-control" id="dashboard-search-input" placeholder="Enter your search query (user ID, setting name, command, etc.)">
+            </div>
+            <div class="form-help">Search across settings, users, roles, commands, and logs</div>
+        </div>
+
+        <div style="margin-bottom: var(--spacing-4);">
+            <label class="form-label">Search Categories</label>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-3);">
+                <label style="display: flex; align-items: center; gap: var(--spacing-2); padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md); cursor: pointer; border: 2px solid transparent; transition: all 0.2s;">
+                    <input class="form-check-input" type="checkbox" id="search-settings" value="settings" checked style="margin: 0;">
+                    <div>
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm);">
+                            <i class="fas fa-cog" style="color: var(--color-primary-400); margin-right: var(--spacing-1);"></i>
+                            Settings
+                        </div>
+                    </div>
+                </label>
+
+                <label style="display: flex; align-items: center; gap: var(--spacing-2); padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md); cursor: pointer; border: 2px solid transparent; transition: all 0.2s;">
+                    <input class="form-check-input" type="checkbox" id="search-users" value="users" checked style="margin: 0;">
+                    <div>
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm);">
+                            <i class="fas fa-users" style="color: var(--color-success); margin-right: var(--spacing-1);"></i>
+                            Users/Roles
+                        </div>
+                    </div>
+                </label>
+
+                <label style="display: flex; align-items: center; gap: var(--spacing-2); padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md); cursor: pointer; border: 2px solid transparent; transition: all 0.2s;">
+                    <input class="form-check-input" type="checkbox" id="search-logs" value="logs" checked style="margin: 0;">
+                    <div>
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm);">
+                            <i class="fas fa-file-alt" style="color: var(--color-warning); margin-right: var(--spacing-1);"></i>
+                            Logs
+                        </div>
+                    </div>
+                </label>
+
+                <label style="display: flex; align-items: center; gap: var(--spacing-2); padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md); cursor: pointer; border: 2px solid transparent; transition: all 0.2s;">
+                    <input class="form-check-input" type="checkbox" id="search-infractions" value="infractions" checked style="margin: 0;">
+                    <div>
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm);">
+                            <i class="fas fa-gavel" style="color: var(--color-danger); margin-right: var(--spacing-1);"></i>
+                            Infractions
+                        </div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-primary" id="run-dashboard-search" style="width: 100%;">
+            <i class="fas fa-search"></i>
+            <span>Search Dashboard</span>
+        </button>
+    </div>
+
+    <!-- Search Results -->
+    <div id="search-results-container">
+        <!-- Quick Search Tips -->
+        <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
+            <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+                <div style="width: 48px; height: 48px; background: var(--color-primary-500); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-lightbulb" style="font-size: var(--font-size-xl); color: white;"></i>
+                </div>
+                <div>
+                    <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Search Tips</div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">Get the most out of dashboard search</div>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-4);">
+                <div style="padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                        <i class="fas fa-user" style="color: var(--color-primary-400); margin-right: var(--spacing-1);"></i>
+                        User Searches
+                    </div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                        Search by Discord ID, username, or role name
+                    </div>
+                </div>
+
+                <div style="padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                        <i class="fas fa-cog" style="color: var(--color-success); margin-right: var(--spacing-1);"></i>
+                        Settings
+                    </div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                        Find configuration values by feature name
+                    </div>
+                </div>
+
+                <div style="padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                        <i class="fas fa-history" style="color: var(--color-warning); margin-right: var(--spacing-1);"></i>
+                        Logs & History
+                    </div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                        Search action logs and audit events
+                    </div>
+                </div>
+
+                <div style="padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
+                        <i class="fas fa-gavel" style="color: var(--color-danger); margin-right: var(--spacing-1);"></i>
+                        Moderation
+                    </div>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                        Look up warnings, kicks, bans, and mutes
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results will be shown here -->
+    <div id="dashboard-search-results" style="margin-top: var(--spacing-6);"></div>
+</div>
+
+<style>
+.search-result-item {
+    background: var(--color-dark-600);
+    padding: var(--spacing-4);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-dark-400);
+    margin-bottom: var(--spacing-3);
+    transition: all 0.2s;
+}
+
+.search-result-item:hover {
+    background: var(--color-dark-500);
+    border-color: var(--color-primary-400);
+}
+
+.search-category-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-1);
+    padding: var(--spacing-1) var(--spacing-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+label:has(input[type="checkbox"]:checked) {
+    border-color: var(--color-primary-400) !important;
+    background: var(--color-primary-500) !important;
+    background-opacity: 0.1;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('dashboard-search-input');
+    const searchButton = document.getElementById('run-dashboard-search');
+    const searchResultsDiv = document.getElementById('dashboard-search-results');
+    const resultsContainer = document.getElementById('search-results-container');
+
+    searchButton.addEventListener('click', async function() {
+        const query = searchInput.value.trim();
+        if (!query) {
+            searchResultsDiv.innerHTML = `
+                <div style="background: var(--color-danger); background-opacity: 0.1; padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-danger);">
+                    <i class="fas fa-exclamation-circle" style="color: var(--color-danger); margin-right: var(--spacing-2);"></i>
+                    <span style="color: var(--color-danger); font-weight: var(--font-weight-semibold);">Please enter a search query.</span>
+                </div>
+            `;
+            return;
+        }
+
+        const categories = [];
+        if (document.getElementById('search-settings').checked) categories.push('settings');
+        if (document.getElementById('search-users').checked) categories.push('users');
+        if (document.getElementById('search-logs').checked) categories.push('logs');
+        if (document.getElementById('search-infractions').checked) categories.push('infractions');
+
+        if (categories.length === 0) {
+            searchResultsDiv.innerHTML = `
+                <div style="background: var(--color-warning); background-opacity: 0.1; padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-warning);">
+                    <i class="fas fa-exclamation-triangle" style="color: var(--color-warning); margin-right: var(--spacing-2);"></i>
+                    <span style="color: var(--color-warning); font-weight: var(--font-weight-semibold);">Please select at least one category to search.</span>
+                </div>
+            `;
+            return;
+        }
+
+        // Hide tips, show loading
+        resultsContainer.style.display = 'none';
+        searchResultsDiv.innerHTML = `
+            <div style="background: var(--color-dark-600); padding: var(--spacing-8); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); text-align: center;">
+                <div style="display: inline-block; width: 48px; height: 48px; border: 4px solid var(--color-dark-400); border-top-color: var(--color-primary-400); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                <div style="margin-top: var(--spacing-4); color: var(--color-text-secondary);">Searching...</div>
+            </div>
+        `;
+
+        try {
+            const response = await fetch(`/api/guild/<%= guild.id %>/search?q=${encodeURIComponent(query)}&categories=${categories.join(',')}`);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'An error occurred during search.');
+            }
+
+            renderSearchResults(data);
+        } catch (error) {
+            console.error('Dashboard Search Error:', error);
+            searchResultsDiv.innerHTML = `
+                <div style="background: var(--color-danger); background-opacity: 0.1; padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-danger);">
+                    <i class="fas fa-exclamation-circle" style="color: var(--color-danger); margin-right: var(--spacing-2);"></i>
+                    <span style="color: var(--color-danger); font-weight: var(--font-weight-semibold);">Error: ${error.message}</span>
+                </div>
+            `;
+        }
+    });
+
+    function renderSearchResults(results) {
+        if (!results || results.length === 0) {
+            searchResultsDiv.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <div class="empty-state-title">No Results Found</div>
+                    <div class="empty-state-description">
+                        Try adjusting your search query or selecting different categories
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        const categoryColors = {
+            settings: 'var(--color-primary-400)',
+            users: 'var(--color-success)',
+            logs: 'var(--color-warning)',
+            infractions: 'var(--color-danger)'
+        };
+
+        const categoryIcons = {
+            settings: 'fa-cog',
+            users: 'fa-users',
+            logs: 'fa-file-alt',
+            infractions: 'fa-gavel'
+        };
+
+        let html = `
+            <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
+                    <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">
+                        <i class="fas fa-search" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
+                        Search Results
+                    </div>
+                    <span class="badge badge-primary">${results.length} result${results.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div>
+        `;
+
+        results.forEach(item => {
+            const color = categoryColors[item.type] || 'var(--color-text-muted)';
+            const icon = categoryIcons[item.type] || 'fa-circle';
+
+            html += `
+                <div class="search-result-item">
+                    <div style="display: flex; align-items: start; gap: var(--spacing-3);">
+                        <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: ${color}; opacity: 0.2; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <i class="fas ${icon}" style="color: ${color};"></i>
+                        </div>
+                        <div style="flex-grow: 1;">
+                            <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
+                                <span class="search-category-badge" style="background: ${color}; opacity: 0.2; color: ${color};">
+                                    <i class="fas ${icon}"></i>
+                                    ${item.type}
+                                </span>
+                            </div>
+                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
+                                ${item.title || 'Result'}
+                            </div>
+                            <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                                ${item.description || 'No description available'}
+                            </div>
+                            ${item.link ? `
+                                <div style="margin-top: var(--spacing-2);">
+                                    <a href="${item.link}" class="btn btn-sm btn-secondary">
+                                        <i class="fas fa-arrow-right"></i>
+                                        <span>View</span>
+                                    </a>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `
+                </div>
+            </div>
+        `;
+
+        searchResultsDiv.innerHTML = html;
+    }
+
+    // Allow search on Enter key
+    searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            searchButton.click();
+        }
+    });
+});
+</script>
+
+<style>
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+</style>

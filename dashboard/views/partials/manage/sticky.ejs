@@ -1,0 +1,534 @@
+<style>
+/* Sticky Messages Page Styles */
+.sticky-section-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.sticky-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.sticky-section-header i {
+    font-size: 1.25rem;
+    color: #a78bfa;
+}
+
+.sticky-section-header h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+
+.sticky-section-body {
+    padding: 24px;
+}
+
+/* Form Styles */
+.sticky-form-group {
+    margin-bottom: 24px;
+}
+
+.sticky-form-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 10px;
+}
+
+.sticky-form-label i {
+    color: #a78bfa;
+    margin-right: 8px;
+}
+
+.sticky-form-input,
+.sticky-form-select,
+.sticky-form-textarea {
+    width: 100%;
+    padding: 14px 18px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.sticky-form-textarea {
+    min-height: 120px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.sticky-form-input:focus,
+.sticky-form-select:focus,
+.sticky-form-textarea:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15);
+}
+
+.sticky-form-select option {
+    background: #1a1d21;
+    color: #ffffff;
+}
+
+.sticky-form-hint {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Button Group */
+.sticky-button-group {
+    display: flex;
+    gap: 12px;
+}
+
+.sticky-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 28px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sticky-save-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+}
+
+.sticky-cancel-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 24px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sticky-cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+}
+
+/* Sticky Message Item */
+.sticky-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 4px solid #a78bfa;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: all 0.2s ease;
+}
+
+.sticky-item:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(167, 139, 250, 0.3);
+    border-left-color: #a78bfa;
+}
+
+.sticky-item:last-child {
+    margin-bottom: 0;
+}
+
+.sticky-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.sticky-channel-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 8px;
+    color: #a78bfa;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.sticky-channel-badge i {
+    font-size: 0.85rem;
+}
+
+.sticky-delete-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: 10px;
+    color: #f87171;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sticky-delete-btn:hover {
+    background: rgba(248, 113, 113, 0.2);
+    border-color: rgba(248, 113, 113, 0.5);
+}
+
+.sticky-content {
+    background: rgba(167, 139, 250, 0.08);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 16px;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    margin-bottom: 16px;
+}
+
+.sticky-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.sticky-meta i {
+    margin-right: 6px;
+}
+
+/* Empty State */
+.sticky-empty-state {
+    text-align: center;
+    padding: 60px 24px;
+}
+
+.sticky-empty-icon {
+    font-size: 3rem;
+    color: rgba(167, 139, 250, 0.3);
+    margin-bottom: 20px;
+}
+
+.sticky-empty-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 10px;
+}
+
+.sticky-empty-desc {
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 24px;
+}
+
+/* Loading State */
+.sticky-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 20px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.sticky-loading i {
+    font-size: 2rem;
+    color: #a78bfa;
+    margin-bottom: 16px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Add Button */
+.sticky-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
+    border: none;
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.sticky-add-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
+}
+
+@media (max-width: 768px) {
+    .sticky-button-group {
+        flex-direction: column;
+    }
+
+    .sticky-save-btn,
+    .sticky-cancel-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .sticky-item-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .sticky-meta {
+        flex-direction: column;
+        gap: 8px;
+    }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-thumbtack"></i>
+                <span>Sticky Messages</span>
+            </div>
+            <div class="page-section-subtitle">
+                Messages that stay at the bottom of channels
+            </div>
+        </div>
+        <button class="sticky-add-btn" onclick="showAddStickyForm()">
+            <i class="fas fa-plus"></i>
+            Add Sticky Message
+        </button>
+    </div>
+
+    <!-- Add Sticky Form (Hidden by default) -->
+    <div class="sticky-section-card" id="add-sticky-card" style="display: none;">
+        <div class="sticky-section-header">
+            <i class="fas fa-plus-circle"></i>
+            <h3>New Sticky Message</h3>
+        </div>
+        <div class="sticky-section-body">
+            <form id="sticky-form" onsubmit="createStickyMessage(event)">
+                <div class="sticky-form-group">
+                    <label class="sticky-form-label">
+                        <i class="fas fa-hashtag"></i>Channel
+                    </label>
+                    <select id="sticky-channel" name="channel_id" class="sticky-form-select" required>
+                        <option value="">Select a channel...</option>
+                        <% if (channels) { %>
+                            <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                            <% }); %>
+                        <% } %>
+                    </select>
+                    <span class="sticky-form-hint">Channel where the sticky message will be posted</span>
+                </div>
+
+                <div class="sticky-form-group" style="margin-bottom: 0;">
+                    <label class="sticky-form-label">
+                        <i class="fas fa-comment-alt"></i>Message Content
+                    </label>
+                    <textarea
+                        id="sticky-content"
+                        name="message_content"
+                        class="sticky-form-textarea"
+                        placeholder="Enter the sticky message content..."
+                        required
+                    ></textarea>
+                    <span class="sticky-form-hint">This message will be reposted whenever someone sends a message in the channel</span>
+                </div>
+
+                <div class="sticky-button-group" style="margin-top: 24px;">
+                    <button type="submit" class="sticky-save-btn">
+                        <i class="fas fa-save"></i>
+                        Create Sticky
+                    </button>
+                    <button type="button" class="sticky-cancel-btn" onclick="hideAddStickyForm()">
+                        <i class="fas fa-times"></i>
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Sticky Messages List -->
+    <div class="sticky-section-card">
+        <div class="sticky-section-header">
+            <i class="fas fa-list"></i>
+            <h3>Active Sticky Messages</h3>
+        </div>
+        <div class="sticky-section-body" id="sticky-list">
+            <div class="sticky-loading">
+                <i class="fas fa-spinner"></i>
+                <span>Loading sticky messages...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showAddStickyForm() {
+    document.getElementById('add-sticky-card').style.display = 'block';
+    document.getElementById('sticky-content').focus();
+}
+
+function hideAddStickyForm() {
+    document.getElementById('add-sticky-card').style.display = 'none';
+    document.getElementById('sticky-form').reset();
+}
+
+async function loadStickyMessages() {
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/sticky');
+        const data = await response.json();
+
+        if (!data.stickyMessages || data.stickyMessages.length === 0) {
+            document.getElementById('sticky-list').innerHTML = `
+                <div class="sticky-empty-state">
+                    <div class="sticky-empty-icon">
+                        <i class="fas fa-thumbtack"></i>
+                    </div>
+                    <div class="sticky-empty-title">No Sticky Messages</div>
+                    <div class="sticky-empty-desc">Create a sticky message to keep important information visible</div>
+                    <button class="sticky-add-btn" onclick="showAddStickyForm()">
+                        <i class="fas fa-plus"></i>
+                        Add First Sticky
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        const stickiesHtml = data.stickyMessages.map(sticky => {
+            const createdDate = new Date(sticky.created_at);
+
+            return `
+                <div class="sticky-item">
+                    <div class="sticky-item-header">
+                        <div class="sticky-channel-badge">
+                            <i class="fas fa-hashtag"></i>
+                            Channel ${sticky.channel_id.slice(-6)}
+                        </div>
+                        <button class="sticky-delete-btn" onclick="deleteStickyMessage('${sticky.channel_id}')">
+                            <i class="fas fa-trash"></i>
+                            Delete
+                        </button>
+                    </div>
+                    <div class="sticky-content">${sticky.message_content}</div>
+                    <div class="sticky-meta">
+                        <span>
+                            <i class="fas fa-user"></i>
+                            Created by ${sticky.created_by || 'Unknown'}
+                        </span>
+                        <span>
+                            <i class="fas fa-calendar"></i>
+                            ${createdDate.toLocaleDateString()} at ${createdDate.toLocaleTimeString()}
+                        </span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        document.getElementById('sticky-list').innerHTML = stickiesHtml;
+
+    } catch (error) {
+        console.error('Error loading sticky messages:', error);
+        document.getElementById('sticky-list').innerHTML = `
+            <div class="sticky-empty-state">
+                <div class="sticky-empty-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="sticky-empty-title">Error Loading Data</div>
+                <div class="sticky-empty-desc">Please try refreshing the page</div>
+            </div>
+        `;
+    }
+}
+
+async function createStickyMessage(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+
+    const sticky = {
+        channel_id: formData.get('channel_id'),
+        message_content: formData.get('message_content')
+    };
+
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/sticky', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sticky)
+        });
+
+        if (response.ok) {
+            alert('Sticky message created successfully!');
+            hideAddStickyForm();
+            loadStickyMessages();
+        } else {
+            const error = await response.json();
+            alert('Failed to create sticky message: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error creating sticky message:', error);
+        alert('Error creating sticky message');
+    }
+}
+
+async function deleteStickyMessage(channelId) {
+    if (!confirm('Are you sure you want to delete this sticky message?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/sticky/${channelId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            alert('Sticky message deleted');
+            loadStickyMessages();
+        } else {
+            alert('Failed to delete sticky message');
+        }
+    } catch (error) {
+        console.error('Error deleting sticky message:', error);
+        alert('Error deleting sticky message');
+    }
+}
+
+loadStickyMessages();
+</script>

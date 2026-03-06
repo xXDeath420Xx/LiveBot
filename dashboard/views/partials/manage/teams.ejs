@@ -1,0 +1,351 @@
+<style>
+/* Compact Teams Page Styles */
+.teams-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.team-stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.2s ease;
+}
+
+.team-stat-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+
+.team-stat-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.team-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #a78bfa;
+}
+
+/* Compact Team Cards */
+.teams-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.team-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.team-card:hover {
+    border-color: rgba(167, 139, 250, 0.35);
+}
+
+.team-card-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.team-card-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.team-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(96, 165, 250, 0.2));
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.team-icon i {
+    font-size: 0.9rem;
+    color: #a78bfa;
+}
+
+.team-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin: 0;
+}
+
+.team-subtitle {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 2px;
+}
+
+.team-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.team-card-body {
+    padding: 14px 16px;
+}
+
+.team-info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.team-info-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.team-info-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.45);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.team-info-label i {
+    color: #a78bfa;
+    font-size: 0.7rem;
+}
+
+.team-info-value {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+/* Compact Buttons */
+.btn-team-settings {
+    padding: 6px 12px;
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 6px;
+    color: #a78bfa;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn-team-settings:hover {
+    background: rgba(167, 139, 250, 0.25);
+    border-color: rgba(167, 139, 250, 0.5);
+}
+
+.btn-team-delete {
+    padding: 6px 10px;
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: 6px;
+    color: #f87171;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-team-delete:hover {
+    background: rgba(248, 113, 113, 0.2);
+}
+
+/* Compact Empty State */
+.teams-empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+}
+
+.teams-empty-icon {
+    font-size: 2.5rem;
+    color: rgba(167, 139, 250, 0.3);
+    margin-bottom: 16px;
+}
+
+.teams-empty-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 8px;
+}
+
+.teams-empty-description {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 20px;
+    max-width: 350px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+@media (max-width: 1200px) {
+    .teams-stats-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .teams-stats-grid { grid-template-columns: 1fr; }
+    .teams-grid { grid-template-columns: 1fr; }
+    .team-info-grid { grid-template-columns: 1fr; }
+    .team-card-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-users-cog"></i>
+                <span>Team Subscriptions</span>
+            </div>
+            <div class="page-section-subtitle">
+                Subscribe to streaming teams for automatic member tracking and notifications
+            </div>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTeamModal">
+            <i class="fas fa-plus"></i>
+            <span>Add Team</span>
+        </button>
+    </div>
+
+    <!-- Stats Overview -->
+    <div class="teams-stats-grid">
+        <div class="team-stat-card">
+            <div class="team-stat-label">Total Teams</div>
+            <div class="team-stat-value"><%= teamSubscriptions?.length || 0 %></div>
+        </div>
+        <div class="team-stat-card">
+            <div class="team-stat-label">Active Channels</div>
+            <div class="team-stat-value"><%= teamSubscriptions?.filter(t => t.announcement_channel_id).length || 0 %></div>
+        </div>
+        <div class="team-stat-card">
+            <div class="team-stat-label">With Live Role</div>
+            <div class="team-stat-value"><%= teamSubscriptions?.filter(t => t.live_role_id).length || 0 %></div>
+        </div>
+    </div>
+
+    <% if (teamSubscriptions && teamSubscriptions.length > 0) { %>
+        <div class="teams-grid">
+            <% teamSubscriptions.forEach(team => { %>
+                <div class="team-card">
+                    <div class="team-card-header">
+                        <div class="team-card-title">
+                            <div class="team-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div>
+                                <h3 class="team-name"><%= team.team_name %></h3>
+                                <div class="team-subtitle">Team Subscription</div>
+                            </div>
+                        </div>
+                        <div class="team-actions">
+                            <button class="btn-team-settings edit-team-btn"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#teamSettingsModal"
+                                    data-team='<%= JSON.stringify(team) %>'>
+                                <i class="fas fa-cog"></i>
+                                <span>Settings</span>
+                            </button>
+                            <form action="/manage/<%= guild.id %>/delete-team" method="POST" class="d-inline" onsubmit="return confirm('Are you sure? This will remove all associated streamers.');">
+                                <input type="hidden" name="teamId" value="<%= team.id %>">
+                                <button type="submit" class="btn-team-delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="team-card-body">
+                        <div class="team-info-grid">
+                            <div class="team-info-item">
+                                <div class="team-info-label">
+                                    <i class="fas fa-hashtag"></i>
+                                    <span>Announcement Channel</span>
+                                </div>
+                                <div class="team-info-value">
+                                    #<%= channels.find(c => c.id === team.announcement_channel_id)?.name || 'Default' %>
+                                </div>
+                            </div>
+                            <div class="team-info-item">
+                                <div class="team-info-label">
+                                    <i class="fas fa-at"></i>
+                                    <span>Live Role</span>
+                                </div>
+                                <div class="team-info-value">
+                                    @<%= roles.find(r => r.id === team.live_role_id)?.name || 'None' %>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            <% }) %>
+        </div>
+    <% } else { %>
+        <div class="teams-empty-state">
+            <div class="teams-empty-icon">
+                <i class="fas fa-users"></i>
+            </div>
+            <div class="teams-empty-title">No Team Subscriptions</div>
+            <div class="teams-empty-description">
+                Subscribe to streaming teams to automatically track all team members and receive live notifications
+            </div>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTeamModal">
+                <i class="fas fa-plus"></i>
+                <span>Add First Team</span>
+            </button>
+        </div>
+    <% } %>
+</div>
+
+<%- include('partials/add-team-modal', { guild, channels, roles }) %>
+<%- include('partials/manage-team-modal', { guild, channels, roles }) %>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const teamSettingsModal = document.getElementById('teamSettingsModal');
+    if (teamSettingsModal) {
+        teamSettingsModal.addEventListener('show.bs.modal', event => {
+            const button = event.relatedTarget || teamSettingsModal._triggerButton;
+            if (!button) return;
+
+            const team = JSON.parse(button.getAttribute('data-team'));
+
+            document.getElementById('modal-team-name').textContent = team.team_name;
+            document.getElementById('edit-team-subscription-id').value = team.id;
+            document.getElementById('edit-team-channel-id').value = team.announcement_channel_id || '';
+            document.getElementById('edit-team-live-role-id').value = team.live_role_id || '';
+            document.getElementById('edit-team-webhook-name').value = team.webhook_name || '';
+            document.getElementById('edit-team-webhook-avatar-url').value = team.webhook_avatar_url || '';
+        });
+    }
+});
+</script>

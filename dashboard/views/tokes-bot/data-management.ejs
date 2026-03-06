@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link">Home</a>
+                <a href="/tokes-bot/dashboard" class="ember-nav-link">Dashboard</a>
+                <a href="/tokes-bot/channels" class="ember-nav-link">Channels</a>
+                <a href="/tokes-bot/profile" class="ember-nav-link">Profile</a>
+            </div>
+            <div class="ember-nav-actions">
+                <div class="ember-nav-user">
+                    <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                    <span><%= user.name %></span>
+                </div>
+                <a href="/tokes-bot/auth/logout" class="ember-btn ember-btn-ghost">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <!-- Header -->
+            <div class="ember-dashboard-header">
+                <h1 class="ember-dashboard-title">Data & Account Management</h1>
+                <p class="ember-dashboard-subtitle">Manage your data, privacy settings, and account</p>
+            </div>
+
+            <!-- Export Data Section -->
+            <div class="ember-card">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Export Your Data</h2>
+                </div>
+                <div class="ember-card-body">
+                    <p class="ember-text-muted" style="margin-bottom: 1rem;">
+                        Download a copy of all your data stored in our system. This includes your profile,
+                        toke history, session participation, and channel settings.
+                    </p>
+                    <a href="/tokes-bot/api/export-data" class="ember-btn ember-btn-primary" download>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem;">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Download My Data (JSON)
+                    </a>
+                </div>
+            </div>
+
+            <!-- Leave Channels Section -->
+            <div class="ember-card" style="margin-top: 1.5rem;">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Leave Channels</h2>
+                </div>
+                <div class="ember-card-body">
+                    <p class="ember-text-muted" style="margin-bottom: 1rem;">
+                        Remove the bot from specific channels you own. This will delete all channel settings,
+                        custom commands, and channel-specific configurations. User toke data is preserved.
+                    </p>
+
+                    <% if (ownedChannels && ownedChannels.length > 0) { %>
+                        <div class="channel-list">
+                            <% ownedChannels.forEach(channel => { %>
+                                <div class="channel-item" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 0.5rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                        <span class="ember-badge <%= channel.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>" style="font-size: 0.7rem;">
+                                            <%= channel.platform.toUpperCase() %>
+                                        </span>
+                                        <span style="font-weight: 600;"><%= channel.channel_name %></span>
+                                        <% if (channel.is_active) { %>
+                                            <span class="ember-badge ember-badge-success" style="font-size: 0.65rem;">Active</span>
+                                        <% } %>
+                                    </div>
+                                    <button
+                                        onclick="leaveChannel(<%= channel.id %>, '<%= channel.channel_name %>')"
+                                        class="ember-btn ember-btn-sm ember-btn-danger"
+                                    >
+                                        Remove Bot
+                                    </button>
+                                </div>
+                            <% }); %>
+                        </div>
+                    <% } else { %>
+                        <div class="ember-text-center" style="padding: 2rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                            <p class="ember-text-muted">You don't own any channels with the bot installed.</p>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Disconnect Platforms Section -->
+            <div class="ember-card" style="margin-top: 1.5rem;">
+                <div class="ember-card-header">
+                    <h2 class="ember-card-title">Disconnect Platforms</h2>
+                </div>
+                <div class="ember-card-body">
+                    <p class="ember-text-muted" style="margin-bottom: 1rem;">
+                        Disconnect linked platforms from your account. You must keep at least one platform connected.
+                        Disconnecting a platform will remove any channels you own on that platform.
+                    </p>
+
+                    <% if (connections && connections.length > 0) { %>
+                        <div class="platform-list">
+                            <% connections.forEach(conn => { %>
+                                <div class="platform-item" style="display: flex; align-items: center; justify-content: space-between; padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 0.5rem;">
+                                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                        <img src="<%= conn.platform_avatar || '/images/default-avatar.png' %>" alt="<%= conn.platform_name %>" style="width: 40px; height: 40px; border-radius: 50%;">
+                                        <div>
+                                            <div style="font-weight: 600;"><%= conn.platform_name %></div>
+                                            <span class="ember-badge <%= conn.platform === 'twitch' ? 'ember-platform-twitch' : 'ember-platform-kick' %>" style="font-size: 0.65rem;">
+                                                <%= conn.platform.toUpperCase() %>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <% if (connections.length > 1) { %>
+                                        <button
+                                            onclick="disconnectPlatform('<%= conn.platform %>')"
+                                            class="ember-btn ember-btn-sm ember-btn-ghost"
+                                        >
+                                            Disconnect
+                                        </button>
+                                    <% } else { %>
+                                        <span class="ember-text-muted" style="font-size: 0.85rem;">Primary account</span>
+                                    <% } %>
+                                </div>
+                            <% }); %>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Delete Account Section -->
+            <div class="ember-card ember-card-danger" style="margin-top: 1.5rem; border: 1px solid var(--ember-error);">
+                <div class="ember-card-header" style="background: var(--ember-error-dim);">
+                    <h2 class="ember-card-title" style="color: var(--ember-error);">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem; vertical-align: middle;">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                        Delete Account
+                    </h2>
+                </div>
+                <div class="ember-card-body">
+                    <p style="color: var(--ember-error); font-weight: 600; margin-bottom: 0.5rem;">
+                        This action is permanent and cannot be undone.
+                    </p>
+                    <p class="ember-text-muted" style="margin-bottom: 1rem;">
+                        Deleting your account will permanently remove:
+                    </p>
+                    <ul style="color: var(--ember-text-secondary); margin-bottom: 1.5rem; padding-left: 1.5rem;">
+                        <li>Your user profile and all personal data</li>
+                        <li>All toke history and statistics</li>
+                        <li>All session participation records</li>
+                        <li>All channels you own and their settings</li>
+                        <li>All custom commands you've created</li>
+                        <li>All connected platform accounts</li>
+                    </ul>
+
+                    <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                        <label class="ember-checkbox" style="margin-bottom: 0.75rem;">
+                            <input type="checkbox" id="confirm-delete-1">
+                            <span>I understand this action is permanent and cannot be undone</span>
+                        </label>
+                        <label class="ember-checkbox">
+                            <input type="checkbox" id="confirm-delete-2">
+                            <span>I want to delete all my data from CertiFriedUtility</span>
+                        </label>
+                    </div>
+
+                    <button
+                        id="delete-account-btn"
+                        onclick="deleteAccount()"
+                        class="ember-btn ember-btn-danger"
+                        disabled
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem;">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            <line x1="10" y1="11" x2="10" y2="17"/>
+                            <line x1="14" y1="11" x2="14" y2="17"/>
+                        </svg>
+                        Permanently Delete My Account
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="ember-footer" style="margin-top: 3rem;">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+
+    <style>
+        .ember-card-danger {
+            background: rgba(239, 68, 68, 0.05);
+        }
+        .ember-checkbox {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+        .ember-checkbox input {
+            margin-top: 0.25rem;
+        }
+        .ember-btn-danger:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+
+    <script>
+        // Enable delete button only when both checkboxes are checked
+        const checkbox1 = document.getElementById('confirm-delete-1');
+        const checkbox2 = document.getElementById('confirm-delete-2');
+        const deleteBtn = document.getElementById('delete-account-btn');
+
+        function updateDeleteButton() {
+            deleteBtn.disabled = !(checkbox1.checked && checkbox2.checked);
+        }
+
+        checkbox1.addEventListener('change', updateDeleteButton);
+        checkbox2.addEventListener('change', updateDeleteButton);
+
+        // Leave channel
+        async function leaveChannel(channelId, channelName) {
+            if (!confirm(`Are you sure you want to remove the bot from "${channelName}"?\n\nThis will delete all channel settings and custom commands.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/tokes-bot/api/channels/${channelId}/leave`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    alert('Bot removed from channel successfully.');
+                    location.reload();
+                } else {
+                    const result = await response.json();
+                    alert(result.error || 'Failed to remove bot from channel');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Disconnect platform
+        async function disconnectPlatform(platform) {
+            if (!confirm(`Are you sure you want to disconnect ${platform}?\n\nThis will also remove any channels you own on ${platform}.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/tokes-bot/api/platforms/${platform}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('Platform disconnected successfully.');
+                    location.reload();
+                } else {
+                    const result = await response.json();
+                    alert(result.error || 'Failed to disconnect platform');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Delete account
+        async function deleteAccount() {
+            if (!confirm('FINAL WARNING: Are you absolutely sure you want to delete your account?\n\nThis will permanently delete ALL your data and cannot be undone.')) {
+                return;
+            }
+
+            // Double confirmation with typed input
+            const confirmation = prompt('Type "DELETE" to confirm account deletion:');
+            if (confirmation !== 'DELETE') {
+                alert('Account deletion cancelled.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/tokes-bot/api/delete-account', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (response.ok) {
+                    alert('Your account has been deleted. You will be redirected to the homepage.');
+                    window.location.href = '/tokes-bot';
+                } else {
+                    const result = await response.json();
+                    alert(result.error || 'Failed to delete account');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+    <script src="/js/csrf.js"></script>
+</body>
+</html>

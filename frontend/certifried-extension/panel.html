@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CertiFried - Twitch Extension</title>
+    <link rel="stylesheet" href="dist/main.css">
+    <style>
+        /* Critical CSS for initial render */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 318px;
+            height: 496px;
+            overflow: hidden;
+            background: #111827;
+            color: #f9fafb;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .cf-loading-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 16px;
+        }
+
+        .cf-loading-screen__logo {
+            width: 64px;
+            height: 64px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .cf-loading-screen__spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid #374151;
+            border-top-color: #22c55e;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading screen shown while JS loads -->
+    <div class="cf-loading-screen" id="loading-screen">
+        <img class="cf-loading-screen__logo" src="dist/CertiFried.png" alt="CertiFried Logo">
+        <div class="cf-loading-screen__spinner"></div>
+    </div>
+
+    <!-- App root - components render here -->
+    <div id="app" class="cf-app cf-app--panel" style="display: none;">
+        <cf-header></cf-header>
+        <cf-nav></cf-nav>
+        <cf-app-container></cf-app-container>
+        <cf-strain-selector></cf-strain-selector>
+        <cf-toast-container></cf-toast-container>
+        <cf-tutorial></cf-tutorial>
+    </div>
+
+    <!-- Twitch Extension Helper -->
+    <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+
+    <!-- App Bundle -->
+    <script type="module">
+        import { app } from './dist/app.js';
+
+        // Wait for app to initialize
+        document.addEventListener('cfx:ready', () => {
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('app').style.display = 'flex';
+        });
+
+        // Handle initialization errors
+        window.addEventListener('error', (e) => {
+            console.error('CertiFried init error:', e);
+        });
+    </script>
+</body>
+</html>

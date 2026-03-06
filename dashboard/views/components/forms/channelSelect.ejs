@@ -1,0 +1,76 @@
+<%# Channel Select Component
+    Props:
+    - name: string (required) - Form field name
+    - id: string - Element ID
+    - channels: Array - Array of channel objects from guild.channels.cache
+    - selected: string - Currently selected channel ID
+    - placeholder: string - Placeholder text
+    - required: boolean - Whether field is required
+    - disabled: boolean - Whether field is disabled
+    - types: Array - Channel types to include (default: text)
+    - class: string - Additional CSS classes
+%>
+<%
+const channelTypes = {
+    0: { name: 'Text', icon: '#', class: 'text-gray-400' },
+    2: { name: 'Voice', icon: '🔊', class: 'text-gray-400' },
+    4: { name: 'Category', icon: '📁', class: 'text-gray-500' },
+    5: { name: 'Announcement', icon: '📢', class: 'text-gray-400' },
+    13: { name: 'Stage', icon: '🎤', class: 'text-gray-400' },
+    15: { name: 'Forum', icon: '💬', class: 'text-gray-400' }
+};
+
+const allowedTypes = locals.types || [0, 5]; // Default: text and announcement
+const filteredChannels = (locals.channels || [])
+    .filter(c => allowedTypes.includes(c.type))
+    .sort((a, b) => a.position - b.position);
+
+const categories = new Map();
+filteredChannels.forEach(c => {
+    const parentId = c.parentId || 'none';
+    if (!categories.has(parentId)) {
+        categories.set(parentId, []);
+    }
+    categories.get(parentId).push(c);
+});
+%>
+
+<select
+    name="<%= locals.name %>"
+    id="<%= locals.id || locals.name %>"
+    class="form-select <%= locals.class || '' %>"
+    <%= locals.required ? 'required' : '' %>
+    <%= locals.disabled ? 'disabled' : '' %>
+    data-enhanced-select
+>
+    <option value=""><%= locals.placeholder || 'Select a channel' %></option>
+
+    <% if (categories.has('none')) { %>
+        <% categories.get('none').forEach(channel => { %>
+            <% const typeInfo = channelTypes[channel.type] || { icon: '#', class: 'text-gray-400' }; %>
+            <option value="<%= channel.id %>" <%= locals.selected === channel.id ? 'selected' : '' %>>
+                <%= typeInfo.icon %> <%= channel.name %>
+            </option>
+        <% }); %>
+    <% } %>
+
+    <%
+    const allChannels = locals.channels || [];
+    const parentChannels = allChannels.filter(c => c.type === 4);
+    parentChannels.forEach(parent => {
+        const children = categories.get(parent.id);
+        if (children && children.length > 0) {
+    %>
+        <optgroup label="<%= parent.name %>">
+            <% children.forEach(channel => { %>
+                <% const typeInfo = channelTypes[channel.type] || { icon: '#', class: 'text-gray-400' }; %>
+                <option value="<%= channel.id %>" <%= locals.selected === channel.id ? 'selected' : '' %>>
+                    <%= typeInfo.icon %> <%= channel.name %>
+                </option>
+            <% }); %>
+        </optgroup>
+    <%
+        }
+    });
+    %>
+</select>

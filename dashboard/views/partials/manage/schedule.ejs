@@ -1,0 +1,986 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-calendar-alt"></i>
+                <span>Schedule Manager</span>
+            </div>
+            <div class="page-section-subtitle">
+                Create and manage event schedules for speedrun marathons and events
+            </div>
+        </div>
+        <button class="btn btn-primary" onclick="showCreateEventModal()">
+            <i class="fas fa-plus"></i>
+            <span>Create Event</span>
+        </button>
+    </div>
+
+    <!-- Navigation Breadcrumb -->
+    <nav id="schedule-breadcrumb" style="margin-bottom: var(--spacing-4); display: none;">
+        <div style="display: flex; align-items: center; gap: var(--spacing-2); font-size: var(--font-size-sm);">
+            <a href="#" onclick="loadEvents(); return false;" style="color: var(--color-primary-400); text-decoration: none;">
+                <i class="fas fa-home"></i> Events
+            </a>
+            <span id="breadcrumb-event" style="color: var(--color-text-muted);"></span>
+            <span id="breadcrumb-schedule" style="color: var(--color-text-muted);"></span>
+        </div>
+    </nav>
+
+    <!-- Stats Overview -->
+    <div id="schedule-stats" class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Events</div>
+            <div id="stat-events" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">0</div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Events</div>
+            <div id="stat-active" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);">0</div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Schedules</div>
+            <div id="stat-schedules" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">0</div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Runs</div>
+            <div id="stat-runs" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);">0</div>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div id="schedule-content">
+        <!-- Events List (default view) -->
+        <div id="events-view">
+            <div id="events-list" class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-calendar-alt"></i>
+                </div>
+                <div class="empty-state-title">No Events Yet</div>
+                <div class="empty-state-description">
+                    Create your first event to start building schedules
+                </div>
+                <button class="btn btn-primary" onclick="showCreateEventModal()">
+                    <i class="fas fa-plus"></i>
+                    <span>Create First Event</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Schedules List (shown when viewing an event) -->
+        <div id="schedules-view" style="display: none;"></div>
+
+        <!-- Items/Runs List (shown when viewing a schedule) -->
+        <div id="items-view" style="display: none;"></div>
+    </div>
+</div>
+
+<!-- Create Event Modal -->
+<div class="modal fade" id="createEventModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Event</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createEventForm" onsubmit="createEvent(event)">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Event Name</label>
+                        <input type="text" class="form-control" name="name" required placeholder="Summer Speedathon 2025">
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Slug (URL identifier)</label>
+                        <input type="text" class="form-control" name="slug" required placeholder="summer-speedathon-2025" pattern="[a-z0-9-]+">
+                        <div class="form-help">Lowercase letters, numbers, and hyphens only</div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="3" placeholder="A weekend marathon featuring the best speedruns"></textarea>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Twitch Channel (optional)</label>
+                        <input type="text" class="form-control" name="twitchChannel" placeholder="twitchchannel">
+                        <div class="form-help">Twitch channel name for stream integration</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>
+                        <span>Create Event</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create Schedule Modal -->
+<div class="modal fade" id="createScheduleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createScheduleForm" onsubmit="createSchedule(event)">
+                <input type="hidden" name="eventId" id="scheduleEventId">
+                <div class="modal-body">
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Schedule Name</label>
+                        <input type="text" class="form-control" name="name" required placeholder="Day 1 - Saturday">
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Slug</label>
+                        <input type="text" class="form-control" name="slug" required placeholder="day-1" pattern="[a-z0-9-]+">
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="2" placeholder="First day of the marathon"></textarea>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Start Time</label>
+                        <input type="datetime-local" class="form-control" name="startTime">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>
+                        <span>Create Schedule</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Run Modal -->
+<div class="modal fade" id="addRunModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Run</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="addRunForm" onsubmit="addRun(event)">
+                <input type="hidden" name="scheduleId" id="runScheduleId">
+                <div class="modal-body">
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+                        <div style="margin-bottom: var(--spacing-4);">
+                            <label class="form-label">Game Name</label>
+                            <input type="text" class="form-control" name="gameName" required placeholder="Super Mario 64">
+                        </div>
+                        <div style="margin-bottom: var(--spacing-4);">
+                            <label class="form-label">Category</label>
+                            <input type="text" class="form-control" name="category" placeholder="120 Star">
+                        </div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Runner(s)</label>
+                        <input type="text" class="form-control" name="runners" placeholder="Runner1, Runner2">
+                        <div class="form-help">Comma-separated list of runners</div>
+                    </div>
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+                        <div style="margin-bottom: var(--spacing-4);">
+                            <label class="form-label">Estimate</label>
+                            <input type="text" class="form-control" name="estimate" placeholder="1:45:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                            <div class="form-help">Format: HH:MM:SS</div>
+                        </div>
+                        <div style="margin-bottom: var(--spacing-4);">
+                            <label class="form-label">Setup Time</label>
+                            <input type="text" class="form-control" name="setup" placeholder="0:10:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                            <div class="form-help">Format: HH:MM:SS</div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="notes" rows="2" placeholder="Any additional notes about this run"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>
+                        <span>Add Run</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Run Modal -->
+<div class="modal fade" id="editRunModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Run</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="editRunForm" onsubmit="updateRun(event)">
+                <input type="hidden" name="itemId" id="editItemId">
+                <div class="modal-body">
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+                        <div style="margin-bottom: var(--spacing-4);">
+                            <label class="form-label">Game Name</label>
+                            <input type="text" class="form-control" name="gameName" id="editGameName" required>
+                        </div>
+                        <div style="margin-bottom: var(--spacing-4);">
+                            <label class="form-label">Category</label>
+                            <input type="text" class="form-control" name="category" id="editCategory">
+                        </div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Runner(s)</label>
+                        <input type="text" class="form-control" name="runners" id="editRunners">
+                    </div>
+                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+                        <div style="margin-bottom: var(--spacing-4);">
+                            <label class="form-label">Estimate</label>
+                            <input type="text" class="form-control" name="estimate" id="editEstimate" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                        </div>
+                        <div style="margin-bottom: var(--spacing-4);">
+                            <label class="form-label">Setup Time</label>
+                            <input type="text" class="form-control" name="setup" id="editSetup" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                        </div>
+                    </div>
+                    <div style="margin-bottom: var(--spacing-4);">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" name="notes" id="editNotes" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i>
+                        <span>Save Changes</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.empty-state {
+    text-align: center;
+    padding: var(--spacing-12) var(--spacing-8);
+    background: var(--color-dark-600);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--color-dark-400);
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: var(--color-text-muted);
+    margin-bottom: var(--spacing-4);
+}
+
+.empty-state-title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.empty-state-description {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-6);
+}
+
+.schedule-card {
+    background: var(--color-dark-600);
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-5);
+    margin-bottom: var(--spacing-4);
+    transition: border-color var(--transition-base);
+}
+
+.schedule-card:hover {
+    border-color: var(--color-primary-400);
+}
+
+.schedule-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--spacing-3);
+}
+
+.schedule-card-title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-primary);
+    margin: 0;
+    cursor: pointer;
+}
+
+.schedule-card-title:hover {
+    color: var(--color-primary-400);
+}
+
+.schedule-card-meta {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.schedule-card-description {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-3);
+}
+
+.schedule-card-actions {
+    display: flex;
+    gap: var(--spacing-2);
+}
+
+.table-container {
+    overflow-x: auto;
+    border: 1px solid var(--color-dark-400);
+    border-radius: var(--radius-lg);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table thead {
+    background: var(--color-dark-600);
+    border-bottom: 2px solid var(--color-dark-400);
+}
+
+.data-table th {
+    padding: var(--spacing-4);
+    text-align: left;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.data-table td {
+    padding: var(--spacing-4);
+    border-bottom: 1px solid var(--color-dark-400);
+}
+
+.data-table tbody tr {
+    transition: background var(--transition-base);
+}
+
+.data-table tbody tr:hover {
+    background: var(--color-dark-600);
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tbody tr.status-running {
+    background: rgba(var(--color-success-rgb), 0.1);
+}
+
+.data-table tbody tr.status-completed {
+    opacity: 0.6;
+}
+
+.run-position {
+    width: 40px;
+    text-align: center;
+    font-weight: var(--font-weight-bold);
+    color: var(--color-text-muted);
+}
+
+.drag-handle {
+    cursor: grab;
+    color: var(--color-text-muted);
+    padding: var(--spacing-2);
+}
+
+.drag-handle:hover {
+    color: var(--color-text-primary);
+}
+
+.form-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--spacing-2);
+}
+
+.form-help {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-2);
+}
+
+.status-badge {
+    padding: var(--spacing-1) var(--spacing-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+}
+
+.status-pending { background: var(--color-dark-400); color: var(--color-text-secondary); }
+.status-running { background: var(--color-success); color: white; }
+.status-completed { background: var(--color-primary-500); color: white; }
+.status-skipped { background: var(--color-warning); color: black; }
+</style>
+
+<script>
+const guildId = '<%= guild.id %>';
+let currentEventId = null;
+let currentScheduleId = null;
+let currentEventData = null;
+let currentScheduleData = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadEvents();
+});
+
+async function loadEvents() {
+    currentEventId = null;
+    currentScheduleId = null;
+    document.getElementById('schedule-breadcrumb').style.display = 'none';
+    document.getElementById('events-view').style.display = 'block';
+    document.getElementById('schedules-view').style.display = 'none';
+    document.getElementById('items-view').style.display = 'none';
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/events`);
+        const data = await response.json();
+
+        if (data.events && data.events.length > 0) {
+            document.getElementById('stat-events').textContent = data.events.length;
+            document.getElementById('stat-active').textContent = data.events.filter(e => e.is_active).length;
+
+            let html = '<div class="events-grid">';
+            data.events.forEach(event => {
+                html += `
+                    <div class="schedule-card">
+                        <div class="schedule-card-header">
+                            <div>
+                                <h3 class="schedule-card-title" onclick="loadSchedules(${event.id}, '${escapeHtml(event.name)}')">${escapeHtml(event.name)}</h3>
+                                <div class="schedule-card-meta">
+                                    <i class="fas fa-link"></i> ${event.slug}
+                                    ${event.twitch_channel ? `<span style="margin-left: var(--spacing-3);"><i class="fab fa-twitch" style="color: #9146ff;"></i> ${event.twitch_channel}</span>` : ''}
+                                </div>
+                            </div>
+                            <span class="status-badge ${event.is_active ? 'status-running' : 'status-pending'}">
+                                ${event.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                        </div>
+                        ${event.description ? `<p class="schedule-card-description">${escapeHtml(event.description)}</p>` : ''}
+                        <div class="schedule-card-actions">
+                            <button class="btn btn-sm btn-primary" onclick="loadSchedules(${event.id}, '${escapeHtml(event.name)}')">
+                                <i class="fas fa-calendar"></i> View Schedules
+                            </button>
+                            <button class="btn btn-sm btn-secondary" onclick="toggleEventStatus(${event.id}, ${!event.is_active})">
+                                <i class="fas fa-${event.is_active ? 'pause' : 'play'}"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteEvent(${event.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            document.getElementById('events-list').innerHTML = html;
+        } else {
+            document.getElementById('stat-events').textContent = '0';
+            document.getElementById('stat-active').textContent = '0';
+            document.getElementById('events-list').innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon"><i class="fas fa-calendar-alt"></i></div>
+                    <div class="empty-state-title">No Events Yet</div>
+                    <div class="empty-state-description">Create your first event to start building schedules</div>
+                    <button class="btn btn-primary" onclick="showCreateEventModal()">
+                        <i class="fas fa-plus"></i> Create First Event
+                    </button>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading events:', error);
+        showToast('Failed to load events', 'error');
+    }
+}
+
+async function loadSchedules(eventId, eventName) {
+    currentEventId = eventId;
+    currentEventData = { id: eventId, name: eventName };
+    document.getElementById('schedule-breadcrumb').style.display = 'block';
+    document.getElementById('breadcrumb-event').innerHTML = `<i class="fas fa-chevron-right"></i> ${escapeHtml(eventName)}`;
+    document.getElementById('breadcrumb-schedule').innerHTML = '';
+    document.getElementById('events-view').style.display = 'none';
+    document.getElementById('schedules-view').style.display = 'block';
+    document.getElementById('items-view').style.display = 'none';
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/events/${eventId}/schedules`);
+        const data = await response.json();
+
+        document.getElementById('stat-schedules').textContent = data.schedules?.length || 0;
+
+        let html = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
+                <h3 style="margin: 0; color: var(--color-text-primary);">Schedules for ${escapeHtml(eventName)}</h3>
+                <button class="btn btn-primary" onclick="showCreateScheduleModal(${eventId})">
+                    <i class="fas fa-plus"></i> Add Schedule
+                </button>
+            </div>
+        `;
+
+        if (data.schedules && data.schedules.length > 0) {
+            data.schedules.forEach(schedule => {
+                html += `
+                    <div class="schedule-card">
+                        <div class="schedule-card-header">
+                            <div>
+                                <h3 class="schedule-card-title" onclick="loadItems(${schedule.id}, '${escapeHtml(schedule.name)}')">${escapeHtml(schedule.name)}</h3>
+                                <div class="schedule-card-meta">
+                                    ${schedule.start_time ? `<i class="fas fa-clock"></i> ${new Date(schedule.start_time).toLocaleString()}` : '<i class="fas fa-clock"></i> No start time set'}
+                                </div>
+                            </div>
+                        </div>
+                        ${schedule.description ? `<p class="schedule-card-description">${escapeHtml(schedule.description)}</p>` : ''}
+                        <div class="schedule-card-actions">
+                            <button class="btn btn-sm btn-primary" onclick="loadItems(${schedule.id}, '${escapeHtml(schedule.name)}')">
+                                <i class="fas fa-list"></i> View Runs
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteSchedule(${schedule.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-state-icon"><i class="fas fa-calendar-day"></i></div>
+                    <div class="empty-state-title">No Schedules Yet</div>
+                    <div class="empty-state-description">Add schedules to organize runs by day or category</div>
+                    <button class="btn btn-primary" onclick="showCreateScheduleModal(${eventId})">
+                        <i class="fas fa-plus"></i> Add First Schedule
+                    </button>
+                </div>
+            `;
+        }
+
+        document.getElementById('schedules-view').innerHTML = html;
+    } catch (error) {
+        console.error('Error loading schedules:', error);
+        showToast('Failed to load schedules', 'error');
+    }
+}
+
+async function loadItems(scheduleId, scheduleName) {
+    currentScheduleId = scheduleId;
+    currentScheduleData = { id: scheduleId, name: scheduleName };
+    document.getElementById('breadcrumb-schedule').innerHTML = `<i class="fas fa-chevron-right"></i> ${escapeHtml(scheduleName)}`;
+    document.getElementById('schedules-view').style.display = 'none';
+    document.getElementById('items-view').style.display = 'block';
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/schedules/${scheduleId}/items`);
+        const data = await response.json();
+
+        document.getElementById('stat-runs').textContent = data.items?.length || 0;
+
+        let html = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
+                <h3 style="margin: 0; color: var(--color-text-primary);">Runs in ${escapeHtml(scheduleName)}</h3>
+                <button class="btn btn-primary" onclick="showAddRunModal(${scheduleId})">
+                    <i class="fas fa-plus"></i> Add Run
+                </button>
+            </div>
+        `;
+
+        if (data.items && data.items.length > 0) {
+            html += `
+                <div class="table-container">
+                    <table class="data-table" id="runs-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th>Game</th>
+                                <th>Category</th>
+                                <th>Runner(s)</th>
+                                <th>Estimate</th>
+                                <th>Setup</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="runs-tbody">
+            `;
+
+            data.items.forEach((item, index) => {
+                html += `
+                    <tr class="status-${item.status || 'pending'}" data-item-id="${item.id}">
+                        <td class="run-position">${index + 1}</td>
+                        <td style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">${escapeHtml(item.game_name)}</td>
+                        <td style="color: var(--color-text-secondary);">${escapeHtml(item.category || '-')}</td>
+                        <td style="color: var(--color-text-secondary);">${escapeHtml(item.runners || '-')}</td>
+                        <td style="font-family: var(--font-family-mono);">${formatSeconds(item.estimate_seconds)}</td>
+                        <td style="font-family: var(--font-family-mono); color: var(--color-text-muted);">${formatSeconds(item.setup_seconds)}</td>
+                        <td><span class="status-badge status-${item.status || 'pending'}">${item.status || 'pending'}</span></td>
+                        <td class="text-end">
+                            <div style="display: flex; gap: var(--spacing-2); justify-content: flex-end;">
+                                ${item.status !== 'running' && item.status !== 'completed' ? `
+                                    <button class="btn btn-sm btn-success" onclick="setRunStatus(${item.id}, 'running')" title="Start Run">
+                                        <i class="fas fa-play"></i>
+                                    </button>
+                                ` : ''}
+                                ${item.status === 'running' ? `
+                                    <button class="btn btn-sm btn-primary" onclick="setRunStatus(${item.id}, 'completed')" title="Complete Run">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                ` : ''}
+                                <button class="btn btn-sm btn-secondary" onclick="showEditRunModal(${item.id}, '${escapeHtml(item.game_name)}', '${escapeHtml(item.category || '')}', '${escapeHtml(item.runners || '')}', ${item.estimate_seconds}, ${item.setup_seconds}, '${escapeHtml(item.notes || '')}')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteRun(${item.id})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="empty-state">
+                    <div class="empty-state-icon"><i class="fas fa-running"></i></div>
+                    <div class="empty-state-title">No Runs Yet</div>
+                    <div class="empty-state-description">Add runs to build your schedule</div>
+                    <button class="btn btn-primary" onclick="showAddRunModal(${scheduleId})">
+                        <i class="fas fa-plus"></i> Add First Run
+                    </button>
+                </div>
+            `;
+        }
+
+        document.getElementById('items-view').innerHTML = html;
+    } catch (error) {
+        console.error('Error loading items:', error);
+        showToast('Failed to load runs', 'error');
+    }
+}
+
+function showCreateEventModal() {
+    document.getElementById('createEventForm').reset();
+    new bootstrap.Modal(document.getElementById('createEventModal')).show();
+}
+
+function showCreateScheduleModal(eventId) {
+    document.getElementById('createScheduleForm').reset();
+    document.getElementById('scheduleEventId').value = eventId;
+    new bootstrap.Modal(document.getElementById('createScheduleModal')).show();
+}
+
+function showAddRunModal(scheduleId) {
+    document.getElementById('addRunForm').reset();
+    document.getElementById('runScheduleId').value = scheduleId;
+    new bootstrap.Modal(document.getElementById('addRunModal')).show();
+}
+
+function showEditRunModal(itemId, gameName, category, runners, estimateSeconds, setupSeconds, notes) {
+    document.getElementById('editItemId').value = itemId;
+    document.getElementById('editGameName').value = gameName;
+    document.getElementById('editCategory').value = category;
+    document.getElementById('editRunners').value = runners;
+    document.getElementById('editEstimate').value = formatSeconds(estimateSeconds);
+    document.getElementById('editSetup').value = formatSeconds(setupSeconds);
+    document.getElementById('editNotes').value = notes;
+    new bootstrap.Modal(document.getElementById('editRunModal')).show();
+}
+
+async function createEvent(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: formData.get('name'),
+                slug: formData.get('slug'),
+                description: formData.get('description'),
+                twitchChannel: formData.get('twitchChannel')
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('createEventModal')).hide();
+            showToast('Event created successfully', 'success');
+            loadEvents();
+        } else {
+            showToast(data.error || 'Failed to create event', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating event:', error);
+        showToast('Failed to create event', 'error');
+    }
+}
+
+async function createSchedule(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const eventId = formData.get('eventId');
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/events/${eventId}/schedules`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: formData.get('name'),
+                slug: formData.get('slug'),
+                description: formData.get('description'),
+                startTime: formData.get('startTime') || null
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('createScheduleModal')).hide();
+            showToast('Schedule created successfully', 'success');
+            loadSchedules(eventId, currentEventData.name);
+        } else {
+            showToast(data.error || 'Failed to create schedule', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating schedule:', error);
+        showToast('Failed to create schedule', 'error');
+    }
+}
+
+async function addRun(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const scheduleId = formData.get('scheduleId');
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/schedules/${scheduleId}/items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                gameName: formData.get('gameName'),
+                category: formData.get('category'),
+                runners: formData.get('runners'),
+                estimateSeconds: parseTimeToSeconds(formData.get('estimate')),
+                setupSeconds: parseTimeToSeconds(formData.get('setup')),
+                notes: formData.get('notes')
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('addRunModal')).hide();
+            showToast('Run added successfully', 'success');
+            loadItems(scheduleId, currentScheduleData.name);
+        } else {
+            showToast(data.error || 'Failed to add run', 'error');
+        }
+    } catch (error) {
+        console.error('Error adding run:', error);
+        showToast('Failed to add run', 'error');
+    }
+}
+
+async function updateRun(e) {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    const itemId = formData.get('itemId');
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/items/${itemId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                gameName: formData.get('gameName'),
+                category: formData.get('category'),
+                runners: formData.get('runners'),
+                estimateSeconds: parseTimeToSeconds(formData.get('estimate')),
+                setupSeconds: parseTimeToSeconds(formData.get('setup')),
+                notes: formData.get('notes')
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('editRunModal')).hide();
+            showToast('Run updated successfully', 'success');
+            loadItems(currentScheduleId, currentScheduleData.name);
+        } else {
+            showToast(data.error || 'Failed to update run', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating run:', error);
+        showToast('Failed to update run', 'error');
+    }
+}
+
+async function deleteEvent(eventId) {
+    if (!confirm('Delete this event and all its schedules? This cannot be undone.')) return;
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/events/${eventId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showToast('Event deleted', 'success');
+            loadEvents();
+        } else {
+            showToast(data.error || 'Failed to delete event', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting event:', error);
+        showToast('Failed to delete event', 'error');
+    }
+}
+
+async function deleteSchedule(scheduleId) {
+    if (!confirm('Delete this schedule and all its runs? This cannot be undone.')) return;
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/schedules/${scheduleId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showToast('Schedule deleted', 'success');
+            loadSchedules(currentEventId, currentEventData.name);
+        } else {
+            showToast(data.error || 'Failed to delete schedule', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting schedule:', error);
+        showToast('Failed to delete schedule', 'error');
+    }
+}
+
+async function deleteRun(itemId) {
+    if (!confirm('Delete this run?')) return;
+
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/items/${itemId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showToast('Run deleted', 'success');
+            loadItems(currentScheduleId, currentScheduleData.name);
+        } else {
+            showToast(data.error || 'Failed to delete run', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting run:', error);
+        showToast('Failed to delete run', 'error');
+    }
+}
+
+async function toggleEventStatus(eventId, isActive) {
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/events/${eventId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isActive })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showToast(`Event ${isActive ? 'activated' : 'deactivated'}`, 'success');
+            loadEvents();
+        } else {
+            showToast(data.error || 'Failed to update event', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating event:', error);
+        showToast('Failed to update event', 'error');
+    }
+}
+
+async function setRunStatus(itemId, status) {
+    try {
+        const response = await fetch(`/manage/${guildId}/schedule/items/${itemId}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showToast(`Run ${status}`, 'success');
+            loadItems(currentScheduleId, currentScheduleData.name);
+        } else {
+            showToast(data.error || 'Failed to update status', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating status:', error);
+        showToast('Failed to update status', 'error');
+    }
+}
+
+function formatSeconds(seconds) {
+    if (!seconds) return '0:00:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function parseTimeToSeconds(timeStr) {
+    if (!timeStr) return 0;
+    const parts = timeStr.split(':').map(Number);
+    if (parts.length === 3) {
+        return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+    return 0;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(message, type = 'info') {
+    if (typeof Toastify !== 'undefined') {
+        Toastify({
+            text: message,
+            duration: 3000,
+            gravity: 'top',
+            position: 'right',
+            backgroundColor: type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'
+        }).showToast();
+    } else {
+        console.log(`[${type}] ${message}`);
+    }
+}
+</script>

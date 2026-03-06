@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+    <style>
+        .rank-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 0.85rem;
+            flex-shrink: 0;
+        }
+        .rank-1 { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; }
+        .rank-2 { background: linear-gradient(135deg, #C0C0C0, #A0A0A0); color: #000; }
+        .rank-3 { background: linear-gradient(135deg, #CD7F32, #8B4513); color: #fff; }
+        .rank-default { background: var(--ember-bg-elevated); color: var(--ember-text-muted); }
+
+        .guild-header {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+        .guild-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            object-fit: cover;
+        }
+        .guild-meta {
+            color: var(--ember-text-muted);
+            font-size: 0.9rem;
+        }
+
+        .user-cell {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .user-display-name {
+            font-weight: 600;
+            color: var(--ember-text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .user-username {
+            font-size: 0.75rem;
+            color: var(--ember-text-muted);
+        }
+
+        .points-value {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--ember-primary);
+        }
+        .stat-value {
+            font-weight: 600;
+            color: var(--ember-text-primary);
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--ember-text-muted);
+        }
+        .raid-breakdown {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            font-size: 0.8rem;
+        }
+        .raid-aff {
+            color: var(--ember-primary);
+        }
+        .raid-non-aff {
+            color: var(--ember-text-primary);
+        }
+
+        .expandable-row {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .expandable-row:hover {
+            background: var(--ember-bg-elevated);
+        }
+        .expand-icon {
+            display: inline-block;
+            transition: transform 0.2s;
+            font-size: 0.7rem;
+            color: var(--ember-text-muted);
+            margin-left: 0.5rem;
+        }
+        .expand-icon.open {
+            transform: rotate(90deg);
+        }
+
+        .detail-row {
+            display: none;
+        }
+        .detail-row.open {
+            display: table-row;
+        }
+        .detail-cell {
+            padding: 0 !important;
+        }
+        .detail-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            background: var(--ember-bg-elevated);
+        }
+        .detail-table th {
+            padding: 0.5rem 0.75rem;
+            text-align: left;
+            font-weight: 600;
+            color: var(--ember-text-muted);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            border-bottom: 1px solid var(--ember-border);
+        }
+        .detail-table td {
+            padding: 0.4rem 0.75rem;
+            border-bottom: 1px solid var(--ember-border);
+            color: var(--ember-text-primary);
+        }
+        .detail-table tr:last-child td {
+            border-bottom: none;
+        }
+        .entry-type {
+            display: inline-block;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .entry-type-raid {
+            background: rgba(145, 70, 255, 0.15);
+            color: #b794f6;
+        }
+        .entry-type-support {
+            background: rgba(0, 209, 102, 0.15);
+            color: #68d391;
+        }
+        .aff-badge {
+            font-size: 0.7rem;
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            font-weight: 500;
+        }
+        .aff-badge-yes {
+            background: rgba(145, 70, 255, 0.15);
+            color: #b794f6;
+        }
+        .aff-badge-no {
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--ember-text-muted);
+        }
+        .proof-link, .twitch-link {
+            color: var(--ember-primary);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .proof-link:hover, .twitch-link:hover {
+            text-decoration: underline;
+        }
+
+        .month-selector {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        .month-selector label {
+            font-weight: 600;
+            color: var(--ember-text-primary);
+            font-size: 0.9rem;
+        }
+        .month-selector select {
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            border: 1px solid var(--ember-border);
+            background: var(--ember-bg-card);
+            color: var(--ember-text-primary);
+            font-family: inherit;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        .month-selector select:focus {
+            outline: none;
+            border-color: var(--ember-primary);
+        }
+
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .pagination a, .pagination span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 36px;
+            height: 36px;
+            padding: 0 0.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        .pagination a {
+            background: var(--ember-bg-card);
+            color: var(--ember-text-primary);
+            border: 1px solid var(--ember-border);
+        }
+        .pagination a:hover {
+            background: var(--ember-bg-elevated);
+            border-color: var(--ember-primary);
+        }
+        .pagination .current {
+            background: var(--ember-primary);
+            color: white;
+            border: 1px solid var(--ember-primary);
+        }
+        .pagination .disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        .error-card {
+            text-align: center;
+            padding: 3rem 1.5rem;
+            color: var(--ember-text-muted);
+        }
+        .error-card h2 {
+            color: var(--ember-text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        @media (max-width: 640px) {
+            .guild-icon { width: 48px; height: 48px; border-radius: 12px; }
+            .ember-dashboard-title { font-size: 1.25rem; }
+            .user-avatar { width: 28px; height: 28px; }
+            .hide-mobile { display: none; }
+            .ember-table th, .ember-table td { padding: 0.5rem; font-size: 0.8rem; }
+            .rank-badge { width: 26px; height: 26px; font-size: 0.75rem; }
+            .points-value { font-size: 0.95rem; }
+        }
+    </style>
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+        </div>
+    </nav>
+
+    <main class="ember-dashboard">
+        <div class="ember-container">
+            <% if (error && !guild) { %>
+                <!-- Full-page error -->
+                <div class="ember-card error-card">
+                    <h2>Supporters Not Found</h2>
+                    <p><%= error %></p>
+                </div>
+            <% } else if (guild) { %>
+                <!-- Guild Header -->
+                <div class="ember-dashboard-header">
+                    <div class="guild-header">
+                        <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
+                             alt="<%= guild.name %>"
+                             class="guild-icon">
+                        <div>
+                            <h1 class="ember-dashboard-title"><%= guild.name %></h1>
+                            <p class="guild-meta"><%= guild.memberCount %> members</p>
+                        </div>
+                    </div>
+                    <p class="ember-dashboard-subtitle">Community Supporters</p>
+                </div>
+
+                <% if (error) { %>
+                    <div class="ember-card error-card">
+                        <p><%= error %></p>
+                    </div>
+                <% } else { %>
+                    <!-- Month Selector -->
+                    <% if (availableMonths && availableMonths.length > 0) { %>
+                        <div class="month-selector">
+                            <label for="month-select">Month:</label>
+                            <select id="month-select" onchange="window.location.href='/supporters/<%= guild.id %>?month=' + this.value">
+                                <% availableMonths.forEach(m => { %>
+                                    <% const [y, mo] = m.split('-'); %>
+                                    <% const label = new Date(parseInt(y), parseInt(mo) - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }); %>
+                                    <option value="<%= m %>" <%= m === monthKey ? 'selected' : '' %>><%= label %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                    <% } %>
+
+                    <!-- Scoring Info -->
+                    <div class="ember-card" style="padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--ember-text-muted); display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                        <span><strong style="color: var(--ember-text-primary);">Raid Non-Affiliate:</strong> +10 pts</span>
+                        <span><strong style="color: var(--ember-primary);">Raid Affiliate:</strong> +5 pts</span>
+                        <span><strong style="color: var(--ember-text-primary);">Support:</strong> +3 pts</span>
+                    </div>
+
+                    <% if (users.length === 0) { %>
+                        <div class="ember-card error-card">
+                            <h2>No Supporters Yet</h2>
+                            <p>Raid and support other streamers to earn points and appear on the leaderboard!</p>
+                        </div>
+                    <% } else { %>
+                        <!-- Leaderboard Table -->
+                        <div class="ember-card">
+                            <table class="ember-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;">Rank</th>
+                                        <th>Member</th>
+                                        <th style="text-align: center;">Points</th>
+                                        <th style="text-align: center;" class="hide-mobile">Raids (Aff / Non-Aff)</th>
+                                        <th style="text-align: center;" class="hide-mobile">Supports</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% users.forEach((user, idx) => { %>
+                                        <% const entries = entriesByUser[user.userId] || []; %>
+                                        <tr class="expandable-row" onclick="toggleDetail('<%= idx %>')">
+                                            <td>
+                                                <span class="rank-badge <%= user.rank <= 3 ? 'rank-' + user.rank : 'rank-default' %>">
+                                                    <%= user.rank %>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div class="user-cell">
+                                                    <img src="<%= user.avatarURL %>"
+                                                         alt=""
+                                                         class="user-avatar"
+                                                         loading="lazy"
+                                                         onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                                                    <div class="user-info">
+                                                        <span class="user-display-name">
+                                                            <%= user.displayName %>
+                                                            <span class="expand-icon" id="expand-icon-<%= idx %>">&#9654;</span>
+                                                        </span>
+                                                        <% if (user.username && user.username !== user.displayName) { %>
+                                                            <span class="user-username">@<%= user.username %></span>
+                                                        <% } %>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td style="text-align: center;">
+                                                <span class="points-value"><%= user.totalPoints.toLocaleString() %></span>
+                                            </td>
+                                            <td style="text-align: center;" class="hide-mobile">
+                                                <div class="raid-breakdown">
+                                                    <span class="stat-value"><%= user.raidCount %></span>
+                                                    <% if (user.raidCount > 0) { %>
+                                                        <span><span class="raid-aff"><%= user.raidAffiliateCount %> aff</span> / <span class="raid-non-aff"><%= user.raidNonAffiliateCount %> non</span></span>
+                                                    <% } %>
+                                                </div>
+                                            </td>
+                                            <td style="text-align: center;" class="hide-mobile">
+                                                <span class="stat-value"><%= user.supportCount %></span>
+                                            </td>
+                                        </tr>
+                                        <% if (entries.length > 0) { %>
+                                        <tr class="detail-row" id="detail-<%= idx %>">
+                                            <td colspan="5" class="detail-cell">
+                                                <table class="detail-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Date</th>
+                                                            <th>Type</th>
+                                                            <th>Streamer</th>
+                                                            <th class="hide-mobile">Status</th>
+                                                            <th>Pts</th>
+                                                            <th>Proof</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <% entries.forEach(e => { %>
+                                                        <tr>
+                                                            <td><%= new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %></td>
+                                                            <td>
+                                                                <span class="entry-type <%= e.type === 'raid' ? 'entry-type-raid' : 'entry-type-support' %>">
+                                                                    <%= e.type === 'raid' ? 'Raid' : 'Support' %>
+                                                                </span>
+                                                            </td>
+                                                            <td>
+                                                                <a href="<%= e.twitchLink %>" target="_blank" rel="noopener" class="twitch-link"><%= e.target %></a>
+                                                            </td>
+                                                            <td class="hide-mobile">
+                                                                <span class="aff-badge <%= e.isAffiliate ? 'aff-badge-yes' : 'aff-badge-no' %>">
+                                                                    <%= e.isAffiliate ? 'Affiliate' : 'Non-Affiliate' %>
+                                                                </span>
+                                                            </td>
+                                                            <td>+<%= e.points %></td>
+                                                            <td>
+                                                                <a href="<%= e.messageLink %>" target="_blank" rel="noopener" class="proof-link">View</a>
+                                                            </td>
+                                                        </tr>
+                                                        <% }); %>
+                                                    </tbody>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                        <% } %>
+                                    <% }) %>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <% if (pagination && pagination.totalPages > 1) { %>
+                            <!-- Pagination -->
+                            <div class="pagination">
+                                <a href="/supporters/<%= guild.id %>?page=<%= pagination.page - 1 %>&month=<%= monthKey %>"
+                                   class="<%= pagination.page <= 1 ? 'disabled' : '' %>">
+                                    &laquo; Prev
+                                </a>
+
+                                <% for (let p = 1; p <= pagination.totalPages; p++) { %>
+                                    <% if (p === pagination.page) { %>
+                                        <span class="current"><%= p %></span>
+                                    <% } else if (Math.abs(p - pagination.page) <= 2 || p === 1 || p === pagination.totalPages) { %>
+                                        <a href="/supporters/<%= guild.id %>?page=<%= p %>&month=<%= monthKey %>"><%= p %></a>
+                                    <% } else if (Math.abs(p - pagination.page) === 3) { %>
+                                        <span style="color: var(--ember-text-muted);">...</span>
+                                    <% } %>
+                                <% } %>
+
+                                <a href="/supporters/<%= guild.id %>?page=<%= pagination.page + 1 %>&month=<%= monthKey %>"
+                                   class="<%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
+                                    Next &raquo;
+                                </a>
+                            </div>
+                        <% } %>
+
+                        <% if (pagination) { %>
+                            <p style="text-align: center; color: var(--ember-text-muted); margin-top: 0.75rem; font-size: 0.85rem;">
+                                Showing <%= (pagination.page - 1) * pagination.limit + 1 %>-<%= Math.min(pagination.page * pagination.limit, pagination.total) %> of <%= pagination.total %> supporters
+                            </p>
+                        <% } %>
+                    <% } %>
+                <% } %>
+            <% } %>
+        </div>
+    </main>
+
+    <script>
+    function toggleDetail(idx) {
+        const row = document.getElementById('detail-' + idx);
+        const icon = document.getElementById('expand-icon-' + idx);
+        if (!row) return;
+        row.classList.toggle('open');
+        if (icon) icon.classList.toggle('open');
+    }
+    </script>
+
+    <!-- Footer -->
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-copy">
+                Powered by <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFriedUtility</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

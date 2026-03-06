@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="description" content="CertiFriedUtility - A community chat bot for cannabis streamers on Twitch and Kick. Track tokes, run smoke sessions, and engage your community.">
+    <meta name="keywords" content="Twitch bot, Kick bot, cannabis bot, smoke session bot, toke tracker, stream bot">
+    <meta name="theme-color" content="#a78bfa">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/tokes-bot.css">
+</head>
+<body class="ember-page">
+    <!-- Navigation -->
+    <nav class="ember-nav">
+        <div class="ember-container ember-nav-inner">
+            <a href="/tokes-bot" class="ember-nav-brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
+                </svg>
+                CertiFriedUtility
+            </a>
+
+            <div class="ember-nav-links">
+                <a href="/tokes-bot" class="ember-nav-link active">Home</a>
+                <a href="/tokes-bot/commands" class="ember-nav-link">Commands</a>
+                <a href="/tokes-bot/leaderboards" class="ember-nav-link">Leaderboards</a>
+                <a href="/tokes-bot/status" class="ember-nav-link">Status</a>
+            </div>
+
+            <div class="ember-nav-actions">
+                <% if (user) { %>
+                    <div class="ember-nav-user">
+                        <img src="<%= user.avatar %>" alt="<%= user.name %>" class="ember-nav-avatar">
+                        <span><%= user.name %></span>
+                    </div>
+                    <a href="/tokes-bot/dashboard" class="ember-btn ember-btn-primary">Dashboard</a>
+                <% } else { %>
+                    <a href="/tokes-bot/auth/twitch" class="ember-btn ember-btn-outline">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+                        </svg>
+                        Login with Twitch
+                    </a>
+                <% } %>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="ember-hero">
+        <div class="ember-hero-bg"></div>
+        <div class="ember-container">
+            <div class="ember-hero-content">
+                <% if (error) { %>
+                    <div class="ember-alert ember-alert-error ember-mb-3">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <line x1="15" y1="9" x2="9" y2="15"/>
+                            <line x1="9" y1="9" x2="15" y2="15"/>
+                        </svg>
+                        <span>
+                            <% if (error === 'twitch_auth_denied') { %>
+                                Authentication was denied. Please try again.
+                            <% } else if (error === 'token_failed') { %>
+                                Failed to authenticate. Please try again.
+                            <% } else { %>
+                                <%= error %>
+                            <% } %>
+                        </span>
+                    </div>
+                <% } %>
+
+                <h1 class="ember-hero-title">Ignite Your Stream Community</h1>
+                <p class="ember-hero-subtitle">
+                    CertiFriedUtility brings the vibes to cannabis streaming communities on Twitch and Kick.
+                    Track tokes, run smoke sessions, compete on leaderboards, and keep your chat engaged.
+                </p>
+                <div class="ember-hero-actions">
+                    <% if (user) { %>
+                        <a href="/tokes-bot/dashboard" class="ember-btn ember-btn-primary ember-btn-lg">
+                            Open Dashboard
+                        </a>
+                    <% } else { %>
+                        <a href="/tokes-bot/auth/twitch" class="ember-btn ember-btn-primary ember-btn-lg">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+                            </svg>
+                            Connect with Twitch
+                        </a>
+                        <a href="/tokes-bot/auth/kick" class="ember-btn ember-btn-outline ember-btn-lg">
+                            Connect with Kick
+                        </a>
+                    <% } %>
+                </div>
+
+                <!-- Stats -->
+                <div class="ember-dashboard-grid ember-mt-4" style="max-width: 600px; margin-left: auto; margin-right: auto;">
+                    <div class="ember-stat-card">
+                        <div class="ember-stat-value"><%= (stats.active_channels || 0).toLocaleString() %></div>
+                        <div class="ember-stat-label">Active Channels</div>
+                    </div>
+                    <div class="ember-stat-card">
+                        <div class="ember-stat-value"><%= (stats.total_users || 0).toLocaleString() %></div>
+                        <div class="ember-stat-label">Users</div>
+                    </div>
+                    <div class="ember-stat-card">
+                        <div class="ember-stat-value"><%= (stats.total_tokes || 0).toLocaleString() %></div>
+                        <div class="ember-stat-label">Total Tokes</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section style="padding: 4rem 0;">
+        <div class="ember-container">
+            <h2 class="ember-text-center ember-mb-4" style="font-size: 2rem; font-weight: 700;">Features</h2>
+
+            <div class="ember-features">
+                <div class="ember-feature">
+                    <div class="ember-feature-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                    </div>
+                    <h3 class="ember-feature-title">Toke Tracking</h3>
+                    <p class="ember-feature-desc">
+                        Track individual and channel-wide tokes with <code>!lit</code>. Build streaks with daily claims using <code>!spark</code>.
+                    </p>
+                </div>
+
+                <div class="ember-feature">
+                    <div class="ember-feature-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                            <line x1="9" y1="9" x2="9.01" y2="9"/>
+                            <line x1="15" y1="9" x2="15.01" y2="9"/>
+                        </svg>
+                    </div>
+                    <h3 class="ember-feature-title">Smoke Sessions</h3>
+                    <p class="ember-feature-desc">
+                        Start group smoke sessions with <code>!sesh</code>. Pass the piece, take hits, and vibe with chat.
+                    </p>
+                </div>
+
+                <div class="ember-feature">
+                    <div class="ember-feature-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 20V10"/>
+                            <path d="M18 20V4"/>
+                            <path d="M6 20v-4"/>
+                        </svg>
+                    </div>
+                    <h3 class="ember-feature-title">Leaderboards</h3>
+                    <p class="ember-feature-desc">
+                        Compete for the top spot on channel and global leaderboards. Check rankings with <code>!fireboard</code>.
+                    </p>
+                </div>
+
+                <div class="ember-feature">
+                    <div class="ember-feature-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                    </div>
+                    <h3 class="ember-feature-title">Cannabis Trivia</h3>
+                    <p class="ember-feature-desc">
+                        Test your knowledge with cannabis trivia using <code>!cannatrivia</code>. Earn XP and climb the ranks.
+                    </p>
+                </div>
+
+                <div class="ember-feature">
+                    <div class="ember-feature-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </div>
+                    <h3 class="ember-feature-title">Strain Lookup</h3>
+                    <p class="ember-feature-desc">
+                        Look up strain info with <code>!strain</code>. Get effects, flavors, and lineage for thousands of strains.
+                    </p>
+                </div>
+
+                <div class="ember-feature">
+                    <div class="ember-feature-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>
+                    </div>
+                    <h3 class="ember-feature-title">Bring Your Own Bot</h3>
+                    <p class="ember-feature-desc">
+                        Use your own Twitch/Kick account - no shared credentials. Full control over your bot identity.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Commands Preview -->
+    <section style="padding: 4rem 0; background: var(--ember-bg-card);">
+        <div class="ember-container ember-container-sm">
+            <h2 class="ember-text-center ember-mb-4" style="font-size: 2rem; font-weight: 700;">Quick Commands</h2>
+
+            <div class="ember-card">
+                <table class="ember-table">
+                    <thead>
+                        <tr>
+                            <th>Command</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>!lit</code></td>
+                            <td>Add a toke, show your total</td>
+                        </tr>
+                        <tr>
+                            <td><code>!spark</code></td>
+                            <td>Daily claim with streak bonus</td>
+                        </tr>
+                        <tr>
+                            <td><code>!fireboard</code></td>
+                            <td>View channel leaderboard</td>
+                        </tr>
+                        <tr>
+                            <td><code>!sesh</code></td>
+                            <td>Start a group smoke session</td>
+                        </tr>
+                        <tr>
+                            <td><code>!strain [name]</code></td>
+                            <td>Look up strain information</td>
+                        </tr>
+                        <tr>
+                            <td><code>!elevated</code></td>
+                            <td>Random stoned thought</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="ember-text-center ember-mt-3">
+                <a href="/tokes-bot/commands" class="ember-btn ember-btn-outline">View All Commands</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="ember-footer">
+        <div class="ember-container ember-footer-inner">
+            <div class="ember-footer-links">
+                <a href="/tokes-bot/commands" class="ember-footer-link">Commands</a>
+                <a href="/tokes-bot/privacy" class="ember-footer-link">Privacy Policy</a>
+                <a href="/tokes-bot/terms" class="ember-footer-link">Terms of Service</a>
+                <a href="/tokes-bot/status" class="ember-footer-link">Status</a>
+            </div>
+            <div class="ember-footer-copy">
+                Part of <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFried MultiTool</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

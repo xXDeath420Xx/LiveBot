@@ -1,0 +1,266 @@
+<%
+const spConfig = typeof selfPromoConfig !== 'undefined' ? selfPromoConfig : {};
+const spEnabled = !!spConfig.enabled;
+const spChannelId = spConfig.channel_id || '';
+const spPlatforms = Array.isArray(spConfig.allowed_platforms) ? spConfig.allowed_platforms : ['twitch', 'kick', 'youtube'];
+%>
+
+<style>
+.sp-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(16, 185, 129, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+.sp-card-header {
+    background: rgba(16, 185, 129, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(16, 185, 129, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.sp-card-header i { font-size: 1rem; color: #10b981; }
+.sp-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #fff; margin: 0; }
+.sp-card-body { padding: 18px; }
+.sp-form-group { margin-bottom: 16px; }
+.sp-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
+.sp-form-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-top: 4px; }
+.sp-form-select {
+    width: 100%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #fff;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+}
+.sp-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(0,0,0,0.15);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+.sp-toggle-label { font-size: 0.85rem; color: rgba(255,255,255,0.8); }
+.sp-toggle-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
+.sp-checkbox-group { display: flex; gap: 12px; flex-wrap: wrap; }
+.sp-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    cursor: pointer;
+}
+.sp-checkbox-item input[type="checkbox"] { accent-color: #10b981; }
+.sp-checkbox-item label { font-size: 0.85rem; color: rgba(255,255,255,0.8); cursor: pointer; }
+.sp-save-btn {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.sp-save-btn:hover { opacity: 0.9; }
+.sp-status-msg {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    display: none;
+}
+.sp-status-msg.success { display: block; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+.sp-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+.sp-toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+}
+.sp-toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.sp-toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.1);
+    border-radius: 999px;
+    transition: 0.2s;
+}
+.sp-toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+.sp-toggle-switch input:checked + .sp-toggle-slider {
+    background: #10b981;
+}
+.sp-toggle-switch input:checked + .sp-toggle-slider::before {
+    transform: translateX(20px);
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-bullhorn"></i>
+                <span>Self-Promo</span>
+            </div>
+            <div class="page-section-subtitle">
+                Auto-track streamers who post in a designated self-promo channel
+            </div>
+        </div>
+    </div>
+
+    <div id="sp-status" class="sp-status-msg"></div>
+
+    <form id="sp-form">
+        <!-- Enable/Disable -->
+        <div class="sp-card">
+            <div class="sp-card-header">
+                <i class="fas fa-power-off"></i>
+                <h3>Enable Self-Promo</h3>
+            </div>
+            <div class="sp-card-body">
+                <div class="sp-toggle-row">
+                    <div>
+                        <div class="sp-toggle-label">Self-Promo System</div>
+                        <div class="sp-toggle-hint">Watch a channel for stream links and auto-track them</div>
+                    </div>
+                    <label class="sp-toggle-switch">
+                        <input type="checkbox" name="enabled" id="sp-enabled" <%= spEnabled ? 'checked' : '' %>>
+                        <span class="sp-toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Channel Config -->
+        <div class="sp-card">
+            <div class="sp-card-header">
+                <i class="fas fa-hashtag"></i>
+                <h3>Channel & Platforms</h3>
+            </div>
+            <div class="sp-card-body">
+                <div class="sp-form-group">
+                    <label class="sp-form-label">Self-Promo Channel</label>
+                    <select name="channel_id" class="sp-form-select">
+                        <option value="">Select a channel...</option>
+                        <% channels.forEach(ch => { %>
+                            <option value="<%= ch.id %>" <%= spChannelId === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                        <% }); %>
+                    </select>
+                    <div class="sp-form-hint">Messages in this channel will be processed for stream links</div>
+                </div>
+
+                <div class="sp-form-group">
+                    <label class="sp-form-label">Allowed Platforms</label>
+                    <div class="sp-checkbox-group">
+                        <% ['twitch', 'kick', 'youtube'].forEach(p => { %>
+                            <div class="sp-checkbox-item">
+                                <input type="checkbox" name="platform_<%= p %>" id="sp-platform-<%= p %>" <%= spPlatforms.includes(p) ? 'checked' : '' %>>
+                                <label for="sp-platform-<%= p %>"><%= p.charAt(0).toUpperCase() + p.slice(1) %></label>
+                            </div>
+                        <% }); %>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Behavior Toggles -->
+        <div class="sp-card">
+            <div class="sp-card-header">
+                <i class="fas fa-sliders-h"></i>
+                <h3>Behavior</h3>
+            </div>
+            <div class="sp-card-body">
+                <div class="sp-toggle-row">
+                    <div>
+                        <div class="sp-toggle-label">Auto-Subscribe</div>
+                        <div class="sp-toggle-hint">Automatically create streamer + subscription when a valid link is posted</div>
+                    </div>
+                    <input type="checkbox" name="auto_subscribe" <%= spConfig.auto_subscribe !== 0 ? 'checked' : '' %> style="accent-color: #10b981;">
+                </div>
+                <div class="sp-toggle-row">
+                    <div>
+                        <div class="sp-toggle-label">Delete Invalid Messages</div>
+                        <div class="sp-toggle-hint">Delete messages that don't contain a valid stream link</div>
+                    </div>
+                    <input type="checkbox" name="delete_invalid" <%= spConfig.delete_invalid !== 0 ? 'checked' : '' %> style="accent-color: #10b981;">
+                </div>
+                <div class="sp-toggle-row">
+                    <div>
+                        <div class="sp-toggle-label">DM on Track</div>
+                        <div class="sp-toggle-hint">Send a DM when a user is added to stream tracking</div>
+                    </div>
+                    <input type="checkbox" name="dm_on_track" <%= spConfig.dm_on_track !== 0 ? 'checked' : '' %> style="accent-color: #10b981;">
+                </div>
+                <div class="sp-toggle-row">
+                    <div>
+                        <div class="sp-toggle-label">DM if Already Tracked</div>
+                        <div class="sp-toggle-hint">DM the user if they post a link for an already-tracked account</div>
+                    </div>
+                    <input type="checkbox" name="dm_on_already_tracked" <%= spConfig.dm_on_already_tracked !== 0 ? 'checked' : '' %> style="accent-color: #10b981;">
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="sp-save-btn">
+            <i class="fas fa-save"></i> Save Self-Promo Config
+        </button>
+    </form>
+</div>
+
+<script>
+document.getElementById('sp-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = document.getElementById('sp-status');
+    const platforms = [];
+    ['twitch', 'kick', 'youtube'].forEach(p => {
+        if (document.getElementById('sp-platform-' + p).checked) platforms.push(p);
+    });
+    const body = {
+        enabled: document.getElementById('sp-enabled').checked,
+        channel_id: e.target.channel_id.value || null,
+        allowed_platforms: platforms,
+        auto_subscribe: e.target.auto_subscribe.checked,
+        delete_invalid: e.target.delete_invalid.checked,
+        dm_on_track: e.target.dm_on_track.checked,
+        dm_on_already_tracked: e.target.dm_on_already_tracked.checked
+    };
+    try {
+        const res = await fetch('/api/guilds/<%= guild.id %>/self-promo/config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        status.textContent = data.success ? 'Self-promo config saved!' : (data.error || 'Failed to save');
+        status.className = 'sp-status-msg ' + (data.success ? 'success' : 'error');
+    } catch (err) {
+        status.textContent = 'Network error';
+        status.className = 'sp-status-msg error';
+    }
+});
+</script>

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CertiFried - Cannabis Tycoon</title>
+    <meta name="description" content="Grow, breed, and trade cannabis strains in this idle tycoon game">
+    <meta name="theme-color" content="#111827">
+
+    <link rel="stylesheet" href="/cfx-api/dist/main.css?v=1770075434">
+
+    <!-- PWA Meta -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/cfx-api/dist/favicon.ico">
+    <link rel="apple-touch-icon" href="/cfx-api/dist/CertiFried.png">
+
+    <style>
+        /* Critical CSS for initial render */
+        html, body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: #111827;
+            color: #f9fafb;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .cf-loading-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 24px;
+        }
+
+        .cf-loading-screen__logo {
+            width: 80px;
+            height: 80px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .cf-loading-screen__title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #22c55e;
+        }
+
+        .cf-loading-screen__spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #374151;
+            border-top-color: #22c55e;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Login screen */
+        .cf-login {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 32px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .cf-login__logo {
+            width: 96px;
+            height: 96px;
+        }
+
+        .cf-login__title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #22c55e;
+            margin-bottom: 8px;
+        }
+
+        .cf-login__subtitle {
+            color: #9ca3af;
+            font-size: 14px;
+        }
+
+        .cf-login__buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 100%;
+            max-width: 280px;
+        }
+
+        .cf-login__btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 14px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .cf-login__btn--twitch {
+            background: #9146ff;
+            color: white;
+        }
+
+        .cf-login__btn--twitch:hover {
+            background: #7c3aed;
+        }
+
+        .cf-login__btn--kick {
+            background: #53fc18;
+            color: black;
+        }
+
+        .cf-login__btn--kick:hover {
+            background: #4ae316;
+        }
+
+        .cf-login__btn svg {
+            width: 20px;
+            height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading screen -->
+    <div class="cf-loading-screen" id="loading-screen">
+        <img class="cf-loading-screen__logo" src="/cfx-api/dist/CertiFried.png" alt="CertiFried Logo">
+        <div class="cf-loading-screen__title">CertiFried</div>
+        <div class="cf-loading-screen__spinner"></div>
+    </div>
+
+    <!-- Login screen (standalone only) -->
+    <div class="cf-login" id="login-screen">
+        <img class="cf-login__logo" src="/cfx-api/dist/CertiFried.png" alt="CertiFried Logo">
+        <div>
+            <h1 class="cf-login__title">CertiFried</h1>
+            <p class="cf-login__subtitle">Cannabis Tycoon Game</p>
+        </div>
+        <div class="cf-login__buttons">
+            <button class="cf-login__btn cf-login__btn--twitch" id="login-twitch">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>
+                </svg>
+                Continue with Twitch
+            </button>
+            <button class="cf-login__btn cf-login__btn--kick" id="login-kick">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                Continue with Kick
+            </button>
+        </div>
+    </div>
+
+    <!-- App root -->
+    <div id="app" class="cf-app cf-app--standalone" style="display: none;">
+        <cf-header></cf-header>
+        <cf-nav></cf-nav>
+        <cf-app-container></cf-app-container>
+        <cf-strain-selector></cf-strain-selector>
+        <cf-toast-container></cf-toast-container>
+        <cf-tutorial></cf-tutorial>
+        <cf-offline-progress></cf-offline-progress>
+    </div>
+
+    <!-- App Bundle - Uses blob URL workaround for ES module loading -->
+    <script>
+        (async function() {
+            try {
+                // Fetch the module as text (bypasses ES module blocking)
+                const response = await fetch('/cfx-api/dist/app.js?v=' + Date.now());
+                if (!response.ok) throw new Error('Failed to fetch app: ' + response.status);
+
+                const code = await response.text();
+                const blob = new Blob([code], { type: 'application/javascript' });
+                const blobUrl = URL.createObjectURL(blob);
+
+                // Import from blob URL
+                const { app, store } = await import(blobUrl);
+                URL.revokeObjectURL(blobUrl);
+
+                // Show appropriate screen based on auth state
+                function updateScreen() {
+                    const isAuthenticated = store.get('auth.isAuthenticated');
+                    const loading = document.getElementById('loading-screen');
+                    const login = document.getElementById('login-screen');
+                    const appEl = document.getElementById('app');
+
+                    loading.style.display = 'none';
+
+                    if (isAuthenticated) {
+                        login.style.display = 'none';
+                        appEl.style.display = 'flex';
+                    } else {
+                        login.style.display = 'flex';
+                        appEl.style.display = 'none';
+                    }
+                }
+
+                // OAuth button handlers
+                document.getElementById('login-twitch').addEventListener('click', () => {
+                    app.startOAuth('twitch');
+                });
+
+                document.getElementById('login-kick').addEventListener('click', () => {
+                    app.startOAuth('kick');
+                });
+
+                // Listen for auth changes
+                store.subscribe('auth.isAuthenticated', updateScreen);
+
+                // Check for OAuth token from popup (localStorage fallback)
+                async function checkOAuthToken() {
+                    const oauthToken = localStorage.getItem('cfx_oauth_token');
+                    if (oauthToken) {
+                        console.log('[CFX] Found OAuth token in localStorage');
+                        localStorage.removeItem('cfx_oauth_token');
+                        localStorage.setItem('cfx_token', oauthToken);
+
+                        // Set token but NOT isAuthenticated yet
+                        store.merge('auth', { token: oauthToken });
+
+                        try {
+                            await app._loadGameState();
+                            await app._connectWebSocket();
+                            // Only set authenticated AFTER game state loads
+                            store.set('auth.isAuthenticated', true);
+                        } catch (err) {
+                            console.error('[CFX] Post-auth error:', err);
+                            // Clear token on failure
+                            localStorage.removeItem('cfx_token');
+                            store.merge('auth', { token: null, isAuthenticated: false });
+                            alert('Failed to load game. Please try logging in again.');
+                        }
+                        updateScreen();
+                    }
+                }
+
+                // Check on window focus (when returning from popup)
+                window.addEventListener('focus', checkOAuthToken);
+
+                // Initial screen update once app is ready
+                document.addEventListener('cfx:ready', () => {
+                    checkOAuthToken();
+                    setTimeout(updateScreen, 100);
+                });
+
+                // Also update screen immediately in case cfx:ready already fired
+                setTimeout(updateScreen, 200);
+
+            } catch (err) {
+                console.error('[CFX] Failed to load app:', err);
+                const loading = document.getElementById('loading-screen');
+                loading.querySelector('.cf-loading-screen__spinner').style.display = 'none';
+                loading.querySelector('.cf-loading-screen__title').textContent = 'Failed to load';
+                loading.querySelector('.cf-loading-screen__title').style.color = '#ef4444';
+            }
+        })();
+    </script>
+</body>
+</html>

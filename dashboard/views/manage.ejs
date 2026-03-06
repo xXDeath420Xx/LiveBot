@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage <%= guild.name %> - CertiFried MultiTool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/unified-dark-theme.css">
+    <link rel="stylesheet" href="/css/loading-states.css">
+    <style>
+        .sidebar {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .sidebar .nav-link {
+            color: rgba(255, 255, 255, 0.7);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 5px;
+            transition: all 0.3s ease;
+        }
+        .sidebar .nav-link:hover,
+        .sidebar .nav-link.active {
+            background: rgba(233, 69, 96, 0.2);
+            color: #fff;
+        }
+        .sidebar-heading {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+            padding-left: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<%- include('partials/header', { user: user }) %>
+<%- include('partials/loading') %>
+
+<main class="page-container">
+    <div class="page-header d-flex align-items-center gap-3 mb-4">
+        <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" class="rounded-circle" width="64" height="64" alt="">
+        <div>
+            <h1 class="mb-0"><%= guild.name %></h1>
+            <a href="/servers" class="text-muted small text-decoration-none"><i class="fas fa-arrow-left me-1"></i>Back to Servers</a>
+        </div>
+    </div>
+
+    <div class="d-flex gap-4">
+        <aside class="sidebar" style="width: 240px; flex-shrink: 0;">
+            <nav class="nav flex-column">
+                <h6 class="sidebar-heading">Core</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/streamers"><i class="fas fa-users fa-fw"></i> Streamers</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/teams"><i class="fas fa-user-friends fa-fw"></i> Teams</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/appearance"><i class="fas fa-paint-brush fa-fw"></i> Appearance</a>
+
+                <h6 class="sidebar-heading">Community</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/welcome"><i class="fas fa-hand-sparkles fa-fw"></i> Welcome</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/reaction-roles"><i class="fas fa-smile-beam fa-fw"></i> Reaction Roles</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/starboard"><i class="fas fa-star fa-fw"></i> Starboard</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/leveling"><i class="fas fa-trophy fa-fw"></i> Leveling</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/giveaways"><i class="fas fa-gift fa-fw"></i> Giveaways</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/polls"><i class="fas fa-poll fa-fw"></i> Polls</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/suggestions"><i class="fas fa-lightbulb fa-fw"></i> Suggestions</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/music"><i class="fas fa-music fa-fw"></i> Music</a>
+
+                <h6 class="sidebar-heading">Economy & Games</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/economy"><i class="fas fa-coins fa-fw"></i> Economy</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/games"><i class="fas fa-gamepad fa-fw"></i> Games</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/gambling"><i class="fas fa-dice fa-fw"></i> Gambling</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/trading"><i class="fas fa-exchange-alt fa-fw"></i> Trading</a>
+
+                <h6 class="sidebar-heading">Moderation</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/moderation"><i class="fas fa-shield-alt fa-fw"></i> Moderation</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/automod"><i class="fas fa-robot fa-fw"></i> AutoMod</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/security"><i class="fas fa-lock fa-fw"></i> Security</a>
+
+                <h6 class="sidebar-heading">Analytics</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/stat-roles"><i class="fas fa-chart-line fa-fw"></i> Stat Roles</a>
+
+                <h6 class="sidebar-heading">Logging & Feeds</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/logging"><i class="fas fa-file-alt fa-fw"></i> Logging</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/feeds"><i class="fas fa-rss fa-fw"></i> Feeds</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/twitch-schedules"><i class="fab fa-twitch fa-fw"></i> Twitch Schedules</a>
+
+                <h6 class="sidebar-heading">Utility</h6>
+                <a class="nav-link" href="/manage/<%= guild.id %>/utilities"><i class="fas fa-wrench fa-fw"></i> General Utilities</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/custom-commands"><i class="fas fa-terminal fa-fw"></i> Custom Commands</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/forms"><i class="fas fa-file-alt fa-fw"></i> Forms</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/tickets"><i class="fas fa-ticket-alt fa-fw"></i> Tickets</a>
+                <a class="nav-link" href="/manage/<%= guild.id %>/backups"><i class="fas fa-save fa-fw"></i> Backups</a>
+            </nav>
+        </aside>
+
+        <div class="main-content flex-grow-1">
+            <div class="content-card">
+                <%
+                const pageMap = {
+                    'streamers': { partial: 'streamers', data: { guild, streamers: consolidatedStreamers, roles, channels, settings } },
+                    'teams': { partial: 'teams', data: { guild, teamSubscriptions, roles, channels } },
+                    'appearance': { partial: 'appearance', data: { guild, settings } },
+                    'welcome': { partial: 'welcome', data: { guild, settings: welcomeSettings, channels } },
+                    'reaction-roles': { partial: 'reaction-roles', data: { guild, panels: reactionRolePanels, roles, channels } },
+                    'starboard': { partial: 'starboard', data: { guild, settings: starboardConfig, channels } },
+                    'leveling': { partial: 'leveling', data: { guild, settings, rewards: roleRewards, roles, channels } },
+                    'giveaways': { partial: 'giveaways', data: { guild, giveaways, channels } },
+                    'polls': { partial: 'polls', data: { guild, polls, channels } },
+                    'suggestions': { partial: 'suggestions', data: { guild, suggestions, suggestionConfig, suggestionStats, suggestionTags, channels, roles } },
+                    'music': { partial: 'music', data: { guild, settings: musicConfig, roles, channels, voiceChannels } },
+                    'economy': { partial: 'economy', data: { guild, economyConfig, shopItems, economyStats, topUsers } },
+                    'games': { partial: 'games', data: { guild, triviaQuestions, hangmanWords, countingChannels, gameStats } },
+                    'gambling': { partial: 'gambling', data: { guild, gamblingConfig, gamblingHistory, gamblingStats, topGamblers } },
+                    'trading': { partial: 'trading', data: { guild, activeTrades, tradeHistory, tradeStats } },
+                    'moderation': { partial: 'moderation', data: { guild, settings: moderationConfig, infractions: recentInfractions, escalationRules: escalationRules, roles } },
+                    'automod': { partial: 'automod', data: { guild, rules: automodRules, heatConfig } },
+                    'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles } },
+                    'stat-roles': { partial: 'stat-roles', data: { guild, statroles: statroleConfigs, roles } },
+                    'logging': { partial: 'logging', data: { guild, settings: logConfig, actionLogs, channels, channelSettingsMap: channelSettingsMap } },
+                    'feeds': { partial: 'feeds', data: { guild, redditFeeds, youtubeFeeds, twitterFeeds, channels } },
+                    'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
+                    'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
+                    'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
+                    'forms': { partial: 'forms', data: { guild, forms, channels } },
+                    'tickets': { partial: 'tickets', data: { guild, settings: ticketConfig, forms: ticketFormsList, categories, roles } },
+                    'backups': { partial: 'backups', data: { guild, backups } }
+                };
+                const activePage = pageMap[page] || pageMap['streamers'];
+                %>
+                <%- include(`partials/manage/${activePage.partial}`, activePage.data) %>
+            </div>
+        </div>
+    </div>
+</main>
+
+<%- include('partials/manage/add-team-modal', { guild, channels, roles }) %>
+<%- include('partials/footer') %>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/loading-manager.js"></script>
+<script>
+    /**
+     * Manage Page - Loading State Management
+     */
+    document.addEventListener('DOMContentLoaded', () => {
+        // Update active link in sidebar
+        const currentPage = '<%= page %>';
+        const navLinks = document.querySelectorAll('.sidebar .nav-link');
+        navLinks.forEach(link => {
+            if (link.getAttribute('href').endsWith(currentPage)) {
+                link.classList.add('active');
+            }
+        });
+
+        // Setup form loading states
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                // Only show loading if form is not marked as no-loading
+                if (!this.dataset.noLoading) {
+                    loadingManager.showFormLoading(this);
+                }
+            });
+        });
+
+        // Setup navigation loading states
+        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                // Only show loading if not an anchor link
+                if (!link.href.includes('#')) {
+                    loadingManager.showPageLoading('Loading page...');
+                }
+            });
+        });
+
+        // Handle back to servers link
+        const backLink = document.querySelector('a[href="/servers"]');
+        if (backLink) {
+            backLink.addEventListener('click', (e) => {
+                loadingManager.showPageLoading('Loading servers...');
+            });
+        }
+
+        // Setup form submission with error handling
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                // Optional: add form validation with loading state
+                if (typeof validateForm === 'function' && !validateForm(this)) {
+                    e.preventDefault();
+                    loadingManager.showToast('Please fix the errors in the form', 'warning');
+                }
+            });
+        });
+
+        console.log('✅ Manage page initialized with loading states');
+    });
+</script>
+
+<!-- Global dark-mode form text fix — loaded last to guarantee override -->
+<style>
+    .form-control,
+    .form-select,
+    textarea,
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="url"],
+    input[type="search"] {
+        color: #fff !important;
+        background-color: rgba(0, 0, 0, 0.4) !important;
+        border-color: rgba(255, 255, 255, 0.15) !important;
+    }
+    .form-control:focus,
+    .form-select:focus,
+    textarea:focus,
+    input:focus {
+        color: #fff !important;
+        background-color: rgba(0, 0, 0, 0.5) !important;
+    }
+    .form-control::placeholder,
+    textarea::placeholder,
+    input::placeholder {
+        color: rgba(255, 255, 255, 0.4) !important;
+    }
+</style>
+
+</body>
+</html>

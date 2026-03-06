@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Select a server to manage with CertiFried MultiTool. Configure stream notifications, moderation, and more.">
+    <meta name="theme-color" content="#a78bfa">
+    <meta property="og:title" content="Servers - CertiFried MultiTool">
+    <meta property="og:description" content="Select a server to manage with CertiFried MultiTool.">
+    <meta property="og:image" content="/images/CertiFried.png">
+    <title>Dashboard - CertiFried MultiTool</title>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-secondary: #0f1316;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-blue: #60a5fa;
+            --accent-cyan: #22d3ee;
+            --accent-green: #23f56b;
+            --accent-red: #f87171;
+            --accent-yellow: #fbbf24;
+            --accent-orange: #fb923c;
+        }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; line-height: 1.6; }
+        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; animation: float 20s ease-in-out infinite; }
+        .orb-1 { width: clamp(300px, 40vw, 500px); height: clamp(300px, 40vw, 500px); background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -10%; left: -10%; }
+        .orb-2 { width: clamp(250px, 35vw, 450px); height: clamp(250px, 35vw, 450px); background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: 10%; right: -10%; animation-delay: -10s; }
+        @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(20px, 20px) scale(1.02); } }
+        .container { width: 100%; max-width: 1400px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
+        /* Navbar */
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
+        .navbar-logo { width: 36px; height: 36px; aspect-ratio: 1/1; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover, .navbar-links a.active { color: var(--text-primary); }
+        .user-menu-container { position: relative; }
+        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50px; cursor: pointer; transition: all 0.2s; }
+        .user-menu:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
+        .user-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+        .user-name { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+        .user-menu-chevron { font-size: 0.7rem; color: var(--text-muted); transition: transform 0.2s; }
+        .user-menu-container.open .user-menu-chevron { transform: rotate(180deg); }
+        .user-dropdown { position: absolute; top: calc(100% + 8px); right: 0; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s ease; z-index: 1001; overflow: hidden; }
+        .user-menu-container.open .user-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+        .dropdown-header { padding: 1rem; border-bottom: 1px solid var(--border-color); }
+        .dropdown-user-info { font-size: 0.8rem; color: var(--text-muted); }
+        .dropdown-divider { height: 1px; background: var(--border-color); margin: 0.5rem 0; }
+        .dropdown-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: all 0.15s; }
+        .dropdown-item:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+        .dropdown-item i { width: 18px; text-align: center; }
+        .dropdown-item.text-warning { color: var(--accent-yellow); }
+        .dropdown-item.text-warning:hover { background: rgba(251, 191, 36, 0.1); }
+        .dropdown-item.text-danger { color: var(--accent-red); }
+        .dropdown-item.text-danger:hover { background: rgba(248, 113, 113, 0.1); }
+        /* Main */
+        main { position: relative; z-index: 1; padding: 100px 0 4rem; min-height: 100vh; }
+        /* Page Header */
+        .page-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1.5rem; margin-bottom: 2rem; }
+        .page-header h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .page-header p { color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem; }
+        .invite-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; }
+        .invite-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(167, 139, 250, 0.4); }
+        .invite-btn svg { width: 18px; height: 18px; }
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem; display: flex; align-items: center; gap: 1rem; transition: all 0.3s; backdrop-filter: blur(10px); }
+        .stat-card:hover { border-color: var(--stat-color, var(--accent-purple)); transform: translateY(-2px); }
+        .stat-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .stat-icon svg { width: 22px; height: 22px; }
+        .stat-value { font-size: 1.35rem; font-weight: 700; color: var(--text-primary); }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+        .stat-purple { --stat-color: var(--accent-purple); }
+        .stat-purple .stat-icon { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
+        .stat-cyan { --stat-color: var(--accent-cyan); }
+        .stat-cyan .stat-icon { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); }
+        .stat-gray { --stat-color: rgba(255,255,255,0.3); }
+        .stat-gray .stat-icon { background: rgba(255, 255, 255, 0.1); color: var(--text-muted); }
+        .stat-red { --stat-color: var(--accent-red); }
+        .stat-red .stat-icon { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+        .stat-amber { --stat-color: var(--accent-yellow); }
+        .stat-amber .stat-icon { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); }
+        .stat-green { --stat-color: var(--accent-green); }
+        .stat-green .stat-icon { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
+        /* Search */
+        .search-bar { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+        .search-wrapper { position: relative; flex: 1; min-width: 200px; }
+        .search-icon { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; color: var(--text-muted); }
+        .search-input { width: 100%; padding: 0.875rem 1rem 0.875rem 3rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 0.95rem; font-family: inherit; transition: all 0.2s; }
+        .search-input::placeholder { color: var(--text-muted); }
+        .search-input:focus { outline: none; border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15); }
+        .search-count { display: flex; align-items: center; gap: 0.5rem; padding: 0 1.25rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; }
+        /* Server Grid */
+        .server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 1.5rem; }
+        .server-card { display: block; text-decoration: none; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; transition: all 0.3s; backdrop-filter: blur(10px); }
+        .server-card:hover { border-color: var(--accent-purple); transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 30px rgba(167, 139, 250, 0.1); }
+        .server-card-header { padding: 1.5rem; display: flex; align-items: flex-start; gap: 1rem; }
+        .server-icon { position: relative; flex-shrink: 0; }
+        .server-icon img, .server-icon .initials { width: 60px; height: 60px; border-radius: 14px; object-fit: cover; border: 2px solid var(--border-color); transition: border-color 0.3s; }
+        .server-card:hover .server-icon img, .server-card:hover .server-icon .initials { border-color: rgba(167, 139, 250, 0.5); }
+        .server-icon .initials { display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 700; color: white; }
+        .server-icon .status { position: absolute; bottom: -2px; right: -2px; width: 18px; height: 18px; background: var(--accent-green); border-radius: 50%; border: 3px solid var(--bg-primary); }
+        .server-info { flex: 1; min-width: 0; }
+        .server-name { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .server-id { font-size: 0.75rem; color: var(--text-muted); font-family: 'SF Mono', monospace; }
+        .server-stats { padding: 0 1.5rem 1.25rem; display: flex; flex-wrap: wrap; gap: 1rem; }
+        .server-stat { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-secondary); }
+        .server-stat svg { width: 16px; height: 16px; }
+        .server-stat.live { color: var(--accent-red); font-weight: 600; }
+        .server-stat.live .pulse { width: 8px; height: 8px; background: var(--accent-red); border-radius: 50%; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .server-card-footer { padding: 0.875rem 1.5rem; background: rgba(0, 0, 0, 0.2); border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; }
+        .server-badge { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: inline-flex; align-items: center; }
+        .server-badge.security-on { color: var(--accent-green); }
+        .server-badge.security-off { color: #f87171; }
+        .server-arrow { width: 18px; height: 18px; color: var(--text-muted); transition: all 0.3s; }
+        .server-card:hover .server-arrow { color: var(--accent-purple); transform: translateX(4px); }
+        /* Empty State */
+        .empty-state { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 20px; padding: 4rem 2rem; text-align: center; }
+        .empty-icon { width: 80px; height: 80px; margin: 0 auto 1.5rem; background: linear-gradient(135deg, rgba(167, 139, 250, 0.15), rgba(96, 165, 250, 0.15)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 20px; display: flex; align-items: center; justify-content: center; }
+        .empty-icon svg { width: 40px; height: 40px; color: var(--accent-purple); }
+        .empty-state h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
+        .empty-state p { color: var(--text-secondary); max-width: 400px; margin: 0 auto 2rem; }
+        .empty-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.875rem 1.5rem; border-radius: 12px; font-size: 0.9rem; font-weight: 600; text-decoration: none; transition: all 0.2s; }
+        .btn svg { width: 18px; height: 18px; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(167, 139, 250, 0.4); }
+        .btn-secondary { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); }
+        .btn-secondary:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
+        /* No Results */
+        .no-results { display: none; text-align: center; padding: 4rem 2rem; }
+        .no-results.visible { display: block; }
+        .no-results svg { width: 64px; height: 64px; color: var(--text-muted); margin: 0 auto 1rem; }
+        .no-results h3 { font-size: 1.25rem; margin-bottom: 0.5rem; color: var(--text-secondary); }
+        .no-results p { color: var(--text-muted); }
+        /* Footer */
+        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 2rem; }
+        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
+        .footer-link:hover { color: var(--accent-purple); }
+        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
+        /* Mobile Menu */
+        .mobile-menu-btn { display: none; background: transparent; border: none; color: var(--text-primary); font-size: 1.25rem; cursor: pointer; padding: 0.5rem; z-index: 1001; }
+        .mobile-menu { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(11, 15, 17, 0.98); backdrop-filter: blur(20px); z-index: 999; padding-top: 80px; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
+        .mobile-menu.active { display: block; opacity: 1; visibility: visible; }
+        .mobile-menu-inner { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; padding: 2rem; }
+        .mobile-menu-link { color: var(--text-primary); text-decoration: none; font-size: 1.25rem; font-weight: 600; padding: 0.75rem 1.5rem; }
+        .mobile-menu-link:hover { color: var(--accent-purple); }
+        .mobile-menu-divider { width: 60%; max-width: 200px; height: 1px; background: var(--border-color); margin: 0.5rem 0; }
+        /* Responsive */
+        @media (max-width: 768px) {
+            .mobile-menu-btn { display: block; }
+            .navbar-links { display: none; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .search-bar { flex-direction: column; }
+            .search-count { justify-content: center; padding: 0.875rem 1rem; }
+            .footer-links { flex-direction: column; gap: 0.75rem; }
+        }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-content">
+                <a href="/" class="navbar-brand">
+                    <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                    <span>CertiFried</span>
+                </a>
+                <div class="navbar-links">
+                    <a href="/">Home</a>
+                    <a href="/commands">Commands</a>
+                    <a href="/status">Status</a>
+                    <a href="/dashboard" class="active">Dashboard</a>
+                </div>
+                <% if (user) { %>
+                <div class="user-menu-container" id="userMenuContainer">
+                    <div class="user-menu" id="userMenuBtn">
+                        <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png" alt="" class="user-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                        <span class="user-name"><%= user.username %></span>
+                        <i class="fas fa-chevron-down user-menu-chevron"></i>
+                    </div>
+                    <div class="user-dropdown">
+                        <div class="dropdown-header">
+                            <div class="dropdown-user-info">Signed in as <strong><%= user.username %></strong></div>
+                        </div>
+                        <a href="/profile" class="dropdown-item">
+                            <i class="fas fa-user"></i>
+                            <span>Profile</span>
+                        </a>
+                        <a href="/servers" class="dropdown-item">
+                            <i class="fas fa-server"></i>
+                            <span>My Servers</span>
+                        </a>
+                        <% if (user.isSuperAdmin || user.canCreateBots) { %>
+                        <div class="dropdown-divider"></div>
+                        <% } %>
+                        <% if (user.canCreateBots || user.isSuperAdmin) { %>
+                        <a href="/bot-management" class="dropdown-item text-warning">
+                            <i class="fas fa-robot"></i>
+                            <span>Bot Management</span>
+                        </a>
+                        <% } %>
+                        <% if (user.isSuperAdmin) { %>
+                        <a href="/super-admin" class="dropdown-item text-warning">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Super Admin</span>
+                        </a>
+                        <% } %>
+                        <div class="dropdown-divider"></div>
+                        <a href="/logout" class="dropdown-item text-danger">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span>Log Out</span>
+                        </a>
+                    </div>
+                </div>
+                <% } else { %>
+                <a href="/auth/discord" class="user-menu">
+                    <i class="fab fa-discord"></i>
+                    <span class="user-name">Login</span>
+                </a>
+                <% } %>
+                <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle mobile menu">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="mobile-menu-inner">
+            <a href="/" class="mobile-menu-link">Home</a>
+            <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/status" class="mobile-menu-link">Status</a>
+            <a href="/dashboard" class="mobile-menu-link">Dashboard</a>
+            <div class="mobile-menu-divider"></div>
+            <% if (user) { %>
+            <div class="user-menu">
+                <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png" alt="" class="user-avatar">
+                <span class="user-name"><%= user.username %></span>
+            </div>
+            <% } %>
+        </div>
+    </div>
+
+    <main>
+        <div class="container">
+            <%
+            const serverList = typeof guilds !== 'undefined' ? guilds : (typeof manageableGuilds !== 'undefined' ? manageableGuilds : []);
+            const humanMembers = typeof totalHumanMembers !== 'undefined' ? totalHumanMembers : (typeof totalMembers !== 'undefined' ? totalMembers : 0);
+            const botCount = typeof totalBots !== 'undefined' ? totalBots : 0;
+            const liveStreams = typeof totalLiveStreams !== 'undefined' ? totalLiveStreams : 0;
+            const streamersTracked = typeof totalStreamersTracked !== 'undefined' ? totalStreamersTracked : 0;
+            %>
+
+            <!-- Page Header -->
+            <div class="page-header">
+                <div>
+                    <h1>Dashboard</h1>
+                    <p>Select a server to manage its settings and configuration</p>
+                </div>
+                <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.clientId || '#' %>&permissions=8&scope=bot+applications.commands" target="_blank" class="invite-btn">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                    Invite Bot
+                </a>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card stat-purple">
+                    <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg></div>
+                    <div><div class="stat-value"><%= serverList.length %></div><div class="stat-label">Servers</div></div>
+                </div>
+                <div class="stat-card stat-cyan">
+                    <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg></div>
+                    <div><div class="stat-value"><%= humanMembers.toLocaleString() %></div><div class="stat-label">Members</div></div>
+                </div>
+                <div class="stat-card stat-gray">
+                    <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg></div>
+                    <div><div class="stat-value"><%= botCount.toLocaleString() %></div><div class="stat-label">Bots</div></div>
+                </div>
+                <div class="stat-card stat-red">
+                    <div class="stat-icon"><svg fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"/></svg></div>
+                    <div><div class="stat-value" style="display:flex;align-items:center;gap:0.5rem;"><%= liveStreams %><% if (liveStreams > 0) { %><span style="width:8px;height:8px;background:var(--accent-red);border-radius:50%;animation:pulse 2s infinite;"></span><% } %></div><div class="stat-label">Live Now</div></div>
+                </div>
+                <div class="stat-card stat-amber">
+                    <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg></div>
+                    <div><div class="stat-value"><%= streamersTracked %></div><div class="stat-label">Streamers</div></div>
+                </div>
+                <div class="stat-card stat-green">
+                    <div class="stat-icon"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+                    <div><div class="stat-value"><%= serverList.length %></div><div class="stat-label">Active</div></div>
+                </div>
+            </div>
+
+            <% if (serverList.length > 0) { %>
+            <!-- Search Bar -->
+            <div class="search-bar">
+                <div class="search-wrapper">
+                    <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    <input type="text" id="serverSearch" class="search-input" placeholder="Search servers by name...">
+                </div>
+                <div class="search-count">
+                    <span id="serverCount"><%= serverList.length %></span>
+                    <span>servers</span>
+                </div>
+            </div>
+
+            <!-- Server Grid -->
+            <div class="server-grid" id="serverGrid">
+                <% serverList.forEach(guild => { %>
+                <a href="/manage/<%= guild.id %>" class="server-card" data-server-name="<%= guild.name.toLowerCase() %>">
+                    <div class="server-card-header">
+                        <div class="server-icon">
+                            <% if (guild.icon) { %>
+                            <img src="https://cdn.discordapp.com/icons/<%= guild.id %>/<%= guild.icon %>.webp?size=128" alt="<%= guild.name %>">
+                            <% } else { %>
+                            <%
+                            const initials = guild.name.split(/\s+/).filter(w => w.length > 0).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                            const colors = ['#a78bfa', '#60a5fa', '#22d3ee', '#34d399', '#fbbf24', '#f87171'];
+                            const bgColor = colors[parseInt(guild.id.slice(-2), 10) % colors.length];
+                            %>
+                            <div class="initials" style="background: <%= bgColor %>"><%= initials %></div>
+                            <% } %>
+                            <div class="status"></div>
+                        </div>
+                        <div class="server-info">
+                            <div class="server-name"><%= guild.name %></div>
+                            <div class="server-id">ID: <%= guild.id %></div>
+                        </div>
+                    </div>
+                    <div class="server-stats">
+                        <div class="server-stat">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--accent-cyan)"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            <%= (guild.memberCount || 0).toLocaleString() %>
+                        </div>
+                        <div class="server-stat" style="color:var(--text-muted)">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                            <%= (guild.botCount || 0).toLocaleString() %>
+                        </div>
+                        <% if (guild.liveCount > 0) { %>
+                        <div class="server-stat live">
+                            <span class="pulse"></span>
+                            <%= guild.liveCount %> live
+                        </div>
+                        <% } %>
+                    </div>
+                    <div class="server-card-footer">
+                        <% if (guild.hasAnySecurity) { %>
+                        <span class="server-badge security-on" title="<%= guild.securityFeatures.join(', ') %>">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:12px;height:12px;margin-right:3px;vertical-align:-1px"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                            Protected
+                        </span>
+                        <% } else { %>
+                        <span class="server-badge security-off" title="No security features enabled">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:12px;height:12px;margin-right:3px;vertical-align:-1px"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                            Unprotected
+                        </span>
+                        <% } %>
+                        <svg class="server-arrow" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                    </div>
+                </a>
+                <% }); %>
+            </div>
+
+            <!-- No Results -->
+            <div class="no-results" id="noResults">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <h3>No servers found</h3>
+                <p>Try adjusting your search</p>
+            </div>
+
+            <% } else { %>
+            <!-- Empty State -->
+            <div class="empty-state">
+                <div class="empty-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>
+                </div>
+                <h2>No Servers Found</h2>
+                <p>You don't have any servers where you can manage CertiFried MultiTool. Make sure you have the "Manage Server" permission.</p>
+                <div class="empty-actions">
+                    <a href="https://discord.com/api/oauth2/authorize?client_id=<%= locals.clientId || '#' %>&permissions=8&scope=bot+applications.commands" target="_blank" class="btn btn-primary">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                        Invite Bot to Server
+                    </a>
+                    <a href="/" class="btn btn-secondary">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                        Back to Home
+                    </a>
+                </div>
+            </div>
+            <% } %>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-links">
+                <a href="/commands" class="footer-link">Commands</a>
+                <a href="/status" class="footer-link">Status</a>
+                <a href="/docs" class="footer-link">Documentation</a>
+                <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" class="footer-link">Support</a>
+                <a href="https://fivem.certifriedmultitool.com" target="_blank" class="footer-link">FiveM Server</a>
+                <a href="/terms" class="footer-link">Terms</a>
+                <a href="/privacy" class="footer-link">Privacy</a>
+            </div>
+            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('serverSearch');
+        const serverGrid = document.getElementById('serverGrid');
+        const serverCards = document.querySelectorAll('.server-card');
+        const serverCount = document.getElementById('serverCount');
+        const noResults = document.getElementById('noResults');
+
+        if (searchInput) {
+            searchInput.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                let visibleCount = 0;
+
+                serverCards.forEach(card => {
+                    const serverName = card.getAttribute('data-server-name');
+                    const isVisible = serverName.includes(searchTerm);
+                    card.style.display = isVisible ? '' : 'none';
+                    if (isVisible) visibleCount++;
+                });
+
+                if (serverCount) serverCount.textContent = visibleCount;
+                if (noResults) noResults.classList.toggle('visible', visibleCount === 0);
+                if (serverGrid) serverGrid.classList.toggle('hidden', visibleCount === 0);
+            });
+        }
+    });
+
+    // Mobile menu toggle
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const mobileMenu = document.getElementById('mobileMenu');
+
+    if (mobileMenuBtn && mobileMenu) {
+        mobileMenuBtn.addEventListener('click', function() {
+            mobileMenu.classList.toggle('active');
+            const isOpen = mobileMenu.classList.contains('active');
+            mobileMenuBtn.innerHTML = isOpen
+                ? '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
+                : '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>';
+        });
+
+        // Close mobile menu when clicking a link
+        mobileMenu.querySelectorAll('.mobile-menu-link').forEach(link => {
+            link.addEventListener('click', function() {
+                mobileMenu.classList.remove('active');
+                mobileMenuBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>';
+            });
+        });
+    }
+
+    // User menu dropdown toggle
+    const userMenuContainer = document.getElementById('userMenuContainer');
+    const userMenuBtn = document.getElementById('userMenuBtn');
+
+    if (userMenuBtn && userMenuContainer) {
+        userMenuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            userMenuContainer.classList.toggle('open');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!userMenuContainer.contains(e.target)) {
+                userMenuContainer.classList.remove('open');
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                userMenuContainer.classList.remove('open');
+            }
+        });
+    }
+    </script>
+</body>
+</html>

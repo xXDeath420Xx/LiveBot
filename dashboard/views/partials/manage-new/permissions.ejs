@@ -1,0 +1,278 @@
+<%# Permission Overrides - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Total Overrides',
+            value: (permissionOverrides || []).length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Role Overrides',
+            value: (permissionOverrides || []).filter(p => p.type === 'role').length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Channel Overrides',
+            value: (permissionOverrides || []).filter(p => p.type === 'channel').length,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Commands Protected',
+            value: new Set((permissionOverrides || []).map(p => p.command_name)).size,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>',
+            color: 'success'
+        }) %>
+    </div>
+
+    <!-- Header with Add Button -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-primary-500/10 rounded-lg">
+                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold text-white">Permission Overrides</h3>
+                    <p class="text-sm text-gray-400">Manage command and feature permission overrides for roles and channels</p>
+                </div>
+            </div>
+            <button onclick="openAddPermissionModal()" class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Override
+            </button>
+        </div>
+
+        <% if (permissionOverrides && permissionOverrides.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Command/Feature</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Type</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Target</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Permission</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% permissionOverrides.forEach(permission => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <div class="flex items-center gap-2">
+                                        <svg class="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                        </svg>
+                                        <span class="font-semibold text-white"><%= permission.command_name || permission.feature_name %></span>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (permission.type === 'role') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-primary-500/20 text-primary-400">Role</span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-purple-500/20 text-purple-400">Channel</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (permission.type === 'role') {
+                                        const role = roles.find(r => r.id === permission.target_id);
+                                    %>
+                                        <span class="text-gray-300"><%= role ? role.name : 'Unknown Role' %></span>
+                                    <% } else {
+                                        const channel = Array.from(channels.values()).find(c => c.id === permission.target_id);
+                                    %>
+                                        <span class="text-gray-300">#<%= channel ? channel.name : 'Unknown Channel' %></span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (permission.allowed) { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-green/20 text-accent-green">Allowed</span>
+                                    <% } else { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-red/20 text-accent-red">Denied</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deletePermission('<%= permission.id %>')" class="btn btn-danger btn-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                        Delete
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Permission Overrides</h4>
+                <p class="text-gray-400 mb-4">Create permission overrides to control who can use specific commands or features</p>
+                <button onclick="openAddPermissionModal()" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add First Override
+                </button>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Add Permission Modal -->
+<div id="add-permission-modal" class="modal-overlay hidden">
+    <div class="modal-container max-w-md">
+        <div class="modal-header">
+            <h3 class="text-lg font-semibold text-white">Add Permission Override</h3>
+            <button onclick="closeAddPermissionModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <form id="add-permission-form">
+            <div class="modal-body space-y-4">
+                <div class="form-group">
+                    <label class="form-label">Command/Feature Name</label>
+                    <input type="text" name="command_name" class="form-input w-full" placeholder="e.g., ban, music, moderation" required>
+                    <p class="form-hint">Enter the command or feature name to override</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Override Type</label>
+                    <select name="type" id="override-type" class="form-input w-full" required>
+                        <option value="role">Role</option>
+                        <option value="channel">Channel</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="role-select-container">
+                    <label class="form-label">Target Role</label>
+                    <%- include('../../components/forms/roleSelect', {
+                        name: 'role_id',
+                        roles: roles,
+                        selected: null,
+                        placeholder: 'Select a role...'
+                    }) %>
+                </div>
+
+                <div class="form-group hidden" id="channel-select-container">
+                    <label class="form-label">Target Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'channel_id',
+                        channels: Array.from(channels.values()).filter(c => c.type === 0 || c.type === 5),
+                        selected: null,
+                        placeholder: 'Select a channel...'
+                    }) %>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Permission</label>
+                    <select name="allowed" class="form-input w-full" required>
+                        <option value="true">Allow</option>
+                        <option value="false">Deny</option>
+                    </select>
+                    <p class="form-hint">Whether this command/feature should be allowed or denied</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" onclick="closeAddPermissionModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Create Override
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openAddPermissionModal() {
+    document.getElementById('add-permission-form').reset();
+    document.getElementById('role-select-container').classList.remove('hidden');
+    document.getElementById('channel-select-container').classList.add('hidden');
+    document.getElementById('add-permission-modal').classList.remove('hidden');
+}
+
+function closeAddPermissionModal() {
+    document.getElementById('add-permission-modal').classList.add('hidden');
+}
+
+document.getElementById('override-type')?.addEventListener('change', function(e) {
+    const roleContainer = document.getElementById('role-select-container');
+    const channelContainer = document.getElementById('channel-select-container');
+
+    if (e.target.value === 'role') {
+        roleContainer.classList.remove('hidden');
+        channelContainer.classList.add('hidden');
+    } else {
+        roleContainer.classList.add('hidden');
+        channelContainer.classList.remove('hidden');
+    }
+});
+
+document.getElementById('add-permission-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const type = formData.get('type');
+
+    const data = {
+        command_name: formData.get('command_name'),
+        type: type,
+        target_id: type === 'role' ? formData.get('role_id') : formData.get('channel_id'),
+        allowed: formData.get('allowed') === 'true'
+    };
+
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/permissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            showToast('success', 'Permission override created');
+            closeAddPermissionModal();
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to create permission override');
+    }
+});
+
+async function deletePermission(overrideId) {
+    if (!confirm('Are you sure you want to delete this permission override?')) return;
+
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/permissions/${overrideId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast('success', 'Permission override deleted');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to delete permission override');
+    }
+}
+</script>

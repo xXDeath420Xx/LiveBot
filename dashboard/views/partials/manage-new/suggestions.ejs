@@ -1,0 +1,289 @@
+<%# Suggestions System - Tailwind Version %>
+
+<div class="space-y-6">
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <%- include('../../components/cards/statCard', {
+            title: 'Pending',
+            value: locals.suggestionStats?.pending || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'warning'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Approved',
+            value: locals.suggestionStats?.approved || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+            color: 'success'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Implemented',
+            value: locals.suggestionStats?.implemented || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>',
+            color: 'primary'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Rejected',
+            value: locals.suggestionStats?.rejected || 0,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>',
+            color: 'danger'
+        }) %>
+    </div>
+
+    <!-- Configuration -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-semibold text-white">Suggestions Configuration</h3>
+                <p class="text-sm text-gray-400">Manage user suggestions, voting, and settings</p>
+            </div>
+            <%- include('../../components/forms/toggle', {
+                name: 'suggestions_enabled',
+                id: 'suggestions_enabled',
+                checked: locals.suggestionConfig?.enabled || false,
+                label: 'Enable Suggestions',
+                size: 'md'
+            }) %>
+        </div>
+
+        <form id="suggestions-form" action="/api/guilds/<%= guildId %>/suggestions/config" method="PUT">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="form-group">
+                    <label class="form-label">Suggestions Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'suggestions_channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: locals.suggestionConfig?.suggestions_channel_id,
+                        placeholder: 'Select channel for suggestions'
+                    }) %>
+                    <p class="form-hint">Where approved suggestions will be posted</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Staff Review Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'staff_review_channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: locals.suggestionConfig?.staff_review_channel_id,
+                        placeholder: 'No review channel'
+                    }) %>
+                    <p class="form-hint">For staff to review before posting</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                <div class="form-group">
+                    <label class="form-label">Staff Role</label>
+                    <%- include('../../components/forms/roleSelect', {
+                        name: 'staff_role_id',
+                        roles: Array.from(roles.values()),
+                        selected: locals.suggestionConfig?.approved_role_id,
+                        placeholder: 'No staff role'
+                    }) %>
+                    <p class="form-hint">Role that can manage suggestions</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="flex items-center gap-3 cursor-pointer p-3 bg-dark-700 rounded-lg">
+                        <input type="checkbox" name="require_approval" class="form-checkbox" <%= locals.suggestionConfig?.require_approval ? 'checked' : '' %>>
+                        <div>
+                            <span class="text-white font-medium">Require Staff Approval</span>
+                            <p class="text-xs text-gray-500">Suggestions must be approved before posting</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
+                <button type="submit" class="btn btn-primary">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Configuration
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Filter & List -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-semibold text-white">Suggestions</h3>
+            <div class="flex items-center gap-3">
+                <select id="status-filter" class="form-input text-sm w-32" onchange="filterSuggestions()">
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="implemented">Implemented</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="under_review">Under Review</option>
+                </select>
+                <select id="sort-filter" class="form-input text-sm w-32" onchange="filterSuggestions()">
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="most_voted">Most Voted</option>
+                </select>
+            </div>
+        </div>
+
+        <% if (locals.suggestions && suggestions.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">ID</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Suggestion</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Author</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Votes</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% suggestions.forEach(suggestion => {
+                            const upvotes = suggestion.upvotes || 0;
+                            const downvotes = suggestion.downvotes || 0;
+                        %>
+                            <tr class="hover:bg-dark-600 transition-colors suggestion-row" data-status="<%= suggestion.status %>">
+                                <td class="py-3 px-4">
+                                    <code class="text-primary-400">#<%= suggestion.suggestion_id %></code>
+                                </td>
+                                <td class="py-3 px-4 max-w-xs">
+                                    <div class="font-medium text-white truncate"><%= suggestion.title || 'No Title' %></div>
+                                    <div class="text-sm text-gray-500 truncate"><%= (suggestion.content || '').substring(0, 60) %><%= (suggestion.content || '').length > 60 ? '...' : '' %></div>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <code class="text-xs text-gray-400"><%= suggestion.author_id %></code>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% if (suggestion.status === 'pending') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-yellow/20 text-accent-yellow">Pending</span>
+                                    <% } else if (suggestion.status === 'approved') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-green/20 text-accent-green">Approved</span>
+                                    <% } else if (suggestion.status === 'implemented') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-primary-500/20 text-primary-400">Implemented</span>
+                                    <% } else if (suggestion.status === 'rejected') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-accent-red/20 text-accent-red">Rejected</span>
+                                    <% } else if (suggestion.status === 'under_review') { %>
+                                        <span class="px-2 py-1 text-xs font-medium rounded-full bg-purple-500/20 text-purple-400">Under Review</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <div class="flex flex-col gap-1">
+                                        <span class="text-xs text-accent-green">+<%= upvotes %></span>
+                                        <span class="text-xs text-accent-red">-<%= downvotes %></span>
+                                    </div>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <div class="flex items-center justify-end gap-1">
+                                        <% if (suggestion.status === 'pending' || suggestion.status === 'under_review') { %>
+                                            <button onclick="approveSuggestion('<%= suggestion.suggestion_id %>')" class="p-2 text-gray-400 hover:text-accent-green hover:bg-dark-600 rounded-lg transition-colors" title="Approve">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                                </svg>
+                                            </button>
+                                            <button onclick="rejectSuggestion('<%= suggestion.suggestion_id %>')" class="p-2 text-gray-400 hover:text-accent-red hover:bg-dark-600 rounded-lg transition-colors" title="Reject">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                </svg>
+                                            </button>
+                                        <% } %>
+                                        <% if (suggestion.status === 'approved') { %>
+                                            <button onclick="implementSuggestion('<%= suggestion.suggestion_id %>')" class="p-2 text-gray-400 hover:text-primary-400 hover:bg-dark-600 rounded-lg transition-colors" title="Mark Implemented">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                </svg>
+                                            </button>
+                                        <% } %>
+                                        <button onclick="deleteSuggestion('<%= suggestion.suggestion_id %>')" class="p-2 text-gray-400 hover:text-accent-red hover:bg-dark-600 rounded-lg transition-colors" title="Delete">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-12">
+                <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-600 flex items-center justify-center">
+                    <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                    </svg>
+                </div>
+                <h4 class="text-lg font-semibold text-white mb-2">No Suggestions Yet</h4>
+                <p class="text-gray-400">Enable the system and set a channel to get started</p>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<script>
+document.getElementById('suggestions-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    const data = {
+        enabled: document.getElementById('suggestions_enabled').checked,
+        suggestions_channel_id: formData.get('suggestions_channel_id'),
+        staff_review_channel_id: formData.get('staff_review_channel_id') || null,
+        staff_role_id: formData.get('staff_role_id') || null,
+        require_approval: formData.has('require_approval')
+    };
+
+    try {
+        const response = await fetch(this.action, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) showToast('success', 'Suggestions settings saved');
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to save settings'); }
+});
+
+function filterSuggestions() {
+    const status = document.getElementById('status-filter').value;
+    document.querySelectorAll('.suggestion-row').forEach(row => {
+        if (!status || row.dataset.status === status) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+async function approveSuggestion(id) {
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/suggestions/${id}/approve`, { method: 'POST' });
+        if (response.ok) { showToast('success', 'Suggestion approved'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to approve'); }
+}
+
+async function rejectSuggestion(id) {
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/suggestions/${id}/reject`, { method: 'POST' });
+        if (response.ok) { showToast('success', 'Suggestion rejected'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to reject'); }
+}
+
+async function implementSuggestion(id) {
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/suggestions/${id}/implement`, { method: 'POST' });
+        if (response.ok) { showToast('success', 'Marked as implemented'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to update'); }
+}
+
+async function deleteSuggestion(id) {
+    if (!confirm('Delete this suggestion?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/suggestions/${id}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Suggestion deleted'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to delete'); }
+}
+</script>
