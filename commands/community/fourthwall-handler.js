@@ -1,6 +1,7 @@
 import {
     ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
-    EmbedBuilder, PermissionFlagsBits
+    EmbedBuilder, PermissionFlagsBits,
+    ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder
 } from 'discord.js';
 import logger from '../../utils/logger.js';
 import { storefrontClient } from '../../utils/fourthwall-api.js';
@@ -185,30 +186,113 @@ async function resolveBrowseTarget(interaction, explicitInput) {
     return { mode: 'scrape', handle: first.shop_handle };
 }
 
+const PRODUCTS_PER_PAGE = 10;
+
+// Build a single-page view: shop-header embed + a product-list embed + nav components.
+// `products` is `[{slug, name, image, price}]`.
+export function buildShopView(shop, target, products, page = 0) {
+    const baseUrl = shop.url || `https://${target.handle}.fourthwall.com/`;
+    const totalPages = Math.max(1, Math.ceil(products.length / PRODUCTS_PER_PAGE));
+    const safePage = Math.min(Math.max(0, page), totalPages - 1);
+    const start = safePage * PRODUCTS_PER_PAGE;
+    const slice = products.slice(start, start + PRODUCTS_PER_PAGE);
+
+    const headerEmbed = new EmbedBuilder()
+        .setColor(EMBED_DEFAULT_COLOR)
+        .setTitle(shop.name || target.handle)
+        .setURL(baseUrl)
+        .setDescription(truncate(sanitizeUserText(shop.description || ''), 500))
+        .setFooter({ text: `${products.length} products${totalPages > 1 ? ` · page ${safePage + 1}/${totalPages}` : ''}` });
+    if (shop.image) headerEmbed.setThumbnail(shop.image);
+
+    const listLines = slice.map((p, i) => {
+        const n = start + i + 1;
+        const productUrl = `${baseUrl.replace(/\/+$/, '')}/products/${p.slug}/`;
+        const priceText = p.price?.display
+            || (p.price?.amount ? formatCurrency(p.price.amount, p.price.currency) : '—');
+        // Discord markdown link inside an embed description renders as clickable text.
+        return `**${n}.** [${sanitizeUserText(p.name)}](${productUrl}) — ${priceText}`;
+    });
+
+    const listEmbed = new EmbedBuilder()
+        .setColor(EMBED_DEFAULT_COLOR)
+        .setTitle(`Products — ${shop.name || target.handle}`)
+        .setURL(baseUrl)
+        .setDescription(listLines.join('\n') || '_no products found_');
+
+    const components = [];
+
+    if (slice.length > 0) {
+        // Select menu — pick a product to see full detail. customId is parsed by the handler.
+        const select = new StringSelectMenuBuilder()
+            .setCustomId(`fw_shop_pick:${target.handle}`)
+            .setPlaceholder('View product details…')
+            .addOptions(slice.map(p =>
+                new StringSelectMenuOptionBuilder()
+                    .setLabel(truncate(p.name, 100))
+                    .setValue(p.slug.slice(0, 100))
+                    .setDescription(truncate(p.price?.display || (p.price?.amount ? formatCurrency(p.price.amount, p.price.currency) : ''), 100) || undefined)
+            ));
+        components.push(new ActionRowBuilder().addComponents(select));
+    }
+
+    if (totalPages > 1) {
+        const prev = new ButtonBuilder()
+            .setCustomId(`fw_shop_page:${target.handle}:${safePage - 1}`)
+            .setLabel('◀ Prev')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(safePage === 0);
+        const next = new ButtonBuilder()
+            .setCustomId(`fw_shop_page:${target.handle}:${safePage + 1}`)
+            .setLabel('Next ▶')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(safePage >= totalPages - 1);
+        const open = new ButtonBuilder()
+            .setLabel('Open shop')
+            .setStyle(ButtonStyle.Link)
+            .setURL(baseUrl);
+        components.push(new ActionRowBuilder().addComponents(prev, next, open));
+    } else {
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel('Open shop').setStyle(ButtonStyle.Link).setURL(baseUrl)
+        ));
+    }
+
+    return { embeds: [headerEmbed, listEmbed], components };
+}
+
+export async function fetchProductsForBrowse(target) {
+    if (target.mode === 'api') {
+        // Storefront API path: shop info + product listing. Different field names than scraper.
+        const sf = storefrontClient(target.token);
+        const shop = await sf.getShop();
+        let products = [];
+        try {
+            const list = await sf.searchProducts('');
+            const items = list.items || list.products || [];
+            products = items.map(p => ({
+                slug: p.handle || p.slug || p.id,
+                name: p.name || p.title,
+                image: p.images?.[0]?.url || p.image,
+                price: p.price?.amount ? { amount: p.price.amount, currency: p.price.currency, display: null } : null
+            }));
+        } catch (err) {
+            logger.warn('[FW Browse] API product list failed; using shop-only view', { err: err.message });
+        }
+        return { shop, products };
+    }
+    const shop = await fourthwallScraper.getShop(target.handle);
+    return { shop, products: shop.products || [] };
+}
+
 export async function handleShop(interaction) {
     await interaction.deferReply();
     const explicit = interaction.options.getString('handle');
     const target = await resolveBrowseTarget(interaction, explicit);
 
-    let shop;
-    if (target.mode === 'api') {
-        shop = await storefrontClient(target.token).getShop();
-    } else {
-        shop = await fourthwallScraper.getShop(target.handle);
-    }
-    const embed = new EmbedBuilder().setColor(EMBED_DEFAULT_COLOR)
-        .setTitle(shop.name || target.handle)
-        .setURL(shop.url || `https://${target.handle}.fourthwall.com/`)
-        .setDescription(truncate(sanitizeUserText(shop.description || ''), 500));
-    if (shop.image) embed.setThumbnail(shop.image);
-    if (target.mode === 'scrape' && Array.isArray(shop.productHandles) && shop.productHandles.length) {
-        embed.addFields({
-            name: `Products (${shop.productHandles.length}+)`,
-            value: shop.productHandles.slice(0, 8).map(h => `• \`${h}\``).join('\n')
-                + '\n_Use `/fourthwall product slug:<handle>` for details._'
-        });
-    }
-    await interaction.editReply({ embeds: [embed] });
+    const { shop, products } = await fetchProductsForBrowse(target);
+    const view = buildShopView(shop, target, products, 0);
+    await interaction.editReply(view);
 }
 
 export async function handleProduct(interaction) {
