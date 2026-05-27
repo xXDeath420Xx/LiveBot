@@ -199,17 +199,61 @@ async function writeCurrentSnapshot(shopHandle, currentProducts, removedSlugs) {
  * TODO(you): implement this. See learning-mode request below.
  */
 export function computeProductDiff(previous, current, isFirstScrape) {
-    // Default implementation: just announce new products, silent on first scrape.
-    // Replace with your own logic — see the request in chat.
-    const events = [];
-    if (isFirstScrape) return events;
+    // Decision 4: first scrape is silent — we just record the catalog without
+    // firing 18 "new product!" pings into the channel on day 1.
+    if (isFirstScrape) return [];
 
+    const events = [];
+    const currentSlugs = new Set(current.map(p => p.slug));
+
+    // Walk current products, classifying each against the previous snapshot.
     for (const p of current) {
         const prev = previous.get(p.slug);
+
         if (!prev) {
+            // Slug never seen → genuinely new product
             events.push({ type: 'new_product', product: p });
+            continue;
+        }
+
+        if (prev.status === 'removed') {
+            // Decision 3: previously visible, then disappeared, now back → restocked
+            // (rather than re-announcing as 'new_product'). Subscribers with
+            // notify_restocked see 🔄; subscribers who toggled it off don't.
+            events.push({ type: 'restocked', product: p });
+            continue;
+        }
+
+        // Same slug, still active — check price movement (decision 2: any diff).
+        const oldAmt = prev.price?.amount;
+        const newAmt = p.price?.amount;
+        if (oldAmt != null && newAmt != null && oldAmt !== newAmt) {
+            events.push({
+                type: newAmt < oldAmt ? 'price_drop' : 'price_increase',
+                product: p,
+                oldPrice: prev.price,
+                newPrice: p.price
+            });
         }
     }
+
+    // Decision 1: products that vanished from the catalog → sold_out, but ONLY
+    // if they had a real price last time we saw them. Skips "coming soon"
+    // placeholders the owner pulled before launching.
+    for (const [slug, prev] of previous) {
+        if (prev.status === 'active' && !currentSlugs.has(slug) && prev.price?.amount != null) {
+            events.push({
+                type: 'sold_out',
+                product: {
+                    slug: prev.slug,
+                    name: prev.name,
+                    image: prev.image,
+                    price: prev.price
+                }
+            });
+        }
+    }
+
     return events;
 }
 
