@@ -4,6 +4,7 @@ import {
 } from 'discord.js';
 import logger from '../../utils/logger.js';
 import { storefrontClient } from '../../utils/fourthwall-api.js';
+import fourthwallScraper from '../../utils/scrapers/fourthwall-scraper.js';
 import { sanitizeUserText, truncate, formatCurrency, EMBED_DEFAULT_COLOR, parseHexColor } from '../../core/fourthwall-helpers.js';
 
 function requireManage(interaction) {
@@ -20,22 +21,44 @@ function mgr(interaction) {
 
 export async function handleSetup(interaction) {
     requireManage(interaction);
+
+    // Pre-fill from .env defaults so the bot owner doesn't have to retype their own creds.
+    // FW_DEFAULT_API_USERNAME / FW_DEFAULT_API_PASSWORD / FW_DEFAULT_STOREFRONT_TOKEN.
+    // Discord limits TextInput defaults to 4000 chars; our values are far shorter.
+    const defaultUser = process.env.FW_DEFAULT_API_USERNAME || '';
+    const defaultPass = process.env.FW_DEFAULT_API_PASSWORD || '';
+    const defaultStorefront = process.env.FW_DEFAULT_STOREFRONT_TOKEN || '';
+
+    const handleInput = new TextInputBuilder()
+        .setCustomId('handle').setLabel('Shop handle (URL slug)')
+        .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)
+        .setPlaceholder('e.g. mamabear-xal-shop');
+
+    const apiUserInput = new TextInputBuilder()
+        .setCustomId('api_user').setLabel('Platform API username')
+        .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(255)
+        .setPlaceholder('fw_api_xxxxx@fourthwall.com');
+    if (defaultUser) apiUserInput.setValue(defaultUser);
+
+    const apiPassInput = new TextInputBuilder()
+        .setCustomId('api_pass').setLabel('Platform API password')
+        .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(255);
+    if (defaultPass) apiPassInput.setValue(defaultPass);
+
+    const storefrontInput = new TextInputBuilder()
+        .setCustomId('storefront_token').setLabel('Storefront token (optional)')
+        .setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(255)
+        .setPlaceholder('ptkn_...');
+    if (defaultStorefront) storefrontInput.setValue(defaultStorefront);
+
     const modal = new ModalBuilder()
         .setCustomId('fourthwall_setup_submit')
         .setTitle('Connect Fourthwall Shop')
         .addComponents(
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('handle').setLabel('Shop handle (URL slug)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('api_user').setLabel('Platform API username').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(255).setPlaceholder('fw_api_xxxxx@fourthwall.com')
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('api_pass').setLabel('Platform API password').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(255)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder().setCustomId('storefront_token').setLabel('Storefront token (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(255).setPlaceholder('ptkn_...')
-            )
+            new ActionRowBuilder().addComponents(handleInput),
+            new ActionRowBuilder().addComponents(apiUserInput),
+            new ActionRowBuilder().addComponents(apiPassInput),
+            new ActionRowBuilder().addComponents(storefrontInput)
         );
     await interaction.showModal(modal);
 }
@@ -132,28 +155,59 @@ export async function handlePrivacy(interaction) {
     await interaction.editReply(`Privacy: show_names=**${!!cfg.show_customer_names}**, show_amounts=**${!!cfg.show_amounts}**`);
 }
 
-async function pickStorefrontToken(interaction, explicitHandle) {
-    if (explicitHandle) {
-        const conn = await mgr(interaction).getConnection(interaction.guildId, explicitHandle);
-        if (conn?.storefront_token) return { token: conn.storefront_token, handle: explicitHandle };
+// Browse commands work against ANY shop by handle, no setup required.
+// If the user explicitly names a handle (or the URL slug from a fourthwall.com link),
+// we scrape the public storefront. If they don't pass one, we try the guild's connected
+// shop's Storefront API (richer data) — that path needs setup.
+function parseShopHandle(input) {
+    if (!input) return null;
+    const trimmed = String(input).trim();
+    const urlMatch = /^https?:\/\/([a-z0-9-]+)\.fourthwall\.com/i.exec(trimmed);
+    if (urlMatch) return urlMatch[1].toLowerCase();
+    if (/^[a-z0-9-]{1,100}$/i.test(trimmed)) return trimmed.toLowerCase();
+    return null;
+}
+
+async function resolveBrowseTarget(interaction, explicitInput) {
+    const parsed = parseShopHandle(explicitInput);
+    if (parsed) {
+        // Prefer connected-shop API (storefront token) when this guild owns the handle.
+        const conn = await mgr(interaction).getConnection(interaction.guildId, parsed);
+        if (conn?.storefront_token) return { mode: 'api', token: conn.storefront_token, handle: parsed };
+        return { mode: 'scrape', handle: parsed };
     }
+    // No explicit handle: fall back to first connected shop in this guild.
     const conns = await mgr(interaction).listConnections(interaction.guildId);
     const first = conns[0];
-    if (!first) throw new Error('No connected shop in this guild. Pass a shop handle or run /fourthwall setup.');
+    if (!first) throw new Error('Pass a shop handle (e.g. `mamabear-xal-shop`) or a full URL.');
     const full = await mgr(interaction).getConnection(interaction.guildId, first.shop_handle);
-    return { token: full?.storefront_token || null, handle: first.shop_handle };
+    if (full?.storefront_token) return { mode: 'api', token: full.storefront_token, handle: first.shop_handle };
+    return { mode: 'scrape', handle: first.shop_handle };
 }
 
 export async function handleShop(interaction) {
     await interaction.deferReply();
     const explicit = interaction.options.getString('handle');
-    const { token, handle } = await pickStorefrontToken(interaction, explicit);
-    const sf = storefrontClient(token);
-    const shop = await sf.getShop();
+    const target = await resolveBrowseTarget(interaction, explicit);
+
+    let shop;
+    if (target.mode === 'api') {
+        shop = await storefrontClient(target.token).getShop();
+    } else {
+        shop = await fourthwallScraper.getShop(target.handle);
+    }
     const embed = new EmbedBuilder().setColor(EMBED_DEFAULT_COLOR)
-        .setTitle(shop.name || handle)
-        .setURL(shop.url || null)
+        .setTitle(shop.name || target.handle)
+        .setURL(shop.url || `https://${target.handle}.fourthwall.com/`)
         .setDescription(truncate(sanitizeUserText(shop.description || ''), 500));
+    if (shop.image) embed.setThumbnail(shop.image);
+    if (target.mode === 'scrape' && Array.isArray(shop.productHandles) && shop.productHandles.length) {
+        embed.addFields({
+            name: `Products (${shop.productHandles.length}+)`,
+            value: shop.productHandles.slice(0, 8).map(h => `• \`${h}\``).join('\n')
+                + '\n_Use `/fourthwall product slug:<handle>` for details._'
+        });
+    }
     await interaction.editReply({ embeds: [embed] });
 }
 
@@ -161,13 +215,18 @@ export async function handleProduct(interaction) {
     await interaction.deferReply();
     const slug = interaction.options.getString('slug');
     const explicit = interaction.options.getString('shop');
-    const { token } = await pickStorefrontToken(interaction, explicit);
-    const sf = storefrontClient(token);
-    const prod = await sf.getProduct(slug);
+    const target = await resolveBrowseTarget(interaction, explicit);
+
+    let prod;
+    if (target.mode === 'api') {
+        prod = await storefrontClient(target.token).getProduct(slug);
+    } else {
+        prod = await fourthwallScraper.getProduct(target.handle, slug);
+    }
     const price = prod.price?.amount ? formatCurrency(prod.price.amount, prod.price.currency) : '—';
     const embed = new EmbedBuilder().setColor(EMBED_DEFAULT_COLOR)
         .setTitle(sanitizeUserText(prod.name || slug))
-        .setURL(prod.url || null)
+        .setURL(prod.url || `https://${target.handle}.fourthwall.com/products/${slug}/`)
         .setDescription(truncate(sanitizeUserText(prod.description || ''), 500))
         .addFields({ name: 'Price', value: price, inline: true });
     if (prod.image) embed.setImage(prod.image);
@@ -178,13 +237,21 @@ export async function handleCollection(interaction) {
     await interaction.deferReply();
     const slug = interaction.options.getString('slug');
     const explicit = interaction.options.getString('shop');
-    const { token } = await pickStorefrontToken(interaction, explicit);
-    const sf = storefrontClient(token);
-    const col = await sf.getCollection(slug);
-    const items = (col.products || []).slice(0, 10).map(p => `• ${sanitizeUserText(p.name)} — ${p.price ? formatCurrency(p.price.amount, p.price.currency) : '—'}`).join('\n');
+    const target = await resolveBrowseTarget(interaction, explicit);
+
+    let col;
+    if (target.mode === 'api') {
+        col = await storefrontClient(target.token).getCollection(slug);
+    } else {
+        col = await fourthwallScraper.getCollection(target.handle, slug);
+    }
+    const apiItems = (col.products || []).slice(0, 10).map(p => `• ${sanitizeUserText(p.name)} — ${p.price ? formatCurrency(p.price.amount, p.price.currency) : '—'}`);
+    const scrapedItems = (col.productHandles || []).slice(0, 10).map(h => `• \`${h}\``);
+    const lines = (apiItems.length ? apiItems : scrapedItems).join('\n');
     const embed = new EmbedBuilder().setColor(EMBED_DEFAULT_COLOR)
         .setTitle(sanitizeUserText(col.name || slug))
-        .setDescription(items || '_(empty collection)_');
+        .setURL(`https://${target.handle}.fourthwall.com/collections/${slug}/`)
+        .setDescription(lines || '_(empty collection)_');
     await interaction.editReply({ embeds: [embed] });
 }
 
@@ -192,13 +259,20 @@ export async function handleSearch(interaction) {
     await interaction.deferReply();
     const query = interaction.options.getString('query');
     const explicit = interaction.options.getString('shop');
-    const { token } = await pickStorefrontToken(interaction, explicit);
-    const sf = storefrontClient(token);
-    const results = await sf.searchProducts(query);
-    const list = (results.items || results.products || []).slice(0, 10);
-    const lines = list.map(p => `• **${sanitizeUserText(p.name)}** — ${p.price ? formatCurrency(p.price.amount, p.price.currency) : '—'}`).join('\n');
+    const target = await resolveBrowseTarget(interaction, explicit);
+
+    let products;
+    if (target.mode === 'api') {
+        const results = await storefrontClient(target.token).searchProducts(query);
+        products = (results.items || results.products || []).slice(0, 10);
+    } else {
+        const r = await fourthwallScraper.searchProducts(target.handle, query);
+        products = r.products || [];
+    }
+    const lines = products.map(p => `• **${sanitizeUserText(p.name)}** — ${p.price ? formatCurrency(p.price.amount, p.price.currency) : '—'}`).join('\n');
     const embed = new EmbedBuilder().setColor(EMBED_DEFAULT_COLOR)
         .setTitle(`Search: ${sanitizeUserText(query)}`)
+        .setURL(`https://${target.handle}.fourthwall.com/`)
         .setDescription(lines || '_no results_');
     await interaction.editReply({ embeds: [embed] });
 }
