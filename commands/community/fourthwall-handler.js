@@ -6,6 +6,7 @@ import {
 import logger from '../../utils/logger.js';
 import { storefrontClient } from '../../utils/fourthwall-api.js';
 import fourthwallScraper from '../../utils/scrapers/fourthwall-scraper.js';
+import shopTracker from '../../core/fourthwall-shop-tracker.js';
 import { sanitizeUserText, truncate, formatCurrency, EMBED_DEFAULT_COLOR, parseHexColor } from '../../core/fourthwall-helpers.js';
 
 function requireManage(interaction) {
@@ -455,4 +456,89 @@ export async function handleGiveaway(interaction, sub) {
         const embed = new EmbedBuilder().setColor(EMBED_DEFAULT_COLOR).setTitle(`Giveaways — ${shop}`).setDescription(items.join('\n') || '_(none)_');
         await interaction.editReply({ embeds: [embed] });
     }
+}
+
+// ─── Public shop tracking (no API key needed — works on any FW shop) ────────
+
+export async function handleTrack(interaction) {
+    requireManage(interaction);
+    await interaction.deferReply({ ephemeral: true });
+    const shopInput = interaction.options.getString('shop');
+    const channel = interaction.options.getChannel('channel');
+    const flags = {
+        new_products: interaction.options.getBoolean('new_products'),
+        price_drops: interaction.options.getBoolean('price_drops'),
+        price_increases: interaction.options.getBoolean('price_increases'),
+        sold_out: interaction.options.getBoolean('sold_out'),
+        restocked: interaction.options.getBoolean('restocked')
+    };
+    // Convert Discord's null (option not provided) into "use default" by stripping nulls.
+    const cleanFlags = Object.fromEntries(Object.entries(flags).filter(([, v]) => v !== null));
+
+    const result = await shopTracker.subscribe({
+        guildId: interaction.guildId,
+        shopHandle: shopInput,
+        channelId: channel.id,
+        addedBy: interaction.user.id,
+        flags: cleanFlags
+    });
+
+    const flagSummary = [
+        cleanFlags.new_products !== false ? '🆕 new' : null,
+        cleanFlags.price_drops !== false ? '📉 drops' : null,
+        cleanFlags.price_increases === true ? '📈 hikes' : null,
+        cleanFlags.sold_out === true ? '❌ sold-out' : null,
+        cleanFlags.restocked !== false ? '🔄 restocks' : null
+    ].filter(Boolean).join(' · ') || '(no events selected)';
+
+    await interaction.editReply(
+        `✓ Tracking **${result.shopName || result.handle}** → <#${channel.id}>\n` +
+        `Events: ${flagSummary}\n` +
+        `First scrape will run within ~10 minutes (silent — no flood of "new product" pings for existing catalog).`
+    );
+}
+
+export async function handleUntrack(interaction) {
+    requireManage(interaction);
+    await interaction.deferReply({ ephemeral: true });
+    const shopInput = interaction.options.getString('shop');
+    const channel = interaction.options.getChannel('channel');
+    const result = await shopTracker.unsubscribe({
+        guildId: interaction.guildId,
+        shopHandle: shopInput,
+        channelId: channel?.id
+    });
+    if (result.removed === 0) {
+        await interaction.editReply(`No tracking subscription found for that shop${channel ? ` in <#${channel.id}>` : ''}.`);
+    } else {
+        await interaction.editReply(`✓ Removed ${result.removed} tracking subscription(s).`);
+    }
+}
+
+export async function handleTracked(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+    const subs = await shopTracker.listSubscriptions(interaction.guildId);
+    if (subs.length === 0) {
+        return interaction.editReply('No shops being auto-tracked in this guild. Use `/fourthwall track` to add one.');
+    }
+    const lines = subs.map(s => {
+        const flags = [
+            s.notify_new_products ? '🆕' : '',
+            s.notify_price_drops ? '📉' : '',
+            s.notify_price_increases ? '📈' : '',
+            s.notify_sold_out ? '❌' : '',
+            s.notify_restocked ? '🔄' : ''
+        ].filter(Boolean).join('');
+        const lastChecked = s.last_checked_at
+            ? `<t:${Math.floor(new Date(s.last_checked_at).getTime()/1000)}:R>`
+            : 'pending';
+        const errorTag = s.consecutive_failures > 0 ? ` ⚠️${s.consecutive_failures}` : '';
+        return `• **${s.shop_handle}** ${s.shop_name ? `(${sanitizeUserText(s.shop_name)})` : ''} → <#${s.channel_id}> ${flags} · last ${lastChecked}${errorTag}`;
+    });
+    await interaction.editReply({
+        embeds: [new EmbedBuilder()
+            .setColor(EMBED_DEFAULT_COLOR)
+            .setTitle('Auto-tracked Fourthwall shops')
+            .setDescription(lines.join('\n'))]
+    });
 }

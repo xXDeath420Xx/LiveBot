@@ -58,6 +58,7 @@ import { startVCSoundScheduler, stopVCSoundScheduler } from './jobs/vc-sound-sch
 import { startPhishingListUpdater, stopPhishingListUpdater } from './jobs/phishing-list-updater.js';
 import { startGlobalBanAggregator, stopGlobalBanAggregator } from './jobs/global-ban-aggregator.js';
 import { startFourthwallCleanup, stopFourthwallCleanup } from './jobs/fourthwall-cleanup.js';
+import { startFourthwallTracker, stopFourthwallTracker } from './jobs/fourthwall-shop-tracker-scheduler.js';
 import AchievementManager from './core/achievement-manager.js';
 import ServerStatsManager from './core/server-stats-manager.js';
 import EmojiStatsManager from './core/emoji-stats-manager.js';
@@ -876,6 +877,10 @@ async function initializeSchedulersAndDashboard(client) {
   startFourthwallCleanup();
   logger.info('[Core] Fourthwall cleanup scheduler initialized');
 
+  // Start Fourthwall public shop tracker (scrapes subscribed shops every 10 min)
+  startFourthwallTracker();
+  logger.info('[Core] Fourthwall shop tracker initialized');
+
   // Start weather alerts (optional - can be enabled per guild)
   // client.weatherManager.start(300); // Check every 5 minutes
 
@@ -1183,6 +1188,10 @@ async function shutdown() {
     // Stop Fourthwall cleanup scheduler
     stopFourthwallCleanup();
     logger.info('[Scheduler] Fourthwall cleanup stopped');
+
+    // Stop Fourthwall shop tracker
+    stopFourthwallTracker();
+    logger.info('[Scheduler] Fourthwall shop tracker stopped');
 
     // Stop QOTD scheduler
     stopQOTDScheduler();
