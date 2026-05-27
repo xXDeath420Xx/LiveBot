@@ -8,7 +8,7 @@ export async function up(db) {
             shop_id VARCHAR(100) DEFAULT NULL,
             api_username VARCHAR(512) NOT NULL,
             api_password TEXT NOT NULL,
-            storefront_token VARCHAR(255) DEFAULT NULL,
+            storefront_token VARCHAR(255) DEFAULT NULL,    -- plaintext: Fourthwall ptkn_* tokens are public read-only browser tokens by design
             connection_token VARCHAR(64) NOT NULL,
             webhook_secret VARCHAR(512) DEFAULT NULL,
             webhook_ids JSON DEFAULT NULL,
