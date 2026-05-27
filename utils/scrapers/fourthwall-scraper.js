@@ -84,6 +84,51 @@ async function fetchHtml(url) {
     return resp.data;
 }
 
+// Parse all <div class="product-tile"> blocks on a page and extract
+// {slug, name, image, price} per tile. The shop page already renders
+// every product card with name + price + thumbnail, so a single page
+// fetch yields a full product catalog without hammering individual
+// product URLs.
+function parseProductTiles(html, handle) {
+    const tiles = [];
+    const seen = new Set();
+    // Anchor each tile to its `<a href="/products/SLUG"...>` opening; close at the next product-tile or end of section.
+    const tileRe = /<a[^>]+href="\/products\/([a-z0-9-]+)"[\s\S]*?(?=<a[^>]+href="\/products\/|<\/section|$)/gi;
+    let m;
+    while ((m = tileRe.exec(html)) !== null) {
+        const slug = m[1].toLowerCase();
+        if (seen.has(slug)) continue;
+        const block = m[0];
+
+        const name = extractFirst(/<h3[^>]+class="tile__heading"[^>]*>\s*([^<]+)\s*<\/h3>/i, block)
+            || extractFirst(/alt="([^"]+?) product image[^"]*"/i, block);
+
+        const image = extractFirst(/<img[^>]+src="(https:\/\/[^"]+?)"[^>]*(?:tile__item|data-preview="first")/i, block)
+            || extractFirst(/<img[^>]+src="(https:\/\/[^"]+?)"/i, block);
+
+        const priceDisplay = extractFirst(/<span[^>]+class="tile__price[^"]*"[^>]*>\s*([^<]+?)\s*<\/span>/i, block);
+        let price = null;
+        if (priceDisplay) {
+            const symMatch = /([£$€¥₹])/.exec(priceDisplay);
+            const numMatch = /([\d.,]+)/.exec(priceDisplay);
+            if (numMatch) {
+                const amount = Math.round(Number(numMatch[1].replace(/,/g, '')) * 100);
+                price = {
+                    amount,
+                    currency: symMatch ? ({ '$': 'USD', '£': 'GBP', '€': 'EUR', '¥': 'JPY', '₹': 'INR' }[symMatch[1]]) : 'USD',
+                    display: priceDisplay.trim()
+                };
+            }
+        }
+
+        if (name) {
+            seen.add(slug);
+            tiles.push({ slug, name, image, price });
+        }
+    }
+    return tiles;
+}
+
 export async function getShop(rawHandle) {
     const handle = validateHandle(rawHandle);
     const key = `shop:${handle}`;
@@ -105,16 +150,12 @@ export async function getShop(rawHandle) {
     const canonical = extractFirst(/<link\s+rel="canonical"\s+href="([^"]+)"/i, html)
         || BASE_URL(handle) + '/';
 
-    // Featured product handles for quick discovery.
-    const productHandles = new Set();
-    const productRe = /\/products\/([a-z0-9-]+)/gi;
-    let m;
-    while ((m = productRe.exec(html)) !== null) {
-        productHandles.add(m[1].toLowerCase());
-    }
+    const products = parseProductTiles(html, handle);
+
+    // Backward-compatible: keep productHandles as flat string array.
+    const productHandles = products.map(p => p.slug);
 
     if (!shopName && !shopId) {
-        // Page exists but doesn't look like a Fourthwall shop (e.g., custom domain mismatch).
         logger.warn('[FW Scraper] page missing FW markers', { handle });
     }
 
@@ -125,7 +166,8 @@ export async function getShop(rawHandle) {
         description,
         image: ogImage,
         url: canonical,
-        productHandles: Array.from(productHandles).slice(0, 50)
+        productHandles,
+        products
     };
     cacheSet(key, result);
     return result;
@@ -159,22 +201,29 @@ export async function getProduct(rawHandle, rawSlug) {
     const name = extractMeta('og:title', html) || extractFirst(/<title>([^<]+)<\/title>/i, html);
     const description = extractMeta('og:description', html) || extractMeta('description', html);
     const image = extractMeta('og:image', html);
-    const priceText = extractMeta('product:price:amount', html);
-    const currency = extractMeta('product:price:currency', html);
     const url = extractMeta('og:url', html) || `${BASE_URL(handle)}/products/${slug}/`;
 
+    // og `product:price:amount` is unreliable — FW reports the cheapest variant
+    // even when the product hero shows a higher price. Prefer the rendered
+    // product-tile or product-price span value.
     let price = null;
-    if (priceText) {
+    const renderedPrice = extractFirst(/<span[^>]+class="[^"]*(?:product-price|tile__price|product__price)[^"]*"[^>]*>\s*([^<]+?)\s*<\/span>/i, html)
+        || extractFirst(/data-price="([^"]+)"/i, html);
+    const parsed = parseMoney(renderedPrice);
+    if (parsed) {
+        const symMap = { '$': 'USD', '£': 'GBP', '€': 'EUR', '¥': 'JPY', '₹': 'INR' };
         price = {
-            amount: Math.round(Number(priceText) * 100), // minor units to match formatCurrency expectations
-            currency: currency || 'USD',
-            display: currency ? `${priceText} ${currency}` : priceText
+            amount: Math.round(parsed.amount * 100),
+            currency: parsed.currencySymbol ? (symMap[parsed.currencySymbol] || 'USD') : 'USD',
+            display: parsed.display
         };
     } else {
-        // Fallback: parse the rendered price span on the page.
-        const fallback = extractFirst(/<span[^>]+(?:class|data-testid)="[^"]*price[^"]*"[^>]*>([^<]+)<\/span>/i, html);
-        const parsed = parseMoney(fallback);
-        if (parsed) price = { amount: Math.round(parsed.amount * 100), currency: 'USD', display: parsed.display };
+        // Last-ditch fallback to og meta if no rendered price found.
+        const ogAmt = extractMeta('product:price:amount', html);
+        const ogCur = extractMeta('product:price:currency', html);
+        if (ogAmt) {
+            price = { amount: Math.round(Number(ogAmt) * 100), currency: ogCur || 'USD', display: ogCur ? `${ogAmt} ${ogCur}` : ogAmt };
+        }
     }
 
     const result = {
@@ -205,16 +254,14 @@ export async function getCollection(rawHandle, rawSlug) {
 
     const name = extractMeta('og:title', html);
     const description = extractMeta('og:description', html);
-    const productHandles = new Set();
-    const productRe = /\/products\/([a-z0-9-]+)/gi;
-    let m;
-    while ((m = productRe.exec(html)) !== null) productHandles.add(m[1].toLowerCase());
+    const products = parseProductTiles(html, handle);
 
     const result = {
         handle, slug,
         name: name || slug,
         description,
-        productHandles: Array.from(productHandles).slice(0, 50)
+        productHandles: products.map(p => p.slug),
+        products
     };
     cacheSet(key, result);
     return result;

@@ -32,6 +32,8 @@ import { handleEmbedCreate, handleEmbedEdit } from './modals/embed_modal.js';
 import { handleStaffIntroSubmit } from './modals/staff_intro_submit.js';
 import { handleForumSuggestionSubmit, handleForumBugReportSubmit } from './modals/forum_submit_handlers.js';
 import { handleFourthwallSetupSubmit } from './modals/fourthwall_setup_submit.js';
+import { handleFourthwallShopPage } from './buttons/fourthwall_shop_page.js';
+import { handleFourthwallShopPick } from './select-menus/fourthwall_shop_pick.js';
 
 /**
  * Button handler registry
@@ -76,7 +78,8 @@ export const buttonHandlers = {
 
   // Forum submit buttons
   'forum_submit_suggestion': handleSuggestionFormButton,
-  'forum_submit_bug_report': handleBugReportFormButton
+  'forum_submit_bug_report': handleBugReportFormButton,
+  'fw_shop_page:': handleFourthwallShopPage
 };
 
 /**
@@ -86,7 +89,8 @@ export const buttonHandlers = {
 export const selectMenuHandlers = {
   'panel_select_category': handlePanelSelectCategory,
   'panel_select_channel': handlePanelSelectChannel,
-  'panel_select_role': handlePanelSelectRole
+  'panel_select_role': handlePanelSelectRole,
+  'fw_shop_pick:': handleFourthwallShopPick
 };
 
 /**
