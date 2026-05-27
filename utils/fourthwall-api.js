@@ -52,15 +52,13 @@ function makePlatformClient(apiUser, apiPass) {
 }
 
 function makeStorefrontClient(storefrontToken) {
-    const headers = {
-        'Accept': 'application/json',
-        'User-Agent': 'CertiFriedUtility/1.0'
-    };
-    if (storefrontToken) headers['X-Storefront-Token'] = storefrontToken;
+    // Storefront API auth is a `storefront_token` *query parameter*, not a header
+    // (verified empirically against https://storefront-api.fourthwall.com/v1/shop).
     return axios.create({
         baseURL: STOREFRONT_BASE,
         timeout: DEFAULT_TIMEOUT_MS,
-        headers,
+        headers: { 'Accept': 'application/json', 'User-Agent': 'CertiFriedUtility/1.0' },
+        params: storefrontToken ? { storefront_token: storefrontToken } : {},
         validateStatus: () => true
     });
 }
