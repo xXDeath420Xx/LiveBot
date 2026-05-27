@@ -1180,6 +1180,10 @@ async function shutdown() {
     stopGlobalBanAggregator();
     logger.info('[Scheduler] Global ban aggregator stopped');
 
+    // Stop Fourthwall cleanup scheduler
+    stopFourthwallCleanup();
+    logger.info('[Scheduler] Fourthwall cleanup stopped');
+
     // Stop QOTD scheduler
     stopQOTDScheduler();
     logger.info('[Scheduler] QOTD scheduler stopped');
