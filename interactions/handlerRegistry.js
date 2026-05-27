@@ -31,6 +31,7 @@ import { handlePollWriteInSubmit } from './modals/poll_write_in_submit.js';
 import { handleEmbedCreate, handleEmbedEdit } from './modals/embed_modal.js';
 import { handleStaffIntroSubmit } from './modals/staff_intro_submit.js';
 import { handleForumSuggestionSubmit, handleForumBugReportSubmit } from './modals/forum_submit_handlers.js';
+import { handleFourthwallSetupSubmit } from './modals/fourthwall_setup_submit.js';
 
 /**
  * Button handler registry
@@ -102,7 +103,8 @@ export const modalHandlers = {
   'embed_edit_': handleEmbedEdit,
   'staff_intro_submit': handleStaffIntroSubmit,
   'forum_suggestion_submit': handleForumSuggestionSubmit,
-  'forum_bug_report_submit': handleForumBugReportSubmit
+  'forum_bug_report_submit': handleForumBugReportSubmit,
+  'fourthwall_setup_submit': handleFourthwallSetupSubmit
 };
 
 /**
