@@ -66,6 +66,20 @@ export default class FourthwallManager {
             }
         }
         if (!webhookSecret) {
+            // Best-effort: try to delete any webhooks that did get created (they'd point at our
+            // 404 URL otherwise). If delete fails, orphan them so the daily cleanup retries.
+            const encUser = encryptStr(apiUser);
+            const encPass = encryptStr(apiPass);
+            for (const wh of registered) {
+                try {
+                    await platform.deleteWebhook(wh.id);
+                } catch (err) {
+                    await pool.execute(
+                        `INSERT INTO fourthwall_orphan_webhooks (connection_id, webhook_id, api_username, api_password) VALUES (?, ?, ?, ?)`,
+                        [connectionId, wh.id, encUser, encPass]
+                    ).catch(e => logger.error('[FW Manager] orphan insert on partial-fail', { err: e.message }));
+                }
+            }
             await pool.execute(`DELETE FROM fourthwall_connections WHERE id = ?`, [connectionId]);
             throw new Error('Fourthwall returned no webhook secret — webhook registration failed entirely.');
         }

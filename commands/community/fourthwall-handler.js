@@ -73,6 +73,9 @@ export async function handleResync(interaction) {
     if (!conn) throw new Error(`No connection for shop ${shop}`);
     const platform = mgr(interaction).platformForConnection(conn);
     const since = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+    // Resync deliberately re-fires events that may already have been delivered via webhook.
+    // It is a recovery tool, not a normal flow — we accept duplicate Discord posts in exchange
+    // for guaranteeing that anything FW recorded in the window ends up in the channel.
     let replayed = 0;
     try {
         const orders = await platform.listOrders({ since, limit: 25 });
@@ -88,7 +91,10 @@ export async function handleResync(interaction) {
     } catch (err) {
         logger.warn('[FW resync] partial', { err: err.message });
     }
-    await interaction.editReply(`Replayed ${replayed} events from the last ${hours}h.`);
+    await interaction.editReply(
+        `Replayed ${replayed} events from the last ${hours}h. ` +
+        `Note: this may produce duplicate posts for events already delivered via webhook.`
+    );
 }
 
 export async function handleRoute(interaction) {
