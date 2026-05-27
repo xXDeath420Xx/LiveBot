@@ -57,6 +57,7 @@ import cleanupScheduler from './jobs/cleanup-scheduler.js';
 import { startVCSoundScheduler, stopVCSoundScheduler } from './jobs/vc-sound-scheduler.js';
 import { startPhishingListUpdater, stopPhishingListUpdater } from './jobs/phishing-list-updater.js';
 import { startGlobalBanAggregator, stopGlobalBanAggregator } from './jobs/global-ban-aggregator.js';
+import { startFourthwallCleanup, stopFourthwallCleanup } from './jobs/fourthwall-cleanup.js';
 import AchievementManager from './core/achievement-manager.js';
 import ServerStatsManager from './core/server-stats-manager.js';
 import EmojiStatsManager from './core/emoji-stats-manager.js';
@@ -463,6 +464,15 @@ async function initializeManagers(client) {
   client.musicPanelManager = new Map();
   logger.info('[Core] Music panel manager initialized');
 
+  // Fourthwall integration manager
+  try {
+    const { default: FourthwallManager } = await import('./core/fourthwall-manager.js');
+    client.fourthwallManager = new FourthwallManager(client);
+    logger.info('[Core] Fourthwall manager initialized');
+  } catch (err) {
+    logger.error(`[Core] Fourthwall manager init failed: ${err.message}`);
+  }
+
   logger.info('[Core] All managers initialized');
 
   // Start memory monitoring and register important Maps
@@ -861,6 +871,10 @@ async function initializeSchedulersAndDashboard(client) {
   // Start cleanup scheduler (runs daily at 4 AM)
   cleanupScheduler.start();
   logger.info('[Core] Cleanup scheduler initialized');
+
+  // Start Fourthwall orphan webhook cleanup + seen-events pruning
+  startFourthwallCleanup();
+  logger.info('[Core] Fourthwall cleanup scheduler initialized');
 
   // Start weather alerts (optional - can be enabled per guild)
   // client.weatherManager.start(300); // Check every 5 minutes
