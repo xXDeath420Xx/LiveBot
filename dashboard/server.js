@@ -17,6 +17,7 @@ import { isSuperAdmin } from '../utils/constants.js';
 import { csrfProtection, csrfToken } from '../utils/csrf-protection.js';
 import { createSessionMiddleware, sessionActivityMiddleware } from './config/session.js';
 import ebookRecordRouter from './routes/ebook-record.js';
+import fourthwallWebhookRouter from './routes/webhooks/fourthwall.js';
 import { invalidateMusicConfigCache } from '../utils/music_helpers.js';
 
 dotenv.config();
@@ -202,6 +203,9 @@ function start(botClient) {
     app.use(passport.initialize());
     app.use(passport.session());
 
+    // Fourthwall webhook receiver — mounted BEFORE body parser to preserve raw body for HMAC verify
+    app.use('/webhooks/fourthwall', fourthwallWebhookRouter);
+
     // Apply API rate limiter after passport so req.user is available for admin bypass
     app.use('/api', apiLimiter);
     app.use('/tokes-bot/api', apiLimiter);
@@ -229,7 +233,8 @@ function start(botClient) {
             '/api/webhooks',
             '/api/webhooks/gitlab',
             '/api/status',
-            '/api/ebook/record'
+            '/api/ebook/record',
+            '/webhooks/fourthwall'
         ]
     }));
 
