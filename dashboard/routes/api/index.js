@@ -19,6 +19,7 @@ import pollsRoutes from './features/polls.js';
 import suggestionsRoutes from './features/suggestions.js';
 import coreRoutes from './features/core.js';
 import rankcardRoutes from './features/rankcard.js';
+import fourthwallRoutes from './features/fourthwall.js';
 
 const router = express.Router();
 
@@ -49,6 +50,7 @@ router.use('/guilds/:guildId/polls', pollsRoutes);
 router.use('/guilds/:guildId/suggestions', suggestionsRoutes);
 router.use('/guilds/:guildId/core', coreRoutes);
 router.use('/guilds/:guildId/rank-card', rankcardRoutes);
+router.use('/guilds/:guildId/fourthwall', fourthwallRoutes);
 
 // Health check
 router.get('/health', (req, res) => {
