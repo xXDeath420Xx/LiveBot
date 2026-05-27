@@ -55,6 +55,22 @@ export default {
         .addSubcommand(s => s.setName('promotions').setDescription('List active promo codes')
             .addStringOption(o => o.setName('shop').setDescription('Shop handle')))
 
+        // Public shop tracking (no setup required — works for any FW shop)
+        .addSubcommand(s => s.setName('track').setDescription('Auto-announce new products/price changes from any FW shop')
+            .addStringOption(o => o.setName('shop').setDescription('Shop handle or URL').setRequired(true))
+            .addChannelOption(o => o.setName('channel').setDescription('Channel to announce in')
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(true))
+            .addBooleanOption(o => o.setName('new_products').setDescription('Announce new products (default on)'))
+            .addBooleanOption(o => o.setName('price_drops').setDescription('Announce price drops (default on)'))
+            .addBooleanOption(o => o.setName('price_increases').setDescription('Announce price increases (default off)'))
+            .addBooleanOption(o => o.setName('sold_out').setDescription('Announce sold-out (default off)'))
+            .addBooleanOption(o => o.setName('restocked').setDescription('Announce restocks (default on)')))
+        .addSubcommand(s => s.setName('untrack').setDescription('Stop auto-announcing for a shop')
+            .addStringOption(o => o.setName('shop').setDescription('Shop handle').setRequired(true))
+            .addChannelOption(o => o.setName('channel').setDescription('Channel (omit to remove from all channels)')
+                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+        .addSubcommand(s => s.setName('tracked').setDescription('List shops this guild is auto-tracking'))
+
         // Admin
         .addSubcommand(s => s.setName('stats').setDescription('Shop counters (orders/revenue/donations/members)')
             .addStringOption(o => o.setName('shop').setDescription('Shop handle').setRequired(true))
@@ -101,6 +117,9 @@ export default {
                 case 'promotions': return await h.handlePromotions(interaction);
                 case 'stats': return await h.handleStats(interaction);
                 case 'recent': return await h.handleRecent(interaction);
+                case 'track': return await h.handleTrack(interaction);
+                case 'untrack': return await h.handleUntrack(interaction);
+                case 'tracked': return await h.handleTracked(interaction);
                 default:
                     return await interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
             }
