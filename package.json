@@ -12,7 +12,8 @@
     "cfx:build": "cd frontend/certifried-extension && npm run build",
     "cfx:build:prod": "cd frontend/certifried-extension && npm run build:prod",
     "cfx:build:zip": "cd frontend/certifried-extension && npm run build:zip",
-    "cfx:watch": "cd frontend/certifried-extension && npm run watch"
+    "cfx:watch": "cd frontend/certifried-extension && npm run watch",
+    "test": "node --test tests/"
   },
   "keywords": [
     "discord",
