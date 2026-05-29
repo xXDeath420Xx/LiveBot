@@ -12,7 +12,7 @@
 
 **Conventions discovered (verified against the codebase):**
 - Tests: `tests/**/*.test.js`, run with `npm test` (= `node --test tests/`). Existing tests already use `node:test` + `node:assert/strict` (e.g. `tests/fourthwall-api.test.js`) — match that style. Run a single file with `node --test tests/defender/foo.test.js`.
-- Migrations: `migrations/NNN_name.js` exporting `export async function up(db)` / `export async function down(db)`. The runner is `scripts/run-migrations.js` (NOT `migrations/run.js` — that doesn't exist; the `npm run migrate` script in package.json points at a nonexistent path and is broken). The runner passes the shared `pool` as `db`, tracks applied files in `schema_migrations`, and runs all pending in numeric order at most once each. **Do not import the pool inside a migration — use the `db` arg.** Run with `node scripts/run-migrations.js`. Next free number is **111**. (Note: `run-migration.js` in the repo root is an unrelated one-off SQL script — ignore it.)
+- Migrations: `migrations/NNN_name.js` exporting `export async function up(db)` / `export async function down(db)`. **There is NO batch runner and NO `schema_migrations` tracking.** The established pattern is a one-off runner script PER migration: `scripts/run-migration-NNN.js` that does `import { up } from '../migrations/NNN_*.js'; import pool from '../utils/db.js'; await up(pool);` (see `scripts/run-migration-110.js` for the exact 15-line template). So the `db` arg IS the shared pool — **use the `db` arg, do not import the pool inside the migration file**. Migrations must be idempotent (`CREATE TABLE IF NOT EXISTS`, column-existence guards) since nothing tracks whether they ran. The `npm run migrate` script and `migrations/run.js` referenced elsewhere do NOT exist — ignore them. Next free migration number is **111**.
 - Command resolution: the existing `getCommand(channelId, name)` reads enabled rows from the `tokes_global_command_config` table (columns: `command_key`, `default_aliases` JSON, `cooldown_default`, `mod_only`, `broadcaster_only`, `category`, `description`) and maps `row.command_key` → the static `commandHandlers[command_key]` map in `command-registry.js`. A built-in command only resolves if it has BOTH a config row AND a `commandHandlers` entry. **The defender does NOT use this path** — defender commands are a self-contained in-memory map dispatched directly in `command-handler.js` (Task 9), so no DB config rows are needed and `command-registry.js` is left unchanged. The defender's manager/admin tiers are enforced in `command-handler.js`.
 - DB access (engine/runtime code, NOT migrations): `import pool from '../../utils/db.js'` then `await pool.execute(sql, params)`.
 - Logging: `import logger from '../../utils/logger.js'`.
@@ -41,9 +41,9 @@
 - `views/landing-chooser.ejs` — Discord-vs-Kick chooser.
 
 **Modified:**
-- `services/certifried-bot/command-handler.js` — insert enforcer hook at top of `handleMessage`; thread `messageId`; add defender permission tier resolution.
-- `services/certifried-bot/kick-client.js` — pass `messageId` into `handleMessage`; expose a shared token+scope resolver.
-- `services/certifried-bot/command-registry.js` — register defender commands; support `minRole` tiers `manager`/`admin`/`broadcaster`.
+- `services/certifried-bot/command-handler.js` — insert enforcer hook at top of `handleMessage`; thread `messageId`; dispatch defender commands (in-memory map) with `manager`/`admin`/`broadcaster` tier checks before the DB-backed `getCommand` path.
+- `services/certifried-bot/kick-client.js` — pass `messageId` into `handleMessage`; set `global.kickBot` for the token resolver.
+- (`command-registry.js` is intentionally NOT modified — defender commands bypass the DB-backed registry.)
 - `dashboard/routes/auth-tokes-bot.js:24` — add the two moderation scopes to `KICK_SCOPES`.
 - `dashboard/server.js:577` — root `/` renders `landing-chooser`; mount `kickDefenderRouter`.
 
@@ -64,9 +64,10 @@
  * Shared-banlist defense network for Kick. See docs/superpowers/specs/2026-05-29-kick-defender-design.md
  */
 
-// NOTE: scripts/run-migrations.js calls up(pool)/down(pool), so `db` IS the
-// shared mysql2 pool. Do NOT import the pool here — use the `db` arg. Matches
-// migration 110's style (CREATE TABLE IF NOT EXISTS, no explicit transaction).
+// NOTE: the per-migration runner (scripts/run-migration-111.js, created in
+// Step 2) calls up(pool), so `db` IS the shared mysql2 pool. Do NOT import the
+// pool here — use the `db` arg. Idempotent (CREATE TABLE IF NOT EXISTS), since
+// nothing tracks whether a migration already ran. Matches migration 110's style.
 
 export async function up(db) {
         await db.execute(`
@@ -158,20 +159,42 @@ export async function down(db) {
 }
 ```
 
-- [ ] **Step 2: Run pending migrations**
+- [ ] **Step 2: Create the per-migration runner script**
 
-Run: `node scripts/run-migrations.js`
-Expected: log line `[Migrate] Applying 111_kbd_tables.js...` then `[Migrate] Applied 111_kbd_tables.js` and `[Migrate] All migrations applied`, process exits 0. (Already-applied earlier migrations are silently skipped.)
+Create `scripts/run-migration-111.js` (mirrors `scripts/run-migration-110.js` exactly):
 
-- [ ] **Step 3: Verify tables exist**
+```js
+import { up } from '../migrations/111_kbd_tables.js';
+import pool from '../utils/db.js';
+
+async function run() {
+    try {
+        await up(pool);
+        console.log('✅ Migration 111 completed successfully');
+        process.exit(0);
+    } catch (error) {
+        console.error('❌ Migration 111 failed:', error.message);
+        process.exit(1);
+    }
+}
+
+run();
+```
+
+- [ ] **Step 3: Run the migration**
+
+Run: `node scripts/run-migration-111.js`
+Expected: `✅ Migration 111 completed successfully`, process exits 0.
+
+- [ ] **Step 4: Verify tables exist**
 
 Run: `node -e "import('./utils/db.js').then(async m=>{const[r]=await m.default.execute(\"SHOW TABLES LIKE 'kbd_%'\");console.log(r);process.exit(0);})"`
 Expected: 5 rows (`kbd_banlist`, `kbd_unbanlist`, `kbd_malicious_sites`, `kbd_managers`, `kbd_enforcement_log`).
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add migrations/111_kbd_tables.js
+git add migrations/111_kbd_tables.js scripts/run-migration-111.js
 git commit -m "feat(kbd): add Kick Defender database tables + enrollment flag"
 ```
 
@@ -1405,13 +1428,13 @@ Expected: PASS (4 tests).
 
 - [ ] **Step 8: Syntax check the modified files**
 
-Run: `node --check services/certifried-bot/command-registry.js && node --check services/certifried-bot/command-handler.js && node --check services/certifried-bot/defender/commands/index.js`
+Run: `node --check services/certifried-bot/command-handler.js && node --check services/certifried-bot/defender/commands/index.js && node --check services/certifried-bot/defender/commands/banlist-commands.js && node --check services/certifried-bot/defender/commands/info-commands.js`
 Expected: exit 0.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add services/certifried-bot/defender/commands tests/defender/commands.test.js services/certifried-bot/command-registry.js services/certifried-bot/command-handler.js
+git add services/certifried-bot/defender/commands tests/defender/commands.test.js services/certifried-bot/command-handler.js
 git commit -m "feat(kbd): add defender chat commands with permission tiers"
 ```
 
