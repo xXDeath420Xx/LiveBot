@@ -1,0 +1,107 @@
+{
+  "guildId": "800157336458231848",
+  "generatedAt": "2026-05-13T07:15:30.394Z",
+  "humanStaff": [
+    {
+      "id": "1503922180176613477",
+      "name": "Bot Manager",
+      "position": 26,
+      "bits": [
+        "ADMINISTRATOR",
+        "KICK_MEMBERS",
+        "BAN_MEMBERS",
+        "MANAGE_CHANNELS",
+        "MANAGE_GUILD",
+        "MANAGE_MESSAGES",
+        "MANAGE_ROLES",
+        "MODERATE_MEMBERS"
+      ]
+    },
+    {
+      "id": "800184758524313640",
+      "name": "Husband",
+      "position": 25,
+      "bits": [
+        "ADMINISTRATOR",
+        "KICK_MEMBERS",
+        "BAN_MEMBERS",
+        "MANAGE_CHANNELS",
+        "MANAGE_GUILD",
+        "MANAGE_MESSAGES",
+        "MANAGE_ROLES",
+        "MODERATE_MEMBERS"
+      ]
+    },
+    {
+      "id": "1356321924283629809",
+      "name": "Gotham Knights",
+      "position": 24,
+      "bits": [
+        "KICK_MEMBERS",
+        "BAN_MEMBERS",
+        "MANAGE_MESSAGES"
+      ]
+    },
+    {
+      "id": "800180555978506251",
+      "name": "The GCPD",
+      "position": 20,
+      "bits": [
+        "MANAGE_MESSAGES"
+      ]
+    },
+    {
+      "id": "1261180788628783188",
+      "name": "The Chicken Man",
+      "position": 19,
+      "bits": [
+        "KICK_MEMBERS",
+        "BAN_MEMBERS",
+        "MANAGE_MESSAGES",
+        "MODERATE_MEMBERS"
+      ]
+    },
+    {
+      "id": "1261182211164606464",
+      "name": "Cockawoosing",
+      "position": 18,
+      "bits": [
+        "KICK_MEMBERS",
+        "BAN_MEMBERS",
+        "MANAGE_MESSAGES",
+        "MODERATE_MEMBERS"
+      ]
+    },
+    {
+      "id": "1286929233842540585",
+      "name": "Mschief Managed",
+      "position": 17,
+      "bits": [
+        "KICK_MEMBERS",
+        "BAN_MEMBERS",
+        "MANAGE_CHANNELS",
+        "MANAGE_MESSAGES",
+        "MANAGE_ROLES",
+        "MODERATE_MEMBERS"
+      ]
+    }
+  ],
+  "botStaff": [
+    {
+      "id": "1503945868611551395",
+      "name": "Harley's Bat",
+      "position": 23,
+      "bits": [
+        "ADMINISTRATOR"
+      ]
+    },
+    {
+      "id": "1293327567381725197",
+      "name": "Rumble Royale",
+      "position": 10,
+      "bits": [
+        "MANAGE_MESSAGES"
+      ]
+    }
+  ]
+}
