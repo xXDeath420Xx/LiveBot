@@ -10,10 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-29-kick-defender-design.md`
 
-**Conventions discovered:**
-- Tests: `tests/**/*.test.js`, run with `npm test` (`node --test tests/**/*.test.js`). The `tests/` dir is currently empty — this plan establishes the convention. Use `node:test` + `node:assert/strict`.
-- Migrations: `migrations/NNN_name.js` exporting `async up()` / `async down()`, using `pool` from `utils/db.js`. Run one with `node run-migration.js NNN_name.js`. Next free number is **111**.
-- DB access: `import pool from '../../utils/db.js'` then `await pool.execute(sql, params)`.
+**Conventions discovered (verified against the codebase):**
+- Tests: `tests/**/*.test.js`, run with `npm test` (= `node --test tests/`). Existing tests already use `node:test` + `node:assert/strict` (e.g. `tests/fourthwall-api.test.js`) — match that style. Run a single file with `node --test tests/defender/foo.test.js`.
+- Migrations: `migrations/NNN_name.js` exporting `export async function up(db)` / `export async function down(db)`. The runner is `scripts/run-migrations.js` (NOT `migrations/run.js` — that doesn't exist; the `npm run migrate` script in package.json points at a nonexistent path and is broken). The runner passes the shared `pool` as `db`, tracks applied files in `schema_migrations`, and runs all pending in numeric order at most once each. **Do not import the pool inside a migration — use the `db` arg.** Run with `node scripts/run-migrations.js`. Next free number is **111**. (Note: `run-migration.js` in the repo root is an unrelated one-off SQL script — ignore it.)
+- Command resolution: the existing `getCommand(channelId, name)` reads enabled rows from the `tokes_global_command_config` table (columns: `command_key`, `default_aliases` JSON, `cooldown_default`, `mod_only`, `broadcaster_only`, `category`, `description`) and maps `row.command_key` → the static `commandHandlers[command_key]` map in `command-registry.js`. A built-in command only resolves if it has BOTH a config row AND a `commandHandlers` entry. **The defender does NOT use this path** — defender commands are a self-contained in-memory map dispatched directly in `command-handler.js` (Task 9), so no DB config rows are needed and `command-registry.js` is left unchanged. The defender's manager/admin tiers are enforced in `command-handler.js`.
+- DB access (engine/runtime code, NOT migrations): `import pool from '../../utils/db.js'` then `await pool.execute(sql, params)`.
 - Logging: `import logger from '../../utils/logger.js'`.
 - Token crypto: `import { encryptToken, decryptToken } from '../../utils/token-encryption.js'`.
 
@@ -63,15 +64,12 @@
  * Shared-banlist defense network for Kick. See docs/superpowers/specs/2026-05-29-kick-defender-design.md
  */
 
-import pool from '../utils/db.js';
-import logger from '../utils/logger.js';
+// NOTE: scripts/run-migrations.js calls up(pool)/down(pool), so `db` IS the
+// shared mysql2 pool. Do NOT import the pool here — use the `db` arg. Matches
+// migration 110's style (CREATE TABLE IF NOT EXISTS, no explicit transaction).
 
-export async function up() {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-
-        await connection.execute(`
+export async function up(db) {
+        await db.execute(`
             CREATE TABLE IF NOT EXISTS kbd_banlist (
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 platform VARCHAR(16) NOT NULL DEFAULT 'kick',
@@ -87,7 +85,7 @@ export async function up() {
             )
         `);
 
-        await connection.execute(`
+        await db.execute(`
             CREATE TABLE IF NOT EXISTS kbd_unbanlist (
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 platform VARCHAR(16) NOT NULL DEFAULT 'kick',
@@ -100,7 +98,7 @@ export async function up() {
             )
         `);
 
-        await connection.execute(`
+        await db.execute(`
             CREATE TABLE IF NOT EXISTS kbd_malicious_sites (
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 uri VARCHAR(512) NOT NULL,
@@ -110,7 +108,7 @@ export async function up() {
             )
         `);
 
-        await connection.execute(`
+        await db.execute(`
             CREATE TABLE IF NOT EXISTS kbd_managers (
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 tokes_user_id INT NOT NULL,
@@ -120,7 +118,7 @@ export async function up() {
             )
         `);
 
-        await connection.execute(`
+        await db.execute(`
             CREATE TABLE IF NOT EXISTS kbd_enforcement_log (
                 id INT PRIMARY KEY AUTO_INCREMENT,
                 channel_id VARCHAR(64) NOT NULL,
@@ -136,58 +134,38 @@ export async function up() {
         `);
 
         // Enrollment flag on existing tokes_channels (column may already exist on re-run)
-        const [cols] = await connection.execute(`
+        const [cols] = await db.execute(`
             SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tokes_channels'
               AND COLUMN_NAME = 'defender_enabled'
         `);
         if (cols.length === 0) {
-            await connection.execute(
+            await db.execute(
                 `ALTER TABLE tokes_channels ADD COLUMN defender_enabled TINYINT(1) NOT NULL DEFAULT 0`
             );
         }
-
-        await connection.commit();
-        logger.info('[Migration] kbd_* tables + defender_enabled flag created');
-    } catch (error) {
-        await connection.rollback();
-        logger.error('[Migration] Failed to create KBD tables', { error: error.message });
-        throw error;
-    } finally {
-        connection.release();
-    }
+        // MySQL DDL auto-commits per statement; no explicit transaction needed
+        // (matches migration 110's style). `db` is the pool passed by run.js.
 }
 
-export async function down() {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        await connection.execute('DROP TABLE IF EXISTS kbd_enforcement_log');
-        await connection.execute('DROP TABLE IF EXISTS kbd_managers');
-        await connection.execute('DROP TABLE IF EXISTS kbd_malicious_sites');
-        await connection.execute('DROP TABLE IF EXISTS kbd_unbanlist');
-        await connection.execute('DROP TABLE IF EXISTS kbd_banlist');
-        // Intentionally leave defender_enabled column in place (dropping risks data loss on re-up).
-        await connection.commit();
-        logger.info('[Migration] kbd_* tables dropped');
-    } catch (error) {
-        await connection.rollback();
-        logger.error('[Migration] Failed to drop KBD tables', { error: error.message });
-        throw error;
-    } finally {
-        connection.release();
-    }
+export async function down(db) {
+    await db.execute('DROP TABLE IF EXISTS kbd_enforcement_log');
+    await db.execute('DROP TABLE IF EXISTS kbd_managers');
+    await db.execute('DROP TABLE IF EXISTS kbd_malicious_sites');
+    await db.execute('DROP TABLE IF EXISTS kbd_unbanlist');
+    await db.execute('DROP TABLE IF EXISTS kbd_banlist');
+    // Intentionally leave defender_enabled column in place (dropping risks data loss on re-up).
 }
 ```
 
-- [ ] **Step 2: Run the migration**
+- [ ] **Step 2: Run pending migrations**
 
-Run: `node run-migration.js 111_kbd_tables.js`
-Expected: log line `[Migration] kbd_* tables + defender_enabled flag created`, process exits 0.
+Run: `node scripts/run-migrations.js`
+Expected: log line `[Migrate] Applying 111_kbd_tables.js...` then `[Migrate] Applied 111_kbd_tables.js` and `[Migrate] All migrations applied`, process exits 0. (Already-applied earlier migrations are silently skipped.)
 
 - [ ] **Step 3: Verify tables exist**
 
-Run: `node -e "import('./utils/db.js').then(async m=>{const[r]=await m.default.execute(\"SHOW TABLES LIKE 'kbd_%'\");console.log(r);await m.default.end();})"`
+Run: `node -e "import('./utils/db.js').then(async m=>{const[r]=await m.default.execute(\"SHOW TABLES LIKE 'kbd_%'\");console.log(r);process.exit(0);})"`
 Expected: 5 rows (`kbd_banlist`, `kbd_unbanlist`, `kbd_malicious_sites`, `kbd_managers`, `kbd_enforcement_log`).
 
 - [ ] **Step 4: Commit**
@@ -1184,14 +1162,13 @@ git commit -m "feat(kbd): request moderation scopes in Kick OAuth flow"
 
 ## Phase 6 — Chat commands
 
-### Task 9: Defender command permission tiers + registry hookup
+### Task 9: Defender command permission tiers + in-memory dispatch
 
 **Files:**
-- Modify: `services/certifried-bot/command-handler.js` (permission resolution for `manager`/`admin`/`broadcaster` tiers)
+- Modify: `services/certifried-bot/command-handler.js` (dispatch defender commands + `manager`/`admin`/`broadcaster` tier checks)
 - Create: `services/certifried-bot/defender/commands/index.js`
 - Create: `services/certifried-bot/defender/commands/banlist-commands.js`
 - Create: `services/certifried-bot/defender/commands/info-commands.js`
-- Modify: `services/certifried-bot/command-registry.js` (merge defender commands into the handler map + alias map)
 - Test: `tests/defender/commands.test.js`
 
 > Permission model: defender commands carry a `minRole` of `everyone` | `broadcaster` | `manager` | `admin`. Resolution: `admin` = `isSuperAdmin(resolveTokesUserId(platform,userId))`; `manager` = `isManager(tokesUserId)` OR admin; `broadcaster` = `isBroadcaster` OR manager OR admin. The tokes user id is resolved from `tokes_platform_connections` by `(platform, platform_id=userId)`.
@@ -1370,42 +1347,56 @@ export async function modCheckCmd(ctx) {
 }
 ```
 
-- [ ] **Step 6: Register defender commands + tiers in the registry & handler**
+- [ ] **Step 6: Dispatch defender commands via their own in-memory path in `command-handler.js`**
 
-In `services/certifried-bot/command-registry.js`, import and merge the defender commands into `commandHandlers` and `ALIAS_MAP`, and ensure `getCommand` returns their `minRole`. Add near the top:
+> IMPORTANT: the existing `getCommand()` only returns commands that have a ROW in `tokes_global_command_config` (it maps `row.command_key` → `commandHandlers[key]`). We deliberately do NOT route defender commands through that DB-backed path — that would require seeding config rows and a per-channel enable. Instead, defender commands are a self-contained in-memory map (`defenderCommands` from Task 9 Step 3) dispatched directly in `handleMessage`, right after the channel/prefix parse and BEFORE the `getCommand()` lookup. No changes to `command-registry.js` are needed.
 
-```js
-import { defenderCommands } from './defender/commands/index.js';
-
-// after commandHandlers is defined:
-for (const [key, def] of Object.entries(defenderCommands)) {
-    commandHandlers[key] = def.handler;
-    for (const alias of def.aliases) ALIAS_MAP[alias] = key;
-}
-// expose minRole lookup:
-export function defenderMinRole(key) {
-    return defenderCommands[key]?.minRole ?? null;
-}
-```
-
-In `services/certifried-bot/command-handler.js`, after a command is resolved and before executing the handler (the `command` object from `getCommand`), enforce the tier for defender commands:
+Add a resolver for defender command keys + aliases to `commands/index.js` (append):
 
 ```js
-import { meetsMinRole, resolvePermissionContext, defenderCommands } from './defender/commands/index.js';
-
-// ...after `const command = await getCommand(...)` and enabled/cooldown checks,
-// just before building ctx and calling command.handler:
-const defDef = defenderCommands[command.key];
-let permCtx = null;
-if (defDef) {
-    permCtx = await resolvePermissionContext({ platform, userId, isBroadcaster });
-    if (!meetsMinRole(defDef.minRole, permCtx)) {
-        return; // silently ignore unauthorized defender command
+// Resolve a typed command name (or alias) to a defender command def, or null.
+const aliasToKey = (() => {
+    const map = {};
+    for (const [key, def] of Object.entries(defenderCommands)) {
+        map[key] = key;
+        for (const alias of def.aliases) map[alias] = key;
     }
+    return map;
+})();
+
+export function resolveDefenderCommand(name) {
+    const key = aliasToKey[name?.toLowerCase()];
+    return key ? { key, ...defenderCommands[key] } : null;
 }
-const ctx = { platform, channelId, channelName, userId, username, args, message, reply, profile, isBroadcaster, isMod, permCtx };
-await command.handler(ctx);
 ```
+
+In `services/certifried-bot/command-handler.js`, add the import at the top:
+
+```js
+import { resolveDefenderCommand, meetsMinRole, resolvePermissionContext } from './defender/commands/index.js';
+```
+
+Then, inside `handleMessage`, AFTER `commandName`/`args` are parsed (current `command-handler.js:179-180`) and BEFORE the `getCommand(channel.id, ...)` lookup (current line 183), insert the defender dispatch:
+
+```js
+    // Defender commands: self-contained, dispatched before the DB-backed registry.
+    const defCmd = resolveDefenderCommand(commandName);
+    if (defCmd) {
+        const permCtx = await resolvePermissionContext({ platform, userId, isBroadcaster });
+        if (!meetsMinRole(defCmd.minRole, permCtx)) {
+            return; // silently ignore unauthorized defender command
+        }
+        const defCtx = { platform, channelId, channelName, userId, username, args, message, reply, isBroadcaster, isMod, permCtx };
+        try {
+            await defCmd.handler(defCtx);
+        } catch (err) {
+            logger.error('[KBD] defender command failed', { command: commandName, error: err.message });
+        }
+        return; // handled; do not fall through to games/custom commands
+    }
+```
+
+(Note: the defender `ctx` uses `reply` directly — the banlist/info command handlers in Steps 4-5 only use `ctx.reply`, `ctx.args`, `ctx.platform`, `ctx.channelId`, and `ctx.permCtx`. No `profile`/`channelStats` needed.)
 
 - [ ] **Step 7: Run command tests**
 
