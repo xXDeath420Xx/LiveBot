@@ -559,6 +559,22 @@ No code changes in this task. If you updated operational docs, commit them; othe
 
 ---
 
+### Task 5b: Auto-join camp for custom bots on startup (added during execution)
+
+Surfaced by the final integration review: the system shares ONE `global.player`
+(bound to the default bot's client), and which bot actually *joins* voice is
+decided by which client fetched the channel (`channel.guild.voiceAdapterCreator`).
+`joinCampChannels` was only wired into the default bot's path
+(`initializeSchedulersAndDashboard`), so custom-bot guilds (e.g. the target guild
+`844406178799943730`, served by custom bot **DabFam Utility** `1438897897289552054`)
+would not auto-join camp on restart.
+
+Fix: in `index.js`, inside the custom-bot init block, immediately after
+`await initializeManagers(customClient)`, call
+`await joinCampChannels(customClient, global.player)` (using the CUSTOM client so
+that bot connects). Wrapped in its own try/catch so a camp failure can't abort the
+bot's init. Commit: `feat(voice-camp): auto-join camp channels for custom bots on startup`.
+
 ## Notes for the implementer
 
 - **discord-player specifics:** `player.nodes.create(guild, opts)` returns a `GuildQueue`; `queue.connect(channelResolvable)` both joins and *moves* an existing connection (used for return-to-camp); `queue.channel` is the current voice channel or `null`. These are v7 APIs verified against `node_modules/discord-player/dist/index.d.ts`.
