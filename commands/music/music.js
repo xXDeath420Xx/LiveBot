@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, ChannelType } from 'discord.js';
 import { QueueRepeatMode } from 'discord-player';
 import pool from '../../utils/db.js';
 
@@ -115,6 +115,12 @@ export default {
                             option.setName('toggle').setDescription('Enable or disable 24/7 mode').setRequired(true)
                                 .addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' })))
                 .addSubcommand(subcommand =>
+                    subcommand.setName('camp').setDescription('Set a voice channel the bot always stays in (leave empty to disable)')
+                        .addChannelOption(option =>
+                            option.setName('channel').setDescription('Voice channel to camp in (omit to disable)')
+                                .addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice)
+                                .setRequired(false)))
+                .addSubcommand(subcommand =>
                     subcommand.setName('autoplay').setDescription('Toggle autoplay (automatically play similar songs)')
                         .addStringOption(option =>
                             option.setName('mode').setDescription('Autoplay mode').setRequired(true)
@@ -223,6 +229,7 @@ export default {
                 // Route to settings handlers (Admin features)
                 switch (subcommand) {
                     case '247': await controlsHandlers.handle247(interaction); break;
+                    case 'camp': await controlsHandlers.handleCamp(interaction); break;
                     case 'autoplay': await controlsHandlers.handleAutoplay(interaction); break;
                     case 'requestchannel': await controlsHandlers.handleRequestChannel(interaction); break;
                     case 'voteskip': await controlsHandlers.handleVoteSkipSettings(interaction); break;
