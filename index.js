@@ -10,6 +10,7 @@ import PollsManager from './core/polls-manager.js';
 import GiveawayManager from './core/giveaway-manager.js';
 import LevelingManager from './core/leveling-manager.js';
 import MusicStatusManager from './core/music-status-manager.js';
+import { getPlayerErrorReason } from './utils/music-error-reasons.js';
 import DJManager from './core/dj-manager.js';
 import MusicPanel from './core/music-panel.js';
 import RPGCharacterManager from './core/rpg-character-manager.js';
@@ -47,11 +48,20 @@ import AutoMemeManager from './core/auto-meme-manager.js';
 import { startAutoMemeScheduler, stopAutoMemeScheduler } from './jobs/auto-meme-scheduler.js';
 import { startPokerMemeScheduler, stopPokerMemeScheduler } from './jobs/poker-meme-scheduler.js';
 import { startCommunityRotation, stopCommunityRotation } from './jobs/community-support-rotation.js';
+import { startMonthlyResetScheduler, stopMonthlyResetScheduler } from './jobs/leveling-monthly-reset.js';
+import { startUnverifiedReaper, stopUnverifiedReaper } from './jobs/unverified-reaper.js';
 import { startAffiliateRecheckScheduler, stopAffiliateRecheckScheduler } from './jobs/affiliate-recheck-scheduler.js';
 import { startTimeCapsuleScheduler, stopTimeCapsuleScheduler } from './jobs/time-capsule-scheduler.js';
 import { startHabitTrackerScheduler, stopHabitTrackerScheduler } from './jobs/habit-tracker-scheduler.js';
 import { startPetStatDecayScheduler, stopPetStatDecayScheduler } from './jobs/pet-stat-decay-scheduler.js';
+import { startThroneScheduler, stopThroneScheduler } from './jobs/throne-scheduler.js';
 import { startServerStatsScheduler, stopServerStatsScheduler } from './jobs/server-stats-scheduler.js';
+import { startStatDisplayScheduler, stopStatDisplayScheduler } from './jobs/stat-display-scheduler.js';
+import { startGamePatchScheduler, stopGamePatchScheduler } from './jobs/game-patch-scheduler.js';
+import GamePatchWatcherManager from './core/game-patch-watcher-manager.js';
+import { startPurgeScheduler, stopPurgeScheduler } from './jobs/purge-scheduler.js';
+import { startBackupScheduler } from './jobs/backup-scheduler.js';
+import { startCrossNetworkScheduler, stopCrossNetworkScheduler } from './jobs/cross-network-scheduler.js';
 import initGrowReminderScheduler from './jobs/grow-reminder-scheduler.js';
 import cleanupScheduler from './jobs/cleanup-scheduler.js';
 import { startVCSoundScheduler, stopVCSoundScheduler } from './jobs/vc-sound-scheduler.js';
@@ -61,6 +71,7 @@ import { startFourthwallCleanup, stopFourthwallCleanup } from './jobs/fourthwall
 import { startFourthwallTracker, stopFourthwallTracker } from './jobs/fourthwall-shop-tracker-scheduler.js';
 import AchievementManager from './core/achievement-manager.js';
 import ServerStatsManager from './core/server-stats-manager.js';
+import StatDisplayManager from './core/stat-display-manager.js';
 import EmojiStatsManager from './core/emoji-stats-manager.js';
 import ScheduleManager from './core/schedule-manager.js';
 import { fileURLToPath } from 'url';
@@ -256,6 +267,14 @@ async function initializeManagers(client) {
   client.serverStatsManager = new ServerStatsManager(client);
   logger.info('[Core] Server Stats manager initialized');
 
+  // Stat Display manager (voice channel counters)
+  client.statDisplayManager = new StatDisplayManager(client);
+  logger.info('[Core] Stat Display manager initialized');
+
+  // Game Patch Watcher manager (per-game patch notes via cod-blog / fortnite-news)
+  client.gamePatchWatcherManager = new GamePatchWatcherManager(client);
+  logger.info('[Core] Game Patch Watcher manager initialized');
+
   // Emoji Stats manager
   client.emojiStatsManager = new EmojiStatsManager(client);
   logger.info('[Core] Emoji Stats manager initialized');
@@ -278,192 +297,34 @@ async function initializeManagers(client) {
   client.rpgShopManager = new RPGShopManager(client, client.rpgCharacterManager);
   logger.info('[Core] RPG shop manager initialized');
 
-  // Initialize music system if discord-player is available
-  if (Player) {
-    try {
-      // Create player instance for this client
-      const player = new Player(client, {
-        ytdlOptions: {
-          quality: 'highestaudio',
-          highWaterMark: 1 << 25,
-          filter: 'audioonly',
-          opusEncoded: false,
-          fmt: 'bestaudio',
-          dlChunkSize: 0
-        },
-        skipFFmpeg: false,
-        useLegacyFFmpeg: false
-      });
-      client.player = player;
-
-      // Set global.player as fallback (last bot to initialize wins, but that's OK for fallback)
-      // This ensures music_helpers.js fallback works for custom bots too
-      global.player = player;
-
-      logger.info(`[Music] Player instance created for ${client.isDefaultBot ? 'default bot' : 'custom bot ' + client.botId}`);
-
-      // Register extractors - ORDER MATTERS!
-      // 1. LocalFileExtractor first (for DJ commentary WAV files)
-      try {
-        const { LocalFileExtractor } = await import('./core/local-file-extractor.js');
-        await player.extractors.register(LocalFileExtractor, {});
-        logger.info('[Music] LocalFileExtractor registered');
-      } catch (error) {
-        logger.warn('[Music] Could not register LocalFileExtractor:', error);
-      }
-
-      // 2. YtDlpExtractor BEFORE SpotifyExtractor - handles all searches including YouTube
-      // SpotifyExtractor claims AUTO_SEARCH but returns empty for non-Spotify content
-      try {
-        const { YtDlpExtractor } = await import('./core/ytdlp-extractor.js');
-        await player.extractors.register(YtDlpExtractor, {});
-        logger.info('[Music] YtDlp extractor registered');
-      } catch (error) {
-        logger.error('[Music] Could not load yt-dlp extractor:', error);
-      }
-
-      // 3. SpotifyExtractor last (only for explicit Spotify URLs now)
-      try {
-        const { SpotifyExtractor } = await import('@discord-player/extractor');
-        await player.extractors.register(SpotifyExtractor, {
-          clientId: process.env.SPOTIFY_CLIENT_ID,
-          clientSecret: process.env.SPOTIFY_CLIENT_SECRET
-        });
-        logger.info('[Music] SpotifyExtractor registered with credentials');
-      } catch (error) {
-        logger.warn('[Music] Could not register SpotifyExtractor:', error.message);
-      }
-
-      // Set up player event handlers
-      player.events.on('playerStart', (queue, track) => {
-        logger.info(`[Music] Started playing: ${track.title} in guild ${queue.guild.id}`);
-        client.musicPanelManager?.get(queue.guild.id)?.updatePanel(queue);
-      });
-
-      player.events.on('playerPause', (queue) => {
-        logger.info(`[Music] Player paused in guild ${queue.guild.id}`);
-        client.musicPanelManager?.get(queue.guild.id)?.updatePanel(queue);
-      });
-
-      player.events.on('playerResume', (queue) => {
-        logger.info(`[Music] Player resumed in guild ${queue.guild.id}`);
-        client.musicPanelManager?.get(queue.guild.id)?.updatePanel(queue);
-      });
-
-      player.events.on('playerSkip', (queue, track) => {
-        logger.info(`[Music] Skipped track in guild ${queue.guild.id}`);
-        client.musicPanelManager?.get(queue.guild.id)?.updatePanel(queue);
-      });
-
-      player.events.on('disconnect', async (queue) => {
-        logger.info(`[Music] Disconnected from voice in guild ${queue.guild.id}`);
-        client.musicStatusManager?.removeMusicSession(queue.guild.id);
-        client.musicPanelManager?.get(queue.guild.id)?.updatePanel();
-
-        // 24/7 Mode: Auto-rejoin if enabled
-        try {
-          const { is247Enabled } = await import('./utils/music_helpers.js');
-          const is247 = await is247Enabled(queue.guild.id);
-          if (is247 && queue.metadata?.voiceChannel) {
-            logger.info(`[24/7] Attempting to rejoin voice channel in guild ${queue.guild.id}`);
-            setTimeout(async () => {
-              try {
-                const channel = await client.channels.fetch(queue.metadata.voiceChannel.id).catch(() => null);
-                if (channel) {
-                  await player.play(channel, { search: '', requestedBy: client.user }, { nodeOptions: { leaveOnEmpty: false, leaveOnEnd: false } });
-                  logger.info(`[24/7] Rejoined voice channel in guild ${queue.guild.id}`);
-                }
-              } catch (rejoinError) {
-                logger.error(`[24/7] Failed to rejoin: ${rejoinError.message}`);
-              }
-            }, 3000);
-          }
-        } catch (error) {
-          logger.error(`[24/7] Error checking 24/7 status: ${error.message}`);
-        }
-      });
-
-      player.events.on('emptyQueue', async (queue) => {
-        logger.info(`[Music] Queue is empty in guild ${queue.guild.id}`);
-        client.musicPanelManager?.get(queue.guild.id)?.updatePanel();
-
-        // If DJ mode is enabled, the DJ manager handles this via its own queueEnd listener
-        // Don't duplicate the call here to prevent race conditions
-        if (queue.metadata?.djMode) {
-          logger.info(`[DJ Mode] Queue empty - DJ manager will handle playlist generation via queueEnd event`);
-          return;
-        }
-
-        // Autoplay: Fetch and queue similar tracks when queue ends
-        try {
-          const { isAutoplayEnabled, getAutoplaySource, is247Enabled } = await import('./utils/music_helpers.js');
-          const autoplayEnabled = await isAutoplayEnabled(queue.guild.id);
-
-          if (autoplayEnabled && queue.history.previousTrack) {
-            logger.info(`[Autoplay] Queue empty, fetching similar tracks for guild ${queue.guild.id}`);
-            const source = await getAutoplaySource(queue.guild.id);
-            const previousTrack = queue.history.previousTrack;
-
-            try {
-              let searchQuery = `${previousTrack.title} ${previousTrack.author || ''} similar`.trim();
-              logger.info(`[Autoplay] Searching for: ${searchQuery}`);
-              const result = await player.search(searchQuery, {
-                requestedBy: client.user,
-                searchEngine: 'ext:com.certifried.ytdlp-universal'
-              });
-
-              if (result.tracks.length > 0) {
-                const newTracks = result.tracks.filter(t =>
-                  t.url !== previousTrack.url && t.title !== previousTrack.title
-                ).slice(0, 3);
-
-                if (newTracks.length > 0) {
-                  for (const track of newTracks) {
-                    queue.addTrack(track);
-                  }
-                  logger.info(`[Autoplay] Added ${newTracks.length} similar tracks to queue`);
-                  if (!queue.isPlaying()) {
-                    await queue.node.play();
-                  }
-                }
-              }
-            } catch (autoplayError) {
-              logger.error(`[Autoplay] Error: ${autoplayError.message}`);
-            }
-          }
-
-          const is247 = await is247Enabled(queue.guild.id);
-          if (is247) {
-            logger.info(`[24/7] Keeping connection alive in guild ${queue.guild.id}`);
-          }
-        } catch (error) {
-          logger.error(`[Autoplay/24/7] Error: ${error.message}`);
-        }
-      });
-
-      player.events.on('error', (queue, error) => {
-        logger.error(`[Music] Player error in guild ${queue.guild.id}:`, error);
-      });
-
-      player.events.on('playerError', (queue, error) => {
-        logger.error(`[Music] Track error in guild ${queue.guild.id}:`, error);
-      });
-
-      // Initialize music managers
-      client.musicStatusManager = new MusicStatusManager(client);
-      logger.info('[Music] Music status manager initialized');
-
-      client.djManager = new DJManager(client);
-      logger.info('[Music] DJ manager initialized');
-    } catch (error) {
-      logger.error('[Music] Failed to initialize music player:', error);
-    }
+  // Share the main bot's player with custom bots so music commands work everywhere
+  // Use a proxy that lazily resolves global.player (may not be created yet at init time)
+  if (!client.player) {
+    Object.defineProperty(client, 'player', {
+      get() { return global.player || null; },
+      set(v) { Object.defineProperty(client, 'player', { value: v, writable: true, configurable: true }); },
+      configurable: true,
+    });
+    logger.info('[Music] Deferred player binding for custom bot (resolves from global.player)');
   }
 
-  // Music panel manager (used by custom bots too)
-  // Panels are loaded eagerly in the music system init block, and lazy-loaded on interaction as fallback
-  client.musicPanelManager = new Map();
-  logger.info('[Core] Music panel manager initialized');
+  // Music panel manager — shared globally so player events can find any bot's panels
+  if (!global.musicPanelManager) global.musicPanelManager = new Map();
+  client.musicPanelManager = global.musicPanelManager;
+  logger.info('[Core] Music panel manager initialized (shared global)');
+
+  // CAH (Cards Against Humanity) — seed built-in deck, rehydrate in-flight games, start cleanup cron
+  try {
+    const { seedBuiltinDeck } = await import('./core/cah-deck-importer.js');
+    await seedBuiltinDeck();
+    const { rehydrateActiveGames } = await import('./core/cah-manager.js');
+    await rehydrateActiveGames(client);
+    const { startCahCleanup } = await import('./jobs/cah-cleanup.js');
+    startCahCleanup();
+    logger.info('[Core] CAH engine ready');
+  } catch (err) {
+    logger.error(`[Core] CAH init failed: ${err.message}`);
+  }
 
   // Fourthwall integration manager
   try {
@@ -513,7 +374,8 @@ async function initializeSchedulersAndDashboard(client) {
           dlChunkSize: 0
         },
         skipFFmpeg: false,  // Always use FFmpeg for proper audio format
-        useLegacyFFmpeg: false
+        useLegacyFFmpeg: false,
+        connectionTimeout: 60000 // 60s voice connection timeout (default 20s too short with 23 bot clients)
       });
       client.player = player;
       global.player = player;
@@ -551,9 +413,17 @@ async function initializeSchedulersAndDashboard(client) {
         logger.warn('[Music] Could not register SpotifyExtractor:', error.message);
       }
 
-      // Add hook to force FFmpeg processing for all streams
+      // Queue mutations — refresh the panel so queue size / "Up Next" stay accurate
+      // when tracks are added while something is already playing. playerStart only
+      // fires on the first track, not on subsequent enqueues.
       player.events.on('audioTrackAdd', (queue, track) => {
         logger.info(`[Music Debug] Track added: ${track.title}`);
+        client.musicPanelManager?.get(queue.guild.id)?.updatePanel(queue);
+      });
+
+      player.events.on('audioTracksAdd', (queue, tracks) => {
+        logger.info(`[Music Debug] ${tracks?.length || 0} tracks added in batch`);
+        client.musicPanelManager?.get(queue.guild.id)?.updatePanel(queue);
       });
 
       // Set up player event handlers
@@ -589,26 +459,18 @@ async function initializeSchedulersAndDashboard(client) {
         client.musicStatusManager?.removeMusicSession(queue.guild.id);
         client.musicPanelManager?.get(queue.guild.id)?.updatePanel();
 
-        // 24/7 Mode: Auto-rejoin if enabled
+        // Voice camp: if this guild has a camp channel, reconnect to it shortly after.
+        // resolveCampChannel returns null for non-camp guilds, so this is a no-op there.
+        const guildId = queue.guild.id;
         try {
-          const { is247Enabled } = await import('./utils/music_helpers.js');
-          const is247 = await is247Enabled(queue.guild.id);
-          if (is247 && queue.metadata?.voiceChannel) {
-            logger.info(`[24/7] Attempting to rejoin voice channel in guild ${queue.guild.id}`);
-            setTimeout(async () => {
-              try {
-                const channel = await client.channels.fetch(queue.metadata.voiceChannel.id).catch(() => null);
-                if (channel) {
-                  await player.play(channel, { search: '', requestedBy: client.user }, { nodeOptions: { leaveOnEmpty: false, leaveOnEnd: false } });
-                  logger.info(`[24/7] Rejoined voice channel in guild ${queue.guild.id}`);
-                }
-              } catch (rejoinError) {
-                logger.error(`[24/7] Failed to rejoin: ${rejoinError.message}`);
-              }
-            }, 3000);
-          }
+          const { rejoinCamp, CAMP_REJOIN_DELAY_MS } = await import('./core/voice-camp-manager.js');
+          setTimeout(() => {
+            rejoinCamp(client, player, guildId).catch((err) =>
+              logger.error(`[VoiceCamp] Rejoin after disconnect failed in guild ${guildId}: ${err.message}`)
+            );
+          }, CAMP_REJOIN_DELAY_MS);
         } catch (error) {
-          logger.error(`[24/7] Error checking 24/7 status: ${error.message}`);
+          logger.error(`[VoiceCamp] Error scheduling camp rejoin in guild ${guildId}: ${error.message}`);
         }
       });
 
@@ -686,24 +548,57 @@ async function initializeSchedulersAndDashboard(client) {
           if (is247) {
             logger.info(`[24/7] Keeping connection alive in guild ${queue.guild.id}`);
           }
+
+          // Voice camp: if a camp channel is configured, return home when idle.
+          const { returnToCamp } = await import('./core/voice-camp-manager.js');
+          await returnToCamp(player, queue);
         } catch (error) {
           logger.error(`[Autoplay/24/7] Error: ${error.message}`);
         }
       });
 
       player.events.on('error', (queue, error) => {
-        logger.error(`[Music] Player error in guild ${queue.guild.id}:`, error);
-        logger.error(`[Music Debug] Error stack:`, error.stack);
+        logger.error(`[Music] Player error in guild ${queue.guild.id}:`, { error: error.message });
+        client.musicPanelManager?.get(queue.guild.id)?.updatePanel(queue);
       });
 
       player.events.on('playerError', async (queue, error) => {
-        logger.error(`[Music] Track error in guild ${queue.guild.id}:`, error);
-        logger.error(`[Music Debug] Error stack:`, error.stack);
-        logger.error(`[Music Debug] Current track:`, queue.currentTrack?.title || 'none');
-        logger.error(`[Music Debug] Track URL:`, queue.currentTrack?.url || 'none');
+        logger.error(`[Music] Track error in guild ${queue.guild.id}: ${error.message}`, {
+          errorMessage: error.message,
+          errorCode: error.code,
+          track: queue.currentTrack?.title || 'none',
+          url: queue.currentTrack?.url || 'none',
+          voiceStatus: queue.connection?.state?.status || 'unknown'
+        });
 
-        // Auto-recovery: try to skip to next track on error
-        logger.warn(`[Music] Attempting auto-recovery by skipping broken track...`);
+        // If voice connection aborted, destroy queue — skipping won't help
+        if (error.code === 'ABORT_ERR' || error.message?.includes('operation was aborted')) {
+          logger.warn(`[Music] Voice connection aborted in guild ${queue.guild.id} — destroying queue`);
+          try {
+            queue.delete();
+          } catch (e) {
+            logger.error(`[Music] Could not delete queue:`, { error: e.message });
+          }
+          client.musicPanelManager?.get(queue.guild.id)?.updatePanel();
+          return;
+        }
+
+        // Send user-friendly error message (only for non-DJ guilds; DJManager handles its own)
+        if (!queue.metadata?.djMode) {
+          try {
+            const channel = client.channels.cache.get(queue.metadata?.channelId);
+            if (channel?.isTextBased()) {
+              const reason = getPlayerErrorReason(error.message);
+              channel.send(`\u23ED\uFE0F | Skipped unavailable track: ${reason}`);
+            }
+          } catch (msgErr) {
+            logger.warn(`[Music] Failed to send error message to channel: ${msgErr.message}`);
+          }
+        }
+
+        // Auto-recovery: wait 3s then skip to next track (prevents YouTube rate-limit cascade)
+        logger.warn(`[Music] Waiting 3s before auto-recovery skip (rate-limit protection)...`);
+        await new Promise(r => setTimeout(r, 3000));
         try {
           if (queue.tracks.size > 0) {
             queue.node.skip();
@@ -714,7 +609,6 @@ async function initializeSchedulersAndDashboard(client) {
           }
         } catch (recoveryError) {
           logger.error(`[Music] Auto-recovery failed:`, { error: recoveryError.message });
-          // Last resort - delete the queue
           try {
             queue.delete();
             logger.warn(`[Music] Deleted queue as last resort recovery`);
@@ -738,9 +632,12 @@ async function initializeSchedulersAndDashboard(client) {
       client.djManager = new DJManager(client);
       logger.info('[Music] DJ manager initialized');
 
-      // Reuse existing map (already created in core init) or create if not present
-      if (!client.musicPanelManager) client.musicPanelManager = new Map();
-      logger.info('[Music] Music panel manager ready');
+      // Reuse shared global map
+      if (!client.musicPanelManager) {
+        if (!global.musicPanelManager) global.musicPanelManager = new Map();
+        client.musicPanelManager = global.musicPanelManager;
+      }
+      logger.info('[Music] Music panel manager ready (shared global)');
 
       // Load existing music panels from database (best-effort; lazy-load fallback exists in interactionCreate)
       try {
@@ -769,6 +666,14 @@ async function initializeSchedulersAndDashboard(client) {
         logger.error('[Music] Error loading music panels:', error);
       }
 
+      // Voice camp: join configured camp channels for this client's guilds (best-effort).
+      try {
+        const { joinCampChannels } = await import('./core/voice-camp-manager.js');
+        await joinCampChannels(client, player);
+      } catch (error) {
+        logger.error('[VoiceCamp] Error joining camp channels on startup:', error);
+      }
+
       logger.info('[Music] Music system fully initialized');
     } catch (error) {
       logger.error('[Music] Failed to initialize music system:', error);
@@ -792,6 +697,13 @@ async function initializeSchedulersAndDashboard(client) {
   // Start streaming schedulers
   startStreamCheckScheduler(client);
   logger.info('[Core] Stream check scheduler initialized');
+
+  // Retry blocked command deployments every 5 min. Without this, a bot whose
+  // boot deploy timed out stays without commands until next PM2 restart, even
+  // after Discord's rate-limit hold clears.
+  setInterval(() => botManager.retryBlockedDeployments(), 5 * 60 * 1000);
+  setTimeout(() => botManager.retryBlockedDeployments(), 30 * 1000); // also try 30s after boot
+  logger.info('[Core] Blocked-deployment retry scheduler initialized (5 min interval)');
 
   startTwitchScheduleScheduler(client);
   logger.info('[Core] Twitch schedule scheduler initialized');
@@ -833,9 +745,19 @@ async function initializeSchedulersAndDashboard(client) {
   startTikTokVideoChecker(client);
   logger.info('[Core] TikTok video checker initialized');
 
+  // Instagram/Facebook feeds are handled by the social-feed-scheduler alongside Reddit/YouTube/Twitter
+
   // Start community support monthly rotation
   startCommunityRotation(client);
   logger.info('[Core] Community support rotation scheduler initialized');
+
+  // Start leveling monthly-reset scheduler (opt-in per guild via level_config.monthly_reset_enabled)
+  startMonthlyResetScheduler(client);
+  logger.info('[Core] Leveling monthly-reset scheduler initialized');
+
+  // Start unverified-reaper (opt-in per guild via verify_config.unverified_kick_days > 0)
+  startUnverifiedReaper(client);
+  logger.info('[Core] Unverified reaper scheduler initialized');
 
   // Start affiliate status re-check scheduler
   startAffiliateRecheckScheduler();
@@ -857,9 +779,39 @@ async function initializeSchedulersAndDashboard(client) {
   startServerStatsScheduler(client);
   logger.info('[Core] Server stats scheduler initialized');
 
+  // Start stat display scheduler (voice channel counters)
+  startStatDisplayScheduler(client);
+  logger.info('[Core] Stat display scheduler initialized');
+
+  // Start game-patch watcher scheduler (cod-blog + fortnite-news)
+  startGamePatchScheduler(client);
+  logger.info('[Core] Game patch scheduler initialized');
+
+  // Start Twitch VIP/Mod role sync scheduler
+  import('./jobs/twitch-role-sync-scheduler.js').then(({ startTwitchRoleSyncScheduler }) => {
+    startTwitchRoleSyncScheduler(client);
+    logger.info('[Core] Twitch role sync scheduler initialized');
+  }).catch(err => logger.error('[Core] Failed to start Twitch role sync scheduler:', err.message));
+
+  // Start scheduled channel purge
+  startPurgeScheduler(client);
+  logger.info('[Core] Purge scheduler initialized');
+
+  // Start auto-backup scheduler (weekly)
+  startBackupScheduler(client);
+  logger.info('[Core] Auto-backup scheduler initialized');
+
+  // Start cross-network live notification scheduler
+  startCrossNetworkScheduler(client);
+  logger.info('[Core] Cross-network scheduler initialized');
+
   // Start VC sound drop scheduler
   startVCSoundScheduler(client.vcSoundManager);
   logger.info('[Core] VC sound scheduler initialized');
+
+  // Start Throne wishlist notification scheduler
+  startThroneScheduler();
+  logger.info('[Core] Throne notification scheduler initialized');
 
   // Start phishing list updater (syncs domain lists every 4 hours)
   startPhishingListUpdater(client);
@@ -913,17 +865,6 @@ async function initializeSchedulersAndDashboard(client) {
     logger.error('[Core] Failed to start CertiFried Extension', { error: error.message, stack: error.stack });
   }
 
-  // Auto-cleanup disabled - run manually if needed
-  // const { forceDeleteSpam } = await import('./force-delete-spam.js');
-  // setTimeout(() => forceDeleteSpam(client), 10000);
-
-  // Check channel messages
-  try {
-    const { checkChannelMessages } = await import('./check-channel-messages.js');
-    setTimeout(() => checkChannelMessages(client), 5000);
-  } catch (error) {
-    logger.error('[Core] Failed to check channel messages', { error: error.message });
-  }
 }
 
 async function start() {
@@ -969,63 +910,91 @@ async function start() {
 
     logger.info(`[BotManager] Found ${customBots.length} enabled custom bot(s) to load`);
 
+    // Prepare all custom bot configs (DB queries are fast, do them sequentially)
+    const botLoadTasks = [];
     for (const botConfig of customBots) {
+      const [mappings] = await pool.execute(
+        'SELECT guild_id FROM guild_bot_mapping WHERE bot_id = ?',
+        [botConfig.bot_id]
+      );
+      const guildIds = mappings.map(m => m.guild_id);
+
+      if (guildIds.length === 0) {
+        logger.warn(`[BotManager] Custom bot ${botConfig.bot_name} (${botConfig.bot_id}) has no assigned guilds, skipping`);
+        continue;
+      }
+
+      let tokenObj;
       try {
-        logger.info(`[BotManager] Loading custom bot: ${botConfig.bot_name} (ID: ${botConfig.bot_id})`);
-
-        // Get guild mappings for this bot
-        const [mappings] = await pool.execute(
-          'SELECT guild_id FROM guild_bot_mapping WHERE bot_id = ?',
-          [botConfig.bot_id]
-        );
-
-        const guildIds = mappings.map(m => m.guild_id);
-
-        if (guildIds.length === 0) {
-          logger.warn(`[BotManager] Custom bot ${botConfig.bot_name} (${botConfig.bot_id}) has no assigned guilds, skipping`);
-          continue;
-        }
-
-        logger.info(`[BotManager] Custom bot ${botConfig.bot_name} assigned to ${guildIds.length} guild(s): ${guildIds.join(', ')}`);
-
-        // Parse and validate token
-        let tokenObj;
-        try {
-          tokenObj = JSON.parse(botConfig.bot_token);
-          logger.info(`[BotManager] Token parsed successfully for ${botConfig.bot_name}`);
-        } catch (parseError) {
-          logger.error(`[BotManager] Failed to parse bot token for ${botConfig.bot_name}:`, {
-            error: parseError.message,
-            bot_id: botConfig.bot_id
-          });
-          continue;
-        }
-
-        const customClient = await botManager.addCustomBot({
-          bot_id: botConfig.bot_id,
-          bot_name: botConfig.bot_name,
-          bot_token: tokenObj,
-          guild_ids: guildIds
+        tokenObj = JSON.parse(botConfig.bot_token);
+      } catch (parseError) {
+        logger.error(`[BotManager] Failed to parse bot token for ${botConfig.bot_name}:`, {
+          error: parseError.message,
+          bot_id: botConfig.bot_id
         });
+        continue;
+      }
 
-        // Initialize managers for custom bot (same as default bot)
-        logger.info(`[BotManager] Initializing managers for ${botConfig.bot_name}...`);
-        await initializeManagers(customClient);
-        logger.info(`[BotManager] ✅ Custom bot ${botConfig.bot_name} (${botConfig.bot_id}) fully initialized with all managers`);
+      botLoadTasks.push({ botConfig, tokenObj, guildIds });
+    }
 
-      } catch (error) {
-        logger.error(`[BotManager] ❌ Failed to load custom bot ${botConfig.bot_name} (${botConfig.bot_id}):`, {
-          error: error.message,
-          stack: error.stack,
-          code: error.code,
-          bot_id: botConfig.bot_id,
-          bot_name: botConfig.bot_name
-        });
-        // Continue loading other bots even if one fails
+    // Login all custom bots with a small stagger so we don't fire 26 DNS
+    // lookups for gateway.discord.gg simultaneously — that race previously
+    // caused one bot per startup to fail with ENOTFOUND.
+    logger.info(`[BotManager] Logging in ${botLoadTasks.length} custom bot(s) (staggered 150ms)...`);
+    const LOGIN_STAGGER_MS = 150;
+    // Each bot's manager-init is chained INSIDE its own promise so it runs
+    // as soon as that bot is ready, independent of any other bot. Previously,
+    // a single hung deploy (e.g. Kitsune's REST rate-limit retry that never
+    // exits) blocked Promise.allSettled forever, leaving every custom bot
+    // without managers and breaking schedulers fleet-wide.
+    const loginResults = await Promise.allSettled(
+      botLoadTasks.map(({ botConfig, tokenObj, guildIds }, i) => {
+        return (async () => {
+          await new Promise(r => setTimeout(r, i * LOGIN_STAGGER_MS));
+          logger.info(`[BotManager] Loading custom bot: ${botConfig.bot_name} (${guildIds.length} guild(s))`);
+          let customClient;
+          try {
+            customClient = await botManager.addCustomBot({
+              bot_id: botConfig.bot_id,
+              bot_name: botConfig.bot_name,
+              bot_token: tokenObj,
+              guild_ids: guildIds
+            });
+          } catch (err) {
+            err.botName = botConfig.bot_name;
+            err.botId = botConfig.bot_id;
+            throw err;
+          }
+          try {
+            if (!customClient.player && global.player) {
+              customClient.player = global.player;
+            }
+            await initializeManagers(customClient);
+            logger.info(`[BotManager] ✅ Custom bot ${botConfig.bot_name} (${botConfig.bot_id}) fully initialized`);
+          } catch (error) {
+            logger.error(`[BotManager] ❌ Manager init failed for ${botConfig.bot_name}:`, { error: error.message });
+          }
+          return { botConfig, customClient };
+        })();
+      })
+    );
+
+    for (const result of loginResults) {
+      if (result.status === 'rejected') {
+        const r = result.reason;
+        logger.error(`[BotManager] ❌ Failed to load custom bot ${r?.botName || 'unknown'} (${r?.botId || '?'}):`, { error: r?.message });
       }
     }
 
     logger.info(`[BotManager] Custom bot initialization complete. ${botManager.clients.size - 1} custom bot(s) loaded successfully.`);
+
+    // Start the AuditBot watcher (dedicated client for global ban report channels)
+    import('./events/globalBanReportWatcher.js').then(({ startAuditWatcher }) => {
+      startAuditWatcher().catch(err => {
+        logger.error(`[GlobalBanWatcher] Failed to start audit watcher: ${err.message}`);
+      });
+    });
 
     // Initialize schedulers for custom bots (needs to be called after bots are loaded)
     if (botManager.clients.size > 1) {
@@ -1037,7 +1006,35 @@ async function start() {
       startAutoMemeScheduler(client); // Add Auto-Meme managers for custom bots
       startPokerMemeScheduler(client); // Add Poker Meme generators for custom bots
       startTikTokVideoChecker(client); // Add TikTok video checker for custom bots
+      // Start stat display schedulers for each custom bot client
+      for (const [botId, botClient] of botManager.clients) {
+        if (botClient !== client && botClient.statDisplayManager) {
+          startStatDisplayScheduler(botClient);
+        }
+        if (botClient !== client && botClient.gamePatchWatcherManager) {
+          startGamePatchScheduler(botClient);
+        }
+      }
       logger.info('[BotManager] Schedulers started for custom bots');
+    }
+
+    // One-shot repair for Chibi's Channel after the botched server transfer
+    // (idempotent — skips if already correct)
+    try {
+      const { runChibiPanelRepair } = await import('./scripts/fix-chibi-panels.js');
+      await runChibiPanelRepair();
+    } catch (err) {
+      logger.error(`[ChibiRepair] Failed to run: ${err.message}`);
+    }
+
+    // Windrose game setup for Chibi's Channel — role, category, news
+    // channel, panel button, Steam watcher (idempotent — skips per-step
+    // when target state is already correct)
+    try {
+      const { runWindroseSetup } = await import('./scripts/setup-windrose-chibi.js');
+      await runWindroseSetup();
+    } catch (err) {
+      logger.error(`[WindroseSetup] Failed to run: ${err.message}`);
     }
 
     // Initialize TTS cleanup scheduler and check yt-dlp version
@@ -1155,6 +1152,10 @@ async function shutdown() {
     stopTikTokVideoChecker();
     logger.info('[Scheduler] TikTok video checker stopped');
 
+    // Stop Throne notification scheduler
+    stopThroneScheduler();
+    logger.info('[Scheduler] Throne notification scheduler stopped');
+
     // Stop community support schedulers
     stopCommunityRotation();
     logger.info('[Scheduler] Community rotation scheduler stopped');
@@ -1176,6 +1177,14 @@ async function shutdown() {
     // Stop server stats scheduler
     stopServerStatsScheduler();
     logger.info('[Scheduler] Server stats scheduler stopped');
+
+    // Stop stat display scheduler
+    stopStatDisplayScheduler();
+    stopGamePatchScheduler();
+    logger.info('[Scheduler] Stat display scheduler stopped');
+
+    // Stop purge scheduler
+    stopPurgeScheduler();
 
     // Stop cleanup scheduler
     cleanupScheduler.stop();
@@ -1262,6 +1271,11 @@ process.on('unhandledRejection', (error) => {
   logger.error('[Process] Unhandled Promise Rejection', { error: error.message, stack: error.stack });
 });
 process.on('uncaughtException', (error) => {
+  // mysql2 pool can cause stack overflow under heavy concurrent load — non-fatal, don't crash
+  if (error instanceof RangeError && error.message === 'Maximum call stack size exceeded') {
+    logger.warn('[Process] Stack overflow caught (likely mysql2 pool pressure) — suppressed');
+    return;
+  }
   logger.error('[Process] Uncaught Exception', { error: error.message, stack: error.stack });
   shutdown();
 });
