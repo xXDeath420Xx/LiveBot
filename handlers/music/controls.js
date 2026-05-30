@@ -1,6 +1,8 @@
 import { QueueRepeatMode } from 'discord-player';
 import { EmbedBuilder, PermissionsBitField, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { checkMusicPermissions, updateMusicConfig, getMusicConfig, isVoteSkipEnabled, getVoteSkipPercentage } from '../../utils/music_helpers.js';
+import { checkMusicPermissions, updateMusicConfig, getMusicConfig, isVoteSkipEnabled, getVoteSkipPercentage, applyLeaveOptionsToQueue } from '../../utils/music_helpers.js';
+import { rejoinCamp } from '../../core/voice-camp-manager.js';
+import { isVoiceChannelType } from '../../core/voice-camp-helpers.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 
@@ -141,6 +143,22 @@ export async function handle247(interaction) {
     try {
         await updateMusicConfig(interaction.guildId, { twenty_four_seven: enabled ? 1 : 0 });
 
+        // Apply to the live session so the toggle takes effect without re-queueing.
+        // discord-player re-reads queue.options.leaveOnEmpty when its leave timer
+        // fires, so flipping the flag here rescues (or arms) the current session.
+        const queue = interaction.client.player.nodes.get(interaction.guildId);
+        if (queue) {
+            if (!enabled && !queue.isPlaying()) {
+                // 24/7 disabled while idle: leave the channel immediately instead
+                // of lingering for the 5-minute cooldown.
+                queue.delete();
+            } else {
+                // Otherwise update the live leave flags: stay when enabling, or
+                // resume normal auto-leave-on-cooldown when disabling mid-playback.
+                applyLeaveOptionsToQueue(queue, enabled);
+            }
+        }
+
         const embed = new EmbedBuilder()
             .setColor(enabled ? '#00ff00' : '#ff0000')
             .setTitle('24/7 Mode')
@@ -154,6 +172,50 @@ export async function handle247(interaction) {
     } catch (error) {
         logger.error(`[24/7] Error: ${error.message}`);
         await interaction.reply({ content: `Failed to update 24/7 mode: ${error.message}`, ephemeral: true });
+    }
+}
+
+/**
+ * Handles the camp ("always stay") voice channel setting.
+ * /music settings camp channel:<voice channel>  -> set + join
+ * /music settings camp off                       -> clear
+ */
+export async function handleCamp(interaction) {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return interaction.reply({ content: 'You need Administrator permissions to configure the camp channel.', ephemeral: true });
+    }
+
+    const channel = interaction.options.getChannel('channel'); // null => disable
+
+    try {
+        if (!channel) {
+            await updateMusicConfig(interaction.guildId, { default_voice_channel_id: null });
+            const embed = new EmbedBuilder()
+                .setColor('#ff0000')
+                .setTitle('Camp Channel')
+                .setDescription('Camp mode is now **disabled**. The bot will no longer be forced to stay in a voice channel.')
+                .setTimestamp();
+            logger.info(`[Camp] Disabled for guild ${interaction.guildId} by ${interaction.user.tag}`);
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        if (!isVoiceChannelType(channel.type)) {
+            return interaction.reply({ content: 'Please select a voice channel.', ephemeral: true });
+        }
+
+        await updateMusicConfig(interaction.guildId, { default_voice_channel_id: channel.id });
+        await rejoinCamp(interaction.client, interaction.client.player, interaction.guildId);
+
+        const embed = new EmbedBuilder()
+            .setColor('#00ff00')
+            .setTitle('Camp Channel')
+            .setDescription(`Camp mode is now **enabled** for ${channel}. The bot will stay there and return after playing music.`)
+            .setTimestamp();
+        logger.info(`[Camp] Set to ${channel.id} for guild ${interaction.guildId} by ${interaction.user.tag}`);
+        await interaction.reply({ embeds: [embed] });
+    } catch (error) {
+        logger.error(`[Camp] Error: ${error.message}`);
+        await interaction.reply({ content: `Failed to update camp channel: ${error.message}`, ephemeral: true });
     }
 }
 
@@ -380,8 +442,10 @@ export async function handleForceSkip(interaction) {
     const config = await getMusicConfig(interaction.guildId);
     const isDJ = config?.dj_role_id && interaction.member.roles.cache.has(config.dj_role_id);
     const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+    let isBotOwner = false;
+    try { const { isSuperAdmin } = await import('../../utils/constants.js'); isBotOwner = isSuperAdmin(interaction.member.id); } catch {}
 
-    if (!isDJ && !isAdmin) {
+    if (!isDJ && !isAdmin && !isBotOwner) {
         return interaction.reply({ content: 'You need the DJ role or Administrator permissions to force skip.', ephemeral: true });
     }
 
