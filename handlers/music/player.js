@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { checkMusicPermissions, useMainPlayer } from '../../utils/music_helpers.js';
+import { checkMusicPermissions, useMainPlayer, getLeaveOptions } from '../../utils/music_helpers.js';
 import db from '../../utils/db.js';
 
 // ============================================================================
@@ -222,7 +222,7 @@ function detectQuerySource(query) {
             return { platform: 'youtube', type: 'mix', displayName: 'YouTube Mix' };
         }
         if (query.includes('/shorts/')) {
-            return { platform: 'youtube', type: 'short', displayName: 'YouTube Short' };
+            return { platform: 'youtube', type: 'video', displayName: 'YouTube' };
         }
         return { platform: 'youtube', type: 'video', displayName: 'YouTube' };
     }
@@ -254,7 +254,22 @@ export async function handlePlay(interaction) {
 
     await interaction.deferReply();
     const player = useMainPlayer(interaction);
-    const query = interaction.options.getString("query");
+    let query = interaction.options.getString("query");
+
+    // Convert YouTube Shorts URLs to regular watch URLs
+    const shortsMatch = query.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/);
+    if (shortsMatch) {
+        query = `https://www.youtube.com/watch?v=${shortsMatch[1]}`;
+    }
+
+    // Strip tracking params
+    if (query.includes('youtube.com') || query.includes('youtu.be')) {
+        try {
+            const url = new URL(query);
+            url.searchParams.delete('si');
+            query = url.toString();
+        } catch {}
+    }
 
     // Detect source for better feedback
     const source = detectQuerySource(query);
@@ -273,8 +288,14 @@ export async function handlePlay(interaction) {
             return interaction.editReply({ content: `No results found for: ${query}` });
         }
 
-        // Filter out YouTube Shorts (they don't play properly)
-        let validTracks = searchResult.tracks.filter(t => !t.url?.includes('youtube.com/shorts'));
+        // Convert YouTube Shorts URLs to regular watch URLs
+        let validTracks = searchResult.tracks.map(t => {
+            if (t.url?.includes('youtube.com/shorts/')) {
+                const match = t.url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/);
+                if (match) t.url = `https://www.youtube.com/watch?v=${match[1]}`;
+            }
+            return t;
+        });
 
         if (validTracks.length === 0) {
             if (searchResult.playlist) {
@@ -329,10 +350,7 @@ export async function handlePlay(interaction) {
                 },
                 selfDeaf: true,
                 volume: 80,
-                leaveOnEmpty: true,
-                leaveOnEmptyCooldown: 300000,
-                leaveOnEnd: true,
-                leaveOnEndCooldown: 300000,
+                ...(await getLeaveOptions(interaction.guildId)),
             }
         });
 

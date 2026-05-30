@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
-import { checkMusicPermissions } from '../../utils/music_helpers.js';
+import { checkMusicPermissions, getLeaveOptions } from '../../utils/music_helpers.js';
 
 /**
  * Handles creating a new playlist
@@ -230,7 +230,8 @@ export async function handlePlay(interaction) {
             await interaction.client.player.play(interaction.member.voice.channel, songs.map(s => s.url).join("\n"), {
                 requestedBy: interaction.user,
                 nodeOptions: {
-                    metadata: { channelId: interaction.channel.id }
+                    metadata: { channelId: interaction.channel.id },
+                    ...(await getLeaveOptions(interaction.guildId))
                 }
             });
 

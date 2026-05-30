@@ -192,9 +192,16 @@ async function checkMusicPermissions(interaction) {
 
     const isDJ = member.roles.cache.has(djRoleId);
     const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
-    const isAlone = member.voice.channel ? member.voice.channel.members.size === 1 : false;
+    const isAlone = member.voice.channel ? member.voice.channel.members.filter(m => !m.user.bot).size <= 1 : false;
 
-    if (isDJ || isAdmin || isAlone) {
+    // Bot owner / super admin always has access
+    let isBotOwner = false;
+    try {
+        const { isSuperAdmin } = await import('./constants.js');
+        isBotOwner = isSuperAdmin(member.id);
+    } catch {}
+
+    if (isDJ || isAdmin || isAlone || isBotOwner) {
         return { permitted: true };
     } else {
         return {
@@ -227,6 +234,50 @@ function invalidateMusicConfigCache(guildId) {
     configCache.delete(guildId);
 }
 
+// Default leave-timer cooldown (ms) used when 24/7 is OFF.
+const LEAVE_COOLDOWN_MS = 300000; // 5 minutes
+
+/**
+ * Build the leave-related nodeOptions for a guild based on its 24/7 setting.
+ *
+ * When 24/7 is enabled, discord-player must NEVER arm its empty/end leave timers,
+ * so the bot stays connected even when the channel is empty or the queue ends.
+ * When disabled, fall back to the standard 5-minute auto-leave behavior.
+ *
+ * Spread the result into a play call's `nodeOptions`, e.g.:
+ *   nodeOptions: { metadata, volume, ...(await getLeaveOptions(guildId)) }
+ *
+ * @param {string} guildId
+ * @returns {Promise<{leaveOnEmpty:boolean, leaveOnEmptyCooldown:number, leaveOnEnd:boolean, leaveOnEndCooldown:number}>}
+ */
+async function getLeaveOptions(guildId) {
+    const is247 = await is247Enabled(guildId);
+    return {
+        leaveOnEmpty: !is247,
+        leaveOnEmptyCooldown: LEAVE_COOLDOWN_MS,
+        leaveOnEnd: !is247,
+        leaveOnEndCooldown: LEAVE_COOLDOWN_MS
+    };
+}
+
+/**
+ * Apply the current 24/7 leave policy to an already-active queue.
+ *
+ * discord-player reads leaveOnEmpty/leaveOnEnd off the mutable `queue.options`
+ * each time its internal timers fire, so mutating them here takes effect on the
+ * live session without re-queueing. Returns false if there is no live queue.
+ *
+ * @param {import('discord-player').GuildQueue} queue
+ * @param {boolean} is247
+ * @returns {boolean} whether options were applied
+ */
+function applyLeaveOptionsToQueue(queue, is247) {
+    if (!queue?.options) return false;
+    queue.options.leaveOnEmpty = !is247;
+    queue.options.leaveOnEnd = !is247;
+    return true;
+}
+
 export {
     checkMusicPermissions,
     useMainPlayer,
@@ -234,6 +285,8 @@ export {
     updateMusicConfig,
     invalidateMusicConfigCache,
     is247Enabled,
+    getLeaveOptions,
+    applyLeaveOptionsToQueue,
     isAutoplayEnabled,
     getAutoplaySource,
     getRequestChannel,
