@@ -9,6 +9,8 @@ import {
     TextInputStyle
 } from 'discord.js';
 import logger from '../utils/logger.js';
+import pool from '../utils/db.js';
+import { getLeaveOptions } from '../utils/music_helpers.js';
 
 class MusicPanel {
     constructor(client, guildId) {
@@ -20,7 +22,7 @@ class MusicPanel {
     }
 
     async createPanel(channel) {
-        const queue = this.client.player.nodes.get(this.guildId);
+        const queue = (this.client.player || global.player).nodes.get(this.guildId);
         const embed = await this.buildEmbed(queue);
         const components = this.buildComponents(queue);
         this.message = await channel.send({ embeds: [embed], components });
@@ -29,12 +31,35 @@ class MusicPanel {
 
     // This is the single entry point for updating the panel, called by player events.
     async updatePanel(queue) {
-        if (!this.message) return;
+        // If message ref is null, try to recover from DB
+        if (!this.message) {
+            try {
+                const [rows] = await pool.execute('SELECT channel_id, message_id FROM music_panels WHERE guild_id = ?', [this.guildId]);
+                if (rows.length > 0 && rows[0].message_id) {
+                    const channel = await this.client.channels.fetch(rows[0].channel_id).catch(() => null);
+                    if (channel) {
+                        this.message = await channel.messages.fetch(rows[0].message_id).catch(() => null);
+                        if (this.message) {
+                            logger.info(`[Music Panel] Recovered panel message for guild ${this.guildId}`);
+                        }
+                    }
+                }
+            } catch { /* recovery failed */ }
+            if (!this.message) return;
+        }
 
-        // Throttle updates to prevent rapid successive updates
+        // Throttle updates — but queue a deferred update so we don't drop the last state
         const now = Date.now();
         if (now - this.lastUpdate < this.updateThrottle) {
-            return; // Skip this update, too soon after last one
+            // Schedule a deferred update if one isn't already pending
+            if (!this._pendingUpdate) {
+                this._pendingUpdate = setTimeout(() => {
+                    this._pendingUpdate = null;
+                    const currentQueue = (this.client.player || global.player)?.nodes?.get(this.guildId);
+                    this.updatePanel(currentQueue);
+                }, this.updateThrottle);
+            }
+            return;
         }
         this.lastUpdate = now;
 
@@ -50,10 +75,9 @@ class MusicPanel {
             await this.message.edit({ embeds: [embed], components });
         } catch (error) {
             if (error.code === 10008) { // Unknown Message
-                logger.warn(`[Music Panel] Message ${this.message.id} not found in guild ${this.guildId}.`);
-                this.message = null; // Clear invalid message reference
+                logger.warn(`[Music Panel] Message ${this.message.id} not found in guild ${this.guildId}, clearing ref`);
+                this.message = null;
             } else if (error.code === 'ChannelNotCached') {
-                logger.error(`[Music Panel] Channel not cached, attempting to fetch...`);
                 try {
                     const channel = await this.client.channels.fetch(this.message.channelId);
                     this.message = await channel.messages.fetch(this.message.id);
@@ -61,10 +85,10 @@ class MusicPanel {
                     const components = this.buildComponents(queue);
                     await this.message.edit({ embeds: [embed], components });
                 } catch (retryError) {
-                    logger.error(`[Music Panel] Failed to update panel after fetching:`, retryError);
+                    logger.error(`[Music Panel] Failed to update panel after fetch retry:`, { error: retryError.message });
                 }
             } else {
-                logger.error(`[Music Panel] Failed to update panel for guild ${this.guildId}:`, error);
+                logger.error(`[Music Panel] Failed to update panel for guild ${this.guildId}:`, { error: error.message });
             }
         }
     }
@@ -144,7 +168,7 @@ class MusicPanel {
 
             embed.addFields({ name: 'Progress', value: progressDisplay, inline: false });
 
-            const nextTrack = queue.tracks.data[0];
+            const nextTrack = queue.tracks.at(0);
             if (nextTrack) {
                 embed.addFields({ name: "Up Next", value: `[${nextTrack.title}](${nextTrack.url}) - ${nextTrack.author}` });
             } else {
@@ -165,13 +189,24 @@ class MusicPanel {
     buildComponents(queue) {
         const isPlaying = queue && queue.currentTrack;
         const isPaused = isPlaying && queue.node.isPaused();
+        const isLooping = queue && queue.repeatMode !== 0;
+        const hasQueue = queue && queue.tracks.size > 0;
 
         const playbackRow = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder().setCustomId('music-play-pause').setLabel(isPaused ? '▶️' : '⏸️').setStyle(ButtonStyle.Primary).setDisabled(!isPlaying),
                 new ButtonBuilder().setCustomId('music-skip').setLabel('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(!isPlaying),
                 new ButtonBuilder().setCustomId('music-stop').setLabel('⏹️').setStyle(ButtonStyle.Danger).setDisabled(!isPlaying),
-                new ButtonBuilder().setCustomId('music-clear').setLabel('🗑️').setStyle(ButtonStyle.Secondary).setDisabled(!queue || queue.tracks.size === 0),
+                new ButtonBuilder().setCustomId('music-shuffle').setLabel('🔀').setStyle(ButtonStyle.Secondary).setDisabled(!hasQueue),
+                new ButtonBuilder().setCustomId('music-loop').setLabel(isLooping ? '🔁 On' : '🔁').setStyle(isLooping ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(!isPlaying),
+            );
+
+        const extrasRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder().setCustomId('music-vol-down').setLabel('🔉').setStyle(ButtonStyle.Secondary).setDisabled(!isPlaying),
+                new ButtonBuilder().setCustomId('music-vol-up').setLabel('🔊').setStyle(ButtonStyle.Secondary).setDisabled(!isPlaying),
+                new ButtonBuilder().setCustomId('music-queue').setLabel('📋 Queue').setStyle(ButtonStyle.Primary).setDisabled(!hasQueue),
+                new ButtonBuilder().setCustomId('music-clear').setLabel('🗑️').setStyle(ButtonStyle.Secondary).setDisabled(!hasQueue),
             );
 
         const songRequestRow = new ActionRowBuilder()
@@ -185,7 +220,7 @@ class MusicPanel {
                     ]),
             );
 
-        return [playbackRow, songRequestRow];
+        return [playbackRow, extrasRow, songRequestRow];
     }
 
     async handleInteraction(interaction) {
@@ -213,9 +248,13 @@ class MusicPanel {
                     console.error('[Music Panel] Unexpected interaction error:', error);
                 }
             }
-            const queue = this.client.player.nodes.get(interaction.guildId);
+            const player = this.client.player || global.player;
+            const queue = player?.nodes?.get(interaction.guildId);
 
-            if (!queue && interaction.customId !== 'music-stop') {
+            if (!queue || !queue.node) {
+                if (interaction.customId !== 'music-add-song' && interaction.customId !== 'music-ai-dj') {
+                    try { await interaction.reply({ content: 'Nothing is playing right now.', ephemeral: true }); } catch {}
+                }
                 return this.updatePanel(undefined);
             }
 
@@ -266,8 +305,40 @@ class MusicPanel {
                 case 'music-clear':
                     if (queue && queue.tracks.size > 0) queue.tracks.clear();
                     break;
+                case 'music-shuffle':
+                    if (queue && queue.tracks.size > 0) queue.tracks.shuffle();
+                    break;
+                case 'music-loop': {
+                    if (queue) {
+                        // Cycle: 0 (off) → 1 (track) → 2 (queue) → 0
+                        const nextMode = queue.repeatMode === 0 ? 2 : 0;
+                        queue.setRepeatMode(nextMode);
+                    }
+                    break;
+                }
+                case 'music-vol-down':
+                    if (queue) queue.node.setVolume(Math.max(0, queue.node.volume - 10));
+                    break;
+                case 'music-vol-up':
+                    if (queue) queue.node.setVolume(Math.min(100, queue.node.volume + 10));
+                    break;
+                case 'music-queue': {
+                    if (queue && queue.tracks.size > 0) {
+                        const tracks = queue.tracks.data.slice(0, 10);
+                        const list = tracks.map((t, i) => `**${i + 1}.** ${t.title} — ${t.author}`).join('\n');
+                        const total = queue.tracks.size;
+                        try {
+                            await interaction.reply({
+                                content: `**Queue** (${total} song${total !== 1 ? 's' : ''}):\n${list}${total > 10 ? `\n... and ${total - 10} more` : ''}`,
+                                ephemeral: true
+                            });
+                        } catch {}
+                        return; // Don't update panel for ephemeral queue view
+                    }
+                    break;
+                }
             }
-            await this.updatePanel(this.client.player.nodes.get(interaction.guildId));
+            await this.updatePanel((this.client.player || global.player).nodes.get(interaction.guildId));
 
         } else if (interaction.isStringSelectMenu() && interaction.customId === 'music-add-song') {
             if (interaction.values[0] === 'add_song_modal') {
@@ -460,7 +531,7 @@ class MusicPanel {
             });
 
             // Play the tracks
-            const player = this.client.player;
+            const player = (this.client.player || global.player);
             let queue = player.nodes.get(interaction.guildId);
 
             // Load DJ voice setting (must be before TTS generation)
@@ -545,9 +616,7 @@ class MusicPanel {
                             },
                             selfDeaf: true,
                             volume: 80,
-                            leaveOnEmpty: true,
-                            leaveOnEmptyCooldown: 300000,
-                            leaveOnEnd: false
+                            ...(await getLeaveOptions(interaction.guildId))
                         }
                     });
                     queue = newQueue;
@@ -576,9 +645,7 @@ class MusicPanel {
                             },
                             selfDeaf: true,
                             volume: 80,
-                            leaveOnEmpty: true,
-                            leaveOnEmptyCooldown: 300000,
-                            leaveOnEnd: false
+                            ...(await getLeaveOptions(interaction.guildId))
                         }
                     });
                 } catch (addError) {

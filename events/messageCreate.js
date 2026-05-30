@@ -8,13 +8,47 @@ import AutoResponseManager from '../core/auto-response-manager.js';
 import { handleAutoPublisher } from '../core/auto-publisher.js';
 import { handleMessage as handleCountingMessage } from '../core/counting-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
-import { handleSelfPromoMessage } from '../core/self-promo-handler.js';
+import { handlePrefixCommand } from '../core/prefix-command-manager.js';
+import { handleSelfPromoMessage, checkAnnounceChannelGate } from '../core/self-promo-handler.js';
 import { spawnPokemon } from '../commands/games/pokemon.js';
 import { handleRPGReply, handleRPGMentionOrChannel, getUserActiveChannel } from '../core/rpg-reply-handler.js';
 import pool from '../utils/db.js';
-import { getRequestChannel } from '../utils/music_helpers.js';
+import { getRequestChannel, getLeaveOptions } from '../utils/music_helpers.js';
 import configCache from '../utils/configCache.js';
 import { saveMessage } from '../utils/message-cache.js';
+import { isWhitelisted } from '../utils/automod-whitelist.js';
+
+// Normalize Unicode (small caps, bold, italic math symbols, etc.) to plain ASCII for comparison
+const UNICODE_MAP = new Map([
+  // Latin small caps
+  ...'ᴀᴁᴂᴃᴄᴅᴆᴇᴈᴉᴊᴋᴌᴍᴎᴏᴐᴑᴒᴓᴔᴕᴖᴗᴘᴙᴚᴛᴜᴝᴞᴟᴠᴡᴢ'.split('').map((c, i) => {
+    const map = 'aabcddeegijklmnooooeoupqrstuvwz';
+    return [c, map[i] || c];
+  }),
+  // Explicit small caps corrections
+  ['ᴀ','a'],['ᴄ','c'],['ᴅ','d'],['ᴇ','e'],['ɢ','g'],['ʜ','h'],['ɪ','i'],['ᴊ','j'],
+  ['ᴋ','k'],['ʟ','l'],['ᴍ','m'],['ɴ','n'],['ᴏ','o'],['ᴘ','p'],['ʀ','r'],['ꜱ','s'],
+  ['ᴛ','t'],['ᴜ','u'],['ᴠ','v'],['ᴡ','w'],['ʏ','y'],['ᴢ','z'],['ꜰ','f'],['ǫ','q'],
+  ['ʙ','b'],['ᴅ','d'],['ᴇ','e'],['ᴄ','c'],
+]);
+function normalizeUnicode(str) {
+  let out = '';
+  for (const c of str) {
+    const mapped = UNICODE_MAP.get(c);
+    if (mapped) { out += mapped; continue; }
+    const cp = c.codePointAt(0);
+    // Math bold sans-serif caps 𝗔(0x1D5D4)-𝗭(0x1D5ED)
+    if (cp >= 0x1D5D4 && cp <= 0x1D5ED) { out += String.fromCharCode(cp - 0x1D5D4 + 0x61); continue; }
+    // Math bold sans-serif lower 𝗮(0x1D5EE)-𝘇(0x1D607)
+    if (cp >= 0x1D5EE && cp <= 0x1D607) { out += String.fromCharCode(cp - 0x1D5EE + 0x61); continue; }
+    // Math bold serif caps 𝐀(0x1D400)-𝐙(0x1D419)
+    if (cp >= 0x1D400 && cp <= 0x1D419) { out += String.fromCharCode(cp - 0x1D400 + 0x61); continue; }
+    // Math bold serif lower 𝐚(0x1D41A)-𝐳(0x1D433)
+    if (cp >= 0x1D41A && cp <= 0x1D433) { out += String.fromCharCode(cp - 0x1D41A + 0x61); continue; }
+    out += c;
+  }
+  return out.toLowerCase();
+}
 
 // Regex patterns for live promotion messages (case-insensitive)
 const LIVE_PROMOTION_PATTERNS = [
@@ -130,12 +164,49 @@ export default {
       // Only the default bot should ignore guilds with custom bots
       if (message.client.isDefaultBot && await shouldIgnoreGuild(message.guild.id)) return;
 
-      // Self-promo channel auto-tracking
-      try {
-          const wasSelfPromo = await handleSelfPromoMessage(message);
-          if (wasSelfPromo) return;
-      } catch (error) {
-          logger.error('[MessageCreate] Error in self-promo handler', { error: error.message });
+      // Prefix command handling — runs before all other message processing
+      if (await handlePrefixCommand(message)) return;
+
+      // Check automod whitelist once for all moderation systems
+      const isAutomodWhitelisted = message.guild ? await isWhitelisted(message.guild.id, message.author.id) : false;
+      if (isAutomodWhitelisted) {
+        logger.debug(`[MessageCreate] Whitelist bypass for user ${message.author.id} in guild ${message.guild.id}`);
+      }
+
+      // Self-promo announcement-channel gate — runs BEFORE the URL handler so
+      // that unauthorized posts in the announce channel are removed even if
+      // they also happen to contain a stream link.
+      if (!isAutomodWhitelisted && message.guild && message.author && !message.author.bot) {
+        try {
+          const gate = await checkAnnounceChannelGate(message.guild, message.author.id, message.channel.id);
+          if (!gate.allowed && gate.deleteUnauthorized) {
+            await message.delete().catch(err => {
+              logger.warn('[MessageCreate] Failed to delete unauthorized announce-channel message', {
+                error: err.message, messageId: message.id, guildId: message.guild.id,
+              });
+            });
+            const reasonList = (gate.reasons || []).map(r => `• ${r}`).join('\n');
+            message.author.send(
+              `Your message in <#${message.channel.id}> was removed because that channel is gated:\n${reasonList}`
+            ).catch(() => { /* DMs closed — nothing to do */ });
+            logger.info('[MessageCreate] Deleted unauthorized message in gated announce channel', {
+              guildId: message.guild.id, userId: message.author.id, channelId: message.channel.id,
+            });
+            return;
+          }
+        } catch (error) {
+          logger.error('[MessageCreate] Error in announce-channel gate', { error: error.message });
+        }
+      }
+
+      // Self-promo channel auto-tracking (skip if whitelisted)
+      if (!isAutomodWhitelisted) {
+        try {
+            const wasSelfPromo = await handleSelfPromoMessage(message);
+            if (wasSelfPromo) return;
+        } catch (error) {
+            logger.error('[MessageCreate] Error in self-promo handler', { error: error.message });
+        }
       }
 
       // Initialize managers on first message if not already done
@@ -209,10 +280,7 @@ export default {
                 },
                 selfDeaf: true,
                 volume: 80,
-                leaveOnEmpty: true,
-                leaveOnEmptyCooldown: 300000,
-                leaveOnEnd: true,
-                leaveOnEndCooldown: 300000
+                ...(await getLeaveOptions(message.guild.id))
               });
 
               // Connect to voice if not already
@@ -336,7 +404,24 @@ export default {
       const isOwner = message.member?.id === message.guild.ownerId;
       const isModerator = message.member?.permissions.has(PermissionFlagsBits.ModerateMembers);
 
-      if (!isAdmin && !isOwner) {
+      // Check if this channel is exempt from all moderation (e.g. self-promo channels)
+      let isExemptChannel = false;
+      try {
+        const spamConfig = message.client.adaptiveSpamManager
+          ? await message.client.adaptiveSpamManager.getConfig(message.guild.id)
+          : null;
+        if (spamConfig?.exempt_channels) {
+          const exempt = typeof spamConfig.exempt_channels === 'string'
+            ? JSON.parse(spamConfig.exempt_channels) : spamConfig.exempt_channels;
+          if (Array.isArray(exempt) && exempt.includes(message.channel.id)) {
+            isExemptChannel = true;
+          }
+        }
+      } catch (err) {
+        logger.warn('[MessageCreate] Failed to check exempt channels', { error: err.message, guildId: message.guild?.id });
+      }
+
+      if (!isAdmin && !isOwner && !isAutomodWhitelisted && !isExemptChannel) {
         // Live promotion filter - delete "I'm live", "Going live", "Live at" from non-mods
         // Moderators are allowed to post live promotions
         // Also allowed in designated self-promo channels
@@ -345,7 +430,8 @@ export default {
 
           if (isLivePromotion) {
             // Check if this is a designated self-promo channel (by name)
-            const channelName = message.channel.name?.toLowerCase() || '';
+            // Normalize Unicode (small caps, bold math, etc.) so fancy channel names still match
+            const channelName = normalizeUnicode(message.channel.name || '');
             const isPromoChannel = SELF_PROMO_CHANNEL_KEYWORDS.some(keyword => channelName.includes(keyword));
 
             // Allow in designated promo channels, otherwise delete

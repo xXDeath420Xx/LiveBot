@@ -5,7 +5,11 @@ import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { getButtonHandler, getSelectMenuHandler, getModalHandler } from '../interactions/handlerRegistry.js';
 import pool from '../utils/db.js';
 import configCache from '../utils/configCache.js';
+import { isSuperAdmin } from '../utils/constants.js';
 import crypto from 'crypto';
+
+// Commands in these categories require ManageGuild by default (no DB row needed)
+const ADMIN_CATEGORIES = new Set(['admin', 'streams']);
 
 // Make crypto available globally for libraries that expect it
 if (typeof globalThis.crypto === 'undefined') {
@@ -42,19 +46,48 @@ export default {
         return;
       }
 
-      // Per-guild command restrictions
-      if (interaction.guild) {
-        const restriction = await configCache.get(
-          'cmd_restrict',
-          `${interaction.guildId}:${interaction.commandName}`,
-          async () => {
-            const [rows] = await pool.execute(
-              'SELECT allowed, admin_only FROM guild_command_restrictions WHERE guild_id = ? AND command_name = ?',
-              [interaction.guildId, interaction.commandName]
-            );
-            return rows[0] || null;
-          }
-        );
+      // Per-guild command restrictions (including channel locks)
+      // Bot owner / super admins bypass ALL per-guild gates in EVERY guild a
+      // CertiFried bot lives in. Reason: the dev must always be able to
+      // diagnose/repair a guild even after a heavy lockdown (e.g. YYZ Studio).
+      const ownerBypass = isSuperAdmin(interaction.user.id);
+      if (interaction.guild && !ownerBypass) {
+        // Check for subcommand-group-specific restriction first (e.g., fun:games, arcade:trivia)
+        const subGroup = interaction.options?.getSubcommandGroup?.(false);
+        const subCmd = interaction.options?.getSubcommand?.(false);
+        const subKey = subGroup ? `${interaction.commandName}:${subGroup}` : (subCmd ? `${interaction.commandName}:${subCmd}` : null);
+
+        let restriction = null;
+
+        // Try subcommand-specific restriction first
+        if (subKey) {
+          restriction = await configCache.get(
+            'cmd_restrict',
+            `${interaction.guildId}:${subKey}`,
+            async () => {
+              const [rows] = await pool.execute(
+                'SELECT allowed, admin_only, channel_id FROM guild_command_restrictions WHERE guild_id = ? AND command_name = ?',
+                [interaction.guildId, subKey]
+              );
+              return rows[0] || null;
+            }
+          );
+        }
+
+        // Fall back to top-level command restriction
+        if (!restriction) {
+          restriction = await configCache.get(
+            'cmd_restrict',
+            `${interaction.guildId}:${interaction.commandName}`,
+            async () => {
+              const [rows] = await pool.execute(
+                'SELECT allowed, admin_only, channel_id FROM guild_command_restrictions WHERE guild_id = ? AND command_name = ?',
+                [interaction.guildId, interaction.commandName]
+              );
+              return rows[0] || null;
+            }
+          );
+        }
 
         if (restriction) {
           if (!restriction.allowed) {
@@ -63,6 +96,13 @@ export default {
           if (restriction.admin_only && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
             return interaction.reply({ content: 'This command is restricted to moderators in this server.', ephemeral: true });
           }
+          // Channel lock — command can only be used in a specific channel
+          if (restriction.channel_id && interaction.channelId !== restriction.channel_id) {
+            return interaction.reply({ content: `This command can only be used in <#${restriction.channel_id}>.`, ephemeral: true });
+          }
+        } else if (ADMIN_CATEGORIES.has(command.category) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+          // No explicit restriction row, but command category is admin-only by default
+          return interaction.reply({ content: 'This command is restricted to moderators.', ephemeral: true });
         }
       }
 
@@ -95,7 +135,7 @@ export default {
         }
       }
 
-      if (timestamps.has(interaction.user.id)) {
+      if (timestamps.has(interaction.user.id) && !ownerBypass) {
         const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
 
         if (now < expirationTime) {
@@ -107,8 +147,10 @@ export default {
         }
       }
 
-      timestamps.set(interaction.user.id, now);
-      setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
+      if (!ownerBypass) {
+        timestamps.set(interaction.user.id, now);
+        setTimeout(() => timestamps.delete(interaction.user.id), cooldownAmount);
+      }
 
       // Execute command
       try {
@@ -416,7 +458,7 @@ export default {
 
             await interaction.deferReply({ ephemeral: true });
 
-            const player = interaction.client.player;
+            const player = interaction.client.player || global.player;
             if (!player) {
               return interaction.editReply({
                 content: 'Music player is not initialized. Please contact an administrator.'
@@ -424,9 +466,14 @@ export default {
             }
 
             try {
-              // Sanitize YouTube URLs - strip tracking params but keep playlist/mix params
+              // Sanitize YouTube URLs - strip tracking params, convert shorts to watch URLs
               if (songQuery.includes('youtube.com') || songQuery.includes('youtu.be')) {
                 try {
+                  // Convert shorts URLs to regular watch URLs
+                  const shortsMatch = songQuery.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/);
+                  if (shortsMatch) {
+                    songQuery = `https://www.youtube.com/watch?v=${shortsMatch[1]}`;
+                  }
                   const url = new URL(songQuery);
                   url.searchParams.delete('si');
                   url.searchParams.delete('playnext');
@@ -434,6 +481,18 @@ export default {
                   songQuery = url.toString();
                 } catch (urlError) {
                   logger.debug(`[Music Panel] URL parsing failed, using original query: ${urlError.message}`);
+                }
+              }
+
+              // Sanitize Spotify URLs — share-flow params like `flow_ctx` break
+              // discord-player's auto-routing (track resolves to 0 results).
+              if (songQuery.includes('open.spotify.com/') || songQuery.startsWith('spotify:')) {
+                try {
+                  const url = new URL(songQuery);
+                  for (const key of [...url.searchParams.keys()]) url.searchParams.delete(key);
+                  songQuery = url.toString();
+                } catch (urlError) {
+                  logger.debug(`[Music Panel] Spotify URL parsing failed: ${urlError.message}`);
                 }
               }
 
@@ -447,11 +506,17 @@ export default {
                 });
               }
 
-              // Filter out YouTube Shorts
-              let validTracks = searchResult.tracks.filter(t => !t.url?.includes('youtube.com/shorts'));
+              // Convert any shorts URLs in results to regular watch URLs
+              let validTracks = searchResult.tracks.map(t => {
+                if (t.url?.includes('youtube.com/shorts/')) {
+                  const match = t.url.match(/youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/);
+                  if (match) t.url = `https://www.youtube.com/watch?v=${match[1]}`;
+                }
+                return t;
+              });
               if (validTracks.length === 0) {
                 return interaction.editReply({
-                  content: 'The requested content is a YouTube Short, which is not supported.'
+                  content: `No playable results found for: ${songQuery}`
                 });
               }
 
@@ -505,6 +570,7 @@ export default {
                 logger.error('[Music Panel] Error loading DJ settings:', error);
               }
 
+              const { getLeaveOptions } = await import('../utils/music_helpers.js');
               const { track } = await player.play(interaction.member.voice.channel, searchResult, {
                 nodeOptions: {
                   metadata: {
@@ -517,10 +583,7 @@ export default {
                   },
                   selfDeaf: true,
                   volume: 80,
-                  leaveOnEmpty: true,
-                  leaveOnEmptyCooldown: 300000,
-                  leaveOnEnd: true,
-                  leaveOnEndCooldown: 300000
+                  ...(await getLeaveOptions(interaction.guildId))
                 }
               });
 
@@ -609,7 +672,7 @@ export default {
                 logger.error('[AI DJ] Error loading DJ voice:', error);
               }
 
-              const player = interaction.client.player;
+              const player = interaction.client.player || global.player;
 
               // ================================================================
               // PLAYLIST LINK MODE: If a playlist URL was provided, use it directly
@@ -641,6 +704,7 @@ export default {
                   });
 
                   // Play with DJ mode enabled
+                  const { getLeaveOptions } = await import('../utils/music_helpers.js');
                   const { track } = await player.play(interaction.member.voice.channel, searchResult, {
                     nodeOptions: {
                       metadata: {
@@ -654,9 +718,7 @@ export default {
                       },
                       selfDeaf: true,
                       volume: 80,
-                      leaveOnEmpty: true,
-                      leaveOnEmptyCooldown: 300000,
-                      leaveOnEnd: false
+                      ...(await getLeaveOptions(interaction.guildId))
                     }
                   });
 
@@ -954,6 +1016,7 @@ export default {
                     ? tracks
                     : tracks.slice(1);
 
+                  const { getLeaveOptions } = await import('../utils/music_helpers.js');
                   const playResult = await player.play(interaction.member.voice.channel, firstPlayUrl, {
                     nodeOptions: {
                       metadata: {
@@ -972,10 +1035,7 @@ export default {
                       },
                       selfDeaf: true,
                       volume: 80,
-                      leaveOnEmpty: true,
-                      leaveOnEmptyCooldown: 300000,
-                      leaveOnEnd: false,
-                      leaveOnEndCooldown: 300000,
+                      ...(await getLeaveOptions(interaction.guildId))
                     }
                   });
                   newQueue = playResult.queue;
