@@ -972,6 +972,17 @@ async function start() {
             }
             await initializeManagers(customClient);
             logger.info(`[BotManager] ✅ Custom bot ${botConfig.bot_name} (${botConfig.bot_id}) fully initialized`);
+
+            // Voice camp: join this custom bot's configured camp channels using ITS
+            // own client, so the custom bot (not the default bot) connects. The shared
+            // global.player orchestrates the queue; the voice adapter comes from the
+            // channel's guild as fetched by customClient.
+            try {
+              const { joinCampChannels } = await import('./core/voice-camp-manager.js');
+              await joinCampChannels(customClient, global.player);
+            } catch (campErr) {
+              logger.error(`[VoiceCamp] Custom bot ${botConfig.bot_name} camp join failed: ${campErr.message}`);
+            }
           } catch (error) {
             logger.error(`[BotManager] ❌ Manager init failed for ${botConfig.bot_name}:`, { error: error.message });
           }
