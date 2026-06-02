@@ -44,6 +44,7 @@ import { startSteamWatchScheduler, stopSteamWatchScheduler } from './jobs/steam-
 import { startQOTDScheduler, stopQOTDScheduler } from './jobs/qotd-scheduler.js';
 import initReminderScheduler from './jobs/reminder-scheduler.js';
 import { startTikTokVideoChecker, stopTikTokVideoChecker } from './jobs/tiktok-video-checker.js';
+import { startEventScheduleChecker, stopEventScheduleChecker } from './jobs/event-schedule-checker.js';
 import AutoMemeManager from './core/auto-meme-manager.js';
 import { startAutoMemeScheduler, stopAutoMemeScheduler } from './jobs/auto-meme-scheduler.js';
 import { startPokerMemeScheduler, stopPokerMemeScheduler } from './jobs/poker-meme-scheduler.js';
@@ -743,6 +744,7 @@ async function initializeSchedulersAndDashboard(client) {
 
   // Start TikTok video checker
   startTikTokVideoChecker(client);
+  startEventScheduleChecker(client);
   logger.info('[Core] TikTok video checker initialized');
 
   // Instagram/Facebook feeds are handled by the social-feed-scheduler alongside Reddit/YouTube/Twitter
@@ -1161,6 +1163,7 @@ async function shutdown() {
 
     // Stop TikTok video checker
     stopTikTokVideoChecker();
+    stopEventScheduleChecker();
     logger.info('[Scheduler] TikTok video checker stopped');
 
     // Stop Throne notification scheduler
