@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
   <title>CertiFried Multicast — Stream Everywhere, Free</title>
   <link rel="stylesheet" href="/css/output.css" />
 </head>
@@ -55,6 +56,8 @@
   </main>
 
   <script>window.__PLATFORMS__ = <%- JSON.stringify(platforms) %>;</script>
+  <!-- csrf.js patches window.fetch to add X-CSRF-Token on POST/PATCH/DELETE; must load before stream.js -->
+  <script src="/js/csrf.js"></script>
   <script src="/js/stream.js"></script>
 </body>
 </html>
