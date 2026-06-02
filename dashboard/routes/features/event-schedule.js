@@ -3,7 +3,7 @@ import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
 import { DEFAULT_CATEGORIES } from '../../../migrations/117_event_schedules.js';
 
-const router = express.Router();
+const router = express.Router({ mergeParams: true });
 
 /**
  * Best-effort resolution of Discord display names for a set of user IDs in a
@@ -43,7 +43,7 @@ async function resolveUsernames(guildId, userIds) {
 }
 
 // Get event-schedule config, categories and events for a guild
-router.get('/manage/:guildId/event-schedule', async (req, res) => {
+router.get('/event-schedule', async (req, res) => {
   try {
     const { guildId } = req.params;
 
@@ -82,7 +82,7 @@ router.get('/manage/:guildId/event-schedule', async (req, res) => {
 });
 
 // Save event-schedule configuration (and seed default categories on first enable)
-router.post('/manage/:guildId/event-schedule/config', async (req, res) => {
+router.post('/event-schedule/config', async (req, res) => {
   try {
     const { guildId } = req.params;
     const { is_enabled, mode, channel_id, title, custom_message } = req.body;
@@ -131,7 +131,7 @@ router.post('/manage/:guildId/event-schedule/config', async (req, res) => {
 });
 
 // Add a custom category
-router.post('/manage/:guildId/event-schedule/category', async (req, res) => {
+router.post('/event-schedule/category', async (req, res) => {
   try {
     const { guildId } = req.params;
     const { name, emoji, color } = req.body;
@@ -158,7 +158,7 @@ router.post('/manage/:guildId/event-schedule/category', async (req, res) => {
 });
 
 // Delete a category
-router.delete('/manage/:guildId/event-schedule/category/:id', async (req, res) => {
+router.delete('/event-schedule/category/:id', async (req, res) => {
   try {
     const { guildId, id } = req.params;
 
