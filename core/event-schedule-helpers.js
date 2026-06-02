@@ -63,6 +63,34 @@ export function scheduleHash(segments) {
 }
 
 /**
+ * Compact 24-hour time + duration label for a segment, e.g. "19:00–21:00 · 2h".
+ * Same UTC day → "HH:MM–HH:MM · <dur>"; spans days → "HH:MM · <dur>" (start + length,
+ * since an end-of-day clock time would mislead on a multi-day bar). Duration rolls up
+ * minutes → hours → days ("45m", "2h 30m", "1d 4h"). All times UTC (matches the header).
+ */
+export function formatTimeLabel(startMs, endMs) {
+    const pad = n => String(n).padStart(2, '0');
+    const s = new Date(startMs);
+    const e = new Date(endMs);
+    const hhmm = d => `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+
+    const mins = Math.max(0, Math.round((endMs - startMs) / 60000));
+    const days = Math.floor(mins / 1440);
+    const hrs = Math.floor((mins % 1440) / 60);
+    const m = mins % 60;
+    let dur;
+    if (days > 0) dur = hrs ? `${days}d ${hrs}h` : `${days}d`;
+    else if (hrs > 0) dur = m ? `${hrs}h ${m}m` : `${hrs}h`;
+    else dur = `${m}m`;
+
+    const sameDay = s.getUTCFullYear() === e.getUTCFullYear()
+        && s.getUTCMonth() === e.getUTCMonth()
+        && s.getUTCDate() === e.getUTCDate();
+    const timePart = sameDay ? `${hhmm(s)}–${hhmm(e)}` : hhmm(s);
+    return `${timePart} · ${dur}`;
+}
+
+/**
  * Parse a Discord custom-emoji mention `<:name:id>` / `<a:name:id>`.
  * Custom emoji are images (no unicode), so the renderer fetches their CDN image.
  * Returns { id, name, animated } or null for unicode/plain strings.

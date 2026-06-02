@@ -1,7 +1,7 @@
 import { AttachmentBuilder } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
-import { weekStartFor, materializeWeek, groupByCategory, scheduleHash } from './event-schedule-helpers.js';
+import { weekStartFor, materializeWeek, groupByCategory, scheduleHash, formatTimeLabel } from './event-schedule-helpers.js';
 import renderEventSchedule from '../utils/event-schedule-renderer.js';
 
 const COOLDOWN_MS = 10 * 60 * 1000; // mirror the twitch manager's 10-min settle window
@@ -25,7 +25,7 @@ class EventScheduleManager {
       items: sec.items.map(it => {
         const startCol = Math.max(0, Math.min(6, Math.floor((it.start - ws.getTime()) / (24 * 60 * 60 * 1000))));
         const endCol = Math.max(startCol, Math.min(6, Math.floor((it.end - 1 - ws.getTime()) / (24 * 60 * 60 * 1000))));
-        return { startCol, span: endCol - startCol + 1, title: it.title, emoji: it.emoji, source: it.source };
+        return { startCol, span: endCol - startCol + 1, title: it.title, emoji: it.emoji, source: it.source, timeLabel: formatTimeLabel(it.start, it.end) };
       }),
     }));
     const weekDays = Array.from({ length: 7 }, (_, i) => {

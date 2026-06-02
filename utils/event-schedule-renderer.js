@@ -306,8 +306,23 @@ export default async function renderEventSchedule(model) {
       const startCol = Math.max(0, Math.min(6, item.startCol | 0));
       const span = Math.max(1, Math.min(7 - startCol, (item.span | 0) || 1));
       const barX = startCol * COL_W + 6;
-      const barW = span * COL_W - 12;
       const barY = y + (ITEM_ROW_H - ITEM_BAR_H) / 2;
+      const timeLabel = item.timeLabel || '';
+
+      // Bar width = the day-span, BUT grow rightward to fit the label so narrow
+      // single-day bars don't truncate. Each event owns its full-width row, so the
+      // space to the right of the bar is empty — safe to extend into. Capped at the
+      // canvas edge; the bar still STARTS on the correct day (left edge unmoved).
+      // emojiBlock estimated generously so a title that drives the width still fits
+      // after the (actual-emoji-width-based) truncation margin below.
+      const emojiBlock = item.emoji ? 52 : 0;
+      ctx.font = 'bold 25px Arial';
+      const titleW = ctx.measureText(item.title || '').width;
+      ctx.font = '18px Arial';
+      const timeW = ctx.measureText(timeLabel).width;
+      const contentW = 18 + emojiBlock + Math.max(titleW, timeW) + 20;
+      const dayW = span * COL_W - 12;
+      const barW = Math.min(WIDTH - 6 - barX, Math.max(dayW, contentW));
 
       // Bar gradient (vertical, lighter top → base color bottom) + border.
       const bg = ctx.createLinearGradient(0, barY, 0, barY + ITEM_BAR_H);
@@ -339,10 +354,19 @@ export default async function renderEventSchedule(model) {
         const ew = drawEmoji(ctx, emoji, tx, barY + ITEM_BAR_H / 2 + 11, 30);
         tx += ew + 12;
       }
-      ctx.font = 'bold 26px Arial';
+      ctx.font = 'bold 25px Arial';
       const maxTextW = barX + barW - tx - 14;
       const title = truncate(ctx, item.title || '', Math.max(20, maxTextW));
-      ctx.fillText(title, tx, barY + ITEM_BAR_H / 2 + 10);
+      if (timeLabel) {
+        // Two-line stack inside the bar: title above, time/length below (smaller, dimmer).
+        ctx.fillText(title, tx, barY + 23);
+        ctx.font = '18px Arial';
+        ctx.globalAlpha = 0.82;
+        ctx.fillText(truncate(ctx, timeLabel, Math.max(20, maxTextW)), tx, barY + 45);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.fillText(title, tx, barY + ITEM_BAR_H / 2 + 10);
+      }
 
       y += ITEM_ROW_H;
     }
