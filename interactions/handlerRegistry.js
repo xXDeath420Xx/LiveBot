@@ -19,9 +19,17 @@ import { handlePanelCreateBasic } from './buttons/panel_create_basic.js';
 import { handlePollWriteIn } from './buttons/poll_write_in.js';
 import { handleStaffIntroButton } from './buttons/staff_intro.js';
 import { handleSuggestionFormButton, handleBugReportFormButton } from './buttons/forum_submit.js';
+import { handleVerifyAccept } from './buttons/verify_accept.js';
+import { handleStreamSignupAdd } from './buttons/stream_signup_add.js';
+import { handleStreamSignupSubmit } from './modals/stream_signup_submit.js';
+import {
+    handleCahJoin, handleCahLeave, handleCahStart, handleCahHand,
+    handleCahStatus, handleCahJudge
+} from './buttons/cah_buttons.js';
 
 // Pre-load all select menu handlers
 import { handlePanelSelectCategory, handlePanelSelectChannel, handlePanelSelectRole } from './select-menus/panel_select_handlers.js';
+import { handleCahPick } from './select-menus/cah_pick.js';
 
 // Pre-load all modal handlers
 import { handleTicketFormSubmit } from './modals/ticket_form_submit.js';
@@ -31,9 +39,15 @@ import { handlePollWriteInSubmit } from './modals/poll_write_in_submit.js';
 import { handleEmbedCreate, handleEmbedEdit } from './modals/embed_modal.js';
 import { handleStaffIntroSubmit } from './modals/staff_intro_submit.js';
 import { handleForumSuggestionSubmit, handleForumBugReportSubmit } from './modals/forum_submit_handlers.js';
+import { handleCahBlankSubmit } from './modals/cah_blank.js';
+import { handleCahPasswordJoin } from './modals/cah_pwjoin.js';
 import { handleFourthwallSetupSubmit } from './modals/fourthwall_setup_submit.js';
 import { handleFourthwallShopPage } from './buttons/fourthwall_shop_page.js';
 import { handleFourthwallShopPick } from './select-menus/fourthwall_shop_pick.js';
+import { handleBirthdayMonthSelect } from './select-menus/birthday_month.js';
+import { handleBirthdayAdminUserSelect } from './select-menus/birthday_admin_user.js';
+import { handleBirthdayAdminStart } from './buttons/birthday_admin.js';
+import { handleBirthdaySetModal } from './modals/birthday_set.js';
 
 /**
  * Button handler registry
@@ -79,7 +93,24 @@ export const buttonHandlers = {
   // Forum submit buttons
   'forum_submit_suggestion': handleSuggestionFormButton,
   'forum_submit_bug_report': handleBugReportFormButton,
-  'fw_shop_page:': handleFourthwallShopPage
+
+  // Verification button (rules-accept gate)
+  'verify_accept': handleVerifyAccept,
+
+  // Stream signup button
+  'stream_signup_add': handleStreamSignupAdd,
+
+  // CAH buttons
+  'cah_join:': handleCahJoin,
+  'cah_leave:': handleCahLeave,
+  'cah_startgame:': handleCahStart,
+  'cah_hand:': handleCahHand,
+  'cah_status:': handleCahStatus,
+  'cah_judge:': handleCahJudge,
+  'fw_shop_page:': handleFourthwallShopPage,
+
+  // Birthday admin entry button
+  'bday:adminstart': handleBirthdayAdminStart
 };
 
 /**
@@ -90,7 +121,13 @@ export const selectMenuHandlers = {
   'panel_select_category': handlePanelSelectCategory,
   'panel_select_channel': handlePanelSelectChannel,
   'panel_select_role': handlePanelSelectRole,
-  'fw_shop_pick:': handleFourthwallShopPick
+  'cah_pick:': handleCahPick,
+  'fw_shop_pick:': handleFourthwallShopPick,
+
+  // Birthday panel selects
+  'bday:month': handleBirthdayMonthSelect,
+  'bday:adminmonth:': handleBirthdayMonthSelect,
+  'bday:adminuser': handleBirthdayAdminUserSelect
 };
 
 /**
@@ -108,7 +145,13 @@ export const modalHandlers = {
   'staff_intro_submit': handleStaffIntroSubmit,
   'forum_suggestion_submit': handleForumSuggestionSubmit,
   'forum_bug_report_submit': handleForumBugReportSubmit,
-  'fourthwall_setup_submit': handleFourthwallSetupSubmit
+  'stream_signup_submit': handleStreamSignupSubmit,
+  'cah_blank:': handleCahBlankSubmit,
+  'cah_pwjoin:': handleCahPasswordJoin,
+  'fourthwall_setup_submit': handleFourthwallSetupSubmit,
+
+  // Birthday set modal (self + admin)
+  'bday:modal:': handleBirthdaySetModal
 };
 
 /**
@@ -138,7 +181,11 @@ export function getButtonHandler(customId) {
  * @returns {Function|null} The handler function or null if not found
  */
 export function getSelectMenuHandler(customId) {
-  return selectMenuHandlers[customId] || null;
+  if (selectMenuHandlers[customId]) return selectMenuHandlers[customId];
+  for (const [prefix, handler] of Object.entries(selectMenuHandlers)) {
+    if (customId.startsWith(prefix)) return handler;
+  }
+  return null;
 }
 
 /**
