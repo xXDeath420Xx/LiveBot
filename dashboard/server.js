@@ -9124,7 +9124,7 @@ function start(botClient) {
     });
 
     import('./routes/features/event-schedule.js').then(({ default: eventScheduleRouter }) => {
-        app.use('/', eventScheduleRouter);
+        app.use('/manage/:guildId', checkAuth, checkGuildAdmin, eventScheduleRouter);
     }).catch(err => {
         logger.error('Failed to load event-schedule routes:', err);
     });
