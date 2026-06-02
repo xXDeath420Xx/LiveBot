@@ -20,7 +20,7 @@ function loadConfig(env = process.env) {
       port: int(env.DB_PORT, 3306),
       user: env.DB_USER,
       password: env.DB_PASSWORD,
-      database: env.DB_NAME || 'CertiFriedUtility'
+      database: env.DB_NAME || 'cert_CertiFriedUtility'
     }
   };
 }
