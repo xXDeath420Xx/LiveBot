@@ -58,7 +58,9 @@ class EventScheduleManager {
     );
     const post = postRows[0];
 
-    if (post && post.schedule_hash === hash) return; // unchanged
+    // Unchanged content → skip, UNLESS an admin forced a refresh (e.g. to repost
+    // a board whose Discord message was deleted while the schedule didn't change).
+    if (post && post.schedule_hash === hash && !config.force_refresh) return;
 
     if (post && post.schedule_hash && post.change_detected_at) {
       const elapsed = Date.now() - new Date(post.change_detected_at).getTime();
