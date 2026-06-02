@@ -8,11 +8,34 @@
 // so callers can gracefully fall back to a text embed.
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { parseCustomEmoji } from '../core/event-schedule-helpers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let Canvas = null;
 try { Canvas = await import('canvas'); } catch { /* silent; image gen disabled */ }
+
+// Cache of custom-emoji CDN images (id -> Image, or null if it failed to load).
+// Custom Discord emoji have no unicode form, so they must be drawn as images.
+const emojiImageCache = new Map();
+
+/**
+ * Pre-fetch the CDN image for every custom emoji used in the model, so the
+ * synchronous drawEmoji can look them up. Failures are negative-cached as null
+ * (the emoji is then simply omitted — never leaked as raw `<:name:id>` text).
+ */
+async function preloadEmojiImages(sections) {
+  if (!Canvas) return;
+  const ids = new Set();
+  const collect = (e) => { const c = parseCustomEmoji(e); if (c) ids.add(c.id); };
+  for (const sec of sections || []) { collect(sec.emoji); for (const it of (sec.items || [])) collect(it.emoji); }
+  await Promise.all([...ids].filter(id => !emojiImageCache.has(id)).map(async (id) => {
+    try {
+      const img = await Canvas.loadImage(`https://cdn.discordapp.com/emojis/${id}.png?size=64`);
+      emojiImageCache.set(id, img);
+    } catch { emojiImageCache.set(id, null); }
+  }));
+}
 
 // Register a bundled monochrome emoji font so emoji render as clean glyphs
 // (colored via ctx.fillStyle) instead of "tofu" codepoint boxes. Cairo handles
@@ -32,6 +55,18 @@ if (Canvas) {
 // `ctx.fillStyle` is left untouched so the monochrome glyph takes the
 // caller's intended color.
 function drawEmoji(ctx, emoji, x, y, size) {
+  // Custom Discord emoji (`<:name:id>`) → draw the preloaded CDN image at a
+  // fixed size (so the title isn't pushed off the bar). If the image failed to
+  // load, draw nothing and consume no width — never leak the raw mention text.
+  const custom = parseCustomEmoji(emoji);
+  if (custom) {
+    const img = emojiImageCache.get(custom.id);
+    if (img) {
+      ctx.drawImage(img, x, y - size * 0.82, size, size);
+      return size;
+    }
+    return 0;
+  }
   const prevFont = ctx.font;
   ctx.font = `${size}px ${EMOJI_FONT_FAMILY}`;
   ctx.fillText(emoji, x, y);
@@ -122,6 +157,9 @@ export default async function renderEventSchedule(model) {
     sections = [],
     footer = '',
   } = model || {};
+
+  // Fetch any custom-emoji CDN images up front so drawEmoji can draw them.
+  await preloadEmojiImages(sections);
 
   // ─── Compute dynamic height ───────────────────────────────────────────────
   let bodyH = 0;
