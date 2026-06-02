@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CertiFried Multicast — Stream Everywhere, Free</title>
+  <link rel="stylesheet" href="/css/output.css" />
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+  <main class="max-w-3xl mx-auto p-6 space-y-8">
+    <header class="space-y-1">
+      <h1 class="text-2xl font-bold">CertiFried Multicast</h1>
+      <p class="text-gray-400">Push once. We relay your live stream to every platform — free.</p>
+      <% if (isGuest) { %>
+        <p class="text-amber-400 text-sm">Guest session<% if (expiresAt) { %> — expires <%= new Date(expiresAt).toLocaleString() %><% } %>. <a class="underline" href="/auth/discord">Log in with Discord</a> to keep your setup.</p>
+      <% } %>
+    </header>
+
+    <section class="bg-gray-900 rounded-xl p-5 space-y-3">
+      <h2 class="font-semibold">Your ingest (point OBS here)</h2>
+      <label class="block text-sm text-gray-400">Server / URL</label>
+      <div class="flex gap-2">
+        <input id="ingestUrl" readonly value="rtmp://<%= ingestUrl.split('/live/')[0].replace('rtmp://','') %>" class="flex-1 bg-gray-800 rounded px-3 py-2 text-sm" />
+        <button data-copy="#ingestUrl" class="bg-indigo-600 px-3 rounded text-sm">Copy</button>
+      </div>
+      <label class="block text-sm text-gray-400">Stream key</label>
+      <div class="flex gap-2">
+        <input id="streamKey" readonly value="<%= streamKey %>" type="password" class="flex-1 bg-gray-800 rounded px-3 py-2 text-sm" />
+        <button id="revealKey" class="bg-gray-700 px-3 rounded text-sm">Show</button>
+        <button data-copy="#streamKey" class="bg-indigo-600 px-3 rounded text-sm">Copy</button>
+        <% if (!isGuest) { %><button id="regenKey" class="bg-red-700 px-3 rounded text-sm">Regenerate</button><% } %>
+      </div>
+      <p class="text-xs text-gray-500">In OBS: Settings → Stream → Custom. Note the port is <strong>1936</strong>.</p>
+    </section>
+
+    <section class="bg-gray-900 rounded-xl p-5 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold">Destinations</h2>
+        <span id="liveBadge" class="text-xs px-2 py-1 rounded bg-gray-700">offline</span>
+      </div>
+      <ul id="destList" class="space-y-2"></ul>
+
+      <form id="addDest" class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-gray-800">
+        <select name="platform" id="platformSel" class="bg-gray-800 rounded px-3 py-2 text-sm">
+          <% Object.entries(platforms).forEach(([k, p]) => { %>
+            <option value="<%= k %>"><%= p.name %></option>
+          <% }) %>
+        </select>
+        <input name="name" placeholder="Label (e.g. My Twitch)" class="bg-gray-800 rounded px-3 py-2 text-sm" />
+        <input name="rtmp_url" id="rtmpUrl" placeholder="rtmp://..." class="bg-gray-800 rounded px-3 py-2 text-sm" />
+        <input name="dest_stream_key" placeholder="platform stream key" class="bg-gray-800 rounded px-3 py-2 text-sm" />
+        <button class="sm:col-span-2 bg-green-600 rounded py-2 text-sm font-medium">Add destination</button>
+      </form>
+    </section>
+  </main>
+
+  <script>window.__PLATFORMS__ = <%- JSON.stringify(platforms) %>;</script>
+  <script src="/js/stream.js"></script>
+</body>
+</html>
