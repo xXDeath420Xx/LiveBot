@@ -1,0 +1,323 @@
+<style>
+/* Event Schedule Page Styles (reusing achievements section classes) */
+.achievements-section {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 16px;
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+.achievements-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.achievements-section-header i { color: #fbbf24; font-size: 1.25rem; }
+.achievements-section-header h3 { font-size: 1.1rem; font-weight: 700; color: #fff; margin: 0; }
+.achievements-section-body { padding: 24px; }
+.config-form-group { margin-bottom: 20px; }
+.config-form-group:last-child { margin-bottom: 0; }
+.config-label { display: block; font-size: 0.875rem; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 8px; }
+.config-help { font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-top: 6px; }
+.toggle-container {
+    display: flex; align-items: center; gap: 12px; padding: 16px;
+    background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; cursor: pointer; transition: all 0.2s ease;
+}
+.toggle-container:hover { background: rgba(0,0,0,0.3); border-color: rgba(167,139,250,0.3); }
+.toggle-container input[type="checkbox"] {
+    width: 44px; height: 24px; appearance: none; background: rgba(255,255,255,0.1);
+    border-radius: 24px; position: relative; cursor: pointer; transition: all 0.3s ease;
+}
+.toggle-container input[type="checkbox"]::before {
+    content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%;
+    background: white; top: 3px; left: 3px; transition: transform 0.3s ease;
+}
+.toggle-container input[type="checkbox"]:checked { background: linear-gradient(135deg,#7c3aed 0%,#a78bfa 100%); }
+.toggle-container input[type="checkbox"]:checked::before { transform: translateX(20px); }
+.toggle-label { font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
+.es-category-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; margin-bottom: 10px;
+}
+.es-category-row:last-child { margin-bottom: 0; }
+.es-color-swatch { width: 18px; height: 18px; border-radius: 5px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.2); }
+.es-category-name { flex: 1; font-weight: 500; color: rgba(255,255,255,0.9); }
+.es-add-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-top: 16px; }
+.es-add-row .config-form-group { margin-bottom: 0; }
+.leaderboard-entry {
+    padding: 14px 18px; display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.leaderboard-entry:last-child { border-bottom: none; }
+.empty-message { text-align: center; padding: 32px; color: rgba(255,255,255,0.5); font-size: 0.95rem; }
+.loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px; color: rgba(255,255,255,0.5); }
+.loading-state i { font-size: 2rem; margin-bottom: 12px; color: #a78bfa; }
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-calendar-alt"></i>
+                <span>Event Schedule</span>
+            </div>
+            <div class="page-section-subtitle">
+                Member-submitted events posted to a shared calendar channel
+            </div>
+        </div>
+    </div>
+
+    <!-- Configuration -->
+    <div class="achievements-section">
+        <div class="achievements-section-header">
+            <i class="fas fa-cog"></i>
+            <h3>Configuration</h3>
+        </div>
+        <div class="achievements-section-body">
+            <form id="es-config-form" onsubmit="saveEventScheduleConfig(event)">
+                <div class="config-form-group">
+                    <label class="toggle-container">
+                        <input type="checkbox" id="es-enabled" name="is_enabled">
+                        <span class="toggle-label">Enable Event Schedule</span>
+                    </label>
+                </div>
+
+                <div class="config-form-group">
+                    <label class="config-label">Display Mode</label>
+                    <select id="es-mode" name="mode" class="form-select">
+                        <option value="combined">Combined (one calendar for the whole server)</option>
+                        <option value="per_user">Per User (one schedule per member)</option>
+                    </select>
+                    <div class="config-help">How events are grouped when posted to the channel</div>
+                </div>
+
+                <div class="config-form-group">
+                    <label class="config-label">Calendar Channel</label>
+                    <select id="es-channel" name="channel_id" class="form-select">
+                        <option value="">Select a channel...</option>
+                        <% if (typeof channels !== 'undefined' && channels) { %>
+                            <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                            <% }); %>
+                        <% } %>
+                    </select>
+                    <div class="config-help">Channel where the event calendar will be posted</div>
+                </div>
+
+                <div class="config-form-group">
+                    <label class="config-label">Calendar Title</label>
+                    <input type="text" id="es-title" name="title" class="form-input" maxlength="100" placeholder="Event Calendar">
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i>
+                    <span>Save Settings</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Categories -->
+    <div class="achievements-section">
+        <div class="achievements-section-header">
+            <i class="fas fa-tags"></i>
+            <h3>Categories</h3>
+        </div>
+        <div class="achievements-section-body">
+            <div id="es-categories">
+                <div class="loading-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Loading categories...</span>
+                </div>
+            </div>
+
+            <form id="es-category-form" onsubmit="addEventScheduleCategory(event)">
+                <div class="es-add-row">
+                    <div class="config-form-group">
+                        <label class="config-label">Name</label>
+                        <input type="text" id="es-cat-name" class="form-input" maxlength="60" placeholder="Category name" required>
+                    </div>
+                    <div class="config-form-group">
+                        <label class="config-label">Emoji</label>
+                        <input type="text" id="es-cat-emoji" class="form-input" maxlength="64" placeholder="🔴" style="width: 90px;">
+                    </div>
+                    <div class="config-form-group">
+                        <label class="config-label">Color</label>
+                        <input type="color" id="es-cat-color" class="form-input" value="#3498DB" style="width: 60px; padding: 4px;">
+                    </div>
+                    <div class="config-form-group">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-plus"></i>
+                            <span>Add</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Events -->
+    <div class="achievements-section">
+        <div class="achievements-section-header">
+            <i class="fas fa-list"></i>
+            <h3>Events</h3>
+        </div>
+        <div id="es-events">
+            <div class="loading-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Loading events...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function esEscapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function esUserLabel(row) {
+    return row.username ? esEscapeHtml(row.username) : ('User ' + String(row.user_id).slice(0, 6) + '…');
+}
+function esFormatWhen(ev) {
+    if (ev.recurrence === 'weekly') {
+        const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const dow = (ev.recur_dow != null && dows[ev.recur_dow]) ? dows[ev.recur_dow] : 'Weekly';
+        return 'Weekly · ' + esEscapeHtml(dow);
+    }
+    if (ev.start_time) {
+        try { return esEscapeHtml(new Date(ev.start_time).toLocaleString()); } catch { return esEscapeHtml(ev.start_time); }
+    }
+    return '—';
+}
+
+async function loadEventSchedule() {
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/event-schedule');
+        const data = await response.json();
+
+        // Config
+        if (data.config) {
+            document.getElementById('es-enabled').checked = !!data.config.is_enabled;
+            document.getElementById('es-mode').value = data.config.mode || 'combined';
+            document.getElementById('es-channel').value = data.config.channel_id || '';
+            document.getElementById('es-title').value = data.config.title || '';
+        }
+
+        // Categories
+        const catEl = document.getElementById('es-categories');
+        if (data.categories && data.categories.length > 0) {
+            catEl.innerHTML = data.categories.map(cat => `
+                <div class="es-category-row">
+                    <span class="es-color-swatch" style="background:${esEscapeHtml(cat.color || '#3498DB')}"></span>
+                    <span>${esEscapeHtml(cat.emoji || '')}</span>
+                    <span class="es-category-name">${esEscapeHtml(cat.name)}</span>
+                    <button class="btn btn-danger btn-sm" onclick="deleteEventScheduleCategory(${Number(cat.id)})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `).join('');
+        } else {
+            catEl.innerHTML = '<div class="empty-message">No categories yet. Enable the feature to seed defaults, or add one below.</div>';
+        }
+
+        // Events
+        const evEl = document.getElementById('es-events');
+        if (data.events && data.events.length > 0) {
+            evEl.innerHTML = data.events.map(ev => `
+                <div class="leaderboard-entry">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:1.25rem;">${esEscapeHtml(ev.emoji || ev.category_emoji || '📌')}</span>
+                        <div>
+                            <div style="font-weight:600; color:#fff;">${esEscapeHtml(ev.title)}</div>
+                            <div style="font-size:0.8rem; color:rgba(255,255,255,0.5);">
+                                ${esUserLabel(ev)}${ev.category_name ? ' · ' + esEscapeHtml(ev.category_name) : ''}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="color:rgba(255,255,255,0.6); font-size:0.85rem;">${esFormatWhen(ev)}</div>
+                </div>
+            `).join('');
+        } else {
+            evEl.innerHTML = '<div class="empty-message">No events submitted yet</div>';
+        }
+    } catch (error) {
+        console.error('Error loading event schedule:', error);
+        document.getElementById('es-events').innerHTML = '<div class="empty-message" style="color:#f87171;">Error loading data</div>';
+    }
+}
+
+async function saveEventScheduleConfig(event) {
+    event.preventDefault();
+    const config = {
+        is_enabled: document.getElementById('es-enabled').checked,
+        mode: document.getElementById('es-mode').value,
+        channel_id: document.getElementById('es-channel').value || null,
+        title: document.getElementById('es-title').value || null
+    };
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/event-schedule/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        if (response.ok) {
+            alert('Configuration saved successfully!');
+            loadEventSchedule();
+        } else {
+            alert('Failed to save configuration');
+        }
+    } catch (error) {
+        console.error('Error saving config:', error);
+        alert('Error saving configuration');
+    }
+}
+
+async function addEventScheduleCategory(event) {
+    event.preventDefault();
+    const body = {
+        name: document.getElementById('es-cat-name').value,
+        emoji: document.getElementById('es-cat-emoji').value || null,
+        color: document.getElementById('es-cat-color').value || '#3498DB'
+    };
+    if (!body.name.trim()) { alert('Category name is required'); return; }
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/event-schedule/category', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (response.ok) {
+            document.getElementById('es-category-form').reset();
+            document.getElementById('es-cat-color').value = '#3498DB';
+            loadEventSchedule();
+        } else {
+            alert('Failed to add category');
+        }
+    } catch (error) {
+        console.error('Error adding category:', error);
+        alert('Error adding category');
+    }
+}
+
+async function deleteEventScheduleCategory(id) {
+    if (!confirm('Delete this category?')) return;
+    try {
+        const response = await fetch('/manage/<%= guild.id %>/event-schedule/category/' + id, { method: 'DELETE' });
+        if (response.ok) {
+            loadEventSchedule();
+        } else {
+            alert('Failed to delete category');
+        }
+    } catch (error) {
+        console.error('Error deleting category:', error);
+        alert('Error deleting category');
+    }
+}
+
+loadEventSchedule();
+</script>

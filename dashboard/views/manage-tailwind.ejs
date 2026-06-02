@@ -153,56 +153,463 @@
         .breadcrumb-item.active { color: var(--text-primary); font-weight: 600; font-size: 0.9rem; }
         .breadcrumb-sep { color: var(--text-muted); }
 
+        /* Animations */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes sectionReveal {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         /* Module Grid */
-        .modules-section { margin-bottom: 3rem; }
-        .section-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
-        .section-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem; }
-        .section-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.05em; }
+        .modules-section {
+            margin-bottom: 1.75rem;
+            background: rgba(255, 255, 255, 0.012);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-left: 3px solid var(--card-accent, #a78bfa);
+            border-radius: 4px 16px 16px 4px;
+            padding: 1.5rem 1.5rem 1.25rem;
+            position: relative;
+            animation: sectionReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+            transition: background 0.3s ease;
+        }
+        .modules-section:nth-child(1) { animation-delay: 0s; }
+        .modules-section:nth-child(2) { animation-delay: 0.06s; }
+        .modules-section:nth-child(3) { animation-delay: 0.12s; }
+        .modules-section:nth-child(4) { animation-delay: 0.18s; }
+        .modules-section:nth-child(5) { animation-delay: 0.24s; }
+        .modules-section:nth-child(6) { animation-delay: 0.30s; }
+        .modules-section:nth-child(7) { animation-delay: 0.36s; }
+        .modules-section:nth-child(8) { animation-delay: 0.42s; }
+        .modules-section:nth-child(9) { animation-delay: 0.48s; }
+        .modules-section:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
 
-        .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
-        .module-card { display: block; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; text-decoration: none; transition: all 0.3s; backdrop-filter: blur(10px); }
-        .module-card:hover { border-color: var(--card-accent, var(--accent-purple)); transform: translateY(-4px); box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3); }
-        .module-header { display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 0.75rem; }
-        .module-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
-        .module-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem; }
-        .module-desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
-        .module-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.625rem; background: rgba(35, 245, 107, 0.15); color: var(--accent-green); border-radius: 50px; font-size: 0.7rem; font-weight: 600; margin-top: 0.75rem; }
-        .module-badge i { font-size: 0.6rem; }
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+            padding-bottom: 0.875rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .section-header-text {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+        .section-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            box-shadow: 0 4px 14px color-mix(in srgb, var(--card-accent, #a78bfa) 25%, transparent);
+            transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .section-toggle:hover .section-icon {
+            transform: scale(1.08);
+        }
+        .section-title {
+            font-size: 0.9rem;
+            font-weight: 800;
+            color: var(--card-accent, var(--text-primary));
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            line-height: 1;
+        }
+        .section-desc {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 400;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+        .section-count {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--card-accent, var(--text-muted));
+            background: color-mix(in srgb, var(--card-accent, #a78bfa) 10%, transparent);
+            padding: 0.2rem 0.55rem;
+            border-radius: 50px;
+            margin-left: 0.5rem;
+            border: 1px solid color-mix(in srgb, var(--card-accent, #a78bfa) 15%, transparent);
+        }
 
-        /* Color classes for modules */
-        .purple { --card-accent: var(--accent-purple); }
-        .purple .module-icon, .purple .section-icon { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
-        .blue { --card-accent: var(--accent-blue); }
-        .blue .module-icon, .blue .section-icon { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); }
-        .green { --card-accent: var(--accent-green); }
-        .green .module-icon, .green .section-icon { background: rgba(35, 245, 107, 0.15); color: var(--accent-green); }
-        .cyan { --card-accent: var(--accent-cyan); }
-        .cyan .module-icon, .cyan .section-icon { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); }
-        .yellow { --card-accent: var(--accent-yellow); }
-        .yellow .module-icon, .yellow .section-icon { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); }
-        .red { --card-accent: var(--accent-red); }
-        .red .module-icon, .red .section-icon { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
-        .orange { --card-accent: var(--accent-orange); }
-        .orange .module-icon, .orange .section-icon { background: rgba(251, 146, 60, 0.15); color: var(--accent-orange); }
-        .pink { --card-accent: var(--accent-pink); }
-        .pink .module-icon, .pink .section-icon { background: rgba(244, 114, 182, 0.15); color: var(--accent-pink); }
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+
+        .module-card {
+            display: block;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 1.35rem;
+            text-decoration: none;
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        /* Staggered card entrance — up to 16 cards per section */
+        .module-grid .module-card:nth-child(1) { animation-delay: 0.04s; }
+        .module-grid .module-card:nth-child(2) { animation-delay: 0.08s; }
+        .module-grid .module-card:nth-child(3) { animation-delay: 0.12s; }
+        .module-grid .module-card:nth-child(4) { animation-delay: 0.16s; }
+        .module-grid .module-card:nth-child(5) { animation-delay: 0.20s; }
+        .module-grid .module-card:nth-child(6) { animation-delay: 0.24s; }
+        .module-grid .module-card:nth-child(7) { animation-delay: 0.28s; }
+        .module-grid .module-card:nth-child(8) { animation-delay: 0.32s; }
+        .module-grid .module-card:nth-child(9) { animation-delay: 0.36s; }
+        .module-grid .module-card:nth-child(10) { animation-delay: 0.40s; }
+        .module-grid .module-card:nth-child(11) { animation-delay: 0.44s; }
+        .module-grid .module-card:nth-child(12) { animation-delay: 0.48s; }
+        .module-grid .module-card:nth-child(13) { animation-delay: 0.52s; }
+        .module-grid .module-card:nth-child(14) { animation-delay: 0.56s; }
+        .module-grid .module-card:nth-child(15) { animation-delay: 0.60s; }
+
+        .module-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--card-gradient, linear-gradient(90deg, var(--card-accent, #a78bfa), var(--card-accent-end, #a78bfa)));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .module-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(ellipse at top left, color-mix(in srgb, var(--card-accent, #a78bfa) 5%, transparent), transparent 60%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        .module-card:hover {
+            border-color: color-mix(in srgb, var(--card-accent, #a78bfa) 35%, transparent);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 32px color-mix(in srgb, var(--card-accent, #a78bfa) 8%, rgba(0,0,0,0.25));
+            background: rgba(255, 255, 255, 0.035);
+        }
+        .module-card:hover::before { opacity: 1; }
+        .module-card:hover::after { opacity: 1; }
+        .module-card:hover .module-icon {
+            transform: scale(1.1);
+            box-shadow: 0 4px 16px color-mix(in srgb, var(--card-accent, #a78bfa) 20%, transparent);
+        }
+        .module-card:hover .module-title {
+            color: var(--card-accent, var(--text-primary));
+        }
+
+        .module-header { display: flex; align-items: center; gap: 0.875rem; }
+        .module-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+            flex-shrink: 0;
+            border: 1px solid color-mix(in srgb, var(--card-accent, #a78bfa) 15%, transparent);
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .module-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.2rem;
+            transition: color 0.3s ease;
+        }
+        .module-desc { font-size: 0.8rem; color: var(--text-muted); line-height: 1.45; }
+        .module-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.2rem 0.5rem; background: rgba(35, 245, 107, 0.15); color: var(--accent-green); border-radius: 50px; font-size: 0.65rem; font-weight: 600; margin-top: 0.5rem; }
+        .module-badge i { font-size: 0.5rem; }
+
+        /* Feature status dot */
+        .module-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            transition: all 0.3s ease;
+            z-index: 2;
+        }
+        .module-status.active {
+            background: #23f56b;
+            box-shadow: 0 0 8px rgba(35, 245, 107, 0.4);
+        }
+        .module-status.active::after {
+            content: '';
+            position: absolute;
+            top: -2px; left: -2px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 1px solid rgba(35, 245, 107, 0.25);
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+        @keyframes statusPulse {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.4); opacity: 0; }
+        }
+
+        /* Search & Filter */
+        .overview-search-wrap { margin-bottom: 1.75rem; }
+        .overview-search { position: relative; margin-bottom: 0.875rem; }
+        .overview-search i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.9rem; }
+        .overview-search input {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .overview-search input:focus {
+            outline: none;
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.12), 0 4px 16px rgba(167, 139, 250, 0.08);
+            background: rgba(255, 255, 255, 0.035);
+        }
+        .overview-search input:focus + .search-shortcut { opacity: 0; }
+        .overview-search input::placeholder { color: var(--text-muted); }
+        .category-tabs {
+            display: flex;
+            gap: 0.25rem;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 4px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .category-tab {
+            padding: 0.5rem 0.875rem;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 7px;
+            white-space: nowrap;
+            transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+            font-family: inherit;
+            position: relative;
+        }
+        .category-tab .tab-count {
+            font-size: 0.6rem;
+            font-weight: 700;
+            opacity: 0.5;
+            margin-left: 0.25rem;
+        }
+        .category-tab:hover {
+            color: var(--text-primary);
+            background: rgba(255,255,255,0.06);
+        }
+        .category-tab.active {
+            color: var(--tab-accent, var(--accent-purple));
+            background: color-mix(in srgb, var(--tab-accent, var(--accent-purple)) 12%, transparent);
+            box-shadow: 0 1px 8px color-mix(in srgb, var(--tab-accent, var(--accent-purple)) 12%, transparent);
+        }
+        .category-tab.active .tab-count {
+            opacity: 0.8;
+        }
+
+        /* Section collapse */
+        .section-toggle { cursor: pointer; user-select: none; position: relative; }
+        .section-chevron {
+            margin-left: auto;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+        }
+        .section-toggle:hover .section-chevron {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-primary);
+        }
+        .modules-section.collapsed .module-grid {
+            display: none;
+        }
+        .modules-section.collapsed .section-chevron { transform: rotate(-90deg); }
+        .modules-section.collapsed {
+            padding-bottom: 1rem;
+        }
+        .modules-section.collapsed .section-header {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+        .module-card.search-hidden { display: none !important; }
+        .modules-section.search-hidden { display: none !important; }
+
+        /* Color classes for modules — each with unique gradient */
+        .purple { --card-accent: #a78bfa; --card-accent-end: #c4b5fd; --card-gradient: linear-gradient(90deg, #8b5cf6, #c4b5fd); }
+        .purple .module-icon, .purple .section-icon { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+
+        .blue { --card-accent: #60a5fa; --card-accent-end: #93c5fd; --card-gradient: linear-gradient(90deg, #3b82f6, #93c5fd); }
+        .blue .module-icon, .blue .section-icon { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
+
+        .green { --card-accent: #23f56b; --card-accent-end: #86efac; --card-gradient: linear-gradient(90deg, #22c55e, #86efac); }
+        .green .module-icon, .green .section-icon { background: rgba(35, 245, 107, 0.15); color: #23f56b; }
+
+        .cyan { --card-accent: #22d3ee; --card-accent-end: #67e8f9; --card-gradient: linear-gradient(90deg, #06b6d4, #67e8f9); }
+        .cyan .module-icon, .cyan .section-icon { background: rgba(34, 211, 238, 0.15); color: #22d3ee; }
+
+        .yellow { --card-accent: #fbbf24; --card-accent-end: #fde68a; --card-gradient: linear-gradient(90deg, #f59e0b, #fde68a); }
+        .yellow .module-icon, .yellow .section-icon { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+
+        .red { --card-accent: #f87171; --card-accent-end: #fca5a5; --card-gradient: linear-gradient(90deg, #ef4444, #fca5a5); }
+        .red .module-icon, .red .section-icon { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+
+        .orange { --card-accent: #fb923c; --card-accent-end: #fdba74; --card-gradient: linear-gradient(90deg, #f97316, #fdba74); }
+        .orange .module-icon, .orange .section-icon { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
+
+        .pink { --card-accent: #f472b6; --card-accent-end: #f9a8d4; --card-gradient: linear-gradient(90deg, #ec4899, #f9a8d4); }
+        .pink .module-icon, .pink .section-icon { background: rgba(244, 114, 182, 0.15); color: #f472b6; }
+
+        .indigo { --card-accent: #818cf8; --card-accent-end: #a5b4fc; --card-gradient: linear-gradient(90deg, #6366f1, #a5b4fc); }
+        .indigo .module-icon, .indigo .section-icon { background: rgba(129, 140, 248, 0.15); color: #818cf8; }
+
+        .teal { --card-accent: #2dd4bf; --card-accent-end: #5eead4; --card-gradient: linear-gradient(90deg, #14b8a6, #5eead4); }
+        .teal .module-icon, .teal .section-icon { background: rgba(45, 212, 191, 0.15); color: #2dd4bf; }
 
         /* Quick Stats */
-        .quick-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2.5rem; }
-        .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem; display: flex; align-items: center; gap: 1rem; transition: all 0.3s; }
-        .stat-card:hover { border-color: var(--stat-accent, var(--accent-purple)); transform: translateY(-2px); }
-        .stat-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+        .quick-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-left: 3px solid var(--stat-accent, var(--accent-purple));
+            border-radius: 4px 14px 14px 4px;
+            padding: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .stat-card:nth-child(1) { animation-delay: 0.05s; }
+        .stat-card:nth-child(2) { animation-delay: 0.1s; }
+        .stat-card:nth-child(3) { animation-delay: 0.15s; }
+        .stat-card:nth-child(4) { animation-delay: 0.2s; }
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(ellipse at left, color-mix(in srgb, var(--stat-accent, #a78bfa) 5%, transparent), transparent 60%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        .stat-card:hover {
+            border-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px color-mix(in srgb, var(--stat-accent, #a78bfa) 8%, rgba(0,0,0,0.2));
+        }
+        .stat-card:hover::after { opacity: 1; }
+        .stat-card:hover .stat-icon { transform: scale(1.08); }
+        .stat-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+            transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            box-shadow: 0 4px 12px color-mix(in srgb, var(--stat-accent, #a78bfa) 20%, transparent);
+        }
         .stat-value { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); }
-        .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
 
-        .stat-purple { --stat-accent: var(--accent-purple); }
-        .stat-purple .stat-icon { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
-        .stat-cyan { --stat-accent: var(--accent-cyan); }
-        .stat-cyan .stat-icon { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); }
-        .stat-green { --stat-accent: var(--accent-green); }
-        .stat-green .stat-icon { background: rgba(35, 245, 107, 0.15); color: var(--accent-green); }
-        .stat-red { --stat-accent: var(--accent-red); }
-        .stat-red .stat-icon { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+        .stat-purple { --stat-accent: #a78bfa; }
+        .stat-purple .stat-icon { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+        .stat-cyan { --stat-accent: #22d3ee; }
+        .stat-cyan .stat-icon { background: rgba(34, 211, 238, 0.15); color: #22d3ee; }
+        .stat-green { --stat-accent: #23f56b; }
+        .stat-green .stat-icon { background: rgba(35, 245, 107, 0.15); color: #23f56b; }
+        .stat-red { --stat-accent: #f87171; }
+        .stat-red .stat-icon { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+
+        /* Recently Visited */
+        .recent-visited {
+            margin-bottom: 1.75rem;
+            animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+            animation-delay: 0.1s;
+        }
+        .recent-visited-label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .recent-visited-label i { font-size: 0.65rem; }
+        .recent-visited-grid {
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            -webkit-overflow-scrolling: touch;
+        }
+        .recent-chip {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+            flex-shrink: 0;
+        }
+        .recent-chip:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(167, 139, 250, 0.3);
+            transform: translateY(-1px);
+        }
+        .recent-chip i {
+            font-size: 0.75rem;
+            color: var(--accent-purple);
+            width: 14px;
+            text-align: center;
+        }
+        .recent-chip span {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .recent-chip:hover span { color: var(--text-primary); }
 
         /* Card Components for Partials */
         .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; backdrop-filter: blur(10px); }
@@ -255,10 +662,17 @@
         .manage-card-title { font-size: 1.125rem; font-weight: 700; }
 
         .form-label { font-size: 0.875rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; display: block; }
-        .form-control, .form-select { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 10px; padding: 0.625rem 0.875rem; font-size: 0.875rem; transition: all 0.2s; }
-        .form-control:focus, .form-select:focus { background: rgba(255, 255, 255, 0.08); border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1); outline: none; }
-        .form-control::placeholder { color: var(--text-muted); }
+        .form-control, .form-select, .form-input, .form-textarea { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: #ffffff !important; border-radius: 10px; padding: 0.625rem 0.875rem; font-size: 0.875rem; transition: all 0.2s; }
+        .form-control:focus, .form-select:focus, .form-input:focus, .form-textarea:focus { background: rgba(255, 255, 255, 0.08); border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1); outline: none; }
+        .form-control::placeholder, .form-input::placeholder, .form-textarea::placeholder { color: var(--text-muted); }
+        /* Global input text fix — ensure ALL inputs have white text on dark backgrounds */
+        input, select, textarea { color: #ffffff !important; }
+        input[type="text"], input[type="number"], input[type="password"], input[type="email"], input[type="url"], input[type="search"], input[type="tel"],
+        textarea, select { background-color: rgba(255, 255, 255, 0.05); }
+        input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.35) !important; }
         .form-select option { background: var(--bg-primary); color: var(--text-primary); }
+        .form-select option:checked, .form-select option:active { background: var(--accent-purple); color: #fff; }
+        .form-select[multiple] option:checked { background: linear-gradient(0deg, var(--accent-purple) 0%, var(--accent-purple) 100%); color: #fff; }
         .form-check-input { background-color: rgba(255, 255, 255, 0.1); border-color: var(--border-color); }
         .form-check-input:checked { background-color: var(--accent-purple); border-color: var(--accent-purple); }
 
@@ -381,6 +795,96 @@
         .empty-state h3 { font-size: 1.125rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
         .empty-state p { font-size: 0.875rem; }
 
+        /* Support Banner */
+        .support-banner {
+            display: block;
+            position: relative;
+            overflow: hidden;
+            border-radius: 4px 16px 16px 4px;
+            padding: 1.15rem 1.5rem;
+            margin-bottom: 1.75rem;
+            text-decoration: none;
+            background: rgba(236, 72, 153, 0.06);
+            border: 1px solid rgba(236, 72, 153, 0.15);
+            border-left: 3px solid #ec4899;
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            cursor: pointer;
+            animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+            animation-delay: 0.25s;
+        }
+        .support-banner:hover {
+            border-color: rgba(236, 72, 153, 0.35);
+            background: rgba(236, 72, 153, 0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 28px rgba(236, 72, 153, 0.1);
+        }
+        .support-banner-glow {
+            position: absolute;
+            top: -50%;
+            right: -5%;
+            width: 180px;
+            height: 180px;
+            background: radial-gradient(circle, rgba(236, 72, 153, 0.1), transparent 70%);
+            pointer-events: none;
+        }
+        .support-banner-content {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            position: relative;
+            z-index: 1;
+        }
+        .support-banner-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #ec4899, #a78bfa);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            color: #fff;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(236, 72, 153, 0.25);
+            transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .support-banner:hover .support-banner-icon { transform: scale(1.08); }
+        .support-banner-text { flex: 1; min-width: 0; }
+        .support-banner-title {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.1rem;
+        }
+        .support-banner-desc {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+        .support-banner-cta {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.45rem 1.1rem;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #ec4899, #a78bfa);
+            color: #fff;
+            font-size: 0.8rem;
+            font-weight: 600;
+            flex-shrink: 0;
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .support-banner:hover .support-banner-cta {
+            box-shadow: 0 4px 16px rgba(236, 72, 153, 0.35);
+            transform: translateX(2px);
+        }
+        .support-banner-cta i {
+            font-size: 0.7rem;
+            transition: transform 0.3s;
+        }
+        .support-banner:hover .support-banner-cta i {
+            transform: translateX(3px);
+        }
+
         /* Footer */
         .footer { padding: 2.5rem 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
         .footer-links { display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1.25rem; }
@@ -396,15 +900,252 @@
         .mobile-menu-link { color: var(--text-primary); text-decoration: none; font-size: 1.25rem; font-weight: 600; }
         .mobile-menu-link:hover { color: var(--accent-purple); }
 
+        /* ═══════════════════════════════════════════════════
+           MOBILE RESPONSIVE — 768px and below
+           Designed for Galaxy Z Fold 7 outer (~374px wide)
+           ═══════════════════════════════════════════════════ */
         @media (max-width: 768px) {
+            /* ── Layout & Navigation ── */
             .mobile-menu-btn { display: block; }
             .navbar-links { display: none; }
             .mobile-menu.active { display: block; }
-            .server-header { flex-direction: column; align-items: flex-start; text-align: left; }
-            .server-name { font-size: 1.5rem; }
-            .quick-stats { grid-template-columns: repeat(2, 1fr); }
-            .module-grid { grid-template-columns: 1fr; }
             .footer-links { flex-direction: column; gap: 0.75rem; }
+
+            /* ── Support Banner ── */
+            .support-banner { padding: 1rem; margin-bottom: 1.5rem; }
+            .support-banner-content { flex-wrap: wrap; gap: 0.75rem; }
+            .support-banner-icon { width: 36px; height: 36px; font-size: 0.9rem; }
+            .support-banner-title { font-size: 0.85rem; }
+            .support-banner-desc { font-size: 0.75rem; }
+            .support-banner-cta { padding: 0.4rem 1rem; font-size: 0.8rem; width: 100%; justify-content: center; }
+            .support-banner-glow { display: none; }
+
+            /* ── Server Header ── */
+            .server-header { flex-direction: column; align-items: flex-start; text-align: left; gap: 0.75rem; margin-bottom: 1.25rem; padding-bottom: 1rem; }
+            .server-name { font-size: 1.2rem; }
+            .server-actions { width: 100%; }
+            .server-actions .btn-back { width: 100%; text-align: center; justify-content: center; }
+            .server-meta { flex-wrap: wrap; gap: 0.5rem; font-size: 0.8rem; }
+
+            /* ── Page Content Container ── */
+            .page-content { padding: 0.875rem !important; overflow-x: hidden; border-radius: 12px; }
+            .page-section { margin-bottom: 1rem; }
+            .page-section-header { flex-direction: column; align-items: flex-start !important; gap: 0.5rem; margin-bottom: 0.75rem; padding-bottom: 0.5rem; }
+            .page-section-title { font-size: 1rem; }
+            .page-section-subtitle { font-size: 0.8rem; }
+            .breadcrumb-nav { font-size: 0.8rem; }
+
+            /* ── NUCLEAR: Force ALL grids to single column ──
+               This catches inline style="display: grid; grid-template-columns: ..." too */
+            .grid.grid-cols-4,
+            .grid.grid-cols-3,
+            .grid.grid-cols-2 { grid-template-columns: 1fr !important; }
+            .quick-stats { grid-template-columns: repeat(2, 1fr) !important; }
+            .module-grid { grid-template-columns: 1fr !important; }
+            .modules-section { padding: 1rem; margin-bottom: 1.25rem; }
+            .category-tabs { -webkit-mask-image: linear-gradient(90deg, black 85%, transparent); mask-image: linear-gradient(90deg, black 85%, transparent); }
+            .recent-visited-grid { -webkit-mask-image: linear-gradient(90deg, black 80%, transparent); mask-image: linear-gradient(90deg, black 80%, transparent); }
+            .stat-card-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 0.5rem; }
+            .stat-card-item { padding: 0.75rem; }
+            .stat-card-value { font-size: 1.2rem; }
+
+            /* Force ANY element with inline grid to single column on mobile */
+            .page-content [style*="grid-template-columns"] {
+                grid-template-columns: 1fr !important;
+            }
+            /* Except stat grids that look good as 2-col */
+            .streamers-stats-grid,
+            .quick-stats,
+            .stat-card-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+            }
+
+            /* ── NUCLEAR: Force inline flex layouts to stack ── */
+            .page-content [style*="display: flex"][style*="justify-content"],
+            .page-content [style*="display: flex"][style*="gap"] {
+                flex-wrap: wrap !important;
+            }
+            .page-content [style*="display: flex"][style*="justify-content: space-between"] {
+                flex-direction: column !important;
+                gap: 0.5rem !important;
+            }
+            .page-content [style*="display: flex"][style*="justify-content: flex-end"] {
+                justify-content: stretch !important;
+            }
+            .page-content [style*="display: flex"][style*="justify-content: flex-end"] > * {
+                width: 100%;
+            }
+
+            /* ── Inline padding/margin reduction ── */
+            .page-content [style*="padding: var(--spacing-6)"],
+            .page-content [style*="padding: var(--spacing-5)"] {
+                padding: 0.75rem !important;
+            }
+            .page-content [style*="margin-bottom: var(--spacing-6)"] {
+                margin-bottom: 0.75rem !important;
+            }
+
+            /* ── ALL Tables — universal mobile treatment ── */
+            .page-content table {
+                font-size: 0.78rem !important;
+                width: 100% !important;
+            }
+            .page-content th {
+                padding: 0.5rem 0.5rem !important;
+                font-size: 0.65rem !important;
+                width: auto !important;
+            }
+            .page-content td {
+                padding: 0.5rem 0.5rem !important;
+            }
+            /* Table wrappers — horizontal scroll with momentum */
+            .page-content .table-container,
+            .page-content .mod-table-wrapper,
+            .page-content .leveling-table-wrapper,
+            .page-content .streamers-table-wrapper,
+            .page-content [style*="overflow"] {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            /* Hide low-priority columns */
+            .mobile-hide { display: none !important; }
+
+            /* ── Touch Targets — 44px minimum ── */
+            .page-content select,
+            .page-content input[type="text"],
+            .page-content input[type="number"],
+            .page-content input[type="url"],
+            .page-content input[type="email"],
+            .page-content input[type="password"],
+            .page-content textarea,
+            .form-control,
+            .form-select,
+            .form-input,
+            .form-textarea,
+            .mod-form-input,
+            .mod-form-select,
+            .leveling-form-input,
+            .leveling-form-select,
+            .search-input {
+                min-height: 44px !important;
+                font-size: 16px !important; /* prevents iOS auto-zoom */
+            }
+            .page-content input[type="color"] {
+                width: 44px !important;
+                height: 44px !important;
+                min-height: 44px !important;
+            }
+
+            /* ── Buttons — touch-friendly ── */
+            .page-content .btn,
+            .page-content button[type="submit"],
+            .btn-action {
+                min-height: 44px;
+                padding: 0.5rem 0.875rem;
+            }
+            .btn-sm { min-height: 38px; }
+
+            /* ── Forms — force single column ── */
+            .mod-form-grid,
+            .mod-add-rule-grid,
+            .leveling-form-grid,
+            .leveling-add-reward-grid,
+            .settings-grid {
+                grid-template-columns: 1fr !important;
+            }
+            .settings-grid-full { grid-column: span 1 !important; }
+            .form-help, .form-hint, .mod-form-hint, .leveling-form-hint {
+                font-size: 0.7rem;
+            }
+
+            /* ── Cards & Sections — tighter on mobile ── */
+            .manage-card { padding: 0.75rem !important; margin-bottom: 0.75rem; }
+            .mod-section-body,
+            .leveling-section-body { padding: 0.75rem !important; }
+            .mod-section-header,
+            .leveling-section-header,
+            .settings-panel-header { padding: 0.625rem 0.75rem !important; }
+            .mod-add-rule-form,
+            .leveling-add-reward { padding: 0.75rem !important; }
+            .settings-panel-body { padding: 0.75rem !important; }
+
+            /* ── Rule/Streamer Cards ── */
+            .mod-rule-card {
+                flex-direction: column !important;
+                gap: 0.5rem;
+                align-items: stretch !important;
+                padding: 0.75rem !important;
+            }
+
+            /* ── Full-width action buttons ── */
+            .mod-delete-btn, .mod-add-btn, .mod-save-btn,
+            .leveling-add-btn, .leveling-delete-btn, .leveling-save-btn {
+                width: 100% !important;
+                justify-content: center !important;
+                min-height: 44px;
+            }
+
+            /* ── Modals ── */
+            .modal-dialog {
+                margin: 0.5rem !important;
+                max-width: calc(100vw - 1rem) !important;
+            }
+            .modal-body { padding: 0.875rem !important; }
+            .modal-header, .modal-footer { padding: 0.75rem !important; }
+
+            /* ── Streamers page specifics ── */
+            .streamers-stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px; }
+            .stat-card-compact { padding: 10px 12px; }
+            .streamer-avatar { width: 28px; height: 28px; }
+            .streamer-name { font-size: 0.8rem; }
+            .action-buttons { flex-wrap: wrap; gap: 4px; justify-content: flex-start !important; }
+            .btn-action { font-size: 0.75rem; padding: 6px 10px; }
+            .platform-badge { font-size: 0.6rem; padding: 2px 6px; }
+
+            /* ── Misc ── */
+            .mod-reason { max-width: none; white-space: normal; word-break: break-word; }
+            .badge { font-size: 0.65rem; padding: 0.2rem 0.4rem; }
+            .toggle-switch { flex-shrink: 0; }
+            .empty-state, .empty-state-modern, .mod-empty-state, .leveling-empty-state {
+                padding: 1.5rem 0.75rem !important;
+            }
+            .empty-state i, .empty-state-icon-modern, .mod-empty-icon, .leveling-empty-icon {
+                font-size: 1.75rem !important;
+            }
+            .warning-banner { flex-direction: column; text-align: center; gap: 8px; padding: 10px 12px; }
+
+            /* ── Typography tightening ── */
+            .page-content h3 { font-size: 0.95rem !important; }
+            .page-content h4 { font-size: 0.875rem !important; }
+            .page-content p { font-size: 0.8rem; }
+        }
+
+        /* ═══════════════════════════════════════════════════
+           EXTRA SMALL — 400px and below (Z Fold outer screen)
+           ═══════════════════════════════════════════════════ */
+        @media (max-width: 400px) {
+            .container { padding: 0 0.5rem !important; }
+            .page-content { padding: 0.625rem !important; border-radius: 10px; }
+            .server-header { gap: 0.5rem; margin-bottom: 0.75rem; }
+            .server-name { font-size: 1.05rem; }
+            .server-icon { width: 40px !important; height: 40px !important; }
+            .page-section-title { font-size: 0.9rem; gap: 0.4rem; }
+            .page-section-subtitle { font-size: 0.75rem; }
+
+            /* Everything single column */
+            .streamers-stats-grid,
+            .quick-stats,
+            .stat-card-grid,
+            .grid.grid-cols-4 {
+                grid-template-columns: 1fr !important;
+            }
+
+            .btn { font-size: 0.78rem; padding: 0.5rem 0.625rem; }
+            .btn-action { font-size: 0.7rem; }
+
+            /* Table even tighter */
+            .page-content th { font-size: 0.6rem !important; padding: 0.375rem !important; }
+            .page-content td { padding: 0.375rem !important; font-size: 0.75rem !important; }
         }
     </style>
 </head>
@@ -464,6 +1205,9 @@
     const redditFeeds = locals.redditFeeds || [];
     const youtubeFeeds = locals.youtubeFeeds || [];
     const twitterFeeds = locals.twitterFeeds || [];
+    const blueskyFeeds = locals.blueskyFeeds || [];
+    const instagramFeeds = locals.instagramFeeds || [];
+    const facebookFeeds = locals.facebookFeeds || [];
     const twitchScheduleSyncs = locals.twitchScheduleSyncs || [];
     const autoPublisherConfig = locals.autoPublisherConfig || {};
     const autorolesConfig = locals.autorolesConfig || {};
@@ -508,6 +1252,7 @@
         'confessions': 'Confessions',
         'timecapsules': 'Time Capsules',
         'economy': 'Economy',
+        'owo': 'OwO Hunt',
         'games': 'Games',
         'gambling': 'Gambling',
         'trading': 'Trading',
@@ -517,6 +1262,7 @@
         'automod': 'AutoMod',
         'security': 'Security',
         'advanced-protection': 'Advanced Protection',
+        'phishing': 'Phishing Detection',
         'quarantine': 'Quarantine',
         'mass': 'Mass Actions',
         'stat-roles': 'Stat Roles',
@@ -525,12 +1271,15 @@
         'analytics': 'Analytics',
         'serverstats': 'Server Stats',
         'emojistats': 'Emoji Stats',
+        'emoji-manager': 'Emoji Manager',
         'feeds': 'Social Feeds',
         'twitch-schedules': 'Twitch Schedules',
         'announcements': 'Announcements',
         'automemes': 'Auto-Memes',
         'utilities': 'Utilities',
         'custom-commands': 'Custom Commands',
+        'custom-embeds': 'Custom Embeds',
+        'auto-purge': 'Auto Purge',
         'commands': 'Commands',
         'forms': 'Forms',
         'tickets': 'Tickets',
@@ -538,12 +1287,20 @@
         'permissions': 'Permissions',
         'reminders': 'Reminders',
         'tags': 'Tags',
+        'todo': 'Task Lists',
+        'autoresponders': 'Auto-Responses',
         'csv': 'CSV Import/Export',
         'sticky': 'Sticky Messages',
         'self-promo': 'Self-Promo',
         'community-support': 'Community Support',
         'stream-ended': 'Stream-Ended Behavior',
-        'auto-track': 'Auto-Track'
+        'auto-track': 'Auto-Track',
+        'streaming': 'Streaming',
+        'free-games': 'Free Games',
+        'tiktok': 'TikTok',
+        'stat-displays': 'Stat Display Channels',
+        'global-ban': 'Global Ban',
+        'throne': 'Throne Wishlists'
     };
     %>
 
@@ -560,6 +1317,8 @@
                 <div class="navbar-links">
                     <a href="/">Home</a>
                     <a href="/commands">Commands</a>
+                    <a href="/cards">Cards</a>
+                    <a href="/cah">🃏 CAH</a>
                     <a href="/status">Status</a>
                     <a href="/dashboard" class="active">Dashboard</a>
                     <a href="/lb/<%= guild.id %>">Leaderboard</a>
@@ -598,6 +1357,10 @@
                             <i class="fas fa-shield-alt"></i>
                             <span>Super Admin</span>
                         </a>
+                        <a href="/admin/cah" class="dropdown-item text-warning">
+                            <span style="display:inline-block;width:1em;text-align:center;">🃏</span>
+                            <span>CAH Admin</span>
+                        </a>
                         <% } %>
                         <div class="dropdown-divider"></div>
                         <a href="/logout" class="dropdown-item text-danger">
@@ -624,6 +1387,8 @@
         <div class="mobile-menu-inner">
             <a href="/" class="mobile-menu-link">Home</a>
             <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/cards" class="mobile-menu-link">Cards</a>
+            <a href="/cah" class="mobile-menu-link">🃏 CAH</a>
             <a href="/status" class="mobile-menu-link">Status</a>
             <a href="/dashboard" class="mobile-menu-link">Dashboard</a>
             <a href="/lb/<%= guild.id %>" class="mobile-menu-link">Leaderboard</a>
@@ -670,11 +1435,13 @@
             <!-- Page Content -->
             <div class="page-content">
                 <%
+                const streamingData = { guild, consolidatedStreamers, teamSubscriptions, twitchScheduleSyncs: typeof twitchScheduleSyncs !== 'undefined' ? twitchScheduleSyncs : [], autoTrackConfigs: typeof autoTrackConfigs !== 'undefined' ? autoTrackConfigs : [], streamEndedSubs: typeof streamEndedSubs !== 'undefined' ? streamEndedSubs : [], settings, channels, roles, twitchRoleSyncConfig: typeof twitchRoleSyncConfig !== 'undefined' ? twitchRoleSyncConfig : null, twitchRoleSyncMembers: typeof twitchRoleSyncMembers !== 'undefined' ? twitchRoleSyncMembers : [] };
                 const pageMap = {
-                    'streamers': { partial: 'streamers', data: { guild, consolidatedStreamers, roles, channels, settings } },
-                    'teams': { partial: 'teams', data: { guild, teamSubscriptions, roles, channels } },
-                    'appearance': { partial: 'appearance', data: { guild, settings } },
-                    'core': { partial: 'core', data: { guild, settings, roles } },
+                    'streaming': { partial: 'streaming', data: streamingData },
+                    'streamers': { partial: 'streaming', data: streamingData },
+                    'teams': { partial: 'streaming', data: streamingData },
+                    'appearance': { partial: 'appearance', data: { guild, settings, customBotInfo: typeof customBotInfo !== 'undefined' ? customBotInfo : null } },
+                    'core': { partial: 'core', data: { guild, settings, roles, prefixConfig } },
                     'welcome': { partial: 'welcome', data: { guild, settings: welcomeSettings, channels } },
                     'reaction-roles': { partial: 'reaction-roles', data: { guild, panels: reactionRolePanels, roles, channels } },
                     'starboard': { partial: 'starboard', data: { guild, settings: starboardConfig, channels } },
@@ -683,16 +1450,17 @@
                     'polls': { partial: 'polls', data: { guild, polls, channels } },
                     'suggestions': { partial: 'suggestions', data: { guild, suggestions, suggestionConfig, suggestionStats, suggestionTags, channels, roles } },
                     'music': { partial: 'music', data: { guild, musicConfig: typeof musicConfig !== 'undefined' ? musicConfig : {}, availableDJVoices: typeof availableDJVoices !== 'undefined' ? availableDJVoices : [], roles, channels, voiceChannels } },
-                    'birthday': { partial: 'birthday', data: { guild, birthdays: typeof birthdayUsers !== 'undefined' ? birthdayUsers : [], birthdayStats: typeof birthdayStats !== 'undefined' ? birthdayStats : {}, birthdayConfig: typeof birthdayConfig !== 'undefined' ? birthdayConfig : {}, channels } },
+                    'birthday': { partial: 'birthday', data: { guild, birthdays: typeof birthdayUsers !== 'undefined' ? birthdayUsers : [], birthdayStats: typeof birthdayStats !== 'undefined' ? birthdayStats : {}, birthdayConfig: typeof birthdayConfig !== 'undefined' ? birthdayConfig : {}, birthdayCards: typeof birthdayCards !== 'undefined' ? birthdayCards : [], channels, roles } },
                     'weather': { partial: 'weather', data: { guild, weatherStats, weatherConfig: typeof weatherConfig !== 'undefined' ? weatherConfig : {}, channels } },
                     'economy': { partial: 'economy', data: { guild, economyConfig, shopItems, economyStats, topUsers } },
+                    'owo':     { partial: 'owo',     data: { guild, owoConfig: typeof owoConfig !== 'undefined' ? owoConfig : null, owoStats: typeof owoStats !== 'undefined' ? owoStats : null } },
                     'games': { partial: 'games', data: { guild, triviaQuestions, hangmanWords, countingChannels, gameStats } },
                     'gambling': { partial: 'gambling', data: { guild, gamblingConfig, gamblingHistory, gamblingStats, topGamblers } },
                     'trading': { partial: 'trading', data: { guild, activeTrades, tradeHistory, tradeStats } },
                     'rpg': { partial: 'rpg', data: { guild, rpgStats, characters: rpgCharacters || [], quests: [] } },
                     'moderation': { partial: 'moderation', data: { guild, settings: moderationConfig, infractions: recentInfractions, escalationRules: escalationRules, channels, roles } },
                     'automod': { partial: 'automod', data: { guild, automodRules: automodRules, heatConfig } },
-                    'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles } },
+                    'security': { partial: 'security', data: { guild, joinGate: joinGateConfig, antiRaid: antiRaidConfig, antiNuke: antiNukeConfig, quarantine: quarantineConfig, roles, channels } },
                     'advanced-protection': { partial: 'advanced-protection', data: { guild, raidConfig: typeof raidConfig !== 'undefined' ? raidConfig : null, selfbotConfig: typeof selfbotConfig !== 'undefined' ? selfbotConfig : null, adaptiveSpamConfig: typeof adaptiveSpamConfig !== 'undefined' ? adaptiveSpamConfig : null, raidIncidents: typeof raidIncidents !== 'undefined' ? raidIncidents : [], selfbotDetections: typeof selfbotDetections !== 'undefined' ? selfbotDetections : [], channels, roles } },
                     'quarantine': { partial: 'quarantine', data: { guild, quarantineConfig, roles } },
                     'mass': { partial: 'mass', data: { guild, roles, channels } },
@@ -700,32 +1468,43 @@
                     'logging': { partial: 'logging', data: { guild, settings: logConfig, auditLogs: typeof auditLogs !== 'undefined' ? auditLogs : [], channels, channelSettingsMap: typeof channelSettingsMap !== 'undefined' ? channelSettingsMap : new Map() } },
                     'action-log': { partial: 'action-log', data: { guild, actionLogs: typeof actionLogs !== 'undefined' ? actionLogs : [] } },
                     'analytics': { partial: 'analytics', data: { guild, serverStats: typeof serverStats !== 'undefined' ? serverStats : [] } },
-                    'feeds': { partial: 'feeds', data: { guild, redditFeeds, youtubeFeeds, twitterFeeds, channels } },
-                    'twitch-schedules': { partial: 'twitch-schedules', data: { guild, syncs: twitchScheduleSyncs, streamers: consolidatedStreamers, channels, roles } },
-                    'announcements': { partial: 'announcements', data: { guild, settings, channels, roles } },
+                    'feeds': { partial: 'feeds', data: { guild, guildId: guild.id, redditFeeds, youtubeFeeds, twitterFeeds, blueskyFeeds: (locals.blueskyFeeds || []), instagramFeeds: (locals.instagramFeeds || []), facebookFeeds: (locals.facebookFeeds || []), channels } },
+                    'twitch-schedules': { partial: 'streaming', data: streamingData },
+                    'announcements': { partial: 'streaming', data: streamingData },
                     'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
                     'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
-                    'commands': { partial: 'commands', data: { guild, commands: typeof commandSettings !== 'undefined' ? commandSettings : [] } },
+                    'custom-embeds': { partial: 'custom-embeds', data: { guild, customEmbeds: typeof customEmbeds !== 'undefined' ? customEmbeds : [], channels } },
+                    'auto-purge': { partial: 'auto-purge', data: { guild, purgeConfigs: typeof purgeConfigs !== 'undefined' ? purgeConfigs : [], channels } },
+                    'commands': { partial: 'commands', data: { guild, commands: typeof commandSettings !== 'undefined' ? commandSettings : [], commandRestrictions: typeof commandRestrictions !== 'undefined' ? commandRestrictions : {}, guildId: guild.id, prefixConfig: typeof prefixConfig !== 'undefined' ? prefixConfig : {}, prefixAliases: typeof prefixAliases !== 'undefined' ? prefixAliases : [] } },
                     'forms': { partial: 'forms', data: { guild, forms: typeof forms !== 'undefined' ? forms : [], channels } },
                     'tickets': { partial: 'tickets', data: { guild, ticketConfig, forms: typeof ticketFormsList !== 'undefined' ? ticketFormsList : [], categories, roles } },
                     'backups': { partial: 'backups', data: { guild, backups: typeof backups !== 'undefined' ? backups : [] } },
                     'permissions': { partial: 'permissions', data: { guild, permissionOverrides: typeof permissionOverrides !== 'undefined' ? permissionOverrides : [], roles, channels } },
                     'reminders': { partial: 'reminders', data: { guild, reminders: typeof reminders !== 'undefined' ? reminders : [], channels } },
                     'tags': { partial: 'tags', data: { guild, tags: typeof tags !== 'undefined' ? tags : [] } },
+                    'autoresponders': { partial: 'autoresponders', data: { guild, channels, roles } },
                     'csv': { partial: 'csv', data: { guild } },
                     'achievements': { partial: 'achievements', data: { guild } },
-                    'serverstats': { partial: 'serverstats', data: { guild } },
+                    'serverstats': { partial: 'serverstats', data: { guild, statDisplayChannels: typeof statDisplayChannels !== 'undefined' ? statDisplayChannels : [], voiceChannels: typeof voiceChannels !== 'undefined' ? voiceChannels : [] } },
                     'emojistats': { partial: 'emojistats', data: { guild } },
+                    'emoji-manager': { partial: 'emoji-manager', data: { guild } },
                     'confessions': { partial: 'confessions', data: { guild, channels } },
                     'timecapsules': { partial: 'timecapsules', data: { guild } },
                     'automemes': { partial: 'automemes', data: { guild, channels } },
                     'sticky': { partial: 'sticky', data: { guild, channels } },
                     'schedule': { partial: 'schedule', data: { guild, channels } },
+                    'todo': { partial: 'todo', data: { guild, channels } },
                     'self-promo': { partial: 'self-promo', data: { guild, selfPromoConfig: typeof selfPromoConfig !== 'undefined' ? selfPromoConfig : {}, channels } },
                     'community-support': { partial: 'community-support', data: { guild, communitySupportConfig: typeof communitySupportConfig !== 'undefined' ? communitySupportConfig : {}, channels } },
-                    'stream-ended': { partial: 'stream-ended', data: { guild, streamEndedSubs: typeof streamEndedSubs !== 'undefined' ? streamEndedSubs : [], channels } },
-                    'auto-track': { partial: 'auto-track', data: { guild, autoTrackConfigs: typeof autoTrackConfigs !== 'undefined' ? autoTrackConfigs : [], channels, roles: typeof roles !== 'undefined' ? roles : [] } },
-                    'global-ban': { partial: 'global-ban', data: { guild, globalBanConfig: typeof globalBanConfig !== 'undefined' ? globalBanConfig : {}, channels } }
+                    'stream-ended': { partial: 'streaming', data: streamingData },
+                    'auto-track': { partial: 'streaming', data: streamingData },
+                    'global-ban': { partial: 'global-ban', data: { guild, globalBanConfig: typeof globalBanConfig !== 'undefined' ? globalBanConfig : {}, channels } },
+                    'phishing': { partial: 'phishing', data: { guild, phishingConfig: typeof phishingConfig !== 'undefined' ? phishingConfig : {}, channels } },
+                    'free-games': { partial: 'free-games', data: { guild, freeGamesSubs: typeof freeGamesSubs !== 'undefined' ? freeGamesSubs : [], channels, roles: typeof roles !== 'undefined' ? roles : [] } },
+                    'tiktok': { partial: 'tiktok', data: { guild, tiktokSubs: typeof tiktokSubs !== 'undefined' ? tiktokSubs : [], tiktokConfig: typeof tiktokConfig !== 'undefined' ? tiktokConfig : {}, recentVideos: typeof recentTiktokVideos !== 'undefined' ? recentTiktokVideos : [], channels, roles } },
+                    'stat-displays': { partial: 'stat-displays', data: { guild, statDisplayChannels: typeof statDisplayChannels !== 'undefined' ? statDisplayChannels : [], voiceChannels: typeof voiceChannels !== 'undefined' ? voiceChannels : [], roles } },
+                    'throne': { partial: 'throne', data: { guild, channels, throneNotifications: typeof throneNotifications !== 'undefined' ? throneNotifications : [], throneGuildConfig: typeof throneGuildConfig !== 'undefined' ? throneGuildConfig : null, throneSettings: typeof throneSettings !== 'undefined' ? throneSettings : null } },
+                    'event-schedule': { partial: 'event-schedule', data: { guild, channels } }
                 };
                 const activePage = pageMap[page];
                 if (activePage) {
@@ -736,6 +1515,36 @@
 
             <% } else { %>
             <!-- Overview Dashboard with Module Grid -->
+            <%
+            // Feature status indicators — derive from existing data
+            // Use try/catch per field to handle any undefined variables gracefully
+            function safeCheck(fn) { try { return !!fn(); } catch(e) { return false; } }
+            const featureStatus = {
+                'streamers': safeCheck(() => consolidatedStreamers && consolidatedStreamers.length > 0),
+                'twitch-schedules': safeCheck(() => twitchScheduleSyncs && twitchScheduleSyncs.length > 0),
+                'tiktok': safeCheck(() => tiktokSubs && tiktokSubs.length > 0),
+                'welcome': safeCheck(() => welcomeSettings && (welcomeSettings.enabled || welcomeSettings.join_channel_id)),
+                'reaction-roles': safeCheck(() => reactionRolePanels && reactionRolePanels.length > 0),
+                'starboard': safeCheck(() => starboardConfig && (starboardConfig.enabled || starboardConfig.channel_id)),
+                'leveling': safeCheck(() => settings && settings.leveling_enabled),
+                'giveaways': safeCheck(() => giveaways && giveaways.length > 0),
+                'suggestions': safeCheck(() => suggestionConfig && suggestionConfig.channel_id),
+                'music': safeCheck(() => musicConfig && musicConfig.enabled !== false),
+                'moderation': safeCheck(() => moderationConfig && (moderationConfig.mod_role_id || moderationConfig.mute_role_id)),
+                'automod': safeCheck(() => automodRules && automodRules.length > 0),
+                'security': safeCheck(() => (joinGateConfig && joinGateConfig.enabled) || (antiRaidConfig && antiRaidConfig.enabled) || (antiNukeConfig && antiNukeConfig.enabled)),
+                'advanced-protection': safeCheck(() => antiRaidConfig && antiRaidConfig.enabled),
+                'phishing': safeCheck(() => phishingConfig && phishingConfig.enabled),
+                'global-ban': safeCheck(() => globalBanConfig && globalBanConfig.enabled),
+                'logging': safeCheck(() => logConfig && logConfig.log_channel_id),
+                'auto-purge': safeCheck(() => purgeConfigs && purgeConfigs.length > 0),
+                'self-promo': safeCheck(() => selfPromoConfig && selfPromoConfig.channel_id),
+                'feeds': safeCheck(() => socialFeeds && socialFeeds.length > 0),
+                'birthday': safeCheck(() => settings && settings.birthday_channel_id),
+                'economy': safeCheck(() => settings && settings.economy_enabled),
+                'custom-commands': safeCheck(() => prefixConfig && prefixConfig.enabled),
+            };
+            %>
 
             <!-- Quick Stats -->
             <div class="quick-stats">
@@ -769,473 +1578,280 @@
                 </div>
             </div>
 
-            <!-- Core Modules -->
-            <section class="modules-section">
-                <div class="section-header purple">
+            <!-- Support Banner -->
+            <a href="https://certifriedmultitool.com/donate" target="_blank" class="support-banner">
+                <div class="support-banner-glow"></div>
+                <div class="support-banner-content">
+                    <div class="support-banner-icon"><i class="fas fa-heart"></i></div>
+                    <div class="support-banner-text">
+                        <div class="support-banner-title">Support CertiFried MultiTool</div>
+                        <div class="support-banner-desc">Help keep the bot running and fund new features</div>
+                    </div>
+                    <div class="support-banner-cta">
+                        <span>Donate</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </div>
+                </div>
+            </a>
+
+            <!-- Server Transfer Banner (shown when both default + custom bot are present) -->
+            <div id="transferBanner" style="display:none; margin-bottom: 16px;">
+                <div style="background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(239,68,68,0.1)); border: 1px solid rgba(124,58,237,0.3); border-radius: 12px; padding: 20px; position: relative; overflow: hidden;">
+                    <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                        <div style="flex-shrink: 0; width: 48px; height: 48px; background: rgba(124,58,237,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
+                            <i class="fas fa-exchange-alt" style="font-size: 1.2rem; color: #a78bfa;"></i>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <div style="font-size: 1rem; font-weight: 700; color: #fff;">Transfer Server to Custom Bot</div>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-top: 2px;" id="transferDesc">Migrate all panels, embeds, and interactive content to your custom bot</div>
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                            <button id="transferPreviewBtn" onclick="previewTransfer()" style="background: #7c3aed; color: #fff; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; font-weight: 600; font-size: 0.85rem; transition: all 0.2s;">
+                                <i class="fas fa-eye" style="margin-right: 6px;"></i>Preview
+                            </button>
+                        </div>
+                    </div>
+                    <div id="transferPreview" style="display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div id="transferCounts" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-bottom: 16px;"></div>
+                        <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.8rem; color: #fca5a5;">
+                            <i class="fas fa-exclamation-triangle" style="margin-right: 6px;"></i>
+                            <strong>Warning:</strong> Active giveaway entries (reactions) cannot be transferred. The default bot will leave the server after transfer.
+                        </div>
+                        <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                            <button onclick="document.getElementById('transferPreview').style.display='none'" style="background: rgba(255,255,255,0.1); color: #d1d5db; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 0.85rem;">Cancel</button>
+                            <button id="transferStartBtn" onclick="confirmTransfer()" style="background: #ef4444; color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-weight: 600; font-size: 0.85rem;">
+                                <i class="fas fa-rocket" style="margin-right: 6px;"></i>Start Transfer
+                            </button>
+                        </div>
+                    </div>
+                    <div id="transferProgress" style="display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                            <div style="width: 16px; height: 16px; border: 2px solid rgba(167,139,250,0.3); border-top-color: #a78bfa; border-radius: 50%; animation: xferspin 0.8s linear infinite;"></div>
+                            <span id="transferStep" style="color: #a78bfa; font-weight: 600; font-size: 0.85rem;">Starting...</span>
+                        </div>
+                        <div id="transferItemProgress" style="font-size: 0.8rem; color: rgba(255,255,255,0.5);"></div>
+                        <div id="transferErrors" style="display: none; margin-top: 8px; font-size: 0.8rem; color: #fca5a5;"></div>
+                        <button onclick="abortXfer()" id="transferAbortBtn" style="margin-top: 12px; background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 0.8rem;">Abort</button>
+                    </div>
+                    <div id="transferComplete" style="display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1); text-align: center;">
+                        <i class="fas fa-check-circle" style="font-size: 2rem; color: #22c55e; margin-bottom: 8px;"></i>
+                        <div style="color: #fff; font-weight: 700; font-size: 1rem;">Transfer Complete!</div>
+                        <div id="transferSummary" style="color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-top: 4px;"></div>
+                    </div>
+                </div>
+            </div>
+            <style>@keyframes xferspin { to { transform: rotate(360deg); } }</style>
+            <script>
+            (function() {
+                var gid = '<%= guild.id %>';
+                var cBotId = null;
+                fetch('/api/guilds/' + gid + '/custom-bot/').then(function(r){return r.json()}).then(function(d){
+                    if (d.hasCustomBot && d.bot && d.bot.bot_id && d.defaultBotPresent) {
+                        // Custom bot is assigned — check which direction transfer goes
+                        // The "current" bot serving this guild is the custom bot
+                        // If default bot is also present, offer transfer TO custom (default→custom)
+                        // OR transfer BACK to default (custom→default)
+                        cBotId = d.bot.bot_id;
+                        var banner = document.getElementById('transferBanner');
+                        var desc = document.getElementById('transferDesc');
+                        var previewBtn = document.getElementById('transferPreviewBtn');
+                        banner.style.display = 'block';
+
+                        // Check if the bot serving the guild is the custom bot (guild_bot_mapping exists)
+                        // If so, the default bot is the "extra" one — offer reverse transfer
+                        // We know mapping exists because hasCustomBot=true
+                        // Add both directions as buttons
+                        desc.textContent = 'Transfer content between CertiFried Utility and ' + (d.bot.bot_name || 'your custom bot');
+                        previewBtn.style.display = 'none';
+
+                        var btnContainer = previewBtn.parentElement;
+                        var toCustomBtn = document.createElement('button');
+                        toCustomBtn.style.cssText = 'background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:10px 16px;cursor:pointer;font-weight:600;font-size:0.82rem;';
+                        toCustomBtn.textContent = 'Transfer to ' + (d.bot.bot_name || 'Custom Bot');
+                        toCustomBtn.onclick = function() { xferDirection = 'to-custom'; previewTransfer(); };
+                        btnContainer.appendChild(toCustomBtn);
+
+                        var toDefaultBtn = document.createElement('button');
+                        toDefaultBtn.style.cssText = 'background:rgba(255,255,255,0.1);color:#d1d5db;border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:10px 16px;cursor:pointer;font-weight:600;font-size:0.82rem;';
+                        toDefaultBtn.textContent = 'Transfer to CertiFried Utility';
+                        toDefaultBtn.onclick = function() { xferDirection = 'to-default'; previewTransfer(); };
+                        btnContainer.appendChild(toDefaultBtn);
+                    }
+                }).catch(function(){});
+
+                var xferDirection = 'to-custom'; // or 'to-default'
+
+                window.previewTransfer = async function() {
+                    if (!cBotId) return;
+                    var body = xferDirection === 'to-default'
+                        ? { toBotId: 'default', fromBotId: cBotId }
+                        : { toBotId: cBotId };
+                    try {
+                        var r = await fetch('/api/guilds/'+gid+'/transfer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+                        var d = await r.json();
+                        if (!d.success) { alert(d.error||'Validation failed'); return; }
+                        var c = d.counts, el = document.getElementById('transferCounts');
+                        var labels = {reactionPanels:'Reaction Panels',ticketPanels:'Ticket Panels',customEmbeds:'Custom Embeds',activeGiveaways:'Giveaways',activePolls:'Polls',stickyMessages:'Sticky Messages',musicPanels:'Music Panels'};
+                        while(el.firstChild) el.removeChild(el.firstChild);
+                        for (var k in labels) {
+                            if (c[k]>0) {
+                                var div=document.createElement('div');
+                                div.style.cssText='background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 12px;text-align:center;';
+                                var n=document.createElement('div');n.style.cssText='font-size:1.2rem;font-weight:700;color:#a78bfa;';n.textContent=c[k];
+                                var l=document.createElement('div');l.style.cssText='font-size:0.7rem;color:rgba(255,255,255,0.4);';l.textContent=labels[k];
+                                div.appendChild(n);div.appendChild(l);el.appendChild(div);
+                            }
+                        }
+                        var tot=document.createElement('div');tot.style.cssText='background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px 12px;text-align:center;';
+                        var tn=document.createElement('div');tn.style.cssText='font-size:1.2rem;font-weight:700;color:#fff;';tn.textContent=c.total;
+                        var tl=document.createElement('div');tl.style.cssText='font-size:0.7rem;color:rgba(255,255,255,0.4);';tl.textContent='Total';
+                        tot.appendChild(tn);tot.appendChild(tl);el.appendChild(tot);
+                        document.getElementById('transferPreview').style.display='block';
+                    } catch(e){alert(e.message)}
+                };
+
+                window.confirmTransfer = async function() {
+                    var dirLabel = xferDirection === 'to-default' ? 'Transfer ALL content back to CertiFried Utility and remove the custom bot?' : 'Transfer ALL content to the custom bot and remove CertiFried Utility?';
+                    if (!cBotId||!confirm(dirLabel + ' This cannot be undone.')) return;
+                    document.getElementById('transferPreview').style.display='none';
+                    document.getElementById('transferProgress').style.display='block';
+                    try {
+                        var body = xferDirection === 'to-default'
+                            ? {toBotId:'default',fromBotId:cBotId,confirmed:true}
+                            : {toBotId:cBotId,confirmed:true};
+                        var r=await fetch('/api/guilds/'+gid+'/transfer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+                        var d=await r.json();
+                        if(!d.success){alert(d.error);return;}
+                        pollXfer();
+                    }catch(e){alert(e.message)}
+                };
+
+                function pollXfer() {
+                    var iv=setInterval(async function(){
+                        try{
+                            var r=await fetch('/api/guilds/'+gid+'/transfer/status');
+                            var d=await r.json();
+                            var p=d.active?d:{};
+                            if(!d.active&&d.transfer&&d.transfer.progress){try{p=typeof d.transfer.progress==='string'?JSON.parse(d.transfer.progress):d.transfer.progress;}catch(e){p={};}}
+                            var step=p.step||(d.transfer?d.transfer.status:null)||'starting...';
+                            document.getElementById('transferStep').textContent=step;
+                            var items=p.items||{};
+                            var prog=document.getElementById('transferItemProgress');
+                            while(prog.firstChild)prog.removeChild(prog.firstChild);
+                            for(var k in items){
+                                var row=document.createElement('div');
+                                row.textContent=k+': '+(items[k].done||0)+'/'+(items[k].total||0)+(items[k].errors>0?' ('+items[k].errors+' errors)':'');
+                                prog.appendChild(row);
+                            }
+                            var errs=p.errors||[];
+                            if(errs.length>0){
+                                var errEl=document.getElementById('transferErrors');
+                                errEl.style.display='block';
+                                while(errEl.firstChild)errEl.removeChild(errEl.firstChild);
+                                errs.forEach(function(e){var div=document.createElement('div');div.textContent='⚠ '+e;errEl.appendChild(div);});
+                            }
+                            if(step==='completed'||step==='failed'||step==='aborted'){
+                                clearInterval(iv);
+                                document.getElementById('transferProgress').style.display='none';
+                                if(step==='completed'){
+                                    document.getElementById('transferComplete').style.display='block';
+                                    document.getElementById('transferSummary').textContent='All content migrated. Default bot has left the server.';
+                                }else{
+                                    document.getElementById('transferStep').textContent=step==='failed'?'Failed: '+(p.error||'Unknown'):' Aborted';
+                                    document.getElementById('transferProgress').style.display='block';
+                                    document.getElementById('transferAbortBtn').style.display='none';
+                                }
+                            }
+                        }catch(e){}
+                    },2000);
+                }
+
+                window.abortXfer = async function(){
+                    if(!confirm('Abort? Already-transferred content stays with the new bot.'))return;
+                    fetch('/api/guilds/'+gid+'/transfer/abort',{method:'POST'});
+                };
+            })();
+            </script>
+
+            <!-- Recently Visited -->
+            <div class="recent-visited" id="recentVisited" style="display:none;">
+                <div class="recent-visited-label"><i class="fas fa-history"></i> Recently Visited</div>
+                <div class="recent-visited-grid" id="recentVisitedGrid"></div>
+            </div>
+
+            <!-- Search & Filter Bar -->
+            <div class="overview-search-wrap">
+                <div class="overview-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="overviewSearch" placeholder="Search settings... (Ctrl+K)" autocomplete="off">
+                </div>
+                <div class="category-tabs" id="categoryTabs">
+                    <button class="category-tab active" data-cat="all">All <span class="tab-count">57</span></button>
+                    <button class="category-tab" data-cat="core" style="--tab-accent: #a78bfa;">Core <span class="tab-count">5</span></button>
+                    <button class="category-tab" data-cat="streaming" style="--tab-accent: #818cf8;">Streaming <span class="tab-count">5</span></button>
+                    <button class="category-tab" data-cat="community" style="--tab-accent: #22d3ee;">Community <span class="tab-count">11</span></button>
+                    <button class="category-tab" data-cat="games" style="--tab-accent: #fbbf24;">Games <span class="tab-count">7</span></button>
+                    <button class="category-tab" data-cat="moderation" style="--tab-accent: #f87171;">Moderation <span class="tab-count">8</span></button>
+                    <button class="category-tab" data-cat="analytics" style="--tab-accent: #60a5fa;">Analytics <span class="tab-count">6</span></button>
+                    <button class="category-tab" data-cat="automation" style="--tab-accent: #fb923c;">Automation <span class="tab-count">7</span></button>
+                    <button class="category-tab" data-cat="utility" style="--tab-accent: #2dd4bf;">Tools <span class="tab-count">9</span></button>
+                </div>
+            </div>
+            <div id="noSearchResults" style="display:none; text-align:center; padding:40px 20px; color:var(--text-muted);">
+                <i class="fas fa-search" style="font-size:2rem; opacity:0.3; margin-bottom:12px; display:block;"></i>
+                <div style="font-size:1rem; font-weight:600;">No settings found</div>
+                <div style="font-size:0.85rem; margin-top:4px;">Try a different search term</div>
+            </div>
+
+            <!-- Core -->
+            <section class="modules-section" data-category="core">
+                <div class="section-header purple section-toggle">
                     <div class="section-icon"><i class="fas fa-cog"></i></div>
-                    <h2 class="section-title">Core</h2>
+                    <div class="section-header-text">
+                        <h2 class="section-title">Core</h2>
+                        <div class="section-desc">Bot configuration, commands, and display settings</div>
+                    </div>
+                    <span class="section-count">5</span>
+                    <i class="fas fa-chevron-down section-chevron"></i>
                 </div>
                 <div class="module-grid">
-                    <a href="/manage/<%= guild.id %>?page=streamers" class="module-card purple">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-video"></i></div>
-                            <div>
-                                <div class="module-title">Streamers</div>
-                                <div class="module-desc">Manage tracked streamers and go-live notifications</div>
-                            </div>
-                        </div>
-                        <% if (liveCount > 0) { %>
-                        <div class="module-badge"><i class="fas fa-circle"></i> <%= liveCount %> Live</div>
-                        <% } %>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=teams" class="module-card purple">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-user-friends"></i></div>
-                            <div>
-                                <div class="module-title">Teams</div>
-                                <div class="module-desc">Subscribe to Twitch teams for automatic notifications</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=appearance" class="module-card purple">
+                    <a href="/manage/<%= guild.id %>?page=appearance" class="module-card purple" data-tags="nickname avatar color embed custom bot instance token branding">
                         <div class="module-header">
                             <div class="module-icon"><i class="fas fa-paint-brush"></i></div>
                             <div>
                                 <div class="module-title">Appearance</div>
-                                <div class="module-desc">Customize embed colors and notification styles</div>
+                                <div class="module-desc">Bot identity, embed colors, custom bot instance</div>
                             </div>
                         </div>
                     </a>
-                    <a href="/manage/<%= guild.id %>?page=core" class="module-card purple">
+                    <a href="/manage/<%= guild.id %>?page=core" class="module-card purple" data-tags="prefix timezone language settings configuration">
                         <div class="module-header">
                             <div class="module-icon"><i class="fas fa-sliders-h"></i></div>
                             <div>
                                 <div class="module-title">Core Settings</div>
-                                <div class="module-desc">Bot prefix, language, and general settings</div>
+                                <div class="module-desc">Bot prefix, timezone, and general settings</div>
                             </div>
                         </div>
                     </a>
-                    <a href="/manage/<%= guild.id %>?page=stream-ended" class="module-card purple">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-edit"></i></div>
-                            <div>
-                                <div class="module-title">Stream-Ended</div>
-                                <div class="module-desc">Edit or delete announcements when streams end</div>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-            </section>
-
-            <!-- Community Modules -->
-            <section class="modules-section">
-                <div class="section-header cyan">
-                    <div class="section-icon"><i class="fas fa-heart"></i></div>
-                    <h2 class="section-title">Community</h2>
-                </div>
-                <div class="module-grid">
-                    <a href="/manage/<%= guild.id %>?page=welcome" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-hand-sparkles"></i></div>
-                            <div>
-                                <div class="module-title">Welcome</div>
-                                <div class="module-desc">Welcome messages and join/leave announcements</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=reaction-roles" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-smile-beam"></i></div>
-                            <div>
-                                <div class="module-title">Reaction Roles</div>
-                                <div class="module-desc">Self-assignable roles via reactions</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=starboard" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-star"></i></div>
-                            <div>
-                                <div class="module-title">Starboard</div>
-                                <div class="module-desc">Highlight popular messages with reactions</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=leveling" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-trophy"></i></div>
-                            <div>
-                                <div class="module-title">Leveling</div>
-                                <div class="module-desc">XP system and level-based role rewards</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=giveaways" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-gift"></i></div>
-                            <div>
-                                <div class="module-title">Giveaways</div>
-                                <div class="module-desc">Create and manage server giveaways</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=polls" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-poll"></i></div>
-                            <div>
-                                <div class="module-title">Polls</div>
-                                <div class="module-desc">Create polls and gather community feedback</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=suggestions" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-lightbulb"></i></div>
-                            <div>
-                                <div class="module-title">Suggestions</div>
-                                <div class="module-desc">Member suggestions and voting system</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=music" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-music"></i></div>
-                            <div>
-                                <div class="module-title">Music</div>
-                                <div class="module-desc">Music player and DJ role settings</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=birthday" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-birthday-cake"></i></div>
-                            <div>
-                                <div class="module-title">Birthdays</div>
-                                <div class="module-desc">Birthday announcements and celebrations</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=self-promo" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-bullhorn"></i></div>
-                            <div>
-                                <div class="module-title">Self-Promo</div>
-                                <div class="module-desc">Auto-track streamers from self-promo channel</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=community-support" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-hands-helping"></i></div>
-                            <div>
-                                <div class="module-title">Community Support</div>
-                                <div class="module-desc">Track raids and reward top supporters</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=auto-track" class="module-card cyan">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-satellite-dish"></i></div>
-                            <div>
-                                <div class="module-title">Auto-Track</div>
-                                <div class="module-desc">Auto-detect streamers by presence (fallback)</div>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-            </section>
-
-            <!-- Economy & Games -->
-            <section class="modules-section">
-                <div class="section-header yellow">
-                    <div class="section-icon"><i class="fas fa-coins"></i></div>
-                    <h2 class="section-title">Economy & Games</h2>
-                </div>
-                <div class="module-grid">
-                    <a href="/manage/<%= guild.id %>?page=economy" class="module-card yellow">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-coins"></i></div>
-                            <div>
-                                <div class="module-title">Economy</div>
-                                <div class="module-desc">Currency system, shop, and transactions</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=games" class="module-card yellow">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-gamepad"></i></div>
-                            <div>
-                                <div class="module-title">Games</div>
-                                <div class="module-desc">Trivia, hangman, and mini-games</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=gambling" class="module-card yellow">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-dice"></i></div>
-                            <div>
-                                <div class="module-title">Gambling</div>
-                                <div class="module-desc">Casino games and betting settings</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=rpg" class="module-card yellow">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-dragon"></i></div>
-                            <div>
-                                <div class="module-title">RPG</div>
-                                <div class="module-desc">Character system, quests, and battles</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=achievements" class="module-card yellow">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-medal"></i></div>
-                            <div>
-                                <div class="module-title">Achievements</div>
-                                <div class="module-desc">Member achievements and badges</div>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-            </section>
-
-            <!-- Moderation -->
-            <section class="modules-section">
-                <div class="section-header red">
-                    <div class="section-icon"><i class="fas fa-shield-alt"></i></div>
-                    <h2 class="section-title">Moderation</h2>
-                </div>
-                <div class="module-grid">
-                    <a href="/manage/<%= guild.id %>?page=moderation" class="module-card red">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-gavel"></i></div>
-                            <div>
-                                <div class="module-title">Moderation</div>
-                                <div class="module-desc">Mod settings, infractions, and escalation</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=automod" class="module-card red">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-robot"></i></div>
-                            <div>
-                                <div class="module-title">AutoMod</div>
-                                <div class="module-desc">Automatic moderation rules and filters</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=security" class="module-card red">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-lock"></i></div>
-                            <div>
-                                <div class="module-title">Security</div>
-                                <div class="module-desc">Join gate, anti-raid, and anti-nuke</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=advanced-protection" class="module-card red">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-shield-virus"></i></div>
-                            <div>
-                                <div class="module-title">Advanced Protection</div>
-                                <div class="module-desc">Raid detection and selfbot protection</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=quarantine" class="module-card red">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-user-shield"></i></div>
-                            <div>
-                                <div class="module-title">Quarantine</div>
-                                <div class="module-desc">Quarantine suspicious accounts</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=mass" class="module-card red">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-users-cog"></i></div>
-                            <div>
-                                <div class="module-title">Mass Actions</div>
-                                <div class="module-desc">Bulk role and channel management</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=global-ban" class="module-card red">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-globe"></i></div>
-                            <div>
-                                <div class="module-title">Global Ban</div>
-                                <div class="module-desc">Cross-server ban database and protection</div>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-            </section>
-
-            <!-- Analytics -->
-            <section class="modules-section">
-                <div class="section-header blue">
-                    <div class="section-icon"><i class="fas fa-chart-bar"></i></div>
-                    <h2 class="section-title">Analytics & Logging</h2>
-                </div>
-                <div class="module-grid">
-                    <a href="/manage/<%= guild.id %>?page=analytics" class="module-card blue">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-chart-line"></i></div>
-                            <div>
-                                <div class="module-title">Analytics</div>
-                                <div class="module-desc">Server statistics and insights</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=logging" class="module-card blue">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-file-alt"></i></div>
-                            <div>
-                                <div class="module-title">Logging</div>
-                                <div class="module-desc">Event logging and audit trails</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=action-log" class="module-card blue">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-history"></i></div>
-                            <div>
-                                <div class="module-title">Action Log</div>
-                                <div class="module-desc">Bot action history and changes</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=stat-roles" class="module-card blue">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-chart-pie"></i></div>
-                            <div>
-                                <div class="module-title">Stat Roles</div>
-                                <div class="module-desc">Dynamic roles based on stats</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=serverstats" class="module-card blue">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-server"></i></div>
-                            <div>
-                                <div class="module-title">Server Stats</div>
-                                <div class="module-desc">Stat channels for member counts</div>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-            </section>
-
-            <!-- Feeds -->
-            <section class="modules-section">
-                <div class="section-header orange">
-                    <div class="section-icon"><i class="fas fa-rss"></i></div>
-                    <h2 class="section-title">Social Feeds</h2>
-                </div>
-                <div class="module-grid">
-                    <a href="/manage/<%= guild.id %>?page=feeds" class="module-card orange">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-rss"></i></div>
-                            <div>
-                                <div class="module-title">Social Feeds</div>
-                                <div class="module-desc">Reddit, YouTube, and Twitter feeds</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=twitch-schedules" class="module-card orange">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fab fa-twitch"></i></div>
-                            <div>
-                                <div class="module-title">Twitch Schedules</div>
-                                <div class="module-desc">Sync Twitch schedules to Discord events</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=announcements" class="module-card orange">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-bullhorn"></i></div>
-                            <div>
-                                <div class="module-title">Announcements</div>
-                                <div class="module-desc">Auto-publish to announcement channels</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=automemes" class="module-card orange">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-laugh-squint"></i></div>
-                            <div>
-                                <div class="module-title">Auto-Memes</div>
-                                <div class="module-desc">Automatic meme posting</div>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-            </section>
-
-            <!-- Utility -->
-            <section class="modules-section">
-                <div class="section-header green">
-                    <div class="section-icon"><i class="fas fa-wrench"></i></div>
-                    <h2 class="section-title">Utility</h2>
-                </div>
-                <div class="module-grid">
-                    <a href="/manage/<%= guild.id %>?page=utilities" class="module-card green">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-toolbox"></i></div>
-                            <div>
-                                <div class="module-title">Utilities</div>
-                                <div class="module-desc">Auto-roles, temp channels, and more</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=custom-commands" class="module-card green">
+                    <a href="/manage/<%= guild.id %>?page=commands" class="module-card purple" data-tags="commands enable disable slash permissions restrictions">
                         <div class="module-header">
                             <div class="module-icon"><i class="fas fa-terminal"></i></div>
                             <div>
-                                <div class="module-title">Custom Commands</div>
-                                <div class="module-desc">Create your own commands</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=commands" class="module-card green">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-code"></i></div>
-                            <div>
                                 <div class="module-title">Commands</div>
-                                <div class="module-desc">Enable/disable bot commands</div>
+                                <div class="module-desc">Enable, disable, and configure bot commands</div>
                             </div>
                         </div>
                     </a>
-                    <a href="/manage/<%= guild.id %>?page=tickets" class="module-card green">
+                    <a href="/manage/<%= guild.id %>?page=stat-displays" class="module-card purple" data-tags="stat display channels voice time date clock members online bots roles boosts counter">
                         <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-ticket-alt"></i></div>
+                            <div class="module-icon"><i class="fas fa-tv"></i></div>
                             <div>
-                                <div class="module-title">Tickets</div>
-                                <div class="module-desc">Support ticket system</div>
+                                <div class="module-title">Stat Displays</div>
+                                <div class="module-desc">Voice channels showing live stats, time, and date</div>
                             </div>
                         </div>
                     </a>
-                    <a href="/manage/<%= guild.id %>?page=forms" class="module-card green">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-file-alt"></i></div>
-                            <div>
-                                <div class="module-title">Forms</div>
-                                <div class="module-desc">Application and survey forms</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=backups" class="module-card green">
-                        <div class="module-header">
-                            <div class="module-icon"><i class="fas fa-save"></i></div>
-                            <div>
-                                <div class="module-title">Backups</div>
-                                <div class="module-desc">Server backup and restore</div>
-                            </div>
-                        </div>
-                    </a>
-                    <a href="/manage/<%= guild.id %>?page=permissions" class="module-card green">
+                    <a href="/manage/<%= guild.id %>?page=permissions" class="module-card purple" data-tags="permissions override roles access">
                         <div class="module-header">
                             <div class="module-icon"><i class="fas fa-user-lock"></i></div>
                             <div>
@@ -1244,12 +1860,615 @@
                             </div>
                         </div>
                     </a>
-                    <a href="/manage/<%= guild.id %>?page=tags" class="module-card green">
+                </div>
+            </section>
+
+            <!-- Streaming & Content -->
+            <section class="modules-section" data-category="streaming">
+                <div class="section-header indigo section-toggle">
+                    <div class="section-icon"><i class="fas fa-video"></i></div>
+                    <div class="section-header-text">
+                        <h2 class="section-title">Streaming & Content</h2>
+                        <div class="section-desc">Live alerts, social feeds, and content tracking</div>
+                    </div>
+                    <span class="section-count">5</span>
+                    <i class="fas fa-chevron-down section-chevron"></i>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=streamers" class="module-card indigo" data-tags="twitch kick youtube tiktok freshtok live notifications go-live stream-ended vod embed delete edit webhook teams subscribe announce">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-broadcast-tower"></i></div>
+                            <div>
+                                <div class="module-title">Streaming</div>
+                                <div class="module-desc">Streamers, teams, go-live alerts, and stream-ended settings</div>
+                            </div>
+                        </div>
+                        <% if (liveCount > 0) { %>
+                        <div class="module-badge"><i class="fas fa-circle"></i> <%= liveCount %> Live</div>
+                        <% } %>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=twitch-schedules" class="module-card indigo" data-tags="twitch schedule sync discord events calendar">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fab fa-twitch"></i></div>
+                            <div>
+                                <div class="module-title">Twitch Schedules</div>
+                                <div class="module-desc">Sync Twitch schedules to Discord events</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=tiktok" class="module-card indigo" data-tags="tiktok freshtok video notifications vod new post content creator reels shorts feed">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fab fa-tiktok"></i></div>
+                            <div>
+                                <div class="module-title">TikTok</div>
+                                <div class="module-desc">TikTok live alerts and new video notifications (FreshTok)</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=self-promo" class="module-card indigo" data-tags="self-promo promotion streamer auto-track channel">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-bullhorn"></i></div>
+                            <div>
+                                <div class="module-title">Self-Promo</div>
+                                <div class="module-desc">Auto-track streamers from self-promo channels</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=community-support" class="module-card indigo" data-tags="community support raid shoutout leaderboard affiliate">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-hands-helping"></i></div>
+                            <div>
+                                <div class="module-title">Community Support</div>
+                                <div class="module-desc">Track raids and reward top supporters</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=throne" class="module-card indigo" data-tags="throne wishlist gifts gifter leaderboard notifications crowdfund">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-crown"></i></div>
+                            <div>
+                                <div class="module-title">Throne Wishlists</div>
+                                <div class="module-desc">Track wishlist changes, gifts, and contributions</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=feeds" class="module-card indigo" data-tags="reddit youtube twitter rss social feed notifications instagram facebook">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-rss"></i></div>
+                            <div>
+                                <div class="module-title">Social Feeds</div>
+                                <div class="module-desc">Reddit, YouTube, Twitter/X, Instagram, and Facebook feeds</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Community -->
+            <section class="modules-section" data-category="community">
+                <div class="section-header cyan section-toggle">
+                    <div class="section-icon"><i class="fas fa-heart"></i></div>
+                    <div class="section-header-text">
+                        <h2 class="section-title">Community</h2>
+                        <div class="section-desc">Engagement, progression, and social features</div>
+                    </div>
+                    <span class="section-count">11</span>
+                    <i class="fas fa-chevron-down section-chevron"></i>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=welcome" class="module-card cyan" data-tags="welcome join message dm greeting autorole member">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-hand-sparkles"></i></div>
+                            <div>
+                                <div class="module-title">Welcome</div>
+                                <div class="module-desc">Welcome messages and join/leave announcements</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=reaction-roles" class="module-card cyan" data-tags="reaction roles self-assign emoji panel dropdown">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-smile-beam"></i></div>
+                            <div>
+                                <div class="module-title">Reaction Roles</div>
+                                <div class="module-desc">Self-assignable roles via reactions</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=leveling" class="module-card cyan" data-tags="xp level rank card rewards roles leaderboard">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-trophy"></i></div>
+                            <div>
+                                <div class="module-title">Leveling</div>
+                                <div class="module-desc">XP system and level-based role rewards</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=achievements" class="module-card cyan" data-tags="achievements badge milestone unlock xp">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-medal"></i></div>
+                            <div>
+                                <div class="module-title">Achievements</div>
+                                <div class="module-desc">Member achievements and badges</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=birthday" class="module-card cyan" data-tags="birthday celebration announce date card">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-birthday-cake"></i></div>
+                            <div>
+                                <div class="module-title">Birthdays</div>
+                                <div class="module-desc">Birthday announcements and celebrations</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=starboard" class="module-card cyan" data-tags="starboard star popular highlight reaction">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-star"></i></div>
+                            <div>
+                                <div class="module-title">Starboard</div>
+                                <div class="module-desc">Highlight popular messages with reactions</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=giveaways" class="module-card cyan" data-tags="giveaway raffle prize winner">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-gift"></i></div>
+                            <div>
+                                <div class="module-title">Giveaways</div>
+                                <div class="module-desc">Create and manage server giveaways</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=polls" class="module-card cyan" data-tags="poll vote survey feedback">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-poll"></i></div>
+                            <div>
+                                <div class="module-title">Polls</div>
+                                <div class="module-desc">Create polls and gather community feedback</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=suggestions" class="module-card cyan" data-tags="suggestion idea feedback vote approve deny">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-lightbulb"></i></div>
+                            <div>
+                                <div class="module-title">Suggestions</div>
+                                <div class="module-desc">Member suggestions and voting system</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=confessions" class="module-card cyan" data-tags="confessions anonymous secret message">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-user-secret"></i></div>
+                            <div>
+                                <div class="module-title">Confessions</div>
+                                <div class="module-desc">Anonymous confession channel</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=music" class="module-card cyan" data-tags="music play queue dj voice tts piper song">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-music"></i></div>
+                            <div>
+                                <div class="module-title">Music</div>
+                                <div class="module-desc">Music player and DJ role settings</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Entertainment -->
+            <section class="modules-section" data-category="games">
+                <div class="section-header yellow section-toggle">
+                    <div class="section-icon"><i class="fas fa-coins"></i></div>
+                    <div class="section-header-text">
+                        <h2 class="section-title">Economy & Games</h2>
+                        <div class="section-desc">Currency, mini-games, and entertainment</div>
+                    </div>
+                    <span class="section-count">7</span>
+                    <i class="fas fa-chevron-down section-chevron"></i>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=economy" class="module-card yellow" data-tags="economy currency coins shop balance transfer">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-coins"></i></div>
+                            <div>
+                                <div class="module-title">Economy</div>
+                                <div class="module-desc">Currency system, shop, and transactions</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=games" class="module-card yellow" data-tags="games trivia hangman counting mini-game">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-gamepad"></i></div>
+                            <div>
+                                <div class="module-title">Games</div>
+                                <div class="module-desc">Trivia, hangman, and mini-games</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=owo" class="module-card yellow" data-tags="owo hunt zoo animals catch mini-game rarity pet collection legendary weapon battle quest">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-paw"></i></div>
+                            <div>
+                                <div class="module-title">OwO Hunt &amp; Zoo</div>
+                                <div class="module-desc">Full animal-hunting mini-game — catch, sell, build teams, forge weapons, fight battles. Rewards feed your Economy + Leveling.</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=gambling" class="module-card yellow" data-tags="gambling casino dice slots bet">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-dice"></i></div>
+                            <div>
+                                <div class="module-title">Gambling</div>
+                                <div class="module-desc">Casino games and betting settings</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=rpg" class="module-card yellow" data-tags="rpg character quest battle adventure">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-dragon"></i></div>
+                            <div>
+                                <div class="module-title">RPG</div>
+                                <div class="module-desc">Character system, quests, and battles</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=free-games" class="module-card yellow" data-tags="free games epic steam gog prime gaming notifications">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-gift"></i></div>
+                            <div>
+                                <div class="module-title">Free Games</div>
+                                <div class="module-desc">Notifications for free games on Epic, Steam, GOG, Prime</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=automemes" class="module-card yellow" data-tags="memes auto-post humor reddit funny">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-laugh-squint"></i></div>
+                            <div>
+                                <div class="module-title">Auto-Memes</div>
+                                <div class="module-desc">Auto-post memes from Reddit to a channel</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Moderation -->
+            <section class="modules-section" data-category="moderation">
+                <div class="section-header red section-toggle">
+                    <div class="section-icon"><i class="fas fa-shield-alt"></i></div>
+                    <div class="section-header-text">
+                        <h2 class="section-title">Moderation & Security</h2>
+                        <div class="section-desc">Protection, filtering, and enforcement</div>
+                    </div>
+                    <span class="section-count">8</span>
+                    <i class="fas fa-chevron-down section-chevron"></i>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=moderation" class="module-card red" data-tags="moderation ban kick mute warn timeout infractions escalation">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-gavel"></i></div>
+                            <div>
+                                <div class="module-title">Moderation</div>
+                                <div class="module-desc">Mod settings, infractions, and escalation</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=automod" class="module-card red" data-tags="automod filter spam links caps profanity word">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-robot"></i></div>
+                            <div>
+                                <div class="module-title">AutoMod</div>
+                                <div class="module-desc">Automatic moderation rules and filters</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=security" class="module-card red" data-tags="security anti-raid anti-nuke join-gate verification lockdown alert">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-lock"></i></div>
+                            <div>
+                                <div class="module-title">Security</div>
+                                <div class="module-desc">Join gate, anti-raid, and anti-nuke</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=advanced-protection" class="module-card red" data-tags="raid detection selfbot adaptive spam protection">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-shield-virus"></i></div>
+                            <div>
+                                <div class="module-title">Advanced Protection</div>
+                                <div class="module-desc">Raid detection and selfbot protection</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=phishing" class="module-card red" data-tags="phishing scam link detection domain">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-link"></i></div>
+                            <div>
+                                <div class="module-title">Phishing Detection</div>
+                                <div class="module-desc">Detect and block known phishing/scam links</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=quarantine" class="module-card red" data-tags="quarantine suspicious isolate restrict">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-user-shield"></i></div>
+                            <div>
+                                <div class="module-title">Quarantine</div>
+                                <div class="module-desc">Quarantine suspicious accounts</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=global-ban" class="module-card red" data-tags="global ban shared cross-server database">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-globe"></i></div>
+                            <div>
+                                <div class="module-title">Global Ban</div>
+                                <div class="module-desc">Cross-server ban database and protection</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=mass" class="module-card red" data-tags="mass actions bulk role channel management">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-users-cog"></i></div>
+                            <div>
+                                <div class="module-title">Mass Actions</div>
+                                <div class="module-desc">Bulk role and channel management</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Analytics & Logging -->
+            <section class="modules-section" data-category="analytics">
+                <div class="section-header blue section-toggle">
+                    <div class="section-icon"><i class="fas fa-chart-bar"></i></div>
+                    <div class="section-header-text">
+                        <h2 class="section-title">Analytics & Logging</h2>
+                        <div class="section-desc">Logging, statistics, and data insights</div>
+                    </div>
+                    <span class="section-count">6</span>
+                    <i class="fas fa-chevron-down section-chevron"></i>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=logging" class="module-card blue" data-tags="logging member join leave message delete edit voice channel role ban unban audit">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-file-alt"></i></div>
+                            <div>
+                                <div class="module-title">Logging</div>
+                                <div class="module-desc">Event logging and audit trails</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=action-log" class="module-card blue" data-tags="action log history bot changes">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-history"></i></div>
+                            <div>
+                                <div class="module-title">Action Log</div>
+                                <div class="module-desc">Bot action history and changes</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=analytics" class="module-card blue" data-tags="analytics statistics insights activity">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-chart-line"></i></div>
+                            <div>
+                                <div class="module-title">Analytics</div>
+                                <div class="module-desc">Server statistics and insights</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=serverstats" class="module-card blue" data-tags="server stats stat display channels time date clock members online">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-server"></i></div>
+                            <div>
+                                <div class="module-title">Server Stats</div>
+                                <div class="module-desc">Stat channels for member counts</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=stat-roles" class="module-card blue" data-tags="stat roles dynamic automatic">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-chart-pie"></i></div>
+                            <div>
+                                <div class="module-title">Stat Roles</div>
+                                <div class="module-desc">Dynamic roles based on stats</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=emojistats" class="module-card blue" data-tags="emoji statistics usage tracking popular">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-smile"></i></div>
+                            <div>
+                                <div class="module-title">Emoji Stats</div>
+                                <div class="module-desc">Track emoji usage and popularity</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Automation & Scheduling -->
+            <section class="modules-section" data-category="automation">
+                <div class="section-header orange section-toggle">
+                    <div class="section-icon"><i class="fas fa-clock"></i></div>
+                    <div class="section-header-text">
+                        <h2 class="section-title">Automation & Scheduling</h2>
+                        <div class="section-desc">Scheduled tasks, timed features, and automated actions</div>
+                    </div>
+                    <span class="section-count">7</span>
+                    <i class="fas fa-chevron-down section-chevron"></i>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=auto-purge" class="module-card orange" data-tags="auto purge clear delete schedule timer cleanup self-promo midnight">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-broom"></i></div>
+                            <div>
+                                <div class="module-title">Auto Purge</div>
+                                <div class="module-desc">Scheduled channel cleanup</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=reminders" class="module-card orange" data-tags="reminders timer schedule notification">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-bell"></i></div>
+                            <div>
+                                <div class="module-title">Reminders</div>
+                                <div class="module-desc">Set and manage reminders</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=schedule" class="module-card orange" data-tags="schedule events calendar planning">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-calendar-alt"></i></div>
+                            <div>
+                                <div class="module-title">Schedule</div>
+                                <div class="module-desc">Event scheduling and calendar</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=sticky" class="module-card orange" data-tags="sticky messages pin persistent channel">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-thumbtack"></i></div>
+                            <div>
+                                <div class="module-title">Sticky Messages</div>
+                                <div class="module-desc">Keep messages pinned at the bottom of channels</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=timecapsules" class="module-card orange" data-tags="time capsule future message delayed">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-hourglass-half"></i></div>
+                            <div>
+                                <div class="module-title">Time Capsules</div>
+                                <div class="module-desc">Schedule messages to be delivered in the future</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=weather" class="module-card orange" data-tags="weather forecast temperature location">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-cloud-sun"></i></div>
+                            <div>
+                                <div class="module-title">Weather</div>
+                                <div class="module-desc">Weather forecasts and location tracking</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=autoresponders" class="module-card orange" data-tags="auto response trigger autoresponder automation reply phrase keyword">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-robot"></i></div>
+                            <div>
+                                <div class="module-title">Auto-Responses</div>
+                                <div class="module-desc">Trigger-based automatic replies</div>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- Server Tools -->
+            <section class="modules-section" data-category="utility">
+                <div class="section-header teal section-toggle">
+                    <div class="section-icon"><i class="fas fa-wrench"></i></div>
+                    <div class="section-header-text">
+                        <h2 class="section-title">Server Tools</h2>
+                        <div class="section-desc">Tickets, commands, and server management utilities</div>
+                    </div>
+                    <span class="section-count">9</span>
+                    <i class="fas fa-chevron-down section-chevron"></i>
+                </div>
+                <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=tickets" class="module-card teal" data-tags="tickets support panel form alert log help">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-ticket-alt"></i></div>
+                            <div>
+                                <div class="module-title">Tickets</div>
+                                <div class="module-desc">Support ticket system</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=utilities" class="module-card teal" data-tags="utilities auto-roles temp channels auto-publish">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-toolbox"></i></div>
+                            <div>
+                                <div class="module-title">Utilities</div>
+                                <div class="module-desc">Auto-roles, temp channels, and more</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=custom-commands" class="module-card teal" data-tags="custom commands create response trigger prefix">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-terminal"></i></div>
+                            <div>
+                                <div class="module-title">Custom Commands</div>
+                                <div class="module-desc">Create your own commands</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=custom-embeds" class="module-card teal" data-tags="custom embeds rich message announcement post info rules">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-newspaper"></i></div>
+                            <div>
+                                <div class="module-title">Custom Embeds</div>
+                                <div class="module-desc">Post rich embed messages</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=emoji-manager" class="module-card teal" data-tags="emoji sticker upload manage delete rename custom emotes">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-icons"></i></div>
+                            <div>
+                                <div class="module-title">Emoji Manager</div>
+                                <div class="module-desc">Upload and manage server emojis & stickers</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=tags" class="module-card teal" data-tags="tags quick response snippet shortcut">
                         <div class="module-header">
                             <div class="module-icon"><i class="fas fa-tag"></i></div>
                             <div>
                                 <div class="module-title">Tags</div>
                                 <div class="module-desc">Quick response tags</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=todo" class="module-card teal" data-tags="todo task list checklist embed manage">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-tasks"></i></div>
+                            <div>
+                                <div class="module-title">Task Lists</div>
+                                <div class="module-desc">Persistent todo embeds with live updates</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=forms" class="module-card teal" data-tags="forms application template submission">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-file-alt"></i></div>
+                            <div>
+                                <div class="module-title">Forms</div>
+                                <div class="module-desc">Application and survey forms</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=csv" class="module-card teal" data-tags="csv import export data spreadsheet">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-file-csv"></i></div>
+                            <div>
+                                <div class="module-title">CSV Import/Export</div>
+                                <div class="module-desc">Import and export server data</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=backups" class="module-card teal" data-tags="backups restore save snapshot">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-save"></i></div>
+                            <div>
+                                <div class="module-title">Backups</div>
+                                <div class="module-desc">Server backup and restore</div>
                             </div>
                         </div>
                     </a>
@@ -1264,10 +2483,11 @@
         <div class="container">
             <div class="footer-links">
                 <a href="/commands" class="footer-link">Commands</a>
+                <a href="/cards" class="footer-link">Cards</a>
                 <a href="/status" class="footer-link">Status</a>
                 <a href="/docs" class="footer-link">Documentation</a>
-                <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" class="footer-link">Support</a>
-                <a href="https://fivem.certifriedmultitool.com" target="_blank" class="footer-link">FiveM Server</a>
+                <a href="https://certifriedmultitool.com/donate" target="_blank" class="footer-link" style="color: #ec4899;">Donate</a>
+                <a href="https://certifriedmultitool.com/discord" target="_blank" class="footer-link">Support</a>
                 <a href="/terms" class="footer-link">Terms</a>
                 <a href="/privacy" class="footer-link">Privacy</a>
             </div>
@@ -1343,5 +2563,597 @@
     });
     </script>
     <script src="/js/csrf.js"></script>
+
+    <!-- Global showToast for all partials -->
+    <script>
+    window.showToast = window.showToast || function(msg, type) {
+        var existing = document.querySelector('.global-toast');
+        if (existing) existing.remove();
+        var toast = document.createElement('div');
+        toast.className = 'global-toast';
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:10px;font-size:0.85rem;font-weight:600;z-index:10001;animation:fadeInUp 0.3s ease;box-shadow:0 8px 24px rgba(0,0,0,0.3);' + (type === 'success' ? 'background:#059669;color:white;' : type === 'error' ? 'background:#dc2626;color:white;' : 'background:#1a1d23;color:white;border:1px solid rgba(255,255,255,0.1);');
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(function() { toast.remove(); }, 4000);
+    };
+    </script>
+
+    <!-- Global AJAX form interceptor — converts all POST forms to no-reload saves -->
+    <script>
+    (function() {
+        document.addEventListener('submit', async function(e) {
+            // If another handler already called preventDefault, this form has its own AJAX handler — skip
+            if (e.defaultPrevented) return;
+            var form = e.target;
+            if (!form || form.method.toUpperCase() !== 'POST') return;
+            // Skip forms that explicitly opt out
+            if (form.dataset.noAjax) return;
+            // Skip file upload forms (multipart needs special handling)
+            if (form.enctype === 'multipart/form-data') return;
+
+            e.preventDefault();
+
+            var action = form.getAttribute('action');
+            var submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+            var originalText = submitBtn ? submitBtn.textContent : '';
+
+            // Disable button and show loading state
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.style.opacity = '0.6';
+                submitBtn.textContent = 'Saving...';
+            }
+
+            try {
+                var formData = new FormData(form);
+                var resp = await fetch(action, {
+                    method: 'POST',
+                    body: new URLSearchParams(formData),
+                    credentials: 'include',
+                    redirect: 'follow',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+
+                // Check if server returned JSON
+                var contentType = resp.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    var data = await resp.json();
+                    if (data.success || data.ok) {
+                        showToast(data.message || 'Saved successfully!', 'success');
+                    } else {
+                        showToast(data.error || data.message || 'Failed to save', 'error');
+                    }
+                } else if (resp.status === 404) {
+                    showToast('This feature is not yet available', 'error');
+                } else if (resp.status >= 400) {
+                    showToast('Request failed (status ' + resp.status + ')', 'error');
+                } else {
+                    // Server returned HTML (redirect was followed) — check URL for success/error params
+                    var url = new URL(resp.url);
+                    if (url.searchParams.has('success')) {
+                        var successType = url.searchParams.get('success');
+                        var messages = {
+                            'created': 'Created successfully!',
+                            'updated': 'Updated successfully!',
+                            'deleted': 'Deleted successfully!',
+                            'saved': 'Settings saved!',
+                            'restored': 'Restore complete!',
+                            'restore_logged': 'Restore logged for review'
+                        };
+                        showToast(messages[successType] || 'Saved successfully!', 'success');
+                    } else if (url.searchParams.has('error')) {
+                        showToast('Error: ' + (url.searchParams.get('error') || 'Something went wrong'), 'error');
+                    } else if (resp.ok) {
+                        showToast('Saved successfully!', 'success');
+                    } else {
+                        showToast('Request failed', 'error');
+                    }
+                }
+
+                // Reload the page content without full refresh for forms that change visible data
+                // Only reload if the form action suggests data was created/deleted (not just config updates)
+                var actionPath = action.startsWith('/') ? action : new URL(action).pathname;
+                if (actionPath.match(/\/(create|add|delete|remove|import|sync|edit)/)) {
+                    setTimeout(function() { window.location.reload(); }, 800);
+                }
+            } catch (err) {
+                showToast('Network error: ' + err.message, 'error');
+            }
+
+            // Restore button
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.style.opacity = '';
+                submitBtn.textContent = originalText;
+            }
+        }); // Bubble phase — runs AFTER partial-specific handlers, so e.defaultPrevented check works
+    })();
+    </script>
+
+    <!-- Fuzzy Finder (Ctrl+K / Cmd+K) -->
+    <style>
+    .ff-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        justify-content: center;
+        padding-top: 15vh;
+    }
+    .ff-overlay.open { display: flex; }
+    .ff-dialog {
+        width: 520px;
+        max-width: 90vw;
+        max-height: 60vh;
+        background: #1a1b2e;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 14px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        align-self: flex-start;
+    }
+    .ff-input-wrap {
+        display: flex;
+        align-items: center;
+        padding: 14px 18px;
+        gap: 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .ff-input-wrap i { color: rgba(255,255,255,0.4); font-size: 0.9rem; }
+    .ff-input {
+        flex: 1;
+        background: none;
+        border: none;
+        outline: none;
+        color: #fff;
+        font-size: 1rem;
+        font-family: inherit;
+    }
+    .ff-input::placeholder { color: rgba(255,255,255,0.3); }
+    .ff-kbd {
+        font-size: 0.65rem;
+        padding: 2px 6px;
+        background: rgba(255,255,255,0.08);
+        border-radius: 4px;
+        color: rgba(255,255,255,0.4);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .ff-results {
+        overflow-y: auto;
+        padding: 6px;
+        flex: 1;
+    }
+    .ff-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        text-decoration: none;
+        color: #fff;
+        transition: background 0.1s;
+    }
+    .ff-item:hover, .ff-item.ff-active {
+        background: rgba(255,255,255,0.06);
+    }
+    .ff-item-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        flex-shrink: 0;
+    }
+    .ff-item-icon.purple { background: rgba(139, 92, 246, 0.2); color: #a78bfa; }
+    .ff-item-icon.cyan { background: rgba(34, 211, 238, 0.2); color: #22d3ee; }
+    .ff-item-icon.yellow { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .ff-item-icon.red { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .ff-item-icon.blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .ff-item-icon.orange { background: rgba(249, 115, 22, 0.2); color: #fb923c; }
+    .ff-item-icon.green { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+    .ff-item-text { flex: 1; min-width: 0; }
+    .ff-item-title { font-size: 0.9rem; font-weight: 600; }
+    .ff-item-desc { font-size: 0.75rem; color: rgba(255,255,255,0.4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ff-item-section { font-size: 0.65rem; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.5px; }
+    .ff-empty {
+        text-align: center;
+        padding: 24px;
+        color: rgba(255,255,255,0.3);
+        font-size: 0.85rem;
+    }
+    .ff-footer {
+        padding: 8px 14px;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        display: flex;
+        gap: 14px;
+        font-size: 0.7rem;
+        color: rgba(255,255,255,0.3);
+    }
+    .ff-footer span { display: flex; align-items: center; gap: 4px; }
+    </style>
+
+    <div id="ffOverlay" class="ff-overlay" onclick="if(event.target===this)closeFinder()">
+        <div class="ff-dialog">
+            <div class="ff-input-wrap">
+                <i class="fas fa-search"></i>
+                <input type="text" class="ff-input" id="ffInput" placeholder="Search modules..." autocomplete="off" spellcheck="false">
+                <span class="ff-kbd">ESC</span>
+            </div>
+            <div class="ff-results" id="ffResults"></div>
+            <div class="ff-footer">
+                <span><kbd class="ff-kbd">&uarr;&darr;</kbd> Navigate</span>
+                <span><kbd class="ff-kbd">Enter</kbd> Open</span>
+                <span><kbd class="ff-kbd">Esc</kbd> Close</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+        // Build module index from the page's module cards
+        const modules = [];
+        document.querySelectorAll('.module-card').forEach(function(card) {
+            var title = (card.querySelector('.module-title') || {}).textContent || '';
+            var desc = (card.querySelector('.module-desc') || {}).textContent || '';
+            var iconEl = card.querySelector('.module-icon i');
+            var iconClass = iconEl ? iconEl.className : '';
+            var href = card.getAttribute('href') || '';
+            var sectionEl = card.closest('.modules-section');
+            var section = sectionEl ? (sectionEl.querySelector('.section-title') || {}).textContent || '' : '';
+            var colorMatch = card.className.match(/module-card\s+(\w+)/);
+            var color = colorMatch ? colorMatch[1] : 'purple';
+            title = title.trim();
+            desc = desc.trim();
+            section = section.trim();
+            var tags = card.getAttribute('data-tags') || '';
+            modules.push({ title: title, desc: desc, iconClass: iconClass, href: href, section: section, color: color, searchText: (title + ' ' + desc + ' ' + section + ' ' + tags).toLowerCase() });
+        });
+
+        var overlay = document.getElementById('ffOverlay');
+        var input = document.getElementById('ffInput');
+        var resultsContainer = document.getElementById('ffResults');
+        var activeIndex = 0;
+
+        function fuzzyMatch(query, text) {
+            query = query.toLowerCase();
+            text = text.toLowerCase();
+            if (text.indexOf(query) !== -1) return 100;
+            var qi = 0, score = 0, lastIdx = -1;
+            for (var ti = 0; ti < text.length && qi < query.length; ti++) {
+                if (text[ti] === query[qi]) {
+                    score += (ti === lastIdx + 1) ? 15 : 5;
+                    if (ti === 0 || text[ti - 1] === ' ') score += 10;
+                    lastIdx = ti;
+                    qi++;
+                }
+            }
+            return qi === query.length ? score : 0;
+        }
+
+        function createItem(m) {
+            var a = document.createElement('a');
+            a.href = m.href;
+            a.className = 'ff-item';
+
+            var iconWrap = document.createElement('div');
+            iconWrap.className = 'ff-item-icon ' + m.color;
+            var icon = document.createElement('i');
+            // Extract the fa- icon name from the full class string
+            var faMatch = m.iconClass.match(/fa-\S+/);
+            icon.className = 'fas ' + (faMatch ? faMatch[0] : 'fa-cog');
+            iconWrap.appendChild(icon);
+
+            var textWrap = document.createElement('div');
+            textWrap.className = 'ff-item-text';
+            var titleEl = document.createElement('div');
+            titleEl.className = 'ff-item-title';
+            titleEl.textContent = m.title;
+            var descEl = document.createElement('div');
+            descEl.className = 'ff-item-desc';
+            descEl.textContent = m.desc;
+            textWrap.appendChild(titleEl);
+            textWrap.appendChild(descEl);
+
+            var sectionEl = document.createElement('div');
+            sectionEl.className = 'ff-item-section';
+            sectionEl.textContent = m.section;
+
+            a.appendChild(iconWrap);
+            a.appendChild(textWrap);
+            a.appendChild(sectionEl);
+            return a;
+        }
+
+        function renderResults(query) {
+            resultsContainer.textContent = '';
+
+            var list;
+            if (!query) {
+                list = modules;
+            } else {
+                list = modules
+                    .map(function(m) { return { m: m, score: fuzzyMatch(query, m.searchText) }; })
+                    .filter(function(x) { return x.score > 0; })
+                    .sort(function(a, b) { return b.score - a.score; })
+                    .map(function(x) { return x.m; });
+            }
+
+            if (list.length === 0) {
+                var empty = document.createElement('div');
+                empty.className = 'ff-empty';
+                var emptyIcon = document.createElement('i');
+                emptyIcon.className = 'fas fa-search';
+                emptyIcon.style.cssText = 'display:block;margin-bottom:8px;font-size:1.2rem;';
+                empty.appendChild(emptyIcon);
+                empty.appendChild(document.createTextNode('No modules found'));
+                resultsContainer.appendChild(empty);
+                activeIndex = -1;
+                return;
+            }
+
+            list.forEach(function(m) {
+                resultsContainer.appendChild(createItem(m));
+            });
+            activeIndex = 0;
+            updateActive();
+        }
+
+        function updateActive() {
+            var items = resultsContainer.querySelectorAll('.ff-item');
+            items.forEach(function(el, i) { el.classList.toggle('ff-active', i === activeIndex); });
+            if (items[activeIndex]) {
+                items[activeIndex].scrollIntoView({ block: 'nearest' });
+            }
+        }
+
+        function openFinder() {
+            overlay.classList.add('open');
+            input.value = '';
+            renderResults('');
+            setTimeout(function() { input.focus(); }, 10);
+        }
+
+        function closeFinder() {
+            overlay.classList.remove('open');
+        }
+
+        function navigateToActive() {
+            var items = resultsContainer.querySelectorAll('.ff-item');
+            if (items[activeIndex]) {
+                window.location.href = items[activeIndex].getAttribute('href');
+            }
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                overlay.classList.contains('open') ? closeFinder() : openFinder();
+                return;
+            }
+            if (!overlay.classList.contains('open')) return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                closeFinder();
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                var items = resultsContainer.querySelectorAll('.ff-item');
+                if (items.length > 0) { activeIndex = (activeIndex + 1) % items.length; updateActive(); }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                var items2 = resultsContainer.querySelectorAll('.ff-item');
+                if (items2.length > 0) { activeIndex = (activeIndex - 1 + items2.length) % items2.length; updateActive(); }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                navigateToActive();
+            }
+        });
+
+        input.addEventListener('input', function() {
+            renderResults(input.value.trim());
+        });
+
+        window.openFinder = openFinder;
+        window.closeFinder = closeFinder;
+    })();
+
+    // Overview search, category tabs, and section collapse
+    (function() {
+        var searchInput = document.getElementById('overviewSearch');
+        var noResults = document.getElementById('noSearchResults');
+        var tabs = document.querySelectorAll('.category-tab');
+        var sections = document.querySelectorAll('.modules-section[data-category]');
+        var activeCat = 'all';
+
+        if (!searchInput) return; // Not on overview page
+
+        // Category tabs
+        tabs.forEach(function(tab) {
+            tab.addEventListener('click', function() {
+                activeCat = tab.getAttribute('data-cat');
+                tabs.forEach(function(t) { t.classList.remove('active'); });
+                tab.classList.add('active');
+                applyFilters();
+            });
+        });
+
+        // Search input
+        searchInput.addEventListener('input', function() { applyFilters(); });
+
+        function applyFilters() {
+            var query = (searchInput.value || '').trim().toLowerCase();
+            var anyVisible = false;
+
+            sections.forEach(function(section) {
+                var cat = section.getAttribute('data-category');
+                var catMatch = activeCat === 'all' || cat === activeCat;
+
+                if (!catMatch) {
+                    section.classList.add('search-hidden');
+                    return;
+                }
+
+                if (!query) {
+                    section.classList.remove('search-hidden');
+                    section.querySelectorAll('.module-card').forEach(function(card) {
+                        card.classList.remove('search-hidden');
+                    });
+                    anyVisible = true;
+                    return;
+                }
+
+                var sectionHasMatch = false;
+                section.querySelectorAll('.module-card').forEach(function(card) {
+                    var title = (card.querySelector('.module-title') || {}).textContent || '';
+                    var desc = (card.querySelector('.module-desc') || {}).textContent || '';
+                    var tags = card.getAttribute('data-tags') || '';
+                    var text = (title + ' ' + desc + ' ' + tags).toLowerCase();
+                    if (text.indexOf(query) > -1) {
+                        card.classList.remove('search-hidden');
+                        sectionHasMatch = true;
+                    } else {
+                        card.classList.add('search-hidden');
+                    }
+                });
+
+                if (sectionHasMatch) {
+                    section.classList.remove('search-hidden');
+                    anyVisible = true;
+                } else {
+                    section.classList.add('search-hidden');
+                }
+            });
+
+            if (noResults) {
+                noResults.style.display = (query && !anyVisible) ? 'block' : 'none';
+            }
+        }
+
+        // Section collapse/expand
+        document.querySelectorAll('.section-toggle').forEach(function(header) {
+            var section = header.closest('.modules-section');
+            var cat = section ? section.getAttribute('data-category') : null;
+
+            // Restore state from localStorage
+            if (cat) {
+                var stored = localStorage.getItem('section-collapsed-' + cat);
+                if (stored === '1') section.classList.add('collapsed');
+            }
+
+            header.addEventListener('click', function() {
+                section.classList.toggle('collapsed');
+                if (cat) {
+                    localStorage.setItem('section-collapsed-' + cat, section.classList.contains('collapsed') ? '1' : '0');
+                }
+            });
+        });
+
+        // Focus search on Ctrl+K (also opens the fuzzy finder, but this focuses the visible one)
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') { searchInput.value = ''; applyFilters(); searchInput.blur(); }
+        });
+
+        // Feature status dots — inject from server-side data
+        <% if (typeof featureStatus !== 'undefined') { %>
+        (function() {
+            var status = <%- JSON.stringify(featureStatus) %>;
+            document.querySelectorAll('.module-card').forEach(function(card) {
+                var href = card.getAttribute('href') || '';
+                var match = href.match(/page=([^&]+)/);
+                if (!match) return;
+                var page = match[1];
+                var dot = document.createElement('div');
+                dot.className = 'module-status' + (status[page] ? ' active' : '');
+                dot.title = status[page] ? 'Configured' : 'Not configured';
+                card.appendChild(dot);
+            });
+        })();
+        <% } %>
+
+        // Recently Visited — localStorage tracking
+        (function() {
+            var GUILD_ID = '<%= guild.id %>';
+            var STORAGE_KEY = 'recent-visited-' + GUILD_ID;
+            var MAX_RECENT = 8;
+
+            // Icon map for recently visited chips
+            var iconMap = {
+                'appearance': 'fa-paint-brush', 'core': 'fa-sliders-h', 'commands': 'fa-terminal',
+                'stat-displays': 'fa-tv', 'permissions': 'fa-user-lock', 'streamers': 'fa-broadcast-tower',
+                'twitch-schedules': 'fa-calendar', 'tiktok': 'fab fa-tiktok', 'self-promo': 'fa-bullhorn',
+                'community-support': 'fa-hands-helping', 'feeds': 'fa-rss', 'welcome': 'fa-hand-sparkles',
+                'reaction-roles': 'fa-smile-beam', 'leveling': 'fa-trophy', 'achievements': 'fa-medal',
+                'birthday': 'fa-birthday-cake', 'starboard': 'fa-star', 'giveaways': 'fa-gift',
+                'polls': 'fa-poll', 'suggestions': 'fa-lightbulb', 'confessions': 'fa-user-secret',
+                'music': 'fa-music', 'economy': 'fa-coins', 'games': 'fa-gamepad',
+                'gambling': 'fa-dice', 'rpg': 'fa-dragon', 'free-games': 'fa-gift',
+                'automemes': 'fa-laugh-squint', 'moderation': 'fa-gavel', 'automod': 'fa-robot',
+                'security': 'fa-lock', 'advanced-protection': 'fa-shield-virus', 'phishing': 'fa-link',
+                'quarantine': 'fa-user-shield', 'global-ban': 'fa-globe', 'mass': 'fa-users-cog',
+                'logging': 'fa-file-alt', 'action-log': 'fa-history', 'analytics': 'fa-chart-line',
+                'serverstats': 'fa-server', 'stat-roles': 'fa-chart-pie', 'emojistats': 'fa-smile',
+                'auto-purge': 'fa-broom', 'reminders': 'fa-bell', 'schedule': 'fa-calendar-alt',
+                'sticky': 'fa-thumbtack', 'timecapsules': 'fa-hourglass-half', 'weather': 'fa-cloud-sun',
+                'tickets': 'fa-ticket-alt', 'utilities': 'fa-toolbox', 'custom-commands': 'fa-terminal',
+                'custom-embeds': 'fa-newspaper', 'emoji-manager': 'fa-icons', 'tags': 'fa-tag', 'autoresponders': 'fa-robot',
+                'forms': 'fa-file-alt', 'csv': 'fa-file-csv', 'backups': 'fa-save'
+            };
+
+            // Title map
+            var titleMap = {};
+            document.querySelectorAll('.module-card').forEach(function(card) {
+                var href = card.getAttribute('href') || '';
+                var match = href.match(/page=([^&]+)/);
+                var title = card.querySelector('.module-title');
+                if (match && title) titleMap[match[1]] = title.textContent;
+            });
+
+            function getRecent() {
+                try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
+            }
+
+            function renderRecent() {
+                var recent = getRecent();
+                var container = document.getElementById('recentVisited');
+                var grid = document.getElementById('recentVisitedGrid');
+                if (!container || !grid || recent.length === 0) { if (container) container.style.display = 'none'; return; }
+
+                container.style.display = '';
+                grid.textContent = '';
+                recent.forEach(function(page) {
+                    var a = document.createElement('a');
+                    a.href = '/manage/' + GUILD_ID + '?page=' + page;
+                    a.className = 'recent-chip';
+                    var icon = document.createElement('i');
+                    var iconClass = iconMap[page] || 'fa-cog';
+                    icon.className = (iconClass.startsWith('fab') ? '' : 'fas ') + iconClass;
+                    a.appendChild(icon);
+                    var span = document.createElement('span');
+                    span.textContent = titleMap[page] || page;
+                    a.appendChild(span);
+                    grid.appendChild(a);
+                });
+            }
+
+            renderRecent();
+
+            // Track page visits (runs on sub-pages, not overview)
+            var currentPage = new URLSearchParams(window.location.search).get('page');
+            if (currentPage && currentPage !== 'overview') {
+                var recent = getRecent();
+                recent = recent.filter(function(p) { return p !== currentPage; });
+                recent.unshift(currentPage);
+                if (recent.length > MAX_RECENT) recent = recent.slice(0, MAX_RECENT);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(recent));
+            }
+        })();
+    })();
+    </script>
 </body>
 </html>
