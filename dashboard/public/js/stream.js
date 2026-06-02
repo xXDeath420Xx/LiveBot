@@ -37,8 +37,18 @@ async function loadDestinations() {
   destinations.forEach((d) => {
     const li = document.createElement('li');
     li.className = 'flex items-center justify-between bg-gray-800 rounded px-3 py-2 text-sm';
-    li.innerHTML = `<span><span class="dot inline-block w-2 h-2 rounded-full bg-gray-500 mr-2"></span>
-      <strong>${d.name}</strong> <span class="text-gray-500">(${d.platform})</span></span>`;
+    // Build the label with textContent (never innerHTML) so a user-chosen
+    // destination name can't inject markup/script into the page.
+    const left = document.createElement('span');
+    const dot = document.createElement('span');
+    dot.className = 'dot inline-block w-2 h-2 rounded-full bg-gray-500 mr-2';
+    const nameEl = document.createElement('strong');
+    nameEl.textContent = d.name;
+    const platEl = document.createElement('span');
+    platEl.className = 'text-gray-500';
+    platEl.textContent = ` (${d.platform})`;
+    left.append(dot, nameEl, document.createTextNode(' '), platEl);
+    li.append(left);
     const right = document.createElement('span');
     right.className = 'flex gap-2';
     const toggle = document.createElement('button');
