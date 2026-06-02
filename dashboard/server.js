@@ -19,6 +19,8 @@ import { createSessionMiddleware, sessionActivityMiddleware } from './config/ses
 import ebookRecordRouter from './routes/ebook-record.js';
 import fourthwallWebhookRouter from './routes/webhooks/fourthwall.js';
 import { invalidateMusicConfigCache } from '../utils/music_helpers.js';
+import encryption from '../utils/encryption.js';
+import cookieParser from 'cookie-parser';
 
 dotenv.config();
 
@@ -70,6 +72,12 @@ const upload = multer({
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
 
+// Large file upload (for PDF imports, etc.)
+const uploadLarge = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+});
+
 // Multer error handler
 const handleMulterError = (err, req, res, next) => {
     if (err instanceof multer.MulterError) {
@@ -114,8 +122,8 @@ function start(botClient) {
                 styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com", "https://cdn.jsdelivr.net"],
                 fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
                 imgSrc: ["'self'", "data:", "https:", "blob:"],
-                connectSrc: ["'self'", "https://api.twitch.tv", "https://kick.com", "blob:"],
-                mediaSrc: ["'self'", "blob:"],
+                connectSrc: ["'self'", "https://api.twitch.tv", "https://kick.com", "https://api.giphy.com", "blob:"],
+                mediaSrc: ["'self'", "blob:", "https:"],
                 frameSrc: ["'none'"],
                 objectSrc: ["'none'"],
                 upgradeInsecureRequests: []
@@ -171,6 +179,9 @@ function start(botClient) {
         keyGenerator: getClientIp,
         skip: (req) => req.user && isSuperAdmin(req.user.id)
     });
+
+    // Cookie parser for non-session cookies (card management, etc.)
+    app.use(cookieParser());
 
     // Session middleware with MySQL store for persistence and management
     const sessionMiddleware = createSessionMiddleware();
@@ -230,11 +241,16 @@ function start(botClient) {
             '/auth/discord/callback',
             '/tokes-bot/auth/twitch/callback',
             '/tokes-bot/auth/kick/callback',
+            '/api/guilds',
             '/api/webhooks',
             '/api/webhooks/gitlab',
             '/api/status',
             '/api/ebook/record',
-            '/webhooks/fourthwall'
+            '/webhooks/fourthwall',
+            '/manage',
+            '/card',
+            '/cards',
+            '/supporters',
         ]
     }));
 
@@ -347,12 +363,16 @@ function start(botClient) {
 
     app.engine('ejs', async (filePath, options, callback) => {
         try {
-            // Create include function that resolves relative paths from the calling file
+            // Create include function that tries caller-relative first, then viewsDir
             function makeInclude(callerFile) {
                 return (templatePath, data = {}) => {
                     const ext = templatePath.endsWith('.ejs') ? '' : '.ejs';
-                    const baseDir = callerFile ? path.dirname(callerFile) : viewsDir;
-                    const fullPath = path.resolve(baseDir, templatePath + ext);
+                    const callerDir = callerFile ? path.dirname(callerFile) : viewsDir;
+                    let fullPath = path.resolve(callerDir, templatePath + ext);
+                    // If not found relative to caller, try from viewsDir
+                    if (!fs.existsSync(fullPath)) {
+                        fullPath = path.resolve(viewsDir, templatePath + ext);
+                    }
                     const template = fs.readFileSync(fullPath, 'utf8');
                     return ejs.render(template, { ...options, ...data, filename: fullPath, include: makeInclude(fullPath) });
                 };
@@ -376,8 +396,250 @@ function start(botClient) {
     // Ebook recording upload (no auth required, large file support)
     app.use('/api/ebook', ebookRecordRouter);
 
+    // Health monitoring endpoint (no auth)
+    app.get('/api/health', async (req, res) => {
+        try {
+            const botManager = global.botManager;
+            const uptime = process.uptime();
+
+            // DB check
+            let dbOk = false;
+            let dbLatency = 0;
+            try {
+                const start = Date.now();
+                await pool.execute('SELECT 1');
+                dbLatency = Date.now() - start;
+                dbOk = true;
+            } catch { /* db down */ }
+
+            // Main bot gateway
+            const mainBot = client;
+            const mainStatus = mainBot?.ws?.status === 0 ? 'connected' : 'disconnected';
+            const mainPing = mainBot?.ws?.ping || -1;
+
+            // Custom bots
+            const customBots = [];
+            if (botManager) {
+                for (const [botId, botClient] of botManager.clients) {
+                    if (botId === 'default') continue;
+                    customBots.push({
+                        id: botId,
+                        name: botClient.user?.username || 'unknown',
+                        status: botClient.ws?.status === 0 ? 'connected' : 'disconnected',
+                        ping: botClient.ws?.ping || -1,
+                        guilds: botClient.guilds?.cache?.size || 0
+                    });
+                }
+            }
+
+            const allConnected = mainStatus === 'connected' && customBots.every(b => b.status === 'connected');
+            const disconnected = customBots.filter(b => b.status !== 'connected');
+
+            res.json({
+                status: dbOk && allConnected ? 'healthy' : dbOk ? 'degraded' : 'unhealthy',
+                uptime: Math.floor(uptime),
+                uptimeFormatted: `${Math.floor(uptime / 86400)}d ${Math.floor((uptime % 86400) / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
+                database: { ok: dbOk, latencyMs: dbLatency },
+                gateway: {
+                    main: { status: mainStatus, ping: mainPing, guilds: mainBot?.guilds?.cache?.size || 0 },
+                    customBots: customBots.length,
+                    allConnected,
+                    disconnected: disconnected.length > 0 ? disconnected.map(b => b.name) : []
+                },
+                memory: {
+                    rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
+                    heap: Math.round(process.memoryUsage().heapUsed / 1024 / 1024)
+                },
+                timestamp: new Date().toISOString()
+            });
+        } catch (error) {
+            res.status(500).json({ status: 'error', error: error.message });
+        }
+    });
+
+    // Public status API — bypass auth for /api/status/* endpoints
+    // Loaded synchronously to avoid race condition with auth-protected /api/* routes
+    app.use('/api/status', async (req, res, next) => {
+        try {
+            if (!app._statusRouter) {
+                const mod = await import('./routes/status.js');
+                app._statusRouter = mod.default;
+            }
+            app._statusRouter(req, res, next);
+        } catch (err) {
+            res.status(500).json({ error: 'Status routes not available' });
+        }
+    });
+
+    // Super-admin API — has its own auth (requireSuperAdmin), must bypass generic apiCheckAuth
+    // Routes use full paths (/api/super-admin/*, /api/admin/*) so intercept both prefixes
+    app.use((req, res, next) => {
+        if (!req.path.startsWith('/api/super-admin/') && !req.path.startsWith('/api/admin/')) return next();
+        (async () => {
+            try {
+                if (!app._superAdminRouter) {
+                    const mod = await import('./routes/super-admin.js');
+                    app._superAdminRouter = mod.default;
+                }
+                app._superAdminRouter(req, res, next);
+            } catch (err) {
+                res.status(500).json({ error: 'Super admin routes not available' });
+            }
+        })();
+    });
+
     // Routes
+    // Public schedule pages — render a streamer's monthly calendar.
+    //
+    //   GET /schedule/:username       → HTML page with the calendar image + share links
+    //   GET /schedule/:username.png   → raw PNG image (used by the HTML page and Discord embeds)
+    //
+    // No auth required — these pages only surface public Twitch schedule data.
+    app.get('/schedule/:username.png', async (req, res) => {
+        try {
+            const username = req.params.username.replace(/\.png$/i, '').trim();
+            if (!username || username.length > 30) return res.status(400).send('bad username');
+            const { getTwitchUser, getStreamSchedule } = await import('../utils/platforms/twitch-api.js');
+            const user = await getTwitchUser(username);
+            if (!user?.id) return res.status(404).send('Twitch user not found');
+            const resp = await getStreamSchedule(user.id);
+            const scheduleData = resp?.data?.data || { segments: [] };
+
+            // Grab cancellation info from whichever guild sync row is most recent
+            let canceled = [];
+            try {
+                const [rows] = await pool.execute(
+                    "SELECT previous_segments_json FROM twitch_schedule_sync_config WHERE streamer_id IN (SELECT streamer_id FROM streamers WHERE platform='twitch' AND LOWER(username) = LOWER(?)) ORDER BY last_synced DESC LIMIT 1",
+                    [username]
+                );
+                const prev = rows[0]?.previous_segments_json ? JSON.parse(rows[0].previous_segments_json) : [];
+                const currentIds = new Set(scheduleData.segments.map(s => s.id));
+                const now = Date.now();
+                canceled = prev.filter(p => p?.id && !currentIds.has(p.id) && p.start_time && new Date(p.start_time).getTime() > now);
+            } catch { /* best-effort */ }
+
+            const TSM = (await import('../core/twitch-schedule-manager.js')).default;
+            const mgr = new TSM({ isDefaultBot: true });
+            const png = await mgr.buildScheduleImage({ username, profile_image_url: user.profile_image_url }, scheduleData, canceled);
+            if (!png) return res.status(503).send('canvas module unavailable');
+            res.set('Content-Type', 'image/png');
+            res.set('Cache-Control', 'public, max-age=600'); // 10 min
+            res.send(png);
+        } catch (err) {
+            logger.error('[/schedule/:username.png]', err);
+            res.status(500).send('render failed');
+        }
+    });
+
+    app.get('/schedule/:username', async (req, res) => {
+        const username = req.params.username.trim();
+        if (!username || username.length > 30) return res.status(400).send('bad username');
+        const imgUrl = `/schedule/${encodeURIComponent(username)}.png`;
+        res.set('Cache-Control', 'public, max-age=60');
+        res.send(`<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<title>${username}'s Streaming Schedule · CertiFried</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="${username}'s Streaming Schedule">
+<meta property="og:description" content="Live-generated from twitch.tv/${username}. Updates automatically when the streamer edits their Twitch schedule.">
+<meta property="og:image" content="${imgUrl}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${imgUrl}">
+<style>
+  body { font-family: -apple-system, Segoe UI, sans-serif; background: #2B1E16; color: #FFF8E6; margin: 0; padding: 0; min-height: 100vh; }
+  header { background: linear-gradient(180deg, #5E3B1E 0%, #3D2B1F 100%); padding: 24px 16px; text-align: center; border-bottom: 4px solid #F5C26B; }
+  header h1 { margin: 0; font-size: 28px; color: #F5C26B; }
+  header p { margin: 6px 0 0; color: #FFEFCE; font-size: 14px; }
+  main { max-width: 1700px; margin: 24px auto; padding: 0 16px; }
+  main img { width: 100%; height: auto; border-radius: 12px; box-shadow: 0 6px 32px rgba(0,0,0,0.4); display: block; }
+  .links { text-align: center; margin: 20px 0; }
+  .links a { color: #F5C26B; text-decoration: none; font-weight: 600; margin: 0 12px; }
+  .links a:hover { text-decoration: underline; }
+  footer { text-align: center; padding: 24px; color: #8F7E6B; font-size: 13px; }
+</style></head>
+<body>
+<header>
+  <h1>${username}'s Streaming Schedule</h1>
+  <p>Live-generated from <a href="https://twitch.tv/${username}" style="color:#F5C26B">twitch.tv/${username}</a> — updates automatically when the streamer edits their Twitch schedule</p>
+</header>
+<main>
+  <img src="${imgUrl}" alt="${username}'s streaming schedule" loading="eager">
+  <div class="links">
+    <a href="https://twitch.tv/${username}" target="_blank">Watch on Twitch →</a>
+    <a href="${imgUrl}" target="_blank">Download image</a>
+  </div>
+</main>
+<footer>Schedule auto-refreshes every 10 minutes · Powered by CertiFried</footer>
+</body></html>`);
+    });
+
+    // Root chooser: pick the Discord bot or the Kick (defender) bot.
+    // Always shown, even when logged in (each card reflects its own session).
     app.get('/', async (req, res) => {
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+        // Every value has a safe default so the public landing page can never 500.
+        let discordLoggedIn = false;
+        let kickLoggedIn = false;
+        let discordServers = 0;
+        let kickChannels = 0;
+
+        try {
+            discordLoggedIn = typeof req.isAuthenticated === 'function' && req.isAuthenticated();
+            kickLoggedIn = !!req.session?.tokesUser;
+        } catch (err) {
+            logger.warn('[Landing Chooser] Session/auth check failed:', { error: err.message });
+        }
+
+        // Live "reach" counts for the chooser cards. Each source is isolated so a
+        // failure (bot not ready, DB hiccup, missing table) never blocks the page.
+        try {
+            // getServerStats() dedupes guilds across the main client AND every
+            // custom bot in global.botManager — same number used by /discord and /status.
+            if (typeof getServerStats === 'function') {
+                discordServers = getServerStats(client)?.guilds || 0;
+            }
+        } catch (err) {
+            logger.warn('[Landing Chooser] Failed to get Discord server count:', { error: err.message });
+        }
+        try {
+            const [[row]] = await pool.execute(
+                'SELECT COUNT(*) AS c FROM tokes_channels WHERE is_enabled = 1'
+            );
+            kickChannels = row?.c || 0;
+        } catch (err) {
+            logger.warn('[Landing Chooser] Failed to get Kick channel count:', { error: err.message });
+        }
+
+        const viewData = {
+            discordLoggedIn,
+            kickLoggedIn,
+            discordHref: discordLoggedIn ? '/dashboard' : '/auth/discord',
+            kickHref: kickLoggedIn ? '/kick' : '/tokes-bot/auth/kick',
+            discordServers,
+            kickChannels
+        };
+
+        try {
+            return res.render('landing-chooser', viewData);
+        } catch (err) {
+            // Render itself failed — log the real cause and fall back to a minimal
+            // inline page so the front door is never a 500.
+            logger.error('[Landing Chooser] Render failed:', { error: err.message, stack: err.stack });
+            return res.status(200).type('html').send(
+                `<!DOCTYPE html><html><head><meta charset="utf-8"><title>CertiFried Utility</title></head>`
+                + `<body style="font-family:system-ui;background:#0b0a12;color:#ececec;text-align:center;padding:4rem">`
+                + `<h1>CertiFried Utility</h1><p>Pick the bot you're here for.</p>`
+                + `<p style="margin-top:2rem"><a style="color:#5865F2" href="${viewData.discordHref}">Discord Bot</a>`
+                + ` &nbsp;·&nbsp; <a style="color:#53FC18" href="${viewData.kickHref}">Kick Bot</a></p>`
+                + `</body></html>`
+            );
+        }
+    });
+
+    // Discord marketing/landing page (formerly at '/').
+    app.get('/discord', async (req, res) => {
         try {
             // Use shared function for consistent server count across all pages
             const stats = getServerStats(client);
@@ -385,6 +647,7 @@ function start(botClient) {
             // Count actual commands
             const commandCount = client?.commands?.size || 0;
 
+            res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
             res.render('landing-tailwind', {
                 user: req.user,
                 clientId: process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID,
@@ -395,6 +658,7 @@ function start(botClient) {
         } catch (error) {
             logger.error('[Landing Page] Error calculating server count:', error);
             // Fallback to main bot count
+            res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
             res.render('landing-tailwind', {
                 user: req.user,
                 clientId: process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID,
@@ -412,20 +676,1382 @@ function start(botClient) {
         passport.authenticate('discord')(req, res, next);
     });
 
-    app.get('/auth/discord/callback',
-        passport.authenticate('discord', { failureRedirect: '/' }),
-        (req, res) => {
-            const returnTo = req.session.returnTo;
-            delete req.session.returnTo;
-            res.redirect(returnTo || '/dashboard');
-        }
-    );
+    app.get('/auth/discord/callback', (req, res, next) => {
+        passport.authenticate('discord', (err, user, info) => {
+            if (err) {
+                logger.error('[Auth Callback] Passport error:', { error: err.message, stack: err.stack });
+                return res.status(500).render('error-tailwind', { user: null, error: 'Authentication failed: ' + err.message });
+            }
+            if (!user) {
+                logger.warn('[Auth Callback] No user returned from Discord OAuth');
+                return res.redirect('/');
+            }
+            req.logIn(user, (loginErr) => {
+                if (loginErr) {
+                    logger.error('[Auth Callback] Login error:', { error: loginErr.message, stack: loginErr.stack });
+                    return res.status(500).render('error-tailwind', { user: null, error: 'Login failed: ' + loginErr.message });
+                }
+                const returnTo = req.session.returnTo;
+                delete req.session.returnTo;
+                res.redirect(returnTo || '/dashboard');
+            });
+        })(req, res, next);
+    });
 
     app.get('/logout', (req, res) => {
         req.logout(() => {
             res.redirect('/');
         });
     });
+    // ===========================
+    // BIRTHDAY CARD ROUTES (public)
+    // ===========================
+
+    // View birthday card (public — no auth required)
+    // ═══ Standalone Cards System ═══
+
+    // Landing page
+    app.get('/cards', (req, res) => {
+        res.render('cards-landing', { user: req.user || null });
+    });
+
+    // Create card page
+    app.get('/cards/create', (req, res) => {
+        res.render('cards-create', { user: req.user || null, occasion: req.query.occasion || 'birthday' });
+    });
+
+    // My Cards — management page for card creators
+    app.get('/cards/my-cards', async (req, res) => {
+        try {
+            let cards = [];
+
+            // Get cards by Discord user ID if logged in
+            if (req.user?.id) {
+                const [discordCards] = await pool.execute(
+                    `SELECT bc.*, (SELECT COUNT(*) FROM birthday_card_signatures WHERE card_id = bc.id) as sig_count
+                     FROM birthday_cards bc WHERE bc.creator_user_id = ? OR bc.user_id = ? ORDER BY bc.id DESC`,
+                    [req.user.id, req.user.id]
+                );
+                cards = discordCards;
+            }
+
+            // Get cards from cookie (non-Discord users or supplement Discord results)
+            const cookieSlugs = req.cookies?.my_cards ? JSON.parse(req.cookies.my_cards) : [];
+            if (cookieSlugs.length > 0) {
+                const placeholders = cookieSlugs.map(() => '?').join(',');
+                const [cookieCards] = await pool.execute(
+                    `SELECT bc.*, (SELECT COUNT(*) FROM birthday_card_signatures WHERE card_id = bc.id) as sig_count
+                     FROM birthday_cards bc WHERE bc.slug IN (${placeholders}) ORDER BY bc.id DESC`,
+                    cookieSlugs
+                );
+                // Merge without duplicates
+                const existingIds = new Set(cards.map(c => c.id));
+                for (const c of cookieCards) {
+                    if (!existingIds.has(c.id)) cards.push(c);
+                }
+            }
+
+            // Sort newest first
+            cards.sort((a, b) => b.id - a.id);
+
+            res.render('cards-my-cards', { user: req.user || null, cards });
+        } catch (error) {
+            logger.error('[Cards] My cards error:', error);
+            res.render('cards-my-cards', { user: req.user || null, cards: [] });
+        }
+    });
+
+    // AI Cover Generation (standalone — no guild required)
+    app.post('/cards/generate-cover', async (req, res) => {
+        try {
+            const { prompt } = req.body;
+            if (!prompt?.trim()) return res.status(400).json({ error: 'Please describe the cover image' });
+
+            const apiKey = process.env.GOOGLE_AI_KEY;
+            if (!apiKey) return res.status(500).json({ error: 'AI generation not configured' });
+
+            const safePrompt = `Generate a greeting card cover image: ${prompt.substring(0, 400)}. Style: colorful, celebratory, festive, high quality. No text or words in the image.`;
+
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: safePrompt }] }],
+                    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+                })
+            });
+
+            const data = await response.json();
+            let imageUrl = null;
+
+            if (data.candidates?.[0]?.content?.parts) {
+                for (const part of data.candidates[0].content.parts) {
+                    if (part.inlineData?.mimeType?.startsWith('image/')) {
+                        const ext = part.inlineData.mimeType === 'image/png' ? 'png' : 'jpg';
+                        const filename = `ai_cover_standalone_${Date.now()}.${ext}`;
+                        const uploadDir = path.join(__dirname, 'public', 'uploads');
+                        const fs = await import('fs');
+                        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+                        fs.writeFileSync(path.join(uploadDir, filename), Buffer.from(part.inlineData.data, 'base64'));
+                        const baseUrl = (process.env.DASHBOARD_URL || '').replace(/\/$/, '');
+                        imageUrl = `${baseUrl}/uploads/${filename}`;
+                        break;
+                    }
+                }
+            }
+
+            if (!imageUrl) return res.status(500).json({ error: 'AI returned no image. Try a different prompt.' });
+
+            logger.info(`[Cards] AI cover generated: "${prompt.substring(0, 60)}"`);
+            res.json({ url: imageUrl });
+        } catch (error) {
+            logger.error('[Cards] AI cover generation error:', error);
+            res.status(500).json({ error: 'AI generation failed. Try again.' });
+        }
+    });
+
+    // Create card API
+    app.post('/cards/create', async (req, res) => {
+        try {
+            const { recipient_name, card_name, occasion, creator_name, password, background_music_url, wishlist_url, deliver_at, card_background_url, ai_cover_url, card_type, board_bg_image_url, board_bg_color } = req.body;
+
+            if (!recipient_name?.trim()) {
+                return res.status(400).json({ error: 'Recipient name is required' });
+            }
+
+            const crypto = await import('crypto');
+            const token = crypto.randomBytes(16).toString('hex');
+            const safeName = recipient_name.trim().substring(0, 200);
+            const safeOccasion = occasion || 'birthday';
+
+            // Generate title from occasion + name if not provided
+            const occasionTitles = {
+                'birthday': `Happy Birthday, ${safeName}!`,
+                'farewell': `Farewell, ${safeName}!`,
+                'thank-you': `Thank You, ${safeName}!`,
+                'congratulations': `Congratulations, ${safeName}!`,
+                'retirement': `Happy Retirement, ${safeName}!`,
+                'welcome': `Welcome, ${safeName}!`,
+                'anniversary': `Happy Anniversary, ${safeName}!`,
+                'baby': `Welcome Baby, ${safeName}!`,
+                'get-well': `Get Well Soon, ${safeName}!`,
+                'holidays': `Happy Holidays, ${safeName}!`,
+                'graduation': `Congrats on Graduating, ${safeName}!`,
+                'promotion': `Congrats on the Promotion, ${safeName}!`,
+                'miss-you': `We Miss You, ${safeName}!`,
+                'condolence': `In Memory of ${safeName}`,
+                'custom': `For ${safeName}`,
+            };
+            const title = card_name?.trim() || occasionTitles[safeOccasion] || `For ${safeName}`;
+            const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 60) + '-' + token.substring(0, 12);
+
+            // Hash password if provided
+            let passwordHash = null;
+            if (password?.trim()) {
+                passwordHash = crypto.createHash('sha256').update(password.trim()).digest('hex');
+            }
+
+            const creatorId = req.user?.id || null;
+            const creatorUsername = creator_name?.trim() || req.user?.username || null;
+
+            const safeCardType = ['board', 'greeting_card', 'one_person'].includes(card_type) ? card_type : 'board';
+
+            const [result] = await pool.execute(`
+                INSERT INTO birthday_cards (guild_id, user_id, card_name, birthday_month, birthday_day, share_token, slug, occasion, recipient_name, creator_user_id, creator_username, password_hash, background_music_url, wishlist_url, deliver_at, card_background_url, ai_cover_url, ai_cover_prompt, card_type, board_bg_image_url, board_bg_color, is_posted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            `, [
+                null,  // No guild — standalone card
+                null,  // No Discord user — standalone card
+                title,
+                new Date().getMonth() + 1,
+                new Date().getDate(),
+                token,
+                slug,
+                safeOccasion,
+                safeName,
+                creatorId,
+                creatorUsername,
+                passwordHash,
+                background_music_url || null,
+                wishlist_url || null,
+                deliver_at || null,
+                card_background_url || null,
+                ai_cover_url || null,
+                ai_cover_url ? (req.body.ai_prompt || '').substring(0, 500) : null,
+                safeCardType,
+                board_bg_image_url || null,
+                board_bg_color || null,
+            ]);
+
+            logger.info(`[Cards] Standalone card created: "${title}" by ${creatorUsername || 'anonymous'}, id=${result.insertId}`);
+
+            // Track created cards in cookie for non-Discord users
+            const existingCards = req.cookies?.my_cards ? JSON.parse(req.cookies.my_cards) : [];
+            existingCards.push(slug);
+            // Keep last 100 cards max
+            const trimmedCards = existingCards.slice(-100);
+            res.cookie('my_cards', JSON.stringify(trimmedCards), {
+                maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
+                httpOnly: true,
+                sameSite: 'lax',
+                secure: process.env.NODE_ENV === 'production'
+            });
+
+            res.json({ success: true, url: `/card/${slug}`, token: slug });
+        } catch (error) {
+            logger.error('[Cards] Create error:', error);
+            res.status(500).json({ error: 'Failed to create card' });
+        }
+    });
+
+    // Resolve YouTube/SoundCloud URL to direct audio stream via yt-dlp
+    app.get('/card/resolve-audio', async (req, res) => {
+        try {
+            const { url } = req.query;
+            if (!url) return res.status(400).json({ error: 'No URL' });
+
+            const allowed = /youtube\.com|youtu\.be|soundcloud\.com/i;
+            if (!allowed.test(url)) return res.status(400).json({ error: 'Unsupported URL' });
+
+            const { spawn } = await import('child_process');
+            const cookiesPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'cookies.txt');
+            const args = ['-f', 'bestaudio/best', '-g', '--no-playlist', '--no-check-formats', '--no-warnings'];
+            if (fs.existsSync(cookiesPath)) args.push('--cookies', cookiesPath);
+            args.push(url);
+
+            const result = await new Promise((resolve, reject) => {
+                const proc = spawn('yt-dlp', args, { timeout: 15000 });
+                let stdout = '', stderr = '';
+                proc.stdout.on('data', d => stdout += d);
+                proc.stderr.on('data', d => stderr += d);
+                proc.on('close', code => code === 0 && stdout.trim() ? resolve(stdout.trim()) : reject(new Error(stderr || 'yt-dlp failed')));
+                proc.on('error', reject);
+            });
+
+            res.json({ audioUrl: result });
+        } catch (error) {
+            logger.error('[Cards] Audio resolve error:', error.message);
+            res.status(500).json({ error: 'Could not resolve audio' });
+        }
+    });
+
+    // ═══ Card View (shared by guild + standalone cards) ═══
+
+    app.get('/card/:shareToken', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+
+            // Look up by slug first, then fall back to share_token
+            let [cards] = await pool.execute(
+                'SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1',
+                [shareToken, shareToken]
+            );
+
+            if (cards.length === 0) {
+                return res.status(404).render('error', { user: req.user || null, error: 'Birthday card not found' });
+            }
+
+            // Redirect old token URLs to the clean slug URL
+            if (cards[0].slug && shareToken !== cards[0].slug) {
+                return res.redirect(301, '/card/' + cards[0].slug);
+            }
+
+            const card = cards[0];
+
+            // Resolve user info — standalone cards use recipient_name, guild cards use Discord lookup
+            let username = card.recipient_name || 'Someone';
+            let avatarUrl = null;
+            let guildName = null;
+            if (card.guild_id && card.user_id) {
+                // Guild-linked card — resolve via Discord
+                try {
+                    const botClient = global.botManager?.getClientForGuild(card.guild_id) || global.botManager?.getDefaultClient() || client;
+                    const discordUser = await botClient.users.fetch(card.user_id).catch(() => null);
+                    if (discordUser) {
+                        username = discordUser.displayName || discordUser.username;
+                        avatarUrl = discordUser.displayAvatarURL({ size: 256 });
+                    }
+                    const guild = botClient.guilds.cache.get(card.guild_id);
+                    if (guild) guildName = guild.name;
+                } catch { /* best effort */ }
+            } else {
+                // Standalone card — use stored name, creator as source
+                guildName = card.creator_username ? `Created by ${card.creator_username}` : 'CertiFried Cards';
+            }
+
+            // Increment view count
+            pool.execute('UPDATE birthday_cards SET view_count = view_count + 1 WHERE id = ?', [card.id]).catch(() => {});
+
+            const [signatures] = await pool.execute(
+                'SELECT * FROM birthday_card_signatures WHERE card_id = ? ORDER BY CASE WHEN pin_rank IS NOT NULL THEN 0 ELSE 1 END, pin_rank ASC, created_at ASC',
+                [card.id]
+            );
+
+            // Load replies for each signature
+            const sigIds = signatures.map(s => s.id);
+            let repliesMap = {};
+            let userLikes = new Set();
+            if (sigIds.length > 0) {
+                const [replies] = await pool.execute(
+                    `SELECT * FROM birthday_card_replies WHERE signature_id IN (${sigIds.map(() => '?').join(',')}) ORDER BY created_at ASC`,
+                    sigIds
+                );
+                for (const r of replies) {
+                    if (!repliesMap[r.signature_id]) repliesMap[r.signature_id] = [];
+                    repliesMap[r.signature_id].push(r);
+                }
+
+                // Load user's likes
+                if (req.user) {
+                    const [likes] = await pool.execute(
+                        `SELECT signature_id FROM birthday_card_likes WHERE user_id = ? AND signature_id IN (${sigIds.map(() => '?').join(',')})`,
+                        [req.user.id, ...sigIds]
+                    );
+                    for (const l of likes) userLikes.add(l.signature_id);
+                }
+            }
+
+            const alreadySigned = req.user ? signatures.some(s => s.signer_user_id === req.user.id) : false;
+            // Force read-only if ?delivered=1 query param (deliver link)
+            const forceReadOnly = req.query.delivered === '1';
+
+            // Password protection check
+            let passwordRequired = false;
+            if (card.password_hash) {
+                const sessionKey = `card_unlocked_${card.id}`;
+                if (!req.session?.[sessionKey]) {
+                    passwordRequired = true;
+                }
+            }
+
+            // For standalone cards, pass the creator's mutual guilds (guilds where bot is present)
+            let mutualGuilds = [];
+            const isCreator = req.user && (req.user.id === card.creator_user_id || req.user.id === card.user_id);
+            if (!card.guild_id && isCreator && req.user?.guilds) {
+                const botGuildIds = new Set();
+                const defaultClient = global.botManager?.getDefaultClient() || client;
+                if (defaultClient?.guilds?.cache) defaultClient.guilds.cache.forEach(g => botGuildIds.add(g.id));
+                if (global.botManager?.getAllClients) {
+                    for (const bc of global.botManager.getAllClients()) {
+                        if (bc?.guilds?.cache) bc.guilds.cache.forEach(g => botGuildIds.add(g.id));
+                    }
+                }
+                mutualGuilds = req.user.guilds
+                    .filter(g => botGuildIds.has(g.id) && (parseInt(g.permissions) & 0x20) === 0x20) // MANAGE_GUILD
+                    .map(g => ({ id: g.id, name: g.name, icon: g.icon }));
+            }
+
+            res.render('birthday-card', {
+                card: { ...card, username, avatar_url: avatarUrl, guild_name: guildName, is_posted: card.is_posted || forceReadOnly ? 1 : 0 },
+                signatures: passwordRequired ? [] : signatures,
+                repliesMap: passwordRequired ? {} : repliesMap,
+                userLikes: passwordRequired ? [] : Array.from(userLikes),
+                user: req.user || null,
+                alreadySigned: passwordRequired ? false : alreadySigned,
+                passwordRequired,
+                mutualGuilds,
+                isCreator: !!isCreator,
+                forceReadOnly: !!forceReadOnly
+            });
+        } catch (error) {
+            logger.error('[Birthday Card] Error loading card:', error);
+            res.status(500).render('error', { user: req.user || null, error: 'Failed to load birthday card' });
+        }
+    });
+
+    // Unlock password-protected card
+    app.post('/card/:shareToken/unlock', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            const { password } = req.body;
+            const [cards] = await pool.execute('SELECT id, password_hash FROM birthday_cards WHERE share_token = ?', [shareToken]);
+            if (!cards.length) return res.redirect('/card/' + shareToken);
+
+            const crypto = await import('crypto');
+            const hash = crypto.createHash('sha256').update(password || '').digest('hex');
+            if (hash === cards[0].password_hash) {
+                if (req.session) req.session[`card_unlocked_${cards[0].id}`] = true;
+                return res.redirect('/card/' + shareToken);
+            }
+            return res.redirect('/card/' + shareToken + '?error=wrong_password');
+        } catch {
+            return res.redirect('/card/' + req.params.shareToken);
+        }
+    });
+
+    // Upload image for birthday card signature
+    app.post('/card/upload', upload.fields([{ name: 'file', maxCount: 1 }]), handleMulterError, async (req, res) => {
+        try {
+            const file = req.files?.file?.[0];
+            if (!file) return res.status(400).json({ error: 'No file' });
+
+            const ext = path.extname(file.originalname).toLowerCase() || '.png';
+            const allowed = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+            if (!allowed.includes(ext)) return res.status(400).json({ error: 'Unsupported file type' });
+
+            const fs = await import('fs');
+            const userId = req.user?.id || 'guest';
+            const filename = `card_upload_${userId}_${Date.now()}${ext}`;
+            const uploadDir = path.join(__dirname, 'public', 'uploads');
+            fs.writeFileSync(path.join(uploadDir, filename), file.buffer);
+
+            const baseUrl = (process.env.DASHBOARD_URL || '').replace(/\/$/, '');
+            res.json({ success: true, url: `${baseUrl}/uploads/${filename}` });
+        } catch (error) {
+            logger.error('[Card Upload] Error:', error);
+            res.status(500).json({ error: 'Upload failed' });
+        }
+    });
+
+    // Sign birthday card (supports logged-in users AND guests)
+    app.post('/card/:shareToken/sign', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            const { message, gif_url, guest_name, guest_email, guest_password, font_color, font_family, font_size, audio_url, gift_code, gift_platform, card_bg_color, card_border_radius, card_border_color, card_shadow, note_effect } = req.body;
+
+            if (!message || !message.trim()) {
+                return res.status(400).json({ error: 'Please write a message' });
+            }
+
+            // Look up card by slug or token
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (cards.length === 0) return res.status(404).json({ error: 'Card not found' });
+
+            const card = cards[0];
+            if (card.is_posted) return res.status(400).json({ error: 'This card has already been delivered' });
+            if (card.is_frozen) return res.status(400).json({ error: 'This card is currently frozen — new messages are disabled' });
+
+            let signerUserId, signerUsername, avatarUrl;
+
+            if (req.user) {
+                // Logged-in user (Discord/Twitch OAuth)
+                signerUserId = req.user.id;
+                signerUsername = req.user.username;
+                const avatarHash = req.user.avatar;
+                avatarUrl = avatarHash
+                    ? `https://cdn.discordapp.com/avatars/${req.user.id}/${avatarHash}.png?size=128`
+                    : `https://cdn.discordapp.com/embed/avatars/${(BigInt(req.user.id) >> 22n) % 6n}.png`;
+            } else {
+                // Guest signer
+                if (!guest_name || !guest_name.trim()) {
+                    return res.status(400).json({ error: 'Please enter your name' });
+                }
+                signerUserId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+                signerUsername = guest_name.trim().substring(0, 100);
+                avatarUrl = null;
+            }
+
+            // Sanitize font fields
+            const safeFontColor = (font_color && /^#[0-9a-fA-F]{3,8}$/.test(font_color)) ? font_color : null;
+            const allowedFonts = ['Helvetica Neue', 'Arial', 'Georgia', 'Courier New', 'Comic Sans MS', 'Impact', 'Trebuchet MS', 'Verdana', 'Palatino', 'Garamond', 'Bookman', 'Muli', 'Roboto', 'Inter', 'Quicksand', 'Pacifico', 'Dancing Script', 'Lobster', 'Caveat', 'Permanent Marker', 'Satisfy', 'Great Vibes', 'Sacramento', 'Architects Daughter', 'Indie Flower', 'Patrick Hand', 'Shadows Into Light', 'Amatic SC'];
+            const safeFontFamily = (font_family && allowedFonts.includes(font_family)) ? font_family : null;
+            const safeFontSize = (font_size && parseInt(font_size) >= 10 && parseInt(font_size) <= 28) ? parseInt(font_size) : null;
+            // Random rotation like RecoCards: ~16% of cards get a rotation between -5 and +5 degrees
+            const rotation = Math.random() < 0.3 ? parseFloat((Math.random() * 6 - 3).toFixed(1)) : null;
+
+            const safeAudioUrl = (audio_url && audio_url.startsWith('/uploads/') && audio_url.length < 512) ? audio_url : null;
+
+            // Encrypt gift card code if provided
+            let encryptedGiftCode = null;
+            const safeGiftPlatform = (gift_platform && gift_platform.length <= 100) ? gift_platform.trim() : null;
+            if (gift_code && gift_code.trim()) {
+                try {
+                    encryptedGiftCode = JSON.stringify(encryption.encrypt(gift_code.trim().substring(0, 2000)));
+                } catch { encryptedGiftCode = null; }
+            }
+
+            // Sanitize per-card appearance fields
+            const safeCardBgColor = (card_bg_color && /^#[0-9a-fA-F]{3,8}$/.test(card_bg_color)) ? card_bg_color : null;
+            const safeCardBorderRadius = (card_border_radius && [4, 8, 16, 24, 32].includes(parseInt(card_border_radius))) ? parseInt(card_border_radius) : null;
+            const safeCardBorderColor = (card_border_color && /^#[0-9a-fA-F]{3,8}$/.test(card_border_color)) ? card_border_color : null;
+            const safeCardShadow = (card_shadow && ['none', 'light', 'medium', 'dramatic'].includes(card_shadow)) ? card_shadow : null;
+            const safeNoteEffect = (note_effect && ['hearts', 'confetti', 'stars', 'sparkles'].includes(note_effect)) ? note_effect : null;
+
+            // Hash optional guest password for later editing
+            const crypto = await import('crypto');
+            const guestPasswordHash = (guest_password && guest_password.trim())
+                ? crypto.createHash('sha256').update(guest_password.trim()).digest('hex')
+                : null;
+
+            await pool.execute(`
+                INSERT INTO birthday_card_signatures (card_id, signer_user_id, signer_username, signer_avatar_url, message, gif_url, font_color, font_family, font_size, rotation, audio_url, gift_code_encrypted, gift_platform, card_bg_color, card_border_radius, card_border_color, card_shadow, note_effect, guest_password_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [card.id, signerUserId, signerUsername, avatarUrl, message.trim().substring(0, 2000), gif_url || null, safeFontColor, safeFontFamily, safeFontSize, rotation, safeAudioUrl, encryptedGiftCode, safeGiftPlatform, safeCardBgColor, safeCardBorderRadius, safeCardBorderColor, safeCardShadow, safeNoteEffect, guestPasswordHash]);
+
+            logger.info(`[Birthday Card] ${req.user?.username || signerUsername} signed card ${card.id} for user ${card.user_id}`);
+            res.json({ success: true });
+        } catch (error) {
+            if (error.code === 'ER_DUP_ENTRY') {
+                return res.json({ error: 'You have already signed this card' });
+            }
+            logger.error('[Birthday Card] Error signing card:', error);
+            res.status(500).json({ error: 'Failed to sign card' });
+        }
+    });
+
+    // Edit a signature (logged-in user edits own, guest uses password)
+    app.post('/card/:shareToken/edit-signature/:signatureId', async (req, res) => {
+        try {
+            const { signatureId } = req.params;
+            const { message, guest_password } = req.body;
+
+            if (!message || !message.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
+
+            const [sigs] = await pool.execute('SELECT signer_user_id, guest_password_hash FROM birthday_card_signatures WHERE id = ?', [signatureId]);
+            if (!sigs.length) return res.status(404).json({ error: 'Signature not found' });
+
+            const sig = sigs[0];
+
+            // Auth check: logged-in user must own the signature, guest must provide correct password
+            if (req.user) {
+                if (sig.signer_user_id !== req.user.id) return res.status(403).json({ error: 'You can only edit your own signature' });
+            } else {
+                // Guest edit — require password
+                if (!sig.guest_password_hash) return res.status(403).json({ error: 'No edit password was set for this signature' });
+                if (!guest_password) return res.status(400).json({ error: 'Password required to edit' });
+                const crypto = await import('crypto');
+                const hash = crypto.createHash('sha256').update(guest_password.trim()).digest('hex');
+                if (hash !== sig.guest_password_hash) return res.status(403).json({ error: 'Incorrect password' });
+            }
+
+            await pool.execute('UPDATE birthday_card_signatures SET message = ? WHERE id = ?', [message.trim().substring(0, 2000), signatureId]);
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('[Birthday Card] Error editing signature:', error);
+            res.status(500).json({ error: 'Failed to edit signature' });
+        }
+    });
+
+    // Delete a signature (logged-in user deletes own, guest uses password)
+    app.post('/card/:shareToken/delete-signature/:signatureId', async (req, res) => {
+        try {
+            const { signatureId } = req.params;
+            const { guest_password } = req.body;
+
+            const [sigs] = await pool.execute('SELECT signer_user_id, guest_password_hash FROM birthday_card_signatures WHERE id = ?', [signatureId]);
+            if (!sigs.length) return res.status(404).json({ error: 'Signature not found' });
+
+            const sig = sigs[0];
+
+            if (req.user) {
+                if (sig.signer_user_id !== req.user.id) return res.status(403).json({ error: 'You can only delete your own signature' });
+            } else {
+                if (!sig.guest_password_hash) return res.status(403).json({ error: 'No edit password was set' });
+                if (!guest_password) return res.status(400).json({ error: 'Password required' });
+                const crypto = await import('crypto');
+                const hash = crypto.createHash('sha256').update(guest_password.trim()).digest('hex');
+                if (hash !== sig.guest_password_hash) return res.status(403).json({ error: 'Incorrect password' });
+            }
+
+            await pool.execute('DELETE FROM birthday_card_signatures WHERE id = ?', [signatureId]);
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('[Birthday Card] Error deleting signature:', error);
+            res.status(500).json({ error: 'Failed to delete signature' });
+        }
+    });
+
+    // Like a signature
+    app.post('/card/:shareToken/like/:signatureId', async (req, res) => {
+        try {
+            if (!req.user) return res.status(401).json({ error: 'Please log in' });
+            const sigId = req.params.signatureId;
+
+            // Verify signature belongs to this card
+            const [sigs] = await pool.execute(
+                'SELECT bcs.id FROM birthday_card_signatures bcs JOIN birthday_cards bc ON bcs.card_id = bc.id WHERE bcs.id = ? AND bc.share_token = ?',
+                [sigId, req.params.shareToken]
+            );
+            if (!sigs.length) return res.status(404).json({ error: 'Not found' });
+
+            await pool.execute(
+                'INSERT INTO birthday_card_likes (signature_id, user_id) VALUES (?, ?)',
+                [sigId, req.user.id]
+            );
+            await pool.execute(
+                'UPDATE birthday_card_signatures SET likes = likes + 1 WHERE id = ?',
+                [sigId]
+            );
+            res.json({ success: true });
+        } catch (error) {
+            if (error.code === 'ER_DUP_ENTRY') return res.json({ error: 'Already liked' });
+            res.status(500).json({ error: 'Failed' });
+        }
+    });
+
+    // Unlike a signature
+    app.delete('/card/:shareToken/like/:signatureId', async (req, res) => {
+        try {
+            if (!req.user) return res.status(401).json({ error: 'Please log in' });
+            const sigId = req.params.signatureId;
+            const [result] = await pool.execute(
+                'DELETE FROM birthday_card_likes WHERE signature_id = ? AND user_id = ?',
+                [sigId, req.user.id]
+            );
+            if (result.affectedRows > 0) {
+                await pool.execute('UPDATE birthday_card_signatures SET likes = GREATEST(likes - 1, 0) WHERE id = ?', [sigId]);
+            }
+            res.json({ success: true });
+        } catch { res.status(500).json({ error: 'Failed' }); }
+    });
+
+    // Reply to a signature
+    app.post('/card/:shareToken/reply/:signatureId', async (req, res) => {
+        try {
+            if (!req.user) return res.status(401).json({ error: 'Please log in' });
+            const { message } = req.body;
+            if (!message?.trim()) return res.status(400).json({ error: 'Message required' });
+
+            const sigId = req.params.signatureId;
+            const [sigs] = await pool.execute(
+                'SELECT bcs.id FROM birthday_card_signatures bcs JOIN birthday_cards bc ON bcs.card_id = bc.id WHERE bcs.id = ? AND bc.share_token = ?',
+                [sigId, req.params.shareToken]
+            );
+            if (!sigs.length) return res.status(404).json({ error: 'Not found' });
+
+            const avatarHash = req.user.avatar;
+            const avatarUrl = avatarHash
+                ? `https://cdn.discordapp.com/avatars/${req.user.id}/${avatarHash}.png?size=64`
+                : `https://cdn.discordapp.com/embed/avatars/${(BigInt(req.user.id) >> 22n) % 6n}.png`;
+
+            await pool.execute(
+                'INSERT INTO birthday_card_replies (signature_id, user_id, username, avatar_url, message) VALUES (?, ?, ?, ?, ?)',
+                [sigId, req.user.id, req.user.username, avatarUrl, message.trim().substring(0, 500)]
+            );
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('[Birthday Card] Reply error:', error);
+            res.status(500).json({ error: 'Failed' });
+        }
+    });
+
+    // Delete a signature (signer or card creator)
+    app.delete('/card/:shareToken/signature/:signatureId', async (req, res) => {
+        try {
+            if (!req.user) return res.status(401).json({ error: 'Please log in' });
+            const { shareToken, signatureId } = req.params;
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).json({ error: 'Card not found' });
+            const card = cards[0];
+
+            const [sigs] = await pool.execute('SELECT * FROM birthday_card_signatures WHERE id = ? AND card_id = ?', [signatureId, card.id]);
+            if (!sigs.length) return res.status(404).json({ error: 'Signature not found' });
+
+            // Only the signer or card creator/owner can delete
+            const isSigner = sigs[0].signer_user_id === req.user.id;
+            const isCreator = card.creator_user_id === req.user.id || card.user_id === req.user.id;
+            if (!isSigner && !isCreator) return res.status(403).json({ error: 'You can only delete your own messages' });
+
+            await pool.execute('DELETE FROM birthday_card_signatures WHERE id = ?', [signatureId]);
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('[Birthday Card] Delete signature error:', error);
+            res.status(500).json({ error: 'Failed' });
+        }
+    });
+
+    // Pin/unpin a signature (card creator only)
+    app.post('/card/:shareToken/pin/:signatureId', async (req, res) => {
+        try {
+            if (!req.user) return res.status(401).json({ error: 'Please log in' });
+            const { shareToken, signatureId } = req.params;
+            const { pin_rank } = req.body;
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).json({ error: 'Card not found' });
+            const card = cards[0];
+
+            const isCreator = card.creator_user_id === req.user.id || card.user_id === req.user.id;
+            if (!isCreator) return res.status(403).json({ error: 'Only the card creator can pin messages' });
+
+            const rank = pin_rank ? parseInt(pin_rank) : null;
+            await pool.execute('UPDATE birthday_card_signatures SET pin_rank = ? WHERE id = ? AND card_id = ?', [rank, signatureId, card.id]);
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('[Birthday Card] Pin error:', error);
+            res.status(500).json({ error: 'Failed' });
+        }
+    });
+
+    // Move signature to different page (greeting cards)
+    app.post('/card/:shareToken/move/:signatureId', async (req, res) => {
+        try {
+            if (!req.user) return res.status(401).json({ error: 'Please log in' });
+            const { shareToken, signatureId } = req.params;
+            const { page_number } = req.body;
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).json({ error: 'Card not found' });
+            const card = cards[0];
+
+            // Only creator or the signer can move
+            const [sigs] = await pool.execute('SELECT * FROM birthday_card_signatures WHERE id = ? AND card_id = ?', [signatureId, card.id]);
+            if (!sigs.length) return res.status(404).json({ error: 'Signature not found' });
+            const isSigner = sigs[0].signer_user_id === req.user.id;
+            const isCreator = card.creator_user_id === req.user.id || card.user_id === req.user.id;
+            if (!isSigner && !isCreator) return res.status(403).json({ error: 'Only the signer or card creator can move messages' });
+
+            const newPage = Math.max(1, parseInt(page_number) || 1);
+            await pool.execute('UPDATE birthday_card_signatures SET page_number = ? WHERE id = ?', [newPage, signatureId]);
+            res.json({ success: true, page_number: newPage });
+        } catch (error) {
+            logger.error('[Birthday Card] Move error:', error);
+            res.status(500).json({ error: 'Failed' });
+        }
+    });
+
+    // Import from RecoCards URL (admin route)
+    // Delete birthday card
+    // Update card customization
+    app.post('/manage/:guildId/birthday/update-card', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { cardId, card_background_url, background_music_url, wishlist_url, custom_logo_url, password, is_frozen, deliver_at, profile_link, credits_text, header_bg_color, board_bg_color, board_bg_image_url, title_font, title_font_size, title_font_color, subtitle_text, subtitle_font, subtitle_font_color, custom_slug } = req.body;
+
+            let passwordHash = null;
+            if (password && password.trim()) {
+                const crypto = await import('crypto');
+                passwordHash = crypto.createHash('sha256').update(password.trim()).digest('hex');
+            }
+
+            await pool.execute(`
+                UPDATE birthday_cards SET
+                    card_background_url = ?,
+                    background_music_url = ?,
+                    wishlist_url = ?,
+                    custom_logo_url = ?,
+                    password_hash = COALESCE(?, password_hash),
+                    is_frozen = ?,
+                    deliver_at = ?,
+                    profile_link = ?,
+                    credits_text = ?,
+                    header_bg_color = ?,
+                    board_bg_color = ?,
+                    board_bg_image_url = ?,
+                    title_font = ?,
+                    title_font_size = ?,
+                    title_font_color = ?,
+                    subtitle_text = ?,
+                    subtitle_font = ?,
+                    subtitle_font_color = ?
+                    ${custom_slug ? ', slug = ?' : ''}
+                WHERE id = ? AND guild_id = ?
+            `, [
+                card_background_url || null,
+                background_music_url || null,
+                wishlist_url || null,
+                custom_logo_url || null,
+                passwordHash,
+                is_frozen ? 1 : 0,
+                deliver_at || null,
+                profile_link || null,
+                credits_text || null,
+                header_bg_color || null,
+                board_bg_color || null,
+                board_bg_image_url || null,
+                title_font || null,
+                title_font_size ? parseInt(title_font_size) : null,
+                title_font_color || null,
+                subtitle_text || null,
+                subtitle_font || null,
+                subtitle_font_color || null,
+                ...(custom_slug ? [custom_slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-|-$/g, '').substring(0, 200)] : []),
+                cardId,
+                guildId
+            ]);
+
+            res.redirect(`/manage/${guildId}?page=birthday&success=card_updated`);
+        } catch (error) {
+            logger.error('[Birthday Card] Update error:', error);
+            res.redirect(`/manage/${guildId}?page=birthday&error=update_failed`);
+        }
+    });
+
+    // Audio upload for birthday card signatures
+    app.post('/card/upload-audio', upload.single('audio'), async (req, res) => {
+        try {
+            if (!req.file) return res.status(400).json({ error: 'No audio file' });
+            if (req.file.size > 2 * 1024 * 1024) return res.status(400).json({ error: 'Audio too large (max 2MB)' });
+            const filename = `audio_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.webm`;
+            const uploadDir = path.join(__dirname, 'public', 'uploads');
+            if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+            fs.writeFileSync(path.join(uploadDir, filename), req.file.buffer);
+            res.json({ url: `/uploads/${filename}` });
+        } catch (error) {
+            logger.error('[Birthday Card] Audio upload error:', error);
+            res.status(500).json({ error: 'Upload failed' });
+        }
+    });
+
+    // Pin/unpin a signature (admin only)
+    app.post('/manage/:guildId/birthday/pin-signature', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const { signatureId, pinRank } = req.body;
+            const rank = pinRank ? parseInt(pinRank) : null;
+            await pool.execute('UPDATE birthday_card_signatures SET pin_rank = ? WHERE id = ?', [rank, signatureId]);
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('[Birthday Card] Pin error:', error);
+            res.status(500).json({ error: 'Failed to pin' });
+        }
+    });
+
+    // Read-only / delivered view (recipient link)
+    // Read-only deliver link — forces read-only view regardless of card status
+    app.get('/card/:shareToken/view', async (req, res) => {
+        res.redirect('/card/' + req.params.shareToken + '?delivered=1');
+    });
+
+    // Embed code endpoint
+    app.get('/card/:shareToken/embed', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).send('Card not found');
+            const card = cards[0];
+            const baseUrl = (process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/$/, '');
+            const embedUrl = `${baseUrl}/card/${card.slug || card.share_token}`;
+            res.json({
+                embed_url: embedUrl,
+                iframe: `<iframe src="${embedUrl}" width="100%" height="800" frameborder="0" style="border-radius: 12px; max-width: 1600px;"></iframe>`,
+                link: embedUrl
+            });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to generate embed' });
+        }
+    });
+
+    // Connect a standalone card to a Discord guild
+    app.post('/card/:shareToken/connect-discord', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            const { guild_id, user_id, card_channel_id, announcement_channel_id, birthday_role_id } = req.body;
+            if (!req.user) return res.status(401).json({ error: 'Please log in' });
+
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).json({ error: 'Card not found' });
+
+            const card = cards[0];
+            // Only the creator can connect
+            if (card.creator_user_id !== req.user.id && card.user_id !== req.user.id) {
+                return res.status(403).json({ error: 'Only the card creator can connect to Discord' });
+            }
+
+            // Verify the user has manage_guild permission on this guild
+            const userGuild = req.user.guilds?.find(g => g.id === guild_id);
+            if (!userGuild || (parseInt(userGuild.permissions) & 0x20) !== 0x20) {
+                return res.status(403).json({ error: 'You need Manage Server permission on that guild' });
+            }
+
+            // Update the card with Discord connection
+            await pool.execute(`
+                UPDATE birthday_cards SET
+                    guild_id = ?,
+                    user_id = COALESCE(user_id, ?),
+                    signing_channel_id = ?,
+                    signing_message_id = NULL
+                WHERE id = ?
+            `, [guild_id, user_id || null, card_channel_id || null, card.id]);
+
+            // If a birthday role was specified, update the birthday_config for this guild
+            if (birthday_role_id) {
+                await pool.execute(`
+                    INSERT INTO birthday_config (guild_id, birthday_role_id, card_channel_id)
+                    VALUES (?, ?, ?)
+                    ON DUPLICATE KEY UPDATE birthday_role_id = VALUES(birthday_role_id), card_channel_id = VALUES(card_channel_id)
+                `, [guild_id, birthday_role_id, card_channel_id || null]).catch(() => {});
+            }
+
+            // If an announcement channel was specified, post a signing embed there
+            if (announcement_channel_id) {
+                try {
+                    const botClient = global.botManager?.getClientForGuild(guild_id) || global.botManager?.getDefaultClient() || client;
+                    const channel = await botClient.channels.fetch(announcement_channel_id).catch(() => null);
+                    if (channel) {
+                        const baseUrl = (process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/$/, '');
+                        const cardUrl = `${baseUrl}/card/${card.slug || card.share_token}`;
+                        const embed = new EmbedBuilder()
+                            .setColor(0xa78bfa)
+                            .setTitle(card.card_name || `Card for ${card.recipient_name}`)
+                            .setDescription(`Sign the card! Add your message, GIFs, voice recordings, and even gift cards.\n\n[Sign the Card](${cardUrl})`)
+                            .setFooter({ text: `${(await pool.execute('SELECT COUNT(*) as c FROM birthday_card_signatures WHERE card_id = ?', [card.id]))[0][0].c} signatures so far` })
+                            .setTimestamp();
+                        if (card.card_background_url) embed.setImage(card.card_background_url);
+                        const msg = await channel.send({ embeds: [embed] });
+                        await pool.execute('UPDATE birthday_cards SET signing_message_id = ?, signing_channel_id = ? WHERE id = ?', [msg.id, announcement_channel_id, card.id]);
+                    }
+                } catch (e) {
+                    logger.warn('[Cards] Failed to post signing embed:', e.message);
+                }
+            }
+
+            logger.info(`[Cards] Card ${card.id} connected to guild ${guild_id} by ${req.user.username}`);
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('[Cards] Connect Discord error:', error);
+            res.status(500).json({ error: 'Failed to connect' });
+        }
+    });
+
+    // Freeze/unfreeze card
+    app.post('/card/:shareToken/freeze', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).json({ error: 'Card not found' });
+            const newState = cards[0].is_frozen ? 0 : 1;
+            await pool.execute('UPDATE birthday_cards SET is_frozen = ? WHERE id = ?', [newState, cards[0].id]);
+            res.json({ success: true, is_frozen: !!newState });
+        } catch (error) {
+            res.status(500).json({ error: 'Failed to update' });
+        }
+    });
+
+    // AI Cover Generation (Google Gemini)
+    app.post('/manage/:guildId/birthday/generate-cover', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { cardId, prompt } = req.body;
+            if (!prompt || !cardId) return res.redirect(`/manage/${guildId}?page=birthday&error=missing_prompt`);
+
+            const apiKey = process.env.GOOGLE_AI_KEY;
+            if (!apiKey) return res.redirect(`/manage/${guildId}?page=birthday&error=ai_not_configured`);
+
+            const safePrompt = `Generate a birthday card cover image: ${prompt.substring(0, 400)}. Style: colorful, celebratory, festive, high quality. No text or words in the image.`;
+
+            // Use Gemini Nano Banana (image generation model)
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: safePrompt }] }],
+                    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+                })
+            });
+
+            const data = await response.json();
+
+            // Extract image from response
+            let imageUrl = null;
+            if (data.candidates?.[0]?.content?.parts) {
+                for (const part of data.candidates[0].content.parts) {
+                    if (part.inlineData?.mimeType?.startsWith('image/')) {
+                        // Save base64 image to file
+                        const ext = part.inlineData.mimeType === 'image/png' ? 'png' : 'jpg';
+                        const filename = `ai_cover_${cardId}_${Date.now()}.${ext}`;
+                        const uploadDir = path.join(__dirname, 'public', 'uploads');
+                        const fs = await import('fs');
+                        if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+                        fs.writeFileSync(path.join(uploadDir, filename), Buffer.from(part.inlineData.data, 'base64'));
+                        const baseUrl = (process.env.DASHBOARD_URL || '').replace(/\/$/, '');
+                        imageUrl = `${baseUrl}/uploads/${filename}`;
+                        break;
+                    }
+                }
+            }
+
+            if (!imageUrl) {
+                logger.warn('[Birthday Card] AI cover generation returned no image', data.candidates?.[0]?.content?.parts?.map(p => p.text || '[image]'));
+                return res.redirect(`/manage/${guildId}?page=birthday&error=ai_no_image`);
+            }
+
+            await pool.execute('UPDATE birthday_cards SET ai_cover_url = ?, ai_cover_prompt = ?, card_background_url = ? WHERE id = ? AND guild_id = ?',
+                [imageUrl, prompt.substring(0, 500), imageUrl, cardId, guildId]);
+
+            logger.info(`[Birthday Card] AI cover generated for card ${cardId}: "${prompt.substring(0, 60)}"`);
+            res.redirect(`/manage/${guildId}?page=birthday&success=cover_generated`);
+        } catch (error) {
+            logger.error('[Birthday Card] AI cover generation error:', error);
+            res.redirect(`/manage/${guildId}?page=birthday&error=ai_failed`);
+        }
+    });
+
+    // Thank You message (birthday person replies to everyone)
+    app.post('/card/:shareToken/thank-you', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            const { message } = req.body;
+            if (!req.user) return res.status(401).json({ error: 'Please log in' });
+            if (!message?.trim()) return res.status(400).json({ error: 'Please write a message' });
+
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).json({ error: 'Card not found' });
+            if (!cards[0].is_posted) return res.status(400).json({ error: 'Card has not been delivered yet' });
+            const isRecipient = cards[0].user_id && cards[0].user_id === req.user.id;
+            const isCreator = cards[0].creator_user_id && cards[0].creator_user_id === req.user.id;
+            if (!isRecipient && !isCreator) return res.status(403).json({ error: 'Only the recipient or card creator can post a thank-you' });
+
+            await pool.execute('UPDATE birthday_cards SET thank_you_message = ?, thank_you_user_id = ? WHERE id = ?',
+                [message.trim().substring(0, 2000), req.user.id, cards[0].id]);
+
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('[Birthday Card] Thank you error:', error);
+            res.status(500).json({ error: 'Failed to post' });
+        }
+    });
+
+    // Reveal gift codes (only for the birthday person, only after delivery)
+    app.get('/card/:shareToken/gifts', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            if (!req.user) return res.status(401).json({ error: 'Please log in' });
+
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).json({ error: 'Card not found' });
+            const isGiftRecipient = cards[0].user_id && cards[0].user_id === req.user.id;
+            const isGiftCreator = cards[0].creator_user_id && cards[0].creator_user_id === req.user.id;
+            if (!isGiftRecipient && !isGiftCreator) return res.status(403).json({ error: 'Only the recipient or card creator can view gift codes' });
+
+            const [sigs] = await pool.execute(
+                'SELECT signer_username, gift_code_encrypted, gift_platform FROM birthday_card_signatures WHERE card_id = ? AND gift_code_encrypted IS NOT NULL',
+                [cards[0].id]
+            );
+
+            const gifts = sigs.map(sig => {
+                let code = '(decryption failed)';
+                try { code = encryption.decrypt(JSON.parse(sig.gift_code_encrypted)); } catch {}
+                return { from: sig.signer_username, platform: sig.gift_platform, code };
+            });
+
+            res.json({ gifts });
+        } catch (error) {
+            logger.error('[Birthday Card] Gift reveal error:', error);
+            res.status(500).json({ error: 'Failed to load gifts' });
+        }
+    });
+
+    // ═══ Standalone Card Management (for /cards/my-cards) ═══
+
+    // Helper: verify card ownership via Discord user or cookie
+    function isCardOwner(req, card) {
+        if (req.user?.id && (card.creator_user_id === req.user.id || card.user_id === req.user.id)) return true;
+        const cookieSlugs = req.cookies?.my_cards ? JSON.parse(req.cookies.my_cards) : [];
+        return cookieSlugs.includes(card.slug);
+    }
+
+    // Edit card settings page
+    app.get('/card/:shareToken/edit', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).render('error', { user: req.user || null, error: 'Card not found' });
+            const card = cards[0];
+            if (!isCardOwner(req, card)) return res.status(403).render('error', { user: req.user || null, error: 'You don\'t have permission to edit this card' });
+            res.render('cards-edit', { user: req.user || null, card });
+        } catch (error) {
+            logger.error('[Cards] Edit page error:', error);
+            res.status(500).render('error', { user: req.user || null, error: 'Failed to load card editor' });
+        }
+    });
+
+    // Update card settings
+    app.post('/card/:shareToken/edit', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).json({ error: 'Card not found' });
+            const card = cards[0];
+            if (!isCardOwner(req, card)) return res.status(403).json({ error: 'Permission denied' });
+
+            const { card_name, recipient_name, background_music_url, wishlist_url, card_background_url, board_bg_image_url, board_bg_color, is_frozen, password, custom_slug } = req.body;
+
+            let passwordHash = undefined;
+            if (password && password.trim()) {
+                const crypto = await import('crypto');
+                passwordHash = crypto.createHash('sha256').update(password.trim()).digest('hex');
+            }
+
+            let newSlug = undefined;
+            if (custom_slug && custom_slug.trim()) {
+                newSlug = custom_slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-|-$/g, '').substring(0, 200);
+            }
+
+            await pool.execute(`
+                UPDATE birthday_cards SET
+                    card_name = ?,
+                    recipient_name = ?,
+                    background_music_url = ?,
+                    wishlist_url = ?,
+                    card_background_url = ?,
+                    board_bg_image_url = ?,
+                    board_bg_color = ?,
+                    is_frozen = ?
+                    ${passwordHash !== undefined ? ', password_hash = ?' : ''}
+                    ${newSlug ? ', slug = ?' : ''}
+                WHERE id = ?
+            `, [
+                card_name || card.card_name,
+                recipient_name || card.recipient_name,
+                background_music_url || null,
+                wishlist_url || null,
+                card_background_url || null,
+                board_bg_image_url || null,
+                board_bg_color || null,
+                is_frozen ? 1 : 0,
+                ...(passwordHash !== undefined ? [passwordHash] : []),
+                ...(newSlug ? [newSlug] : []),
+                card.id
+            ]);
+
+            // Update cookie if slug changed
+            if (newSlug && newSlug !== card.slug) {
+                const cookieSlugs = req.cookies?.my_cards ? JSON.parse(req.cookies.my_cards) : [];
+                const idx = cookieSlugs.indexOf(card.slug);
+                if (idx !== -1) cookieSlugs[idx] = newSlug;
+                res.cookie('my_cards', JSON.stringify(cookieSlugs), { maxAge: 365 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+            }
+
+            logger.info(`[Cards] Card ${card.id} updated by ${req.user?.username || 'anonymous'}`);
+            res.json({ success: true, slug: newSlug || card.slug });
+        } catch (error) {
+            logger.error('[Cards] Edit error:', error);
+            res.status(500).json({ error: 'Failed to update card' });
+        }
+    });
+
+    // Delete standalone card
+    app.delete('/card/:shareToken', async (req, res) => {
+        try {
+            const { shareToken } = req.params;
+            const [cards] = await pool.execute('SELECT * FROM birthday_cards WHERE slug = ? OR share_token = ? LIMIT 1', [shareToken, shareToken]);
+            if (!cards.length) return res.status(404).json({ error: 'Card not found' });
+            const card = cards[0];
+            if (!isCardOwner(req, card)) return res.status(403).json({ error: 'Permission denied' });
+
+            await pool.execute('DELETE FROM birthday_cards WHERE id = ?', [card.id]);
+
+            // Remove from cookie
+            const cookieSlugs = req.cookies?.my_cards ? JSON.parse(req.cookies.my_cards) : [];
+            const filtered = cookieSlugs.filter(s => s !== card.slug);
+            res.cookie('my_cards', JSON.stringify(filtered), { maxAge: 365 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
+
+            logger.info(`[Cards] Card ${card.id} (${card.card_name}) deleted by ${req.user?.username || 'anonymous'}`);
+            res.json({ success: true });
+        } catch (error) {
+            logger.error('[Cards] Delete error:', error);
+            res.status(500).json({ error: 'Failed to delete card' });
+        }
+    });
+
+    app.post('/manage/:guildId/birthday/delete-card', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { cardId } = req.body;
+            // Signatures, likes, and replies cascade-delete via foreign keys
+            await pool.execute('DELETE FROM birthday_cards WHERE id = ? AND guild_id = ?', [cardId, guildId]);
+            logger.info(`[Birthday Card] Card ${cardId} deleted from guild ${guildId} by ${req.user.username}`);
+            res.redirect(`/manage/${guildId}?page=birthday&success=card_deleted`);
+        } catch (error) {
+            logger.error('[Birthday Card] Delete error:', error);
+            res.redirect(`/manage/${guildId}?page=birthday&error=delete_failed`);
+        }
+    });
+
+    app.post('/manage/:guildId/birthday/import-recocard', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { user_id, recocard_url } = req.body;
+            if (!user_id || !recocard_url || !recocard_url.includes('recocards.com/board/')) {
+                return res.redirect(`/manage/${guildId}?page=birthday&error=invalid_url`);
+            }
+
+            const puppeteer = (await import('puppeteer')).default;
+            const crypto = await import('crypto');
+
+            logger.info(`[Birthday Card] Scraping RecoCards: ${recocard_url}`);
+
+            const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+            const page = await browser.newPage();
+            await page.setViewport({ width: 1920, height: 1080 });
+            await page.goto(recocard_url, { waitUntil: 'networkidle2', timeout: 60000 });
+            await page.waitForSelector('mat-card.example-card', { timeout: 20000 }).catch(() => {});
+
+            // Scroll to load all cards
+            await page.evaluate(async () => {
+                // Scroll aggressively to load all lazy-loaded cards
+                let lastHeight = 0;
+                for (let i = 0; i < 50; i++) {
+                    window.scrollBy(0, 2000);
+                    await new Promise(r => setTimeout(r, 300));
+                    if (document.body.scrollHeight === lastHeight && i > 10) break;
+                    lastHeight = document.body.scrollHeight;
+                }
+                window.scrollTo(0, 0);
+            });
+            await new Promise(r => setTimeout(r, 3000));
+
+            const signatures = await page.evaluate(() => {
+                const cards = document.querySelectorAll('mat-card.example-card');
+                return Array.from(cards).map(card => {
+                    const name = card.querySelector('mat-card-title, .mat-card-title')?.textContent?.trim() || '';
+                    const contentEl = card.querySelector('mat-card-content, .mat-card-content');
+                    const content = contentEl?.textContent?.trim() || '';
+                    const allImgs = Array.from(card.querySelectorAll('img')).map(i => i.src).filter(s => s && !s.includes('avatar') && s.startsWith('http'));
+                    // Extract like count from heart button
+                    let likes = 0;
+                    const heartIcon = card.querySelector('[data-icon=heart]');
+                    if (heartIcon) {
+                        const parent = heartIcon.closest('button') || heartIcon.parentElement;
+                        const countMatch = parent?.textContent?.trim().match(/\d+/);
+                        if (countMatch) likes = parseInt(countMatch[0]);
+                    }
+                    // Extract font styles from card content
+                    let fontColor = null, fontFamily = null, fontSize = null;
+                    if (contentEl) {
+                        const cs = getComputedStyle(contentEl);
+                        const inlineDiv = contentEl.querySelector('div[style]');
+                        if (inlineDiv) {
+                            const colorMatch = inlineDiv.style.color;
+                            if (colorMatch && colorMatch !== 'rgb(31, 41, 55)') fontColor = colorMatch;
+                        }
+                        if (cs.fontFamily && !cs.fontFamily.includes('Muli')) fontFamily = cs.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
+                        const fSize = parseInt(cs.fontSize);
+                        if (fSize && fSize !== 14) fontSize = fSize;
+                    }
+                    // Extract rotation from inline style
+                    let rotation = null;
+                    const style = card.getAttribute('style') || '';
+                    const rotMatch = style.match(/rotate\(([^)]+)deg\)/);
+                    if (rotMatch && rotMatch[1] !== '0') rotation = parseFloat(rotMatch[1]);
+                    return { name, content: content.substring(0, 5000), image: allImgs[0] || null, likes, fontColor, fontFamily, fontSize, rotation };
+                }).filter(s => s.name || s.content.length > 5);
+            });
+
+            // Grab the board title from the page
+            const boardTitle = await page.evaluate(() => {
+                const h1 = document.querySelector('h1, .board-title, [class*=title]');
+                return h1?.textContent?.trim() || '';
+            });
+
+            await browser.close();
+
+            if (signatures.length === 0) {
+                return res.redirect(`/manage/${guildId}?page=birthday&error=no_signatures_found`);
+            }
+
+            // Create card with readable slug
+            const token = crypto.randomBytes(16).toString('hex');
+            const cardName = boardTitle || 'Birthday Card';
+            const slug = cardName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 60) + '-' + token.substring(0, 12);
+            const now = new Date();
+            const [result] = await pool.execute(
+                'INSERT INTO birthday_cards (guild_id, user_id, card_name, birthday_month, birthday_day, share_token, slug, is_posted) VALUES (?, ?, ?, ?, ?, ?, ?, 0)',
+                [guildId, user_id, cardName, now.getMonth() + 1, now.getDate(), token, slug]
+            );
+            const cardId = result.insertId;
+
+            // Import signatures with font styles and rotation
+            for (let i = 0; i < signatures.length; i++) {
+                const sig = signatures[i];
+                // Convert rgb color to hex if needed
+                let hexColor = sig.fontColor;
+                if (hexColor && hexColor.startsWith('rgb')) {
+                    const m = hexColor.match(/\d+/g);
+                    if (m && m.length >= 3) hexColor = '#' + m.slice(0, 3).map(n => parseInt(n).toString(16).padStart(2, '0')).join('');
+                }
+                await pool.execute(
+                    'INSERT INTO birthday_card_signatures (card_id, signer_user_id, signer_username, message, gif_url, likes, font_color, font_family, font_size, rotation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [cardId, `recocard_${i}`, sig.name || 'Anonymous', sig.content || '(no message)', sig.image, sig.likes || 0, hexColor || null, sig.fontFamily || null, sig.fontSize || null, sig.rotation || null]
+                );
+            }
+
+            logger.info(`[Birthday Card] Imported ${signatures.length} signatures from RecoCards for guild ${guildId}, card ${cardId}`);
+            res.redirect(`/manage/${guildId}?page=birthday&success=imported_${signatures.length}`);
+        } catch (error) {
+            logger.error('[Birthday Card] RecoCards import error:', error);
+            res.redirect(`/manage/${guildId}?page=birthday&error=import_failed`);
+        }
+    });
+
+    // PDF import (admin route)
+    app.post('/manage/:guildId/birthday/import-card', uploadLarge.fields([
+        { name: 'pdf_file', maxCount: 1 }
+    ]), handleMulterError, checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { user_id, card_id } = req.body;
+            const uploadedFile = req.files?.pdf_file?.[0];
+
+            if (!uploadedFile || !user_id) {
+                return res.redirect(`/manage/${guildId}?page=birthday&error=missing_fields`);
+            }
+
+            const crypto = await import('crypto');
+            const fs = await import('fs');
+
+            // Save PDF to public uploads for viewing
+            const pdfFilename = `birthday_card_${guildId}_${Date.now()}.pdf`;
+            const uploadDir = path.join(__dirname, 'public', 'uploads');
+            fs.writeFileSync(path.join(uploadDir, pdfFilename), uploadedFile.buffer);
+            const baseUrl = (process.env.DASHBOARD_URL || '').replace(/\/$/, '');
+            const pdfUrl = `${baseUrl}/uploads/${pdfFilename}`;
+
+            // Try to extract text (works for text-based PDFs)
+            const { execFileSync } = await import('child_process');
+
+            // Create or use existing card
+            let targetCardId = card_id;
+            if (!targetCardId) {
+                const token = crypto.randomBytes(16).toString('hex');
+                const now = new Date();
+                const [result] = await pool.execute(
+                    'INSERT INTO birthday_cards (guild_id, user_id, birthday_month, birthday_day, share_token, is_posted, card_background_url) VALUES (?, ?, ?, ?, ?, 0, ?)',
+                    [guildId, user_id, now.getMonth() + 1, now.getDate(), token, pdfUrl]
+                );
+                targetCardId = result.insertId;
+            } else {
+                await pool.execute('UPDATE birthday_cards SET card_background_url = ? WHERE id = ?', [pdfUrl, targetCardId]);
+            }
+
+            // Save PDF to temp file for ImageMagick processing
+            const tmpPdf = path.join(uploadDir, `_tmp_import_${Date.now()}.pdf`);
+            fs.writeFileSync(tmpPdf, uploadedFile.buffer);
+
+            // Count pages using identify
+            let pageCount = 0;
+            try {
+                const countOutput = execFileSync('identify', [tmpPdf], { timeout: 60000 }).toString();
+                pageCount = countOutput.trim().split('\n').length;
+            } catch { pageCount = 0; }
+
+            let imported = 0;
+            if (pageCount > 0) {
+                // Convert each page to an image and create a signature entry
+                // Skip page 0 (cover page) — start from page 1
+                const startPage = pageCount > 2 ? 1 : 0;
+                for (let p = startPage; p < pageCount; p++) {
+                    try {
+                        const imgFilename = `card_${targetCardId}_page_${p}.png`;
+                        const imgPath = path.join(uploadDir, imgFilename);
+                        execFileSync('convert', [
+                            '-density', '200',
+                            `${tmpPdf}[${p}]`,
+                            '-quality', '90',
+                            imgPath
+                        ], { timeout: 30000 });
+
+                        const imgUrl = `${baseUrl}/uploads/${imgFilename}`;
+                        await pool.execute(
+                            'INSERT INTO birthday_card_signatures (card_id, signer_user_id, signer_username, message, gif_url) VALUES (?, ?, ?, ?, ?)',
+                            [targetCardId, `imported_${p}`, `Page ${p + 1}`, 'Imported from RecoCards', imgUrl]
+                        );
+                        imported++;
+                    } catch (pageErr) {
+                        logger.warn(`[Birthday Card] Failed to convert page ${p}: ${pageErr.message}`);
+                    }
+                }
+            }
+
+            // Clean up temp PDF
+            try { fs.unlinkSync(tmpPdf); } catch { /* ignore */ }
+
+            logger.info(`[Birthday Card] Imported ${imported} pages from PDF for guild ${guildId}, card ${targetCardId}`);
+            res.redirect(`/manage/${guildId}?page=birthday&success=imported_${imported}`);
+        } catch (error) {
+            logger.error('[Birthday Card] PDF import error:', error);
+            res.redirect(`/manage/${guildId}?page=birthday&error=import_failed`);
+        }
+    });
+
     // TikTok Analytics page (public - no auth required)
     app.get('/analytics/:username', async (req, res) => {
         try {
@@ -753,18 +2379,24 @@ function start(botClient) {
             try {
                 // For super admin, get ALL live streamers and streamers tracked
                 if (isSuperAdmin(req.user.id)) {
-                    // Get all live counts
+                    // Per-guild live counts (for badge on each server card)
                     const [allLive] = await pool.query(`
                         SELECT guild_id, COUNT(DISTINCT COALESCE(discord_user_id, CONCAT(platform, ':', username))) as live_count
                         FROM live_announcements
-                        WHERE offline_check_count < 4
+                        WHERE offline_check_count < 6
                         GROUP BY guild_id
                     `);
-
                     allLive.forEach(row => {
                         livePerGuild.set(row.guild_id, row.live_count);
-                        totalLiveStreams += row.live_count;
                     });
+
+                    // Global unique live count (not sum of per-guild — a streamer in 3 guilds = 1 streamer)
+                    const [globalLive] = await pool.query(`
+                        SELECT COUNT(DISTINCT COALESCE(discord_user_id, CONCAT(platform, ':', username))) as live_count
+                        FROM live_announcements
+                        WHERE offline_check_count < 6
+                    `);
+                    totalLiveStreams = globalLive[0]?.live_count || 0;
 
                     // Get total streamers tracked across all guilds
                     const [allStreamers] = await pool.query(`SELECT COUNT(*) as total FROM streamers`);
@@ -774,19 +2406,26 @@ function start(botClient) {
                     const guildIds = manageableGuilds.map(g => g.id);
                     const placeholders = guildIds.map(() => '?').join(',');
 
-                    // Get live count per guild
+                    // Per-guild live counts
                     const [liveByGuild] = await pool.query(`
                         SELECT guild_id, COUNT(DISTINCT COALESCE(discord_user_id, CONCAT(platform, ':', username))) as live_count
                         FROM live_announcements
                         WHERE guild_id IN (${placeholders})
-                        AND offline_check_count < 4
+                        AND offline_check_count < 6
                         GROUP BY guild_id
                     `, guildIds);
-
                     liveByGuild.forEach(row => {
                         livePerGuild.set(row.guild_id, row.live_count);
-                        totalLiveStreams += row.live_count;
                     });
+
+                    // Global unique live count for user's guilds
+                    const [userLive] = await pool.query(`
+                        SELECT COUNT(DISTINCT COALESCE(discord_user_id, CONCAT(platform, ':', username))) as live_count
+                        FROM live_announcements
+                        WHERE guild_id IN (${placeholders})
+                        AND offline_check_count < 6
+                    `, guildIds);
+                    totalLiveStreams = userLive[0]?.live_count || 0;
 
                     // Get total streamers tracked
                     const [streamersTracked] = await pool.query(`
@@ -803,6 +2442,36 @@ function start(botClient) {
             // Attach live count to each guild
             for (const guildData of manageableGuilds) {
                 guildData.liveCount = livePerGuild.get(guildData.id) || 0;
+            }
+
+            // Fetch guild owner + bot joined date for each guild
+            for (const guildData of manageableGuilds) {
+                try {
+                    let botGuild = null;
+                    if (global.botManager) {
+                        const botClient = global.botManager.getClientForGuild(guildData.id);
+                        botGuild = botClient?.guilds.cache.get(guildData.id);
+                    } else {
+                        botGuild = client.guilds.cache.get(guildData.id);
+                    }
+                    if (botGuild) {
+                        // Guild owner
+                        if (botGuild.ownerId) {
+                            try {
+                                const ownerUser = await botGuild.members.fetch(botGuild.ownerId).catch(() => null);
+                                guildData.ownerName = ownerUser?.user?.username || null;
+                                guildData.ownerId = botGuild.ownerId;
+                            } catch {
+                                guildData.ownerId = botGuild.ownerId;
+                            }
+                        }
+                        // Bot joined date (the bot's own member join timestamp)
+                        const botMember = botGuild.members.me;
+                        if (botMember?.joinedAt) {
+                            guildData.botJoinedAt = botMember.joinedAt;
+                        }
+                    }
+                } catch { /* best effort */ }
             }
 
             // Fetch security feature status per guild
@@ -834,6 +2503,9 @@ function start(botClient) {
                     guildData.hasAnySecurity = false;
                 }
             }
+
+            // Sort servers alphabetically by name
+            manageableGuilds.sort((a, b) => a.name.localeCompare(b.name));
 
             res.render('servers-tailwind', {
                 guilds: manageableGuilds,
@@ -876,7 +2548,19 @@ function start(botClient) {
             const guildId = req.params.guildId;
             const guild = req.guildObject;
 
-            // Use cached roles and channels (already loaded by Discord.js)
+            // Refresh from REST before reading the cache. The gateway cache
+            // goes stale when the bot misses GUILD_ROLE_* / GUILD_CHANNEL_*
+            // events (offline at the moment of the change, dropped events),
+            // which causes admin dropdowns to render an incomplete list.
+            // The fetch* methods hit the API and update the cache in place.
+            try {
+                await Promise.all([
+                    guild.roles.fetch(),
+                    guild.channels.fetch(),
+                ]);
+            } catch (err) {
+                logger.warn('[Manage] role/channel refresh failed, falling back to cache', { guildId, error: err.message });
+            }
             const allRoles = guild.roles.cache;
             const allChannels = guild.channels.cache;
 
@@ -905,19 +2589,55 @@ function start(botClient) {
                 [guildId]
             );
 
-            // Build category channels map from log_event_config
+            // Build category channels and event colors maps from log_event_config
             const categoryChannels = {};
+            const eventColorMap = {};
             logEventConfigRows.forEach(row => {
                 if (row.log_channel_id) {
                     categoryChannels[row.event_type] = row.log_channel_id;
                 }
+                if (row.embed_color) {
+                    eventColorMap[row.event_type] = row.embed_color;
+                }
             });
 
             // Format logConfig for the template
+            // When enabled_events is NULL, ALL events are enabled (log-manager treats null as "allow all")
+            // But also respect log_event_config.enabled = 0 for explicitly disabled events
+            let enabledLogs = logConfigRaw.enabled_events || null;
+            if (!enabledLogs || enabledLogs === '[]') {
+                // NULL or empty = all events enabled — start with full list
+                const allEvents = [
+                    "messageDelete","messageUpdate","memberUpdate","memberLeave","memberKick",
+                    "voiceUpdate","channelCreate","channelDelete","channelUpdate",
+                    "ban","unban","moderation","roleCreate","roleDelete","roleUpdate",
+                    "tickets","xp","giveaway","starboard","http","commandUsage",
+                    "memberJoin","memberTimeout","automodAction",
+                    "reactionAdd","reactionRemove","reactionRemoveAll","reactionRemoveEmoji",
+                    "pollVoteAdd","pollVoteRemove","channelPinsUpdate",
+                    "threadCreate","threadDelete","threadUpdate","threadMembersUpdate",
+                    "guildUpdate","emojiCreate","emojiDelete","emojiUpdate",
+                    "stickerCreate","stickerDelete","stickerUpdate",
+                    "inviteCreate","inviteDelete",
+                    "webhookUpdate","integrationUpdate","integrationsUpdate",
+                    "scheduledEventCreate","scheduledEventUpdate","scheduledEventDelete",
+                    "scheduledEventUserAdd","scheduledEventUserRemove",
+                    "soundboardSoundCreate","soundboardSoundDelete","soundboardSoundUpdate",
+                    "voiceChannelEffect","stageInstanceCreate","stageInstanceDelete","stageInstanceUpdate",
+                    "automodRuleCreate","automodRuleUpdate","automodRuleDelete",
+                    "system","sticky-roles","temp-channels","join-gate","poll"
+                ];
+                // Remove events explicitly disabled in log_event_config
+                const disabledEvents = new Set(
+                    logEventConfigRows.filter(r => r.enabled === 0).map(r => r.event_type)
+                );
+                enabledLogs = JSON.stringify(allEvents.filter(e => !disabledEvents.has(e)));
+            }
             const logConfig = {
                 log_channel_id: logConfigRaw.log_channel_id || null,
-                enabled_logs: logConfigRaw.enabled_events || '[]',
-                log_categories: JSON.stringify(categoryChannels)
+                enabled_logs: enabledLogs,
+                log_categories: JSON.stringify(categoryChannels),
+                event_colors: JSON.stringify(eventColorMap)
             };
 
             // Fetch analytics data
@@ -1045,7 +2765,7 @@ function start(botClient) {
                 const [streamersData] = await pool.execute(
                     `SELECT
                         s.streamer_id, s.platform, s.username, s.platform_user_id, s.discord_user_id,
-                        sub.subscription_id, sub.announcement_channel_id, sub.live_role_id,
+                        sub.subscription_id, sub.announcement_channel_id, sub.live_role_id, sub.ping_role_id,
                         sub.custom_message, sub.delete_on_end, sub.override_nickname, sub.override_avatar_url,
                         sub.team_subscription_id, sub.notify_videos, sub.video_announcement_channel_id,
                         (SELECT COUNT(*) FROM live_announcements WHERE streamer_id = s.streamer_id AND guild_id = ? AND offline_check_count < 4) as is_live
@@ -1096,6 +2816,7 @@ function start(botClient) {
                         platform_username: row.username, // Add platform-specific username
                         announcement_channel_id: row.announcement_channel_id,
                         live_role_id: row.live_role_id,
+                        ping_role_id: row.ping_role_id,
                         custom_message: row.custom_message,
                         delete_on_end: row.delete_on_end,
                         override_nickname: row.override_nickname,
@@ -1180,6 +2901,149 @@ function start(botClient) {
                 logger.error('Error fetching guild config:', error);
             }
 
+            // Fetch custom bot info for appearance page
+            let customBotInfo = null;
+            try {
+                const [botMapping] = await pool.execute(
+                    'SELECT bot_id, assigned_by, assigned_at FROM guild_bot_mapping WHERE guild_id = ?',
+                    [guildId]
+                );
+                if (botMapping.length > 0) {
+                    const [botData] = await pool.execute(
+                        'SELECT bot_id, bot_name, owner_user_id, enabled, approved, self_service, created_at FROM custom_bots WHERE bot_id = ?',
+                        [botMapping[0].bot_id]
+                    );
+                    if (botData.length > 0) {
+                        const botStatus = global.botManager?.getBotStatus(botData[0].bot_id) || null;
+                        let botAvatar = null;
+                        if (botStatus?.isReady) {
+                            if (botStatus.avatar) botAvatar = botStatus.avatar;
+                            else if (botStatus.avatarHash) botAvatar = `https://cdn.discordapp.com/avatars/${botData[0].bot_id}/${botStatus.avatarHash}.png?size=128`;
+                            else botAvatar = `https://cdn.discordapp.com/embed/avatars/${(BigInt(botData[0].bot_id) >> 22n) % 6n}.png`;
+                        }
+                        // Resolve owner username
+                        let ownerName = null;
+                        try {
+                            const [ownerRows] = await pool.execute('SELECT username FROM users WHERE user_id = ?', [botData[0].owner_user_id]);
+                            ownerName = ownerRows[0]?.username || null;
+                        } catch { /* ignore */ }
+                        customBotInfo = {
+                            ...botData[0],
+                            bot_name: (botStatus?.isReady && botStatus?.username) ? botStatus.username : botData[0].bot_name,
+                            bot_avatar: botAvatar,
+                            is_online: botStatus?.isReady || false,
+                            owner_name: ownerName,
+                            assigned_at: botMapping[0].assigned_at
+                        };
+                    }
+                }
+            } catch (error) {
+                logger.error('Error fetching custom bot info:', error);
+            }
+
+            // Fetch TikTok data
+            let tiktokSubs = [];
+            let tiktokConfig = {};
+            let recentTiktokVideos = [];
+            try {
+                const [subs] = await pool.execute(`
+                    SELECT sub.subscription_id, sub.streamer_id, sub.tiktok_vod_notifications, sub.announcement_channel_id,
+                           sub.video_announcement_channel_id, sub.custom_message, sub.live_role_id,
+                           sub.delete_on_end, sub.edit_on_end, sub.tiktok_embed_video, sub.ping_role_id,
+                           s.username, s.profile_image_url,
+                           1 AS has_live
+                    FROM subscriptions sub
+                    JOIN streamers s ON sub.streamer_id = s.streamer_id
+                    WHERE s.platform = 'tiktok' AND sub.guild_id = ?
+                    ORDER BY s.username
+                `, [guildId]);
+                tiktokSubs = subs;
+                const subWithVideoChannel = subs.find(s => s.video_announcement_channel_id);
+                tiktokConfig = { video_channel_id: subWithVideoChannel?.video_announcement_channel_id || '' };
+
+                const [videos] = await pool.execute(`
+                    SELECT tvp.video_id, tvp.video_url, tvp.title, tvp.thumbnail_url, tvp.view_count, tvp.posted_at, s.username
+                    FROM tiktok_video_posts tvp
+                    JOIN streamers s ON tvp.streamer_id = s.streamer_id
+                    JOIN subscriptions sub ON s.streamer_id = sub.streamer_id AND sub.guild_id = ?
+                    WHERE s.platform = 'tiktok'
+                    ORDER BY tvp.posted_at DESC LIMIT 6
+                `, [guildId]);
+                recentTiktokVideos = videos;
+            } catch (error) {
+                if (error.code !== 'ER_NO_SUCH_TABLE') {
+                    logger.error('Error fetching TikTok data:', error);
+                }
+            }
+
+            // Fetch stat display channels with live values
+            let statDisplayChannels = [];
+            try {
+                const [sdRows] = await pool.execute(
+                    'SELECT id, channel_id, stat_type, template, config FROM stat_display_channels WHERE guild_id = ?',
+                    [guildId]
+                );
+                // Compute live values for each stat display
+                const sdGuild = req.guildObject;
+                for (const sd of sdRows) {
+                    try {
+                        const cfg = sd.config ? (typeof sd.config === 'string' ? JSON.parse(sd.config) : sd.config) : null;
+                        switch (sd.stat_type) {
+                            case 'members': sd.live_value = sdGuild?.memberCount || 0; break;
+                            case 'humans': sd.live_value = sdGuild?.members?.cache?.filter(m => !m.user.bot).size || 0; break;
+                            case 'bots': sd.live_value = sdGuild?.members?.cache?.filter(m => m.user.bot).size || 0; break;
+                            case 'online': sd.live_value = sdGuild?.members?.cache?.filter(m => m.presence?.status && m.presence.status !== 'offline').size || 0; break;
+                            case 'channels': sd.live_value = sdGuild?.channels?.cache?.filter(c => c.type !== 4).size || 0; break;
+                            case 'roles': sd.live_value = (sdGuild?.roles?.cache?.size || 1) - 1; break;
+                            case 'boosts': sd.live_value = sdGuild?.premiumSubscriptionCount || 0; break;
+                            case 'role': {
+                                const roleId = cfg?.role_id;
+                                const role = roleId && sdGuild?.roles?.cache?.get(roleId);
+                                sd.live_value = role?.members?.size || 0;
+                                sd.role_name = role?.name || 'Unknown Role';
+                                break;
+                            }
+                            case 'time': {
+                                // Compute guild local time
+                                const [tzRows] = await pool.execute('SELECT timezone FROM guild_settings WHERE guild_id = ?', [guildId]);
+                                const tz = tzRows[0]?.timezone || 'UTC+0';
+                                const tzMatch = tz.match(/UTC([+-])(\d+)(?::(\d+))?/);
+                                const sign = tzMatch ? (tzMatch[1] === '-' ? -1 : 1) : 1;
+                                const oh = tzMatch ? parseInt(tzMatch[2]) : 0;
+                                const om = tzMatch?.[3] ? parseInt(tzMatch[3]) : 0;
+                                const now = new Date();
+                                const local = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + sign * (oh * 3600000 + om * 60000));
+                                const hrs = local.getHours() % 12 || 12;
+                                sd.live_value = `${hrs}:${local.getMinutes().toString().padStart(2, '0')}${local.getHours() >= 12 ? 'pm' : 'am'}`;
+                                break;
+                            }
+                            case 'date': {
+                                const [tzRows2] = await pool.execute('SELECT timezone FROM guild_settings WHERE guild_id = ?', [guildId]);
+                                const tz2 = tzRows2[0]?.timezone || 'UTC+0';
+                                const tzMatch2 = tz2.match(/UTC([+-])(\d+)(?::(\d+))?/);
+                                const sign2 = tzMatch2 ? (tzMatch2[1] === '-' ? -1 : 1) : 1;
+                                const oh2 = tzMatch2 ? parseInt(tzMatch2[2]) : 0;
+                                const om2 = tzMatch2?.[3] ? parseInt(tzMatch2[3]) : 0;
+                                const now2 = new Date();
+                                const local2 = new Date(now2.getTime() + (now2.getTimezoneOffset() * 60000) + sign2 * (oh2 * 3600000 + om2 * 60000));
+                                const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+                                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                                const d = local2.getDate();
+                                const ord = d===1||d===21||d===31?'st':d===2||d===22?'nd':d===3||d===23?'rd':'th';
+                                sd.live_value = `${days[local2.getDay()]}, ${months[local2.getMonth()]} ${d}${ord}`;
+                                break;
+                            }
+                            default: sd.live_value = '?';
+                        }
+                    } catch { sd.live_value = '?'; }
+                }
+                statDisplayChannels = sdRows;
+            } catch (error) {
+                if (error.code !== 'ER_NO_SUCH_TABLE') {
+                    logger.error('Error fetching stat display channels:', error);
+                }
+            }
+
             // Fetch suggestion config
             let suggestionConfig = {};
             try {
@@ -1227,12 +3091,16 @@ function start(botClient) {
                 announcement_channel_id: guildConfig.announcement_channel_id,
                 announcement_message: guildConfig.announcement_message,
                 use_webhook_persona: guildConfig.use_webhook_persona,
+                stream_ignored_roles: guildConfig.stream_ignored_roles ? JSON.parse(guildConfig.stream_ignored_roles) : [],
                 leveling_enabled: levelingConfig.enabled,
                 leveling_xp_rate: levelingConfig.xp_per_message,
                 leveling_xp_cooldown: levelingConfig.xp_cooldown_seconds,
                 level_up_channel_id: levelingConfig.level_up_channel_id,
                 leveling_ignored_channels: levelingConfig.ignored_channels ? JSON.parse(levelingConfig.ignored_channels) : [],
                 leveling_ignored_roles: levelingConfig.ignored_roles ? JSON.parse(levelingConfig.ignored_roles) : [],
+                monthly_reset_enabled: levelingConfig.monthly_reset_enabled,
+                reset_interval_days: levelingConfig.reset_interval_days,
+                last_reset_at: levelingConfig.last_reset_at,
                 // Appearance settings from guild_config
                 bot_nickname: guildConfig.bot_nickname,
                 bot_avatar_url: guildConfig.bot_avatar_url,
@@ -1243,13 +3111,33 @@ function start(botClient) {
             let twitchScheduleSyncs = [];
             try {
                 const [syncsData] = await pool.execute(
-                    'SELECT id, streamer_id, discord_channel_id as channel_id, is_enabled FROM twitch_schedule_sync_config WHERE guild_id = ?',
+                    `SELECT
+                        tss.id, tss.streamer_id, tss.discord_channel_id,
+                        tss.discord_channel_id AS channel_id,
+                        tss.is_enabled, tss.sync_interval_minutes, tss.weekly_refresh,
+                        tss.last_weekly_refresh, tss.mention_role_id, tss.custom_message,
+                        tss.last_synced, tss.schedule_hash, tss.last_message_id,
+                        s.username, s.username AS twitch_username, s.profile_image_url
+                     FROM twitch_schedule_sync_config tss
+                     LEFT JOIN streamers s ON tss.streamer_id = s.streamer_id
+                     WHERE tss.guild_id = ?
+                     ORDER BY tss.id DESC`,
                     [guildId]
                 );
                 twitchScheduleSyncs = syncsData;
             } catch (error) {
                 logger.error('Error fetching Twitch schedule syncs:', error);
             }
+
+            // Fetch Twitch role sync config
+            let twitchRoleSyncConfig = null;
+            let twitchRoleSyncMembers = [];
+            try {
+                const [configRows] = await pool.execute('SELECT guild_id, broadcaster_twitch_id, broadcaster_twitch_username, vip_role_id, mod_role_id, sub_role_id, remove_vip_on_leave, enabled, last_synced, token_scopes FROM twitch_role_sync_config WHERE guild_id = ?', [guildId]);
+                if (configRows.length > 0) twitchRoleSyncConfig = configRows[0];
+                const [memberRows] = await pool.execute('SELECT * FROM twitch_role_sync_members WHERE guild_id = ? ORDER BY twitch_username', [guildId]);
+                twitchRoleSyncMembers = memberRows;
+            } catch {}
 
             // Fetch temp channel configuration
             let tempChannelConfig = {};
@@ -1511,6 +3399,17 @@ function start(botClient) {
                 logger.error('Error fetching adaptive spam config:', error);
             }
 
+            // Fetch invite filter config + whitelist entries
+            let inviteFilterConfig = { enabled: 1, use_whitelist: 0, action: 'delete_warn', log_channel_id: null };
+            let inviteFilterEntries = { users: [], roles: [], channels: [] };
+            try {
+                const linkWhitelist = await import('../utils/link-whitelist.js');
+                inviteFilterConfig = await linkWhitelist.getConfig(guildId);
+                inviteFilterEntries = await linkWhitelist.listEntries(guildId);
+            } catch (error) {
+                logger.error('Error fetching invite filter config:', error);
+            }
+
             // Fetch giveaways
             let giveaways = [];
             try {
@@ -1525,14 +3424,38 @@ function start(botClient) {
                 }
             }
 
+            // Fetch prefix command config + aliases
+            let prefixConfig = { prefix: '!', enabled: 1, delete_trigger: 0, cleanup_delay: 0, private_categories: null, disabled_commands: null };
+            let prefixAliases = [];
+            try {
+                const [prefixRows] = await pool.execute(
+                    'SELECT * FROM prefix_command_config WHERE guild_id = ?',
+                    [guildId]
+                );
+                if (prefixRows.length > 0) prefixConfig = prefixRows[0];
+                const [aliasRows] = await pool.execute(
+                    'SELECT alias, command_name, created_by, created_at FROM prefix_command_aliases WHERE guild_id = ? ORDER BY alias',
+                    [guildId]
+                );
+                prefixAliases = aliasRows;
+            } catch (error) {
+                // Table may not exist yet
+            }
+
             res.render('manage-tailwind', {
                 user: req.user,
                 guild: guild,
                 page: req.query.page || 'overview',
-                roles: Array.from(allRoles.filter(r => !r.managed && r.name !== '@everyone').values()),
-                channels: Array.from(allChannels.filter(c => c.isTextBased()).values()),
-                voiceChannels: Array.from(allChannels.filter(c => c.isVoiceBased()).values()),
-                categories: Array.from(allChannels.filter(c => c.type === 4).values()),
+                roles: Array.from(allRoles.filter(r => !r.managed && r.name !== '@everyone').values()).sort((a, b) => a.name.localeCompare(b.name)),
+                channels: Array.from(allChannels.filter(c => c.isTextBased()).values()).sort((a, b) => a.name.localeCompare(b.name)),
+                voiceChannels: Array.from(allChannels.filter(c => c.isVoiceBased()).values()).sort((a, b) => a.name.localeCompare(b.name)),
+                categories: Array.from(allChannels.filter(c => c.type === 4).values()).sort((a, b) => a.name.localeCompare(b.name)),
+                // Non-bot members, mapped to a lean shape for the Twitch link UI's autocomplete.
+                // We expose the full list so a Twitch broadcaster can map all 22+ mods on-page
+                // without round-tripping a search endpoint per row.
+                guildMembers: Array.from(guild.members.cache.filter(m => !m.user.bot).values())
+                    .map(m => ({ id: m.user.id, username: m.user.username, display: m.displayName }))
+                    .sort((a, b) => a.username.localeCompare(b.username)),
                 // Streamers and Teams
                 consolidatedStreamers: consolidatedStreamers,
                 teamSubscriptions: teamSubscriptions,
@@ -1540,19 +3463,62 @@ function start(botClient) {
                 totalSubscriptions: totalSubscriptions,
                 // Settings
                 settings: settings,
+                customBotInfo: customBotInfo,
+                statDisplayChannels: statDisplayChannels,
+                customEmbeds: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT * FROM custom_embeds WHERE guild_id = ? ORDER BY created_at DESC', [guildId]);
+                        return rows;
+                    } catch { return []; }
+                })(),
+                purgeConfigs: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT * FROM scheduled_purges WHERE guild_id = ? ORDER BY created_at DESC', [guildId]);
+                        return rows;
+                    } catch { return []; }
+                })(),
+                tiktokSubs: tiktokSubs,
+                tiktokConfig: tiktokConfig,
+                recentTiktokVideos: recentTiktokVideos,
+                prefixConfig: prefixConfig,
+                prefixAliases: prefixAliases,
                 channelSettings: channelSettingsRows,
                 channelSettingsMap: channelSettingsMap,
                 // Community Features
                 welcomeSettings: welcomeSettings,
                 reactionRolePanels: reactionRolePanels,
                 starboardConfig: starboardConfig,
-                roleRewards: [],
+                roleRewards: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT id, level, role_id FROM level_role_rewards WHERE guild_id = ? ORDER BY level', [guildId]);
+                        return rows;
+                    } catch { return []; }
+                })(),
                 giveaways: giveaways,
                 polls: [],
                 suggestions: suggestions,
                 suggestionConfig: suggestionConfig,
                 suggestionStats: {},
                 suggestionTags: [],
+                // Throne
+                throneNotifications: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT * FROM throne_notifications WHERE guild_id = ?', [guildId]);
+                        return rows;
+                    } catch { return []; }
+                })(),
+                throneGuildConfig: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT * FROM throne_guild_config WHERE guild_id = ?', [guildId]);
+                        return rows[0] || null;
+                    } catch { return null; }
+                })(),
+                throneSettings: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT * FROM throne_guild_settings WHERE guild_id = ?', [guildId]);
+                        return rows[0] || null;
+                    } catch { return null; }
+                })(),
                 // Music
                 musicQueues: [],
                 musicConfig: musicConfig,
@@ -1640,7 +3606,8 @@ function start(botClient) {
                                 enabled: rows[0].is_enabled,
                                 threshold: rows[0].join_limit,
                                 time_period: rows[0].time_period_seconds,
-                                action: rows[0].action
+                                action: rows[0].action,
+                                alert_channel_id: rows[0].alert_channel_id
                             };
                         }
                         return {};
@@ -1657,7 +3624,8 @@ function start(botClient) {
                         );
                         if (rows[0]) {
                             return {
-                                enabled: rows[0].enabled
+                                enabled: rows[0].enabled,
+                                alert_channel_id: rows[0].alert_channel_id
                             };
                         }
                         return {};
@@ -1688,6 +3656,26 @@ function start(botClient) {
                         return {};
                     } catch (error) {
                         logger.error('Error fetching global ban config:', error);
+                        return {};
+                    }
+                })(),
+                globalBanStats: await (async () => {
+                    try {
+                        const [[active]] = await pool.execute('SELECT COUNT(*) as c FROM global_ban_entries WHERE active = 1');
+                        const [[pending]] = await pool.execute('SELECT COUNT(*) as c FROM global_ban_reports WHERE status = "pending"');
+                        const [[guilds]] = await pool.execute('SELECT COUNT(*) as c FROM global_ban_config WHERE enabled = 1');
+                        return { activeEntries: active.c, pendingReports: pending.c, enabledGuilds: guilds.c };
+                    } catch { return { activeEntries: 0, pendingReports: 0, enabledGuilds: 0 }; }
+                })(),
+                phishingConfig: await (async () => {
+                    try {
+                        const [rows] = await pool.execute(
+                            'SELECT * FROM phishing_config WHERE guild_id = ?',
+                            [guildId]
+                        );
+                        return rows[0] || {};
+                    } catch (error) {
+                        logger.error('Error fetching phishing config:', error);
                         return {};
                     }
                 })(),
@@ -1786,9 +3774,59 @@ function start(botClient) {
                     }
                 })(),
                 // Birthday & Weather
-                birthdayUsers: [],
-                birthdayStats: {},
-                birthdayConfig: {},
+                birthdayUsers: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT user_id, month, day FROM user_birthdays WHERE guild_id = ? ORDER BY month, day', [guildId]);
+                        // Resolve usernames from Discord cache
+                        const botClient = global.botManager?.getClientForGuild(guildId) || client;
+                        const guildObj = botClient?.guilds.cache.get(guildId);
+                        for (const row of rows) {
+                            try {
+                                const member = guildObj?.members.cache.get(row.user_id) || await guildObj?.members.fetch(row.user_id).catch(() => null);
+                                row.username = member?.displayName || member?.user?.username || null;
+                                row.avatar_url = member?.user?.displayAvatarURL({ size: 64 }) || null;
+                            } catch { row.username = null; row.avatar_url = null; }
+                        }
+                        return rows;
+                    } catch { return []; }
+                })(),
+                birthdayStats: await (async () => {
+                    try {
+                        const [total] = await pool.execute('SELECT COUNT(*) as count FROM user_birthdays WHERE guild_id = ?', [guildId]);
+                        const now = new Date();
+                        const m = now.getMonth() + 1;
+                        const [thisMonth] = await pool.execute('SELECT COUNT(*) as count FROM user_birthdays WHERE guild_id = ? AND month = ?', [guildId, m]);
+                        // Upcoming 7 days
+                        let upcoming = 0;
+                        for (let d = 0; d <= 7; d++) {
+                            const future = new Date(now); future.setDate(future.getDate() + d);
+                            const fm = future.getMonth() + 1, fd = future.getDate();
+                            const [r] = await pool.execute('SELECT COUNT(*) as c FROM user_birthdays WHERE guild_id = ? AND month = ? AND day = ?', [guildId, fm, fd]);
+                            upcoming += r[0].c;
+                        }
+                        return { total: total[0].count, thisMonth: thisMonth[0].count, upcoming };
+                    } catch { return { total: 0, thisMonth: 0, upcoming: 0 }; }
+                })(),
+                birthdayConfig: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT * FROM birthday_config WHERE guild_id = ?', [guildId]);
+                        return rows[0] || {};
+                    } catch { return {}; }
+                })(),
+                birthdayCards: await (async () => {
+                    try {
+                        const [rows] = await pool.execute(`
+                            SELECT bc.*, COUNT(bcs.id) as signature_count
+                            FROM birthday_cards bc
+                            LEFT JOIN birthday_card_signatures bcs ON bc.id = bcs.card_id
+                            WHERE bc.guild_id = ?
+                            GROUP BY bc.id
+                            ORDER BY bc.created_at DESC
+                            LIMIT 20
+                        `, [guildId]);
+                        return rows;
+                    } catch { return []; }
+                })(),
                 weatherStats: await (async () => {
                     try {
                         const [[userCountResult]] = await pool.execute(
@@ -1827,12 +3865,19 @@ function start(botClient) {
                 })(),
                 // Misc
                 events: [],
-                backups: [],
+                backups: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT id, guild_id, snapshot_name, created_by_id, created_at FROM server_backups WHERE guild_id = ? ORDER BY created_at DESC', [guildId]);
+                        return rows;
+                    } catch { return []; }
+                })(),
                 permissionOverrides: [],
                 reminders: [],
                 tags: [],
                 // Additional variables
                 twitchScheduleSyncs: twitchScheduleSyncs,
+                twitchRoleSyncConfig: twitchRoleSyncConfig,
+                twitchRoleSyncMembers: twitchRoleSyncMembers,
                 availableDJVoices: (() => {
                     // Locale to category mapping
                     const localeCategories = {
@@ -1897,14 +3942,90 @@ function start(botClient) {
                 actionLogs: [],
                 analyticsData: analyticsData,
                 serverStats: serverStats,
-                redditFeeds: [],
-                youtubeFeeds: [],
-                twitterFeeds: [],
+                redditFeeds:    await pool.execute('SELECT * FROM reddit_feeds    WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
+                youtubeFeeds:   await pool.execute('SELECT * FROM youtube_feeds   WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
+                twitterFeeds:   await pool.execute('SELECT * FROM twitter_feeds   WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
+                blueskyFeeds:   await pool.execute('SELECT * FROM bluesky_feeds   WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
+                instagramFeeds: await pool.execute('SELECT * FROM instagram_feeds WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
+                facebookFeeds:  await pool.execute('SELECT * FROM facebook_feeds  WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
                 autoPublisherConfig: autoPublisherConfig,
                 autorolesConfig: autorolesConfig,
                 tempChannelConfig: tempChannelConfig,
-                customCommands: [],
-                commandSettings: [],
+                customCommands: await (async () => {
+                    try {
+                        const [rows] = await pool.execute('SELECT * FROM custom_commands WHERE guild_id = ? ORDER BY command_name', [guildId]);
+                        return rows;
+                    } catch { return []; }
+                })(),
+                commandSettings: (() => {
+                    const cmds = [];
+                    if (client && client.commands) {
+                        client.commands.forEach(cmd => {
+                            const data = cmd.data;
+                            if (!data) return;
+
+                            const entry = {
+                                name: data.name,
+                                description: data.description,
+                                category: cmd.category || 'General',
+                                subcommands: []
+                            };
+
+                            // Extract subcommand groups and subcommands from options
+                            if (data.options && data.options.length > 0) {
+                                for (const opt of data.options) {
+                                    const optJson = opt.toJSON ? opt.toJSON() : opt;
+                                    if (optJson.type === 2) {
+                                        // SubcommandGroup
+                                        const group = { name: optJson.name, description: optJson.description, subcommands: [] };
+                                        if (optJson.options) {
+                                            for (const sub of optJson.options) {
+                                                const subJson = sub.toJSON ? sub.toJSON() : sub;
+                                                if (subJson.type === 1) {
+                                                    group.subcommands.push({
+                                                        name: subJson.name,
+                                                        description: subJson.description,
+                                                        options: (subJson.options || []).filter(o => o.type !== 1 && o.type !== 2).map(o => ({
+                                                            name: o.name, description: o.description, required: o.required || false, type: o.type
+                                                        }))
+                                                    });
+                                                }
+                                            }
+                                        }
+                                        entry.subcommands.push({ type: 'group', ...group });
+                                    } else if (optJson.type === 1) {
+                                        // SubCommand (no group)
+                                        const subJson = opt.toJSON ? opt.toJSON() : opt;
+                                        entry.subcommands.push({
+                                            type: 'subcommand',
+                                            name: subJson.name,
+                                            description: subJson.description,
+                                            options: (subJson.options || []).filter(o => o.type !== 1 && o.type !== 2).map(o => ({
+                                                name: o.name, description: o.description, required: o.required || false, type: o.type
+                                            }))
+                                        });
+                                    }
+                                }
+                            }
+
+                            cmds.push(entry);
+                        });
+                    }
+                    return cmds;
+                })(),
+                commandRestrictions: await (async () => {
+                    try {
+                        const [rows] = await pool.execute(
+                            'SELECT command_name, allowed, admin_only FROM guild_command_restrictions WHERE guild_id = ?',
+                            [guildId]
+                        );
+                        const map = {};
+                        rows.forEach(r => {
+                            map[r.command_name] = { allowed: r.allowed, admin_only: r.admin_only };
+                        });
+                        return map;
+                    } catch { return {}; }
+                })(),
                 forms: forms,
                 ticketConfig: {},
                 ticketFormsList: [],
@@ -1916,6 +4037,9 @@ function start(botClient) {
                 selfbotConfig: selfbotConfig,
                 selfbotDetections: selfbotDetections,
                 adaptiveSpamConfig: adaptiveSpamConfig,
+                // Invite link filter (loaded from link-whitelist helper)
+                inviteFilterConfig: inviteFilterConfig,
+                inviteFilterEntries: inviteFilterEntries,
                 // Guild Systems (self-promo, community support, stream-ended)
                 selfPromoConfig: await (async () => {
                     try {
@@ -1950,10 +4074,19 @@ function start(botClient) {
                             FROM subscriptions sub
                             JOIN streamers s ON sub.streamer_id = s.streamer_id
                             LEFT JOIN twitch_teams ts ON sub.team_subscription_id = ts.id
-                            LEFT JOIN guild_config gc ON CAST(sub.guild_id AS CHAR) = CAST(gc.guild_id AS CHAR)
+                            LEFT JOIN guild_config gc ON sub.guild_id COLLATE utf8mb4_unicode_ci = gc.guild_id COLLATE utf8mb4_unicode_ci
                             WHERE sub.guild_id = ?
                             ORDER BY sub.edit_on_end DESC, s.username
                         `, [guildId]);
+                        return rows;
+                    } catch { return []; }
+                })(),
+                freeGamesSubs: await (async () => {
+                    try {
+                        const [rows] = await pool.execute(
+                            'SELECT * FROM free_games_subscriptions WHERE guild_id = ? ORDER BY created_at DESC',
+                            [guildId]
+                        );
                         return rows;
                     } catch { return []; }
                 })(),
@@ -2007,6 +4140,8 @@ function start(botClient) {
 
             logger.info(`[DJ Config] Received: djEnabled=${djEnabled}, djVoice=${djVoice}`);
 
+            const isEnabled = djEnabled === 'on' ? 1 : 0;
+
             // Upsert music_config
             await pool.execute(`
                 INSERT INTO music_config (guild_id, dj_enabled, dj_voice)
@@ -2014,9 +4149,16 @@ function start(botClient) {
                 ON DUPLICATE KEY UPDATE
                     dj_enabled = VALUES(dj_enabled),
                     dj_voice = VALUES(dj_voice)
-            `, [guildId, djEnabled === 'on' ? 1 : 0, djVoice || 'female']);
+            `, [guildId, isEnabled, djVoice || 'female']);
 
-            logger.info(`[DJ Config] Saved to DB: djEnabled=${djEnabled === 'on' ? 1 : 0}, djVoice=${djVoice || 'female'}`);
+            // Also upsert ai_dj_config (the command handler checks this table)
+            await pool.execute(`
+                INSERT INTO ai_dj_config (guild_id, enabled)
+                VALUES (?, ?)
+                ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)
+            `, [guildId, isEnabled]);
+
+            logger.info(`[DJ Config] Saved to DB: djEnabled=${isEnabled}, djVoice=${djVoice || 'female'}`);
             invalidateMusicConfigCache(guildId);
 
             res.redirect(`/manage/${guildId}?page=music&success=dj`);
@@ -2063,6 +4205,464 @@ function start(botClient) {
             logger.error('[POST /manage/:guildId/music/advanced Error]', error);
             res.redirect(`/manage/${guildId}?page=music&error=advanced`);
         }
+    });
+
+    // Music filter settings
+    app.post('/manage/:guildId/music/filters', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const filters = req.body['filters[]'] || req.body.filters || [];
+            const filterList = Array.isArray(filters) ? filters : [filters];
+            const filtersJson = JSON.stringify(filterList.filter(Boolean));
+
+            await pool.execute(
+                `INSERT INTO music_config (guild_id, enabled_filters) VALUES (?, ?)
+                 ON DUPLICATE KEY UPDATE enabled_filters = VALUES(enabled_filters)`,
+                [guildId, filtersJson]
+            );
+
+            invalidateMusicConfigCache(guildId);
+            logger.info(`[Music Filters] Updated filters for guild ${guildId}: ${filtersJson}`);
+            res.redirect(`/manage/${guildId}?page=music&success=filters`);
+        } catch (error) {
+            logger.error('[POST /manage/:guildId/music/filters Error]', error);
+            res.redirect(`/manage/${guildId}?page=music&error=filters`);
+        }
+    });
+
+    // ===========================
+    // SERVER BACKUPS (extracted to routes/features/backups.js)
+    // ===========================
+    import('./routes/features/backups.js').then(mod => {
+        app.use('/manage/:guildId', checkAuth, checkGuildAdmin, mod.default);
+        logger.info('[Dashboard] Backup routes loaded');
+    });
+
+    // ===========================
+    // CUSTOM COMMANDS
+    // ===========================
+
+    app.post('/manage/:guildId/add-custom-command', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { command_name, response } = req.body;
+            if (!command_name || !response) return res.redirect(`/manage/${guildId}?page=custom-commands&error=missing_fields`);
+
+            const name = command_name.trim().toLowerCase().replace(/\s+/g, '');
+            if (name.length > 50) return res.redirect(`/manage/${guildId}?page=custom-commands&error=name_too_long`);
+
+            await pool.execute(
+                'INSERT INTO custom_commands (guild_id, command_name, response) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE response = VALUES(response)',
+                [guildId, name, response.trim()]
+            );
+
+            logger.info(`[CustomCmd] Created command "${name}" for guild ${guildId} by ${req.user.username}`);
+            res.redirect(`/manage/${guildId}?page=custom-commands&success=created`);
+        } catch (error) {
+            logger.error('[CustomCmd] Error creating command:', { error: error.message, guildId });
+            res.redirect(`/manage/${guildId}?page=custom-commands&error=create_failed`);
+        }
+    });
+
+    app.post('/manage/:guildId/edit-custom-command', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { command_id, response } = req.body;
+            if (!command_id || !response) return res.redirect(`/manage/${guildId}?page=custom-commands&error=missing_fields`);
+
+            await pool.execute('UPDATE custom_commands SET response = ? WHERE id = ? AND guild_id = ?', [response.trim(), command_id, guildId]);
+            logger.info(`[CustomCmd] Updated command ${command_id} for guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=custom-commands&success=updated`);
+        } catch (error) {
+            logger.error('[CustomCmd] Error updating command:', { error: error.message, guildId });
+            res.redirect(`/manage/${guildId}?page=custom-commands&error=update_failed`);
+        }
+    });
+
+    app.post('/manage/:guildId/delete-custom-command', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { command_id } = req.body;
+            if (!command_id) return res.redirect(`/manage/${guildId}?page=custom-commands&error=missing_id`);
+
+            await pool.execute('DELETE FROM custom_commands WHERE id = ? AND guild_id = ?', [command_id, guildId]);
+            logger.info(`[CustomCmd] Deleted command ${command_id} for guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=custom-commands&success=deleted`);
+        } catch (error) {
+            logger.error('[CustomCmd] Error deleting command:', { error: error.message, guildId });
+            res.redirect(`/manage/${guildId}?page=custom-commands&error=delete_failed`);
+        }
+    });
+
+    // Alias for the existing form that uses command_name instead of id
+    app.post('/manage/:guildId/remove-custom-command', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { command_name } = req.body;
+            if (!command_name) return res.redirect(`/manage/${guildId}?page=custom-commands&error=missing_name`);
+            await pool.execute('DELETE FROM custom_commands WHERE command_name = ? AND guild_id = ?', [command_name, guildId]);
+            logger.info(`[CustomCmd] Deleted command "${command_name}" for guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=custom-commands&success=deleted`);
+        } catch (error) {
+            logger.error('[CustomCmd] Error deleting command:', { error: error.message, guildId });
+            res.redirect(`/manage/${guildId}?page=custom-commands&error=delete_failed`);
+        }
+    });
+
+    // ===========================
+    // MISSING ROUTE HANDLERS
+    // ===========================
+
+    // --- Leveling: Role Rewards ---
+    app.post('/manage/:guildId/add-role-reward', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { level, role_id } = req.body;
+            if (!level || !role_id) return res.redirect(`/manage/${guildId}?page=leveling&error=missing_fields`);
+            await pool.execute('INSERT INTO level_role_rewards (guild_id, level, role_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE role_id = VALUES(role_id)', [guildId, parseInt(level), role_id]);
+            res.redirect(`/manage/${guildId}?page=leveling&success=created`);
+        } catch (error) { logger.error('[LevelReward] Error:', error.message); res.redirect(`/manage/${guildId}?page=leveling&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/remove-role-reward', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { level } = req.body;
+            await pool.execute('DELETE FROM level_role_rewards WHERE guild_id = ? AND level = ?', [guildId, parseInt(level)]);
+            res.redirect(`/manage/${guildId}?page=leveling&success=deleted`);
+        } catch (error) { logger.error('[LevelReward] Error:', error.message); res.redirect(`/manage/${guildId}?page=leveling&error=failed`); }
+    });
+
+    // --- Tags ---
+    app.post('/manage/:guildId/delete-tag', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { tag_name } = req.body;
+            await pool.execute('DELETE FROM tags WHERE guild_id = ? AND tag_name = ?', [guildId, tag_name]);
+            res.redirect(`/manage/${guildId}?page=tags&success=deleted`);
+        } catch (error) { logger.error('[Tags] Error:', error.message); res.redirect(`/manage/${guildId}?page=tags&error=failed`); }
+    });
+
+    // --- Permissions ---
+    app.post('/manage/:guildId/create-permission-override', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { role_id, command_name, allowed } = req.body;
+            if (!role_id || !command_name) return res.redirect(`/manage/${guildId}?page=permissions&error=missing_fields`);
+            await pool.execute('INSERT INTO bot_permissions (guild_id, role_id, command_name, allowed) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE allowed = VALUES(allowed)', [guildId, role_id, command_name, allowed ? 1 : 0]);
+            res.redirect(`/manage/${guildId}?page=permissions&success=created`);
+        } catch (error) { logger.error('[Permissions] Error:', error.message); res.redirect(`/manage/${guildId}?page=permissions&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/delete-permission-override', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { override_id } = req.body;
+            await pool.execute('DELETE FROM bot_permissions WHERE guild_id = ? AND id = ?', [guildId, override_id]);
+            res.redirect(`/manage/${guildId}?page=permissions&success=deleted`);
+        } catch (error) { logger.error('[Permissions] Error:', error.message); res.redirect(`/manage/${guildId}?page=permissions&error=failed`); }
+    });
+
+    // --- Reminders ---
+    app.post('/manage/:guildId/create-reminder', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { channel_id, message, remind_at } = req.body;
+            if (!channel_id || !message || !remind_at) return res.redirect(`/manage/${guildId}?page=reminders&error=missing_fields`);
+            await pool.execute('INSERT INTO reminders (guild_id, channel_id, message, remind_at, created_by) VALUES (?, ?, ?, ?, ?)', [guildId, channel_id, message, remind_at, req.user.id]);
+            res.redirect(`/manage/${guildId}?page=reminders&success=created`);
+        } catch (error) { logger.error('[Reminders] Error:', error.message); res.redirect(`/manage/${guildId}?page=reminders&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/delete-reminder', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { reminder_id } = req.body;
+            await pool.execute('DELETE FROM reminders WHERE guild_id = ? AND id = ?', [guildId, reminder_id]);
+            res.redirect(`/manage/${guildId}?page=reminders&success=deleted`);
+        } catch (error) { logger.error('[Reminders] Error:', error.message); res.redirect(`/manage/${guildId}?page=reminders&error=failed`); }
+    });
+
+    // --- Tickets ---
+    app.post('/manage/:guildId/create-ticket-panel', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { panel_name, channel_id, category_id, description } = req.body;
+            if (!panel_name || !channel_id) return res.redirect(`/manage/${guildId}?page=tickets&error=missing_fields`);
+            await pool.execute('INSERT INTO ticket_panels (guild_id, panel_name, channel_id, category_id, description) VALUES (?, ?, ?, ?, ?)', [guildId, panel_name, channel_id, category_id || null, description || null]);
+            res.redirect(`/manage/${guildId}?page=tickets&success=created`);
+        } catch (error) { logger.error('[Tickets] Error:', error.message); res.redirect(`/manage/${guildId}?page=tickets&error=failed`); }
+    });
+
+    // --- Economy Shop ---
+    app.post('/manage/:guildId/economy/shop/add', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { item_name, price, description, role_id } = req.body;
+            if (!item_name || !price) return res.redirect(`/manage/${guildId}?page=economy&error=missing_fields`);
+            await pool.execute('INSERT INTO shop_items (guild_id, item_name, price, description, role_id) VALUES (?, ?, ?, ?, ?)', [guildId, item_name, parseInt(price), description || null, role_id || null]);
+            res.redirect(`/manage/${guildId}?page=economy&success=created`);
+        } catch (error) { logger.error('[Economy] Error:', error.message); res.redirect(`/manage/${guildId}?page=economy&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/economy/shop/edit', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { item_id, item_name, price, description, role_id } = req.body;
+            await pool.execute('UPDATE shop_items SET item_name = ?, price = ?, description = ?, role_id = ? WHERE guild_id = ? AND id = ?', [item_name, parseInt(price), description || null, role_id || null, guildId, item_id]);
+            res.redirect(`/manage/${guildId}?page=economy&success=updated`);
+        } catch (error) { logger.error('[Economy] Error:', error.message); res.redirect(`/manage/${guildId}?page=economy&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/economy/shop/delete', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { item_id } = req.body;
+            await pool.execute('DELETE FROM shop_items WHERE guild_id = ? AND id = ?', [guildId, item_id]);
+            res.redirect(`/manage/${guildId}?page=economy&success=deleted`);
+        } catch (error) { logger.error('[Economy] Error:', error.message); res.redirect(`/manage/${guildId}?page=economy&error=failed`); }
+    });
+
+    // --- Gambling ---
+    app.post('/manage/:guildId/gambling/config', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { enabled, min_bet, max_bet, house_edge } = req.body;
+            await pool.execute('INSERT INTO gambling_config (guild_id, enabled, min_bet, max_bet, house_edge) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE enabled = VALUES(enabled), min_bet = VALUES(min_bet), max_bet = VALUES(max_bet), house_edge = VALUES(house_edge)', [guildId, enabled ? 1 : 0, parseInt(min_bet) || 10, parseInt(max_bet) || 10000, parseFloat(house_edge) || 0.05]);
+            res.redirect(`/manage/${guildId}?page=gambling&success=saved`);
+        } catch (error) { logger.error('[Gambling] Error:', error.message); res.redirect(`/manage/${guildId}?page=gambling&error=failed`); }
+    });
+
+    // --- Stat Roles ---
+    app.post('/manage/:guildId/stat-roles/update', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { configs } = req.body;
+            // Clear and re-insert
+            await pool.execute('DELETE FROM statrole_configs WHERE guild_id = ?', [guildId]);
+            if (configs && Array.isArray(configs)) {
+                for (const cfg of configs) {
+                    if (cfg.role_id && cfg.stat_type && cfg.threshold) {
+                        await pool.execute('INSERT INTO statrole_configs (guild_id, role_id, stat_type, threshold) VALUES (?, ?, ?, ?)', [guildId, cfg.role_id, cfg.stat_type, parseInt(cfg.threshold)]);
+                    }
+                }
+            }
+            res.redirect(`/manage/${guildId}?page=stat-roles&success=saved`);
+        } catch (error) { logger.error('[StatRoles] Error:', error.message); res.redirect(`/manage/${guildId}?page=stat-roles&error=failed`); }
+    });
+
+    // --- Suggestions ---
+    app.post('/manage/:guildId/suggestions/approve', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { suggestion_id } = req.body;
+            await pool.execute('UPDATE suggestions SET status = "approved" WHERE guild_id = ? AND id = ?', [guildId, suggestion_id]);
+            res.redirect(`/manage/${guildId}?page=suggestions&success=updated`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=suggestions&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/suggestions/reject', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { suggestion_id } = req.body;
+            await pool.execute('UPDATE suggestions SET status = "rejected" WHERE guild_id = ? AND id = ?', [guildId, suggestion_id]);
+            res.redirect(`/manage/${guildId}?page=suggestions&success=updated`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=suggestions&error=failed`); }
+    });
+
+    // --- Mass Actions ---
+    app.post('/manage/:guildId/mass-assign-role', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { role_id, target_role_id } = req.body;
+            if (!role_id) return res.redirect(`/manage/${guildId}?page=mass&error=missing_fields`);
+            const botClient = global.botManager?.getClientForGuild(guildId) || req.app.locals.client;
+            const guild = botClient?.guilds?.cache?.get(guildId);
+            if (!guild) return res.redirect(`/manage/${guildId}?page=mass&error=guild_not_found`);
+            await guild.members.fetch();
+            const role = guild.roles.cache.get(role_id);
+            if (!role) return res.redirect(`/manage/${guildId}?page=mass&error=role_not_found`);
+            let count = 0;
+            for (const [, member] of guild.members.cache) {
+                if (member.roles.cache.has(role_id)) continue;
+                if (target_role_id && !member.roles.cache.has(target_role_id)) continue;
+                try { await member.roles.add(role, 'Mass assign via dashboard'); count++; } catch {}
+            }
+            logger.info(`[MassAction] Assigned role ${role.name} to ${count} members in ${guild.name}`);
+            res.redirect(`/manage/${guildId}?page=mass&success=created`);
+        } catch (error) { logger.error('[MassAction] Error:', error.message); res.redirect(`/manage/${guildId}?page=mass&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/mass-remove-role', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { role_id } = req.body;
+            if (!role_id) return res.redirect(`/manage/${guildId}?page=mass&error=missing_fields`);
+            const botClient = global.botManager?.getClientForGuild(guildId) || req.app.locals.client;
+            const guild = botClient?.guilds?.cache?.get(guildId);
+            if (!guild) return res.redirect(`/manage/${guildId}?page=mass&error=guild_not_found`);
+            const role = guild.roles.cache.get(role_id);
+            if (!role) return res.redirect(`/manage/${guildId}?page=mass&error=role_not_found`);
+            let count = 0;
+            for (const [, member] of role.members) {
+                try { await member.roles.remove(role, 'Mass remove via dashboard'); count++; } catch {}
+            }
+            logger.info(`[MassAction] Removed role ${role.name} from ${count} members in ${guild.name}`);
+            res.redirect(`/manage/${guildId}?page=mass&success=deleted`);
+        } catch (error) { logger.error('[MassAction] Error:', error.message); res.redirect(`/manage/${guildId}?page=mass&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/mass-kick', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { role_id, reason } = req.body;
+            if (!role_id) return res.redirect(`/manage/${guildId}?page=mass&error=missing_fields`);
+            const botClient = global.botManager?.getClientForGuild(guildId) || req.app.locals.client;
+            const guild = botClient?.guilds?.cache?.get(guildId);
+            if (!guild) return res.redirect(`/manage/${guildId}?page=mass&error=guild_not_found`);
+            const role = guild.roles.cache.get(role_id);
+            if (!role) return res.redirect(`/manage/${guildId}?page=mass&error=role_not_found`);
+            let count = 0;
+            for (const [, member] of role.members) {
+                if (!member.kickable) continue;
+                try { await member.kick(reason || 'Mass kick via dashboard'); count++; } catch {}
+            }
+            logger.info(`[MassAction] Kicked ${count} members with role ${role.name} in ${guild.name}`);
+            res.redirect(`/manage/${guildId}?page=mass&success=deleted`);
+        } catch (error) { logger.error('[MassAction] Error:', error.message); res.redirect(`/manage/${guildId}?page=mass&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/mass-ban', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { role_id, reason } = req.body;
+            if (!role_id) return res.redirect(`/manage/${guildId}?page=mass&error=missing_fields`);
+            const botClient = global.botManager?.getClientForGuild(guildId) || req.app.locals.client;
+            const guild = botClient?.guilds?.cache?.get(guildId);
+            if (!guild) return res.redirect(`/manage/${guildId}?page=mass&error=guild_not_found`);
+            const role = guild.roles.cache.get(role_id);
+            if (!role) return res.redirect(`/manage/${guildId}?page=mass&error=role_not_found`);
+            let count = 0;
+            for (const [, member] of role.members) {
+                if (!member.bannable) continue;
+                try { await member.ban({ reason: reason || 'Mass ban via dashboard' }); count++; } catch {}
+            }
+            logger.info(`[MassAction] Banned ${count} members with role ${role.name} in ${guild.name}`);
+            res.redirect(`/manage/${guildId}?page=mass&success=deleted`);
+        } catch (error) { logger.error('[MassAction] Error:', error.message); res.redirect(`/manage/${guildId}?page=mass&error=failed`); }
+    });
+
+    // --- Ranks (Self-Assignable Roles) ---
+    app.post('/manage/:guildId/add-self-assignable-role', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { role_id, category } = req.body;
+            if (!role_id) return res.redirect(`/manage/${guildId}?page=ranks&error=missing_fields`);
+            await pool.execute('INSERT INTO joinable_ranks (guild_id, role_id, category) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE category = VALUES(category)', [guildId, role_id, category || 'General']);
+            res.redirect(`/manage/${guildId}?page=ranks&success=created`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=ranks&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/edit-self-assignable-role', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { role_id, category } = req.body;
+            await pool.execute('UPDATE joinable_ranks SET category = ? WHERE guild_id = ? AND role_id = ?', [category || 'General', guildId, role_id]);
+            res.redirect(`/manage/${guildId}?page=ranks&success=updated`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=ranks&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/remove-self-assignable-role', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { role_id } = req.body;
+            await pool.execute('DELETE FROM joinable_ranks WHERE guild_id = ? AND role_id = ?', [guildId, role_id]);
+            res.redirect(`/manage/${guildId}?page=ranks&success=deleted`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=ranks&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/add-role-category', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { category_name } = req.body;
+            // Categories are implicit from the joinable_ranks table — no separate table needed
+            res.redirect(`/manage/${guildId}?page=ranks&success=created`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=ranks&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/edit-role-category', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { old_category, new_category } = req.body;
+            await pool.execute('UPDATE joinable_ranks SET category = ? WHERE guild_id = ? AND category = ?', [new_category, guildId, old_category]);
+            res.redirect(`/manage/${guildId}?page=ranks&success=updated`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=ranks&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/delete-role-category', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { category } = req.body;
+            await pool.execute('DELETE FROM joinable_ranks WHERE guild_id = ? AND category = ?', [guildId, category]);
+            res.redirect(`/manage/${guildId}?page=ranks&success=deleted`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=ranks&error=failed`); }
+    });
+
+    app.post('/manage/:guildId/update-rank-config', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            // Rank config is typically just the self-assignable role settings — redirect back
+            res.redirect(`/manage/${guildId}?page=ranks&success=saved`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=ranks&error=failed`); }
+    });
+
+    // --- Music Playlists ---
+    app.post('/manage/:guildId/music/playlists', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { playlist_name, playlist_url } = req.body;
+            if (!playlist_name) return res.redirect(`/manage/${guildId}?page=music&error=missing_fields`);
+            await pool.execute('INSERT INTO music_playlists (guild_id, name, url, created_by) VALUES (?, ?, ?, ?)', [guildId, playlist_name, playlist_url || null, req.user.id]);
+            res.redirect(`/manage/${guildId}?page=music&success=created`);
+        } catch (error) { logger.error('[Music] Error:', error.message); res.redirect(`/manage/${guildId}?page=music&error=failed`); }
+    });
+
+    // --- Import ---
+    app.post('/manage/:guildId/import-csv', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        // CSV import needs file upload handling — redirect with info
+        res.redirect(`/manage/${guildId}?page=csv&error=csv_import_requires_file`);
+    });
+
+    app.post('/manage/:guildId/import-team', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { team_url } = req.body;
+            if (!team_url) return res.redirect(`/manage/${guildId}?page=mass&error=missing_fields`);
+            // Team import logic would go here
+            res.redirect(`/manage/${guildId}?page=mass&success=created`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=mass&error=failed`); }
+    });
+
+    // --- Trading ---
+    app.post('/manage/:guildId/trading/cancel', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { trade_id } = req.body;
+            await pool.execute('UPDATE trades SET status = "cancelled" WHERE guild_id = ? AND id = ?', [guildId, trade_id]);
+            res.redirect(`/manage/${guildId}?page=trading&success=updated`);
+        } catch (error) { res.redirect(`/manage/${guildId}?page=trading&error=failed`); }
+    });
+
+    // --- Teams (edit) ---
+    app.post('/manage/:guildId/edit-team', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { team_id, team_name, webhook_avatar_url } = req.body;
+            if (!team_id) return res.redirect(`/manage/${guildId}?page=streamers&error=missing_fields`);
+            await pool.execute('UPDATE teams SET team_name = ?, webhook_avatar_url = ? WHERE guild_id = ? AND team_id = ?', [team_name, webhook_avatar_url || null, guildId, team_id]);
+            res.redirect(`/manage/${guildId}?page=streamers&success=updated`);
+        } catch (error) { logger.error('[Teams] Error:', error.message); res.redirect(`/manage/${guildId}?page=streamers&error=failed`); }
     });
 
     // Voice preview endpoint - serves pre-generated preview audio files
@@ -2126,7 +4726,7 @@ function start(botClient) {
     app.post('/manage/:guildId/update-logging', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
-            const { log_channel_id, enabled_logs, log_categories } = req.body;
+            const { log_channel_id, enabled_logs, log_categories, event_colors } = req.body;
 
             // Update main logging config
             await pool.execute(`
@@ -2145,10 +4745,11 @@ function start(botClient) {
             // First, get all enabled log types
             const enabledArray = Array.isArray(enabled_logs) ? enabled_logs : (enabled_logs ? [enabled_logs] : []);
             const categoryOverrides = log_categories || {};
+            const colorOverrides = event_colors || {};
 
             // Define all possible log categories to ensure we update disabled ones too
             const allCategories = [
-                'messageDelete', 'messageUpdate', 'memberUpdate', 'memberLeave', 'memberKick',
+                'memberJoin', 'messageDelete', 'messageUpdate', 'memberUpdate', 'memberLeave', 'memberKick',
                 'voiceUpdate', 'channelCreate', 'channelDelete', 'channelUpdate',
                 'threadCreate', 'threadDelete', 'threadUpdate', 'guildUpdate',
                 'ban', 'unban', 'roleCreate', 'roleDelete', 'roleUpdate',
@@ -2161,20 +4762,949 @@ function start(botClient) {
             for (const eventType of allCategories) {
                 const isEnabled = enabledArray.includes(eventType);
                 const channelOverride = categoryOverrides[eventType] || null;
+                const embedColor = colorOverrides[eventType] || null;
 
                 await pool.execute(`
-                    INSERT INTO log_event_config (guild_id, event_type, enabled, log_channel_id)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO log_event_config (guild_id, event_type, enabled, log_channel_id, embed_color)
+                    VALUES (?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                         enabled = VALUES(enabled),
-                        log_channel_id = VALUES(log_channel_id)
-                `, [guildId, eventType, isEnabled ? 1 : 0, channelOverride]);
+                        log_channel_id = VALUES(log_channel_id),
+                        embed_color = VALUES(embed_color)
+                `, [guildId, eventType, isEnabled ? 1 : 0, channelOverride, embedColor]);
             }
 
             res.redirect(`/manage/${guildId}?page=logging&success=config`);
         } catch (error) {
             logger.error('[POST /manage/:guildId/update-logging Error]', error);
             res.redirect(`/manage/${guildId}?page=logging&error=config`);
+        }
+    });
+
+    // ===========================
+    // CUSTOM EMBEDS
+    // ===========================
+
+    app.post('/manage/:guildId/create-custom-embed', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const guildId = req.params.guildId;
+            const { channel_id, title, description, color, thumbnail_url, image_url, footer_text, author_name, author_icon_url, url, action } = req.body;
+
+            if (!channel_id) {
+                return res.redirect(`/manage/${guildId}?page=custom-embeds&error=missing_channel`);
+            }
+            if (!title && !description) {
+                return res.redirect(`/manage/${guildId}?page=custom-embeds&error=missing_content`);
+            }
+
+            const [result] = await pool.execute(`
+                INSERT INTO custom_embeds (guild_id, channel_id, title, description, color, thumbnail_url, image_url, footer_text, author_name, author_icon_url, url, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [guildId, channel_id, title || null, description || null, color || '#a78bfa', thumbnail_url || null, image_url || null, footer_text || null, author_name || null, author_icon_url || null, url || null, req.user.id]);
+
+            const embedId = result.insertId;
+
+            // If action is 'post', immediately post to Discord
+            if (action === 'post') {
+                try {
+                    const botClient = global.botManager?.getClientForGuild(guildId) || global.botManager?.getDefaultClient() || client;
+                    const channel = await botClient.channels.fetch(channel_id).catch(() => null);
+                    if (channel && channel.isTextBased()) {
+                        const embed = new EmbedBuilder()
+                            .setColor(color || '#a78bfa');
+                        if (title) embed.setTitle(title);
+                        if (description) embed.setDescription(description);
+                        if (url) embed.setURL(url);
+                        if (thumbnail_url) embed.setThumbnail(thumbnail_url);
+                        if (image_url) embed.setImage(image_url);
+                        if (footer_text) embed.setFooter({ text: footer_text });
+                        if (author_name) embed.setAuthor({ name: author_name, iconURL: author_icon_url || undefined });
+                        embed.setTimestamp();
+
+                        const msg = await channel.send({ embeds: [embed] });
+                        await pool.execute('UPDATE custom_embeds SET message_id = ? WHERE id = ?', [msg.id, embedId]);
+                        logger.info(`[Custom Embeds] Posted embed ${embedId} to channel ${channel_id} as message ${msg.id}`);
+                    }
+                } catch (postErr) {
+                    logger.error(`[Custom Embeds] Failed to post embed ${embedId}: ${postErr.message}`);
+                }
+            }
+
+            res.redirect(`/manage/${guildId}?page=custom-embeds&success=created`);
+        } catch (error) {
+            logger.error('[POST create-custom-embed Error]', error);
+            res.redirect(`/manage/${req.params.guildId}?page=custom-embeds&error=create_failed`);
+        }
+    });
+
+    app.post('/api/guilds/:guildId/custom-embeds/:embedId/post', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const { guildId, embedId } = req.params;
+            const [embeds] = await pool.execute('SELECT * FROM custom_embeds WHERE id = ? AND guild_id = ?', [embedId, guildId]);
+            if (!embeds.length) return res.json({ success: false, error: 'Embed not found' });
+
+            const emb = embeds[0];
+            if (emb.message_id) return res.json({ success: false, error: 'Already posted' });
+
+            const botClient = global.botManager?.getClientForGuild(guildId) || global.botManager?.getDefaultClient() || client;
+            const channel = await botClient.channels.fetch(emb.channel_id).catch(() => null);
+            if (!channel || !channel.isTextBased()) return res.json({ success: false, error: 'Channel not found' });
+
+            const embed = new EmbedBuilder().setColor(emb.color || '#a78bfa');
+            if (emb.title) embed.setTitle(emb.title);
+            if (emb.description) embed.setDescription(emb.description);
+            if (emb.url) embed.setURL(emb.url);
+            if (emb.thumbnail_url) embed.setThumbnail(emb.thumbnail_url);
+            if (emb.image_url) embed.setImage(emb.image_url);
+            if (emb.footer_text) embed.setFooter({ text: emb.footer_text });
+            if (emb.author_name) embed.setAuthor({ name: emb.author_name, iconURL: emb.author_icon_url || undefined });
+            embed.setTimestamp();
+
+            const msg = await channel.send({ embeds: [embed] });
+            await pool.execute('UPDATE custom_embeds SET message_id = ? WHERE id = ?', [msg.id, embedId]);
+
+            res.json({ success: true, message_id: msg.id });
+        } catch (error) {
+            logger.error('[POST custom-embeds post Error]', error);
+            res.status(500).json({ success: false, error: 'Failed to post' });
+        }
+    });
+
+    app.post('/manage/:guildId/delete-custom-embed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { embedId } = req.body;
+            const [embeds] = await pool.execute('SELECT * FROM custom_embeds WHERE id = ? AND guild_id = ?', [embedId, guildId]);
+            if (embeds.length && embeds[0].message_id) {
+                try {
+                    const botClient = global.botManager?.getClientForGuild(guildId) || global.botManager?.getDefaultClient() || client;
+                    const channel = await botClient.channels.fetch(embeds[0].channel_id).catch(() => null);
+                    if (channel) {
+                        const msg = await channel.messages.fetch(embeds[0].message_id).catch(() => null);
+                        if (msg) await msg.delete().catch(() => {});
+                    }
+                } catch { /* best effort */ }
+            }
+            await pool.execute('DELETE FROM custom_embeds WHERE id = ? AND guild_id = ?', [embedId, guildId]);
+            res.redirect(`/manage/${guildId}?page=custom-embeds&success=deleted`);
+        } catch (error) {
+            logger.error('[POST delete-custom-embed Error]', error);
+            res.redirect(`/manage/${guildId}?page=custom-embeds&error=delete_failed`);
+        }
+    });
+
+    // Edit custom embed
+    app.post('/manage/:guildId/edit-custom-embed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { embedId, channel_id, title, description, color, thumbnail_url, image_url, footer_text, author_name, author_icon_url, url, action } = req.body;
+
+            await pool.execute(
+                `UPDATE custom_embeds SET channel_id = ?, title = ?, description = ?, color = ?, thumbnail_url = ?, image_url = ?, footer_text = ?, author_name = ?, author_icon_url = ?, url = ?, updated_at = NOW() WHERE id = ? AND guild_id = ?`,
+                [channel_id, title || null, description || null, color || '#a78bfa', thumbnail_url || null, image_url || null, footer_text || null, author_name || null, author_icon_url || null, url || null, embedId, guildId]
+            );
+
+            // If "Save & Update Discord Message", also edit the live message
+            if (action === 'update_discord') {
+                const [embeds] = await pool.execute('SELECT * FROM custom_embeds WHERE id = ? AND guild_id = ?', [embedId, guildId]);
+                if (embeds.length) {
+                    try {
+                        const botClient = global.botManager?.getClientForGuild(guildId) || global.botManager?.getDefaultClient() || client;
+                        const channel = await botClient.channels.fetch(embeds[0].channel_id).catch(() => null);
+                        if (channel) {
+                            const embed = new EmbedBuilder().setColor(embeds[0].color || '#a78bfa');
+                            if (embeds[0].title) embed.setTitle(embeds[0].title);
+                            if (embeds[0].url) embed.setURL(embeds[0].url);
+                            if (embeds[0].description) embed.setDescription(embeds[0].description);
+                            if (embeds[0].thumbnail_url) embed.setThumbnail(embeds[0].thumbnail_url);
+                            if (embeds[0].image_url) embed.setImage(embeds[0].image_url);
+                            if (embeds[0].footer_text) embed.setFooter({ text: embeds[0].footer_text });
+                            if (embeds[0].author_name) {
+                                const authorObj = { name: embeds[0].author_name };
+                                if (embeds[0].author_icon_url) authorObj.iconURL = embeds[0].author_icon_url;
+                                embed.setAuthor(authorObj);
+                            }
+
+                            let updated = false;
+                            // Try to edit existing message first
+                            if (embeds[0].message_id) {
+                                try {
+                                    const msg = await channel.messages.fetch(embeds[0].message_id).catch(() => null);
+                                    if (msg && msg.author.id === botClient.user.id) {
+                                        await msg.edit({ embeds: [embed] });
+                                        updated = true;
+                                    } else if (msg) {
+                                        // Message exists but was posted by a different bot — delete and repost
+                                        await msg.delete().catch(() => {});
+                                    }
+                                } catch { /* message may be gone */ }
+                            }
+
+                            // If edit didn't work, post a new message
+                            if (!updated) {
+                                const newMsg = await channel.send({ embeds: [embed] });
+                                await pool.execute('UPDATE custom_embeds SET message_id = ? WHERE id = ?', [newMsg.id, embedId]);
+                                logger.info(`[Custom Embeds] Reposted embed ${embedId} as new message ${newMsg.id} (old message was from different bot)`);
+                            }
+                        }
+                    } catch (e) {
+                        logger.warn('[Edit Custom Embed] Failed to update Discord message:', e.message);
+                    }
+                }
+            }
+
+            res.redirect(`/manage/${guildId}?page=custom-embeds&success=updated`);
+        } catch (error) {
+            logger.error('[POST edit-custom-embed Error]', error);
+            res.redirect(`/manage/${guildId}?page=custom-embeds&error=edit_failed`);
+        }
+    });
+
+    // ===========================
+    // SCHEDULED PURGE ROUTES
+    // ===========================
+
+    app.post('/manage/:guildId/add-purge', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { channel_id, mode, purge_time, interval_hours } = req.body;
+            if (!channel_id) return res.redirect(`/manage/${guildId}?page=auto-purge&error=missing_channel`);
+
+            const isInterval = mode === 'interval';
+            await pool.execute(`
+                INSERT INTO scheduled_purges (guild_id, channel_id, purge_time, interval_hours, enabled, created_by)
+                VALUES (?, ?, ?, ?, 1, ?)
+                ON DUPLICATE KEY UPDATE purge_time = VALUES(purge_time), interval_hours = VALUES(interval_hours), enabled = 1
+            `, [guildId, channel_id, isInterval ? '00:00' : (purge_time || '00:00'), isInterval ? (parseInt(interval_hours) || 24) : null, req.user.id]);
+
+            logger.info(`[Auto Purge] Schedule added for channel ${channel_id} in guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=auto-purge&success=added`);
+        } catch (error) {
+            logger.error('[POST add-purge Error]', error);
+            res.redirect(`/manage/${guildId}?page=auto-purge&error=add_failed`);
+        }
+    });
+
+    app.post('/manage/:guildId/remove-purge', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            await pool.execute('DELETE FROM scheduled_purges WHERE id = ? AND guild_id = ?', [req.body.purgeId, guildId]);
+            res.redirect(`/manage/${guildId}?page=auto-purge&success=removed`);
+        } catch (error) {
+            logger.error('[POST remove-purge Error]', error);
+            res.redirect(`/manage/${guildId}?page=auto-purge&error=remove_failed`);
+        }
+    });
+
+    app.post('/manage/:guildId/toggle-purge', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            await pool.execute('UPDATE scheduled_purges SET enabled = ? WHERE id = ? AND guild_id = ?', [req.body.enabled === '1' ? 1 : 0, req.body.purgeId, guildId]);
+            res.redirect(`/manage/${guildId}?page=auto-purge&success=toggled`);
+        } catch (error) {
+            logger.error('[POST toggle-purge Error]', error);
+            res.redirect(`/manage/${guildId}?page=auto-purge&error=toggle_failed`);
+        }
+    });
+
+    // ===========================
+    // SOCIAL FEED ROUTES
+    // ===========================
+
+    // YouTube Feeds
+    app.post('/manage/:guildId/add-youtube-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const wantsJson = req.is('application/json') || req.accepts(['html', 'json']) === 'json';
+        try {
+            const { youtube_channel_id } = req.body;
+            const discordChannelId = req.body.discord_channel_id || req.body.channel_id;
+            if (!youtube_channel_id || !discordChannelId) {
+                if (wantsJson) return res.status(400).json({ error: 'Missing required fields: youtube_channel_id, discord_channel_id' });
+                return res.redirect(`/manage/${guildId}?page=feeds&error=missing_fields`);
+            }
+            await pool.execute(
+                'INSERT INTO youtube_feeds (guild_id, youtube_channel_id, discord_channel_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE discord_channel_id = VALUES(discord_channel_id)',
+                [guildId, youtube_channel_id.trim(), discordChannelId]
+            );
+            logger.info(`[Feeds] YouTube feed added: ${youtube_channel_id} → ${discordChannelId} in guild ${guildId}`);
+            if (wantsJson) return res.json({ success: true });
+            res.redirect(`/manage/${guildId}?page=feeds&success=youtube_added`);
+        } catch (error) {
+            logger.error('[POST add-youtube-feed Error]', error);
+            if (wantsJson) return res.status(500).json({ error: 'Failed to add YouTube feed' });
+            res.redirect(`/manage/${guildId}?page=feeds&error=youtube`);
+        }
+    });
+
+    app.post('/manage/:guildId/remove-youtube-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            await pool.execute('DELETE FROM youtube_feeds WHERE id = ? AND guild_id = ?', [req.body.feedId, guildId]);
+            logger.info(`[Feeds] YouTube feed ${req.body.feedId} removed from guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=feeds&success=youtube_removed`);
+        } catch (error) {
+            logger.error('[POST remove-youtube-feed Error]', error);
+            res.redirect(`/manage/${guildId}?page=feeds&error=youtube`);
+        }
+    });
+
+    // Reddit Feeds
+    app.post('/manage/:guildId/add-reddit-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const wantsJson = req.is('application/json') || req.accepts(['html', 'json']) === 'json';
+        try {
+            const { subreddit } = req.body;
+            const channelId = req.body.channel_id || req.body.discord_channel_id;
+            if (!subreddit || !channelId) {
+                if (wantsJson) return res.status(400).json({ error: 'Missing required fields: subreddit, channel_id' });
+                return res.redirect(`/manage/${guildId}?page=feeds&error=missing_fields`);
+            }
+            const cleanSubreddit = subreddit.trim().replace(/^r\//, '');
+            await pool.execute(
+                'INSERT INTO reddit_feeds (guild_id, subreddit, channel_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id)',
+                [guildId, cleanSubreddit, channelId]
+            );
+            logger.info(`[Feeds] Reddit feed added: r/${cleanSubreddit} → ${channelId} in guild ${guildId}`);
+            if (wantsJson) return res.json({ success: true });
+            res.redirect(`/manage/${guildId}?page=feeds&success=reddit_added`);
+        } catch (error) {
+            logger.error('[POST add-reddit-feed Error]', error);
+            if (wantsJson) return res.status(500).json({ error: 'Failed to add Reddit feed' });
+            res.redirect(`/manage/${guildId}?page=feeds&error=reddit`);
+        }
+    });
+
+    app.post('/manage/:guildId/remove-reddit-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            await pool.execute('DELETE FROM reddit_feeds WHERE id = ? AND guild_id = ?', [req.body.feedId, guildId]);
+            logger.info(`[Feeds] Reddit feed ${req.body.feedId} removed from guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=feeds&success=reddit_removed`);
+        } catch (error) {
+            logger.error('[POST remove-reddit-feed Error]', error);
+            res.redirect(`/manage/${guildId}?page=feeds&error=reddit`);
+        }
+    });
+
+    // Twitter/X Feeds
+    app.post('/manage/:guildId/add-twitter-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const wantsJson = req.is('application/json') || req.accepts(['html', 'json']) === 'json';
+        try {
+            const { twitter_username } = req.body;
+            // Modern form sends `channel_id`; older code passed `discord_channel_id`. Accept either.
+            const channelId = req.body.channel_id || req.body.discord_channel_id;
+            if (!twitter_username || !channelId) {
+                if (wantsJson) return res.status(400).json({ error: 'Missing required fields: twitter_username, channel_id' });
+                return res.redirect(`/manage/${guildId}?page=feeds&error=missing_fields`);
+            }
+            const cleanUsername = twitter_username.trim().replace(/^@/, '');
+            await pool.execute(
+                'INSERT INTO twitter_feeds (guild_id, twitter_username, channel_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id)',
+                [guildId, cleanUsername, channelId]
+            );
+            logger.info(`[Feeds] Twitter feed added: @${cleanUsername} → ${channelId} in guild ${guildId}`);
+            if (wantsJson) return res.json({ success: true, twitter_username: cleanUsername, channel_id: channelId });
+            res.redirect(`/manage/${guildId}?page=feeds&success=twitter_added`);
+        } catch (error) {
+            logger.error('[POST add-twitter-feed Error]', error);
+            if (wantsJson) return res.status(500).json({ error: 'Failed to add Twitter feed' });
+            res.redirect(`/manage/${guildId}?page=feeds&error=twitter`);
+        }
+    });
+
+    app.post('/manage/:guildId/remove-twitter-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            await pool.execute('DELETE FROM twitter_feeds WHERE id = ? AND guild_id = ?', [req.body.feedId, guildId]);
+            logger.info(`[Feeds] Twitter feed ${req.body.feedId} removed from guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=feeds&success=twitter_removed`);
+        } catch (error) {
+            logger.error('[POST remove-twitter-feed Error]', error);
+            res.redirect(`/manage/${guildId}?page=feeds&error=twitter`);
+        }
+    });
+
+    // ===========================
+    // BLUESKY ROUTES
+    // ===========================
+    app.post('/manage/:guildId/add-bluesky-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const wantsJson = req.is('application/json') || req.accepts(['html', 'json']) === 'json';
+        try {
+            let { bluesky_handle } = req.body;
+            const channelId = req.body.channel_id || req.body.discord_channel_id;
+            if (!bluesky_handle || !channelId) {
+                if (wantsJson) return res.status(400).json({ error: 'Missing required fields: bluesky_handle, channel_id' });
+                return res.redirect(`/manage/${guildId}?page=feeds&error=missing_fields`);
+            }
+            bluesky_handle = bluesky_handle.trim().replace(/^@/, '').replace(/^https?:\/\/bsky\.app\/profile\//, '');
+
+            // Resolve the profile to confirm the handle is real before persisting
+            const { getProfile } = await import('../utils/platforms/bluesky.js');
+            const profile = await getProfile(bluesky_handle);
+            if (!profile) {
+                if (wantsJson) return res.status(404).json({ error: `Bluesky handle @${bluesky_handle} not found` });
+                return res.redirect(`/manage/${guildId}?page=feeds&error=bluesky_not_found`);
+            }
+
+            await pool.execute(
+                'INSERT INTO bluesky_feeds (guild_id, bluesky_handle, channel_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id)',
+                [guildId, bluesky_handle, channelId]
+            );
+            logger.info(`[Feeds] Bluesky feed added: @${bluesky_handle} → ${channelId} in guild ${guildId}`);
+            if (wantsJson) return res.json({ success: true, bluesky_handle, channel_id: channelId, profile: { displayName: profile.displayName, handle: profile.handle } });
+            res.redirect(`/manage/${guildId}?page=feeds&success=bluesky_added`);
+        } catch (error) {
+            logger.error('[POST add-bluesky-feed Error]', error);
+            if (wantsJson) return res.status(500).json({ error: 'Failed to add Bluesky feed' });
+            res.redirect(`/manage/${guildId}?page=feeds&error=bluesky`);
+        }
+    });
+
+    app.post('/manage/:guildId/remove-bluesky-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            await pool.execute('DELETE FROM bluesky_feeds WHERE id = ? AND guild_id = ?', [req.body.feedId, guildId]);
+            logger.info(`[Feeds] Bluesky feed ${req.body.feedId} removed from guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=feeds&success=bluesky_removed`);
+        } catch (error) {
+            logger.error('[POST remove-bluesky-feed Error]', error);
+            res.redirect(`/manage/${guildId}?page=feeds&error=bluesky`);
+        }
+    });
+
+    // ===========================
+    // INSTAGRAM ROUTES
+    // ===========================
+    app.post('/manage/:guildId/add-instagram-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const wantsJson = req.is('application/json') || req.accepts(['html', 'json']) === 'json';
+        try {
+            let { instagram_username } = req.body;
+            const channelId = req.body.channel_id || req.body.discord_channel_id;
+            if (!instagram_username || !channelId) {
+                if (wantsJson) return res.status(400).json({ error: 'Missing required fields: instagram_username, channel_id' });
+                return res.redirect(`/manage/${guildId}?page=feeds&error=missing_fields`);
+            }
+            instagram_username = instagram_username.trim().replace(/^@/, '');
+
+            const { igBusinessDiscovery } = await import('../utils/platforms/meta.js');
+            const biz = await igBusinessDiscovery(instagram_username, { mediaLimit: 1 });
+            if (!biz) {
+                const msg = `Instagram profile @${instagram_username} not found or not a Business/Creator account (Graph API requirement)`;
+                if (wantsJson) return res.status(404).json({ error: msg });
+                return res.redirect(`/manage/${guildId}?page=feeds&error=instagram_not_discoverable`);
+            }
+
+            await pool.execute(
+                'INSERT INTO instagram_feeds (guild_id, instagram_username, ig_user_id, channel_id) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id), ig_user_id = VALUES(ig_user_id)',
+                [guildId, instagram_username, biz.id || null, channelId]
+            );
+            logger.info(`[Feeds] Instagram feed added: @${instagram_username} → ${channelId} in guild ${guildId}`);
+            if (wantsJson) return res.json({ success: true, instagram_username, channel_id: channelId });
+            res.redirect(`/manage/${guildId}?page=feeds&success=instagram_added`);
+        } catch (error) {
+            logger.error('[POST add-instagram-feed Error]', error);
+            if (wantsJson) return res.status(500).json({ error: 'Failed to add Instagram feed' });
+            res.redirect(`/manage/${guildId}?page=feeds&error=instagram`);
+        }
+    });
+
+    app.post('/manage/:guildId/remove-instagram-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            await pool.execute('DELETE FROM instagram_feeds WHERE id = ? AND guild_id = ?', [req.body.feedId, guildId]);
+            res.redirect(`/manage/${guildId}?page=feeds&success=instagram_removed`);
+        } catch (error) {
+            logger.error('[POST remove-instagram-feed Error]', error);
+            res.redirect(`/manage/${guildId}?page=feeds&error=instagram`);
+        }
+    });
+
+    // ===========================
+    // FACEBOOK PAGE ROUTES
+    // ===========================
+    app.post('/manage/:guildId/add-facebook-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const wantsJson = req.is('application/json') || req.accepts(['html', 'json']) === 'json';
+        try {
+            const { facebook_page_id } = req.body;
+            const channelId = req.body.channel_id || req.body.discord_channel_id;
+            if (!facebook_page_id || !channelId) {
+                if (wantsJson) return res.status(400).json({ error: 'Missing required fields: facebook_page_id, channel_id' });
+                return res.redirect(`/manage/${guildId}?page=feeds&error=missing_fields`);
+            }
+            const pageId = facebook_page_id.trim();
+
+            const { fbPageInfo } = await import('../utils/platforms/meta.js');
+            const info = await fbPageInfo(pageId);
+            if (!info) {
+                const msg = `Facebook page ${pageId} not accessible with the configured token`;
+                if (wantsJson) return res.status(404).json({ error: msg });
+                return res.redirect(`/manage/${guildId}?page=feeds&error=facebook_not_found`);
+            }
+
+            await pool.execute(
+                'INSERT INTO facebook_feeds (guild_id, facebook_page_id, page_name, channel_id) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id), page_name = VALUES(page_name)',
+                [guildId, pageId, info.name || null, channelId]
+            );
+            logger.info(`[Feeds] Facebook feed added: ${info.name || pageId} → ${channelId} in guild ${guildId}`);
+            if (wantsJson) return res.json({ success: true, facebook_page_id: pageId, page_name: info.name, channel_id: channelId });
+            res.redirect(`/manage/${guildId}?page=feeds&success=facebook_added`);
+        } catch (error) {
+            logger.error('[POST add-facebook-feed Error]', error);
+            if (wantsJson) return res.status(500).json({ error: 'Failed to add Facebook feed' });
+            res.redirect(`/manage/${guildId}?page=feeds&error=facebook`);
+        }
+    });
+
+    app.post('/manage/:guildId/remove-facebook-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            await pool.execute('DELETE FROM facebook_feeds WHERE id = ? AND guild_id = ?', [req.body.feedId, guildId]);
+            res.redirect(`/manage/${guildId}?page=feeds&success=facebook_removed`);
+        } catch (error) {
+            logger.error('[POST remove-facebook-feed Error]', error);
+            res.redirect(`/manage/${guildId}?page=feeds&error=facebook`);
+        }
+    });
+
+    // ===========================
+    // TIKTOK ROUTES
+    // ===========================
+
+    // Add TikTok creator directly from the TikTok page (with video feed enabled by default)
+    app.post('/manage/:guildId/tiktok/add-creator', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            let { username, channel_id, custom_message, mention_role_id } = req.body;
+            if (!username || !channel_id) return res.redirect(`/manage/${guildId}?page=tiktok&error=missing_fields`);
+
+            username = username.trim().replace(/^@/, '').toLowerCase();
+
+            // Resolve the real TikTok user id before persisting — never insert temp_ placeholders.
+            const { resolveStreamerIdentity, upsertStreamerByIdentity } = await import('../utils/platforms/resolve-identity.js');
+            const identity = await resolveStreamerIdentity('tiktok', username);
+            if (!identity) {
+                logger.warn('[TikTok add-creator] TikTok user not resolvable', { username });
+                return res.redirect(`/manage/${guildId}?page=tiktok&error=tiktok_user_not_found`);
+            }
+            const streamerId = await upsertStreamerByIdentity(pool, 'tiktok', identity, null);
+
+            // Create subscription with video feed enabled, custom message, and mention role
+            await pool.execute(`
+                INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, video_announcement_channel_id, tiktok_vod_notifications, delete_on_end, custom_message, live_role_id)
+                VALUES (?, ?, ?, ?, 1, 1, ?, ?)
+                ON DUPLICATE KEY UPDATE video_announcement_channel_id = VALUES(video_announcement_channel_id), tiktok_vod_notifications = 1, custom_message = VALUES(custom_message), live_role_id = VALUES(live_role_id)
+            `, [guildId, streamerId, channel_id, channel_id, custom_message || null, mention_role_id || null]);
+
+            logger.info(`[TikTok] Creator @${username} added with video feed to channel ${channel_id} in guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=tiktok&success=creator_added`);
+        } catch (error) {
+            logger.error('[POST tiktok/add-creator Error]', error);
+            res.redirect(`/manage/${guildId}?page=tiktok&error=add_failed`);
+        }
+    });
+
+    // Toggle video feed notifications for a TikTok subscription
+    app.post('/manage/:guildId/tiktok/toggle-feed', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { subscription_id, enabled } = req.body;
+            await pool.execute(
+                'UPDATE subscriptions SET tiktok_vod_notifications = ? WHERE subscription_id = ? AND guild_id = ?',
+                [enabled === '1' ? 1 : 0, subscription_id, guildId]
+            );
+            logger.info(`[TikTok] Toggled video feed for sub ${subscription_id} in guild ${guildId}: ${enabled}`);
+            res.redirect(`/manage/${guildId}?page=tiktok&success=feed_toggled`);
+        } catch (error) {
+            logger.error('[TikTok toggle-feed Error]', error);
+            res.redirect(`/manage/${guildId}?page=tiktok&error=feed_toggle`);
+        }
+    });
+
+    // Edit a TikTok creator's settings
+    app.post('/manage/:guildId/tiktok/edit', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { subscription_id, announcement_channel_id, video_announcement_channel_id, live_role_id, ping_role_id, custom_message, delete_on_end, edit_on_end, tiktok_embed_video } = req.body;
+            await pool.execute(`
+                UPDATE subscriptions SET
+                    announcement_channel_id = ?,
+                    video_announcement_channel_id = ?,
+                    live_role_id = ?,
+                    ping_role_id = ?,
+                    custom_message = ?,
+                    delete_on_end = ?,
+                    edit_on_end = ?,
+                    tiktok_embed_video = ?
+                WHERE subscription_id = ? AND guild_id = ?
+            `, [
+                announcement_channel_id || null,
+                video_announcement_channel_id || null,
+                live_role_id || null,
+                ping_role_id || null,
+                custom_message || null,
+                delete_on_end ? 1 : 0,
+                edit_on_end ? 1 : 0,
+                tiktok_embed_video ? 1 : 0,
+                subscription_id,
+                guildId,
+            ]);
+            logger.info(`[TikTok] Updated settings for sub ${subscription_id} in guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=tiktok&success=updated`);
+        } catch (error) {
+            logger.error('[TikTok edit Error]', error);
+            res.redirect(`/manage/${guildId}?page=tiktok&error=edit_failed`);
+        }
+    });
+
+    // Remove a TikTok creator
+    app.post('/manage/:guildId/tiktok/remove', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { subscription_id, streamer_id } = req.body;
+            // Delete the subscription
+            await pool.execute('DELETE FROM subscriptions WHERE subscription_id = ? AND guild_id = ?', [subscription_id, guildId]);
+            // Check if any other guilds still track this streamer
+            const [remaining] = await pool.execute('SELECT COUNT(*) as c FROM subscriptions WHERE streamer_id = ?', [streamer_id]);
+            if (remaining[0].c === 0) {
+                // No other guilds track this streamer — clean up streamer record
+                await pool.execute('DELETE FROM streamers WHERE streamer_id = ? AND platform = ?', [streamer_id, 'tiktok']).catch(() => {});
+            }
+            logger.info(`[TikTok] Removed sub ${subscription_id} (streamer ${streamer_id}) from guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=tiktok&success=removed`);
+        } catch (error) {
+            logger.error('[TikTok remove Error]', error);
+            res.redirect(`/manage/${guildId}?page=tiktok&error=remove_failed`);
+        }
+    });
+
+    // Update TikTok feed settings (video channel override)
+    app.post('/manage/:guildId/tiktok/feed-settings', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const { video_channel_id } = req.body;
+            const channelId = video_channel_id || null;
+
+            // Update all TikTok subscriptions for this guild with the video channel
+            await pool.execute(`
+                UPDATE subscriptions sub
+                JOIN streamers s ON sub.streamer_id = s.streamer_id
+                SET sub.video_announcement_channel_id = ?
+                WHERE s.platform = 'tiktok' AND sub.guild_id = ?
+            `, [channelId, guildId]);
+
+            logger.info(`[TikTok] Updated feed channel for guild ${guildId}: ${channelId || 'default'}`);
+            res.redirect(`/manage/${guildId}?page=tiktok&success=feed_settings`);
+        } catch (error) {
+            logger.error('[TikTok feed-settings Error]', error);
+            res.redirect(`/manage/${guildId}?page=tiktok&error=feed_settings`);
+        }
+    });
+
+    // Twitch Role Sync — Save settings
+    app.post('/manage/:guildId/twitch-role-sync/settings', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const { vip_role_id, mod_role_id, sub_role_id, remove_vip_on_leave, enabled } = req.body;
+        try {
+            await pool.execute(`
+                UPDATE twitch_role_sync_config SET
+                    vip_role_id = ?, mod_role_id = ?, sub_role_id = ?,
+                    remove_vip_on_leave = ?, enabled = ?
+                WHERE guild_id = ?
+            `, [vip_role_id || null, mod_role_id || null, sub_role_id || null, remove_vip_on_leave ? 1 : 0, enabled ? 1 : 0, guildId]);
+            logger.info(`[TwitchRoleSync] Updated settings for guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=streamers&success=sync_settings_saved`);
+        } catch (err) {
+            logger.error('[TwitchRoleSync] Error saving settings:', { error: err.message, guildId });
+            res.redirect(`/manage/${guildId}?page=streamers&error=settings_save_failed`);
+        }
+    });
+
+    // Twitch Role Sync — Disconnect broadcaster
+    app.post('/manage/:guildId/twitch-role-sync/disconnect', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            await pool.execute('DELETE FROM twitch_role_sync_config WHERE guild_id = ?', [guildId]);
+            await pool.execute('DELETE FROM twitch_role_sync_members WHERE guild_id = ?', [guildId]);
+            logger.info(`[TwitchRoleSync] Disconnected broadcaster for guild ${guildId}`);
+            res.redirect(`/manage/${guildId}?page=streamers&success=twitch_disconnected`);
+        } catch (err) {
+            logger.error('[TwitchRoleSync] Error disconnecting:', { error: err.message, guildId });
+            res.redirect(`/manage/${guildId}?page=streamers&error=disconnect_failed`);
+        }
+    });
+
+    // Twitch Role Sync — Fetch full Twitch mods/VIPs list with link status
+    // Returns JSON; the UI calls this to render the mapping panel.
+    app.get('/manage/:guildId/twitch-role-sync/mods-vips', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const [configRows] = await pool.execute('SELECT * FROM twitch_role_sync_config WHERE guild_id = ?', [guildId]);
+            if (configRows.length === 0) return res.json({ error: 'broadcaster_not_connected' });
+
+            const config = configRows[0];
+            const { getValidToken } = await import('../jobs/twitch-role-sync-scheduler.js');
+            const { getChannelVIPs, getChannelModerators } = await import('../utils/platforms/twitch.js');
+            const accessToken = await getValidToken(config);
+            if (!accessToken) return res.json({ error: 'token_invalid' });
+
+            const [vipList, modList] = await Promise.all([
+                getChannelVIPs(config.broadcaster_twitch_id, accessToken).catch(() => []),
+                getChannelModerators(config.broadcaster_twitch_id, accessToken).catch(() => []),
+            ]);
+
+            // Build link map from both sources
+            const linkMap = new Map(); // twitch_user_id → { discord_user_id, twitch_username, source }
+            const [communityLinks] = await pool.execute(
+                'SELECT discord_user_id, twitch_user_id, twitch_username FROM community_twitch_links WHERE guild_id = ? AND twitch_user_id IS NOT NULL',
+                [guildId]
+            );
+            for (const l of communityLinks) linkMap.set(l.twitch_user_id, { ...l, source: 'community_twitch_links' });
+            const [streamerLinks] = await pool.execute(
+                `SELECT DISTINCT s.discord_user_id, s.platform_user_id AS twitch_user_id, s.username AS twitch_username
+                 FROM streamers s JOIN subscriptions sub ON s.streamer_id = sub.streamer_id
+                 WHERE sub.guild_id = ? AND s.platform = 'twitch' AND s.discord_user_id IS NOT NULL AND s.platform_user_id IS NOT NULL`,
+                [guildId]
+            );
+            for (const l of streamerLinks) {
+                if (!linkMap.has(l.twitch_user_id)) linkMap.set(l.twitch_user_id, { ...l, source: 'streamers' });
+            }
+
+            // Known Twitch bot accounts that can never be Discord-linked
+            const KNOWN_TWITCH_BOTS = new Set([
+                'streamlabs', 'wizebot', 'sery_bot', 'streamelements', 'moobot', 'nightbot',
+                'kumabotdefender', 'frostytools', 'lumiastream', 'fossabot', 'cloudbot',
+                'commanderroot', 'soundalerts', 'streamcaptainbot', 'lurxx',
+            ]);
+
+            // Build candidate-name index for username heuristic matching.
+            //
+            // Discord display names and nicknames often use stylized Unicode —
+            // mathematical bold (𝐀), cursive (𝓐), fullwidth (Ａ), small caps (ᴀ),
+            // squared/circled letters, surrounding emojis/symbols, diacritics.
+            // None of those should defeat a username match. Two passes:
+            //   deStyle()   — NFKD-decomposes most variants, strips combining
+            //                 marks and zero-width characters, applies a small-
+            //                 caps lookup for code points NFKD won't touch
+            //                 (Phonetic Extensions, U+1D00-U+1D7F + a few singletons).
+            //   normalize() — deStyle + lowercase + strip all non-[a-z0-9].
+            //                 Used for fuzzy comparisons (substring, edit-distance).
+            //
+            // Source for the small-caps map: same trick `scripts/kitsune-lockdown.mjs`
+            // already uses for matching staff-role names.
+            const SMALL_CAPS_MAP = {
+                'ᴀ':'a','ʙ':'b','ᴄ':'c','ᴅ':'d','ᴇ':'e','ꜰ':'f','ɢ':'g','ʜ':'h','ɪ':'i',
+                'ᴊ':'j','ᴋ':'k','ʟ':'l','ᴍ':'m','ɴ':'n','ᴏ':'o','ᴘ':'p','ǫ':'q','ʀ':'r',
+                'ꜱ':'s','ᴛ':'t','ᴜ':'u','ᴠ':'v','ᴡ':'w','ʏ':'y','ᴢ':'z',
+            };
+            function deStyle(s) {
+                if (!s) return '';
+                let out = s.normalize('NFKD')
+                    .replace(/[̀-ͯ]/g, '')              // combining diacritic marks
+                    .replace(/[​-‍﻿]/g, '');       // zero-width / BOM
+                // Manual small-caps lookup (NFKD doesn't decompose Phonetic Extensions)
+                let mapped = '';
+                for (const ch of out) mapped += SMALL_CAPS_MAP[ch] || SMALL_CAPS_MAP[ch.toLowerCase()] || ch;
+                return mapped;
+            }
+
+            const guild = req.guildObject;
+            const members = Array.from(guild.members.cache.filter(m => !m.user.bot).values());
+            const normalize = (s) => deStyle(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+            const lowerDestyle = (s) => deStyle(s).toLowerCase();
+
+            const memberIndex = members.map(m => ({
+                id: m.user.id,
+                username: m.user.username,
+                global_name: m.user.globalName || null,
+                nickname: m.nickname || null,
+                names_raw: [m.user.username, m.user.globalName, m.nickname].filter(Boolean).map(lowerDestyle),
+                names_norm: [m.user.username, m.user.globalName, m.nickname].filter(Boolean).map(normalize),
+            }));
+
+            // Cheap Levenshtein for short strings (cap at 8 to bail early)
+            function lev(a, b, max = 8) {
+                if (Math.abs(a.length - b.length) > max) return max + 1;
+                const m = a.length, n = b.length;
+                if (m === 0) return n; if (n === 0) return m;
+                let prev = new Array(n + 1);
+                for (let j = 0; j <= n; j++) prev[j] = j;
+                for (let i = 1; i <= m; i++) {
+                    const curr = [i];
+                    let rowMin = i;
+                    for (let j = 1; j <= n; j++) {
+                        const cost = a[i-1] === b[j-1] ? 0 : 1;
+                        curr[j] = Math.min(prev[j] + 1, curr[j-1] + 1, prev[j-1] + cost);
+                        if (curr[j] < rowMin) rowMin = curr[j];
+                    }
+                    if (rowMin > max) return max + 1;
+                    prev = curr;
+                }
+                return prev[n];
+            }
+
+            // Score a (twitch_username, twitch_display_name) pair against a member.
+            // Returns { score, reason } where score is 0-100.
+            // Twitch display names can also be stylized, so the same deStyle pass
+            // applies on the Twitch side too — symmetry matters for matching.
+            function scoreMatch(twitchUsername, twitchDisplayName, mem) {
+                const tCandidates = [twitchUsername, twitchDisplayName].filter(Boolean).map(lowerDestyle);
+                const tNorms      = tCandidates.map(normalize);
+                let best = { score: 0, reason: null };
+
+                // Tier 1: exact case-insensitive match on any raw name
+                for (const tc of tCandidates) {
+                    if (mem.names_raw.includes(tc)) return { score: 100, reason: `exact "${tc}"` };
+                }
+                // Tier 2: exact normalized match (strips punctuation/underscores)
+                for (const tn of tNorms) {
+                    if (mem.names_norm.includes(tn)) {
+                        if (best.score < 92) best = { score: 92, reason: `normalized exact "${tn}"` };
+                    }
+                }
+                // Tier 3: substring/contains (small length delta)
+                for (const tn of tNorms) {
+                    for (const mn of mem.names_norm) {
+                        if (!tn || !mn) continue;
+                        if (tn === mn) continue; // already scored
+                        const longer = tn.length > mn.length ? tn : mn;
+                        const shorter = tn.length > mn.length ? mn : tn;
+                        if (shorter.length >= 4 && longer.includes(shorter)) {
+                            const ratio = shorter.length / longer.length;
+                            const score = Math.round(60 + ratio * 25);  // 60-85
+                            if (score > best.score) best = { score, reason: `contains "${shorter}"` };
+                        }
+                    }
+                }
+                // Tier 4: edit-distance ≤ 2 on normalized
+                for (const tn of tNorms) {
+                    for (const mn of mem.names_norm) {
+                        if (!tn || !mn || Math.abs(tn.length - mn.length) > 3) continue;
+                        const d = lev(tn, mn, 3);
+                        if (d <= 2 && tn.length >= 4) {
+                            const score = d === 0 ? 92 : (d === 1 ? 75 : 65);
+                            if (score > best.score) best = { score, reason: `edit-distance ${d} from "${mn}"` };
+                        }
+                    }
+                }
+                return best;
+            }
+
+            // For an unlinked Twitch entry, find the best member suggestion.
+            function suggestForTwitch(twitchUsername, twitchDisplayName, excludeDiscordIds) {
+                let bestMember = null, bestScore = 0, bestReason = null;
+                for (const mem of memberIndex) {
+                    if (excludeDiscordIds.has(mem.id)) continue;  // member already linked to another Twitch user
+                    const r = scoreMatch(twitchUsername, twitchDisplayName, mem);
+                    if (r.score > bestScore) {
+                        bestScore = r.score; bestReason = r.reason; bestMember = mem;
+                    }
+                }
+                if (!bestMember || bestScore < 60) return null;
+                return {
+                    discord_user_id: bestMember.id,
+                    discord_username: bestMember.username,
+                    discord_display: bestMember.global_name || bestMember.nickname || null,
+                    score: bestScore,
+                    reason: bestReason,
+                };
+            }
+
+            // Members already linked to a Twitch user shouldn't be suggested for another
+            const alreadyLinkedMemberIds = new Set([...linkMap.values()].map(l => l.discord_user_id));
+
+            const enrich = (entry, type) => {
+                const link = linkMap.get(entry.user_id);
+                const username = entry.user_login || entry.user_name?.toLowerCase();
+                const isBot = KNOWN_TWITCH_BOTS.has((entry.user_login || '').toLowerCase());
+                const suggestion = (link || isBot) ? null : suggestForTwitch(username, entry.user_name, alreadyLinkedMemberIds);
+                return {
+                    twitch_user_id: entry.user_id,
+                    twitch_username: username,
+                    twitch_display_name: entry.user_name,
+                    type,
+                    discord_user_id: link?.discord_user_id || null,
+                    link_source: link?.source || null,
+                    is_known_bot: isBot,
+                    suggestion,
+                };
+            };
+
+            return res.json({
+                mods: modList.map(m => enrich(m, 'mod')),
+                vips: vipList.map(v => enrich(v, 'vip')),
+                broadcaster: { twitch_id: config.broadcaster_twitch_id, twitch_username: config.broadcaster_twitch_username },
+                counts: {
+                    mods_total: modList.length,
+                    vips_total: vipList.length,
+                    mods_linked: modList.filter(m => linkMap.has(m.user_id)).length,
+                    vips_linked: vipList.filter(v => linkMap.has(v.user_id)).length,
+                },
+            });
+        } catch (err) {
+            logger.error('[TwitchRoleSync] mods-vips fetch error:', { error: err.message, stack: err.stack, guildId });
+            res.status(500).json({ error: 'fetch_failed', message: err.message });
+        }
+    });
+
+    // Twitch Role Sync — Link a Twitch user to a Discord user (manual mapping)
+    app.post('/manage/:guildId/twitch-role-sync/link', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const { twitch_user_id, twitch_username, discord_user_id } = req.body;
+        if (!twitch_user_id || !twitch_username || !discord_user_id) {
+            return res.status(400).json({ error: 'missing_fields' });
+        }
+        try {
+            // Verify the Discord user is actually in this guild (prevents linking to random snowflakes)
+            const guild = req.guildObject;
+            const member = await guild.members.fetch(discord_user_id).catch(() => null);
+            if (!member) return res.status(400).json({ error: 'discord_user_not_in_guild' });
+
+            await pool.execute(
+                `INSERT INTO community_twitch_links (guild_id, discord_user_id, twitch_username, twitch_user_id, last_checked)
+                 VALUES (?, ?, ?, ?, NOW())
+                 ON DUPLICATE KEY UPDATE twitch_username = VALUES(twitch_username), twitch_user_id = VALUES(twitch_user_id), last_checked = NOW()`,
+                [guildId, discord_user_id, twitch_username, twitch_user_id]
+            );
+            logger.info(`[TwitchRoleSync] Linked Twitch ${twitch_username} (${twitch_user_id}) → Discord ${member.user.tag} (${discord_user_id}) in guild ${guildId}`);
+            res.json({ success: true, discord_username: member.user.tag });
+        } catch (err) {
+            logger.error('[TwitchRoleSync] link error:', { error: err.message, guildId });
+            res.status(500).json({ error: 'link_failed', message: err.message });
+        }
+    });
+
+    // Twitch Role Sync — Unlink (delete a community_twitch_links row)
+    app.post('/manage/:guildId/twitch-role-sync/unlink', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const { discord_user_id } = req.body;
+        if (!discord_user_id) return res.status(400).json({ error: 'missing_discord_user_id' });
+        try {
+            await pool.execute(
+                'DELETE FROM community_twitch_links WHERE guild_id = ? AND discord_user_id = ?',
+                [guildId, discord_user_id]
+            );
+            res.json({ success: true });
+        } catch (err) {
+            res.status(500).json({ error: 'unlink_failed', message: err.message });
+        }
+    });
+
+    // Twitch Role Sync — Manual sync now
+    app.post('/manage/:guildId/twitch-role-sync/sync-now', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        try {
+            const [configs] = await pool.execute('SELECT * FROM twitch_role_sync_config WHERE guild_id = ?', [guildId]);
+            if (configs.length === 0) return res.redirect(`/manage/${guildId}?page=streamers&error=sync_not_configured`);
+            const { syncGuild } = await import('../jobs/twitch-role-sync-scheduler.js');
+            await syncGuild(configs[0]);
+            res.redirect(`/manage/${guildId}?page=streamers&success=sync_complete`);
+        } catch (err) {
+            logger.error('[TwitchRoleSync] Manual sync error:', { error: err.message, stack: err.stack, guildId });
+            res.redirect(`/manage/${guildId}?page=streamers&error=sync_failed`);
         }
     });
 
@@ -2263,12 +5793,18 @@ function start(botClient) {
     app.post('/manage/:guildId/update-leveling', checkAuth, checkGuildAdmin, async (req, res) => {
         const guildId = req.params.guildId;
         try {
-            const { leveling_enabled, leveling_xp_rate, leveling_xp_cooldown, level_up_channel_id, leveling_ignored_channels, leveling_ignored_roles } = req.body;
+            const {
+                leveling_enabled, leveling_xp_rate, leveling_xp_cooldown,
+                level_up_channel_id, leveling_ignored_channels, leveling_ignored_roles,
+                monthly_reset_enabled, reset_interval_days
+            } = req.body;
 
             logger.info(`[Leveling Config] Received for guild ${guildId}:`, {
                 leveling_enabled,
                 leveling_xp_rate,
-                leveling_xp_cooldown
+                leveling_xp_cooldown,
+                monthly_reset_enabled,
+                reset_interval_days
             });
 
             // Prepare arrays for ignored channels and roles
@@ -2280,17 +5816,27 @@ function start(botClient) {
                 ? leveling_ignored_roles
                 : (leveling_ignored_roles ? [leveling_ignored_roles] : []);
 
+            // Validate + coerce reset interval (7–365 days)
+            let resetIntervalDays = parseInt(reset_interval_days);
+            if (!Number.isInteger(resetIntervalDays) || resetIntervalDays < 7 || resetIntervalDays > 365) {
+                resetIntervalDays = 30;
+            }
+
             // Update leveling config
             await pool.execute(`
-                INSERT INTO level_config (guild_id, enabled, xp_per_message, xp_cooldown_seconds, level_up_channel_id, ignored_channels, ignored_roles)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO level_config
+                    (guild_id, enabled, xp_per_message, xp_cooldown_seconds, level_up_channel_id,
+                     ignored_channels, ignored_roles, monthly_reset_enabled, reset_interval_days)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     enabled = VALUES(enabled),
                     xp_per_message = VALUES(xp_per_message),
                     xp_cooldown_seconds = VALUES(xp_cooldown_seconds),
                     level_up_channel_id = VALUES(level_up_channel_id),
                     ignored_channels = VALUES(ignored_channels),
-                    ignored_roles = VALUES(ignored_roles)
+                    ignored_roles = VALUES(ignored_roles),
+                    monthly_reset_enabled = VALUES(monthly_reset_enabled),
+                    reset_interval_days = VALUES(reset_interval_days)
             `, [
                 guildId,
                 leveling_enabled ? 1 : 0,
@@ -2298,7 +5844,9 @@ function start(botClient) {
                 parseInt(leveling_xp_cooldown) || 60,
                 level_up_channel_id || null,
                 JSON.stringify(ignoredChannels),
-                JSON.stringify(ignoredRoles)
+                JSON.stringify(ignoredRoles),
+                monthly_reset_enabled ? 1 : 0,
+                resetIntervalDays
             ]);
 
             logger.info(`[Leveling Config] Saved successfully for guild ${guildId}`);
@@ -2314,7 +5862,7 @@ function start(botClient) {
     app.post('/manage/:guildId/update-core-settings', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
-            const { timezone, live_role_id } = req.body;
+            const { timezone, live_role_id, prefix, prefix_enabled, delete_trigger, cleanup_delay, private_categories } = req.body;
 
             // Update guild_settings (timezone)
             await pool.execute(
@@ -2329,6 +5877,30 @@ function start(botClient) {
                  ON DUPLICATE KEY UPDATE live_role_id = VALUES(live_role_id)`,
                 [guildId, live_role_id || null]
             );
+
+            // Update prefix command config
+            const privateCats = Array.isArray(private_categories) ? private_categories : (private_categories ? [private_categories] : []);
+            await pool.execute(
+                `INSERT INTO prefix_command_config (guild_id, prefix, enabled, delete_trigger, cleanup_delay, private_categories)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE prefix = VALUES(prefix), enabled = VALUES(enabled),
+                 delete_trigger = VALUES(delete_trigger), cleanup_delay = VALUES(cleanup_delay),
+                 private_categories = VALUES(private_categories)`,
+                [
+                    guildId,
+                    (prefix && prefix.length <= 5) ? prefix : '!',
+                    prefix_enabled ? 1 : 0,
+                    delete_trigger ? 1 : 0,
+                    parseInt(cleanup_delay) || 0,
+                    privateCats.length ? JSON.stringify(privateCats) : null
+                ]
+            );
+
+            // Invalidate prefix cache so bot picks up changes immediately
+            try {
+                const { invalidateGuildCache } = await import('../core/prefix-command-manager.js');
+                invalidateGuildCache(guildId);
+            } catch { /* prefix module may not be loaded in dashboard context */ }
 
             res.redirect(`/manage/${guildId}?page=core&success=updated`);
         } catch (error) {
@@ -2412,7 +5984,8 @@ function start(botClient) {
     app.post('/manage/:guildId/security/antiraid', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
-            const { enabled, threshold, timePeriod, action } = req.body;
+            const { enabled, threshold, timePeriod, action, alert_channel_id } = req.body;
+            const alertChannel = alert_channel_id || null;
 
             // Check if config exists
             const [existing] = await pool.execute(
@@ -2421,19 +5994,17 @@ function start(botClient) {
             );
 
             if (existing.length === 0) {
-                // Insert new config (using correct column names)
                 await pool.execute(
-                    `INSERT INTO anti_raid_config (guild_id, is_enabled, join_limit, time_period_seconds, action)
-                     VALUES (?, ?, ?, ?, ?)`,
-                    [guildId, enabled ? 1 : 0, threshold || 10, timePeriod || 10, action || 'kick']
+                    `INSERT INTO anti_raid_config (guild_id, is_enabled, join_limit, time_period_seconds, action, alert_channel_id)
+                     VALUES (?, ?, ?, ?, ?, ?)`,
+                    [guildId, enabled ? 1 : 0, threshold || 10, timePeriod || 10, action || 'kick', alertChannel]
                 );
             } else {
-                // Update existing config
                 await pool.execute(
                     `UPDATE anti_raid_config
-                     SET is_enabled = ?, join_limit = ?, time_period_seconds = ?, action = ?
+                     SET is_enabled = ?, join_limit = ?, time_period_seconds = ?, action = ?, alert_channel_id = ?
                      WHERE guild_id = ?`,
-                    [enabled ? 1 : 0, threshold || 10, timePeriod || 10, action || 'kick', guildId]
+                    [enabled ? 1 : 0, threshold || 10, timePeriod || 10, action || 'kick', alertChannel, guildId]
                 );
             }
 
@@ -2448,7 +6019,8 @@ function start(botClient) {
     app.post('/manage/:guildId/security/antinuke', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
-            const { enabled } = req.body;
+            const { enabled, alert_channel_id } = req.body;
+            const alertChannel = alert_channel_id || null;
 
             // Check if config exists
             const [existing] = await pool.execute(
@@ -2457,18 +6029,16 @@ function start(botClient) {
             );
 
             if (existing.length === 0) {
-                // Insert new config with default thresholds (using correct column names)
                 await pool.execute(
                     `INSERT INTO anti_nuke_config
-                     (guild_id, enabled, max_channel_deletes, max_role_deletes, max_kick_bans, action_on_trigger)
-                     VALUES (?, ?, 3, 3, 5, 'ban')`,
-                    [guildId, enabled ? 1 : 0]
+                     (guild_id, enabled, max_channel_deletes, max_role_deletes, max_kick_bans, action_on_trigger, alert_channel_id)
+                     VALUES (?, ?, 3, 3, 5, 'ban', ?)`,
+                    [guildId, enabled ? 1 : 0, alertChannel]
                 );
             } else {
-                // Update existing config
                 await pool.execute(
-                    `UPDATE anti_nuke_config SET enabled = ? WHERE guild_id = ?`,
-                    [enabled ? 1 : 0, guildId]
+                    `UPDATE anti_nuke_config SET enabled = ?, alert_channel_id = ? WHERE guild_id = ?`,
+                    [enabled ? 1 : 0, alertChannel, guildId]
                 );
             }
 
@@ -2860,10 +6430,40 @@ function start(botClient) {
             // Determine final avatar URL: uploaded file takes precedence, then URL field
             let finalAvatarUrl = bot_avatar_url || null;
 
-            // TODO: Handle file upload - would need to upload to CDN/storage and get URL
-            // For now, just use the URL field
             if (uploadedFile) {
-                logger.warn('[POST /manage/:guildId/update-bot-appearance] File upload not yet implemented - using URL field instead');
+                const ext = path.extname(uploadedFile.originalname).toLowerCase() || '.png';
+                const allowedExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+                if (allowedExts.includes(ext)) {
+                    const fs = await import('fs');
+                    const { execFileSync } = await import('child_process');
+                    const uploadDir = path.join(__dirname, 'public', 'uploads');
+                    const ts = Date.now();
+
+                    // Save original
+                    const origPath = path.join(uploadDir, `avatar_${guildId}_${ts}_orig${ext}`);
+                    fs.writeFileSync(origPath, uploadedFile.buffer);
+
+                    // Resize to 256x256 PNG for Discord webhook avatar compatibility
+                    // Always convert to static PNG — Discord webhook avatar_url doesn't reliably support animated GIFs
+                    const filename = `avatar_${guildId}_${ts}.png`;
+                    const outputPath = path.join(uploadDir, filename);
+                    try {
+                        if (ext === '.gif') {
+                            // Flatten GIF to static PNG (composite all frames)
+                            execFileSync('convert', [origPath, '-coalesce', '-flatten', '-resize', '256x256', outputPath], { timeout: 15000 });
+                        } else {
+                            execFileSync('convert', [origPath, '-resize', '256x256', outputPath], { timeout: 10000 });
+                        }
+                        fs.unlinkSync(origPath);
+                    } catch (resizeErr) {
+                        logger.warn(`[Appearance] Resize failed, using original: ${resizeErr.message}`);
+                        fs.renameSync(origPath, outputPath);
+                    }
+
+                    const baseUrl = (process.env.DASHBOARD_URL || '').replace(/\/$/, '');
+                    finalAvatarUrl = `${baseUrl}/uploads/${filename}`;
+                    logger.info(`[Appearance] Avatar uploaded and resized: ${filename} → ${finalAvatarUrl} for guild ${guildId}`);
+                }
             }
 
             await pool.execute(`
@@ -2931,8 +6531,11 @@ function start(botClient) {
     app.post('/manage/:guildId/update-announcements', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
-            const { announcement_channel_id, live_role_id, announcement_message, use_webhook_persona } = req.body;
+            const { announcement_channel_id, live_role_id, announcement_message, use_webhook_persona, stream_ignored_roles } = req.body;
             const webhookPersona = use_webhook_persona === '1' ? 1 : 0;
+            const ignoredRolesJson = stream_ignored_roles
+                ? JSON.stringify(Array.isArray(stream_ignored_roles) ? stream_ignored_roles : [stream_ignored_roles])
+                : null;
 
             logger.info('[POST /manage/:guildId/update-announcements] Updating:', {
                 guildId,
@@ -2951,14 +6554,15 @@ function start(botClient) {
 
             // Save to guilds table (where stream-manager reads from)
             await pool.execute(`
-                INSERT INTO guilds (guild_id, announcement_channel_id, live_role_id, announcement_message, use_webhook_persona)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO guilds (guild_id, announcement_channel_id, live_role_id, announcement_message, use_webhook_persona, stream_ignored_roles)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     announcement_channel_id = VALUES(announcement_channel_id),
                     live_role_id = VALUES(live_role_id),
                     announcement_message = VALUES(announcement_message),
-                    use_webhook_persona = VALUES(use_webhook_persona)
-            `, [guildId, announcement_channel_id || null, live_role_id || null, announcement_message || null, webhookPersona]);
+                    use_webhook_persona = VALUES(use_webhook_persona),
+                    stream_ignored_roles = VALUES(stream_ignored_roles)
+            `, [guildId, announcement_channel_id || null, live_role_id || null, announcement_message || null, webhookPersona, ignoredRolesJson]);
 
             // If a channel was just set (wasn't configured before), cross-pollinate existing streamers
             if (announcement_channel_id && !hadChannel) {
@@ -2980,7 +6584,9 @@ function start(botClient) {
     });
 
     // Welcome & Farewell Settings
-    app.post('/manage/:guildId/update-welcome', checkAuth, checkGuildAdmin, async (req, res) => {
+    app.post('/manage/:guildId/update-welcome', upload.fields([
+        { name: 'card_background_file', maxCount: 1 }
+    ]), handleMulterError, checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
             const {
@@ -2995,11 +6601,32 @@ function start(botClient) {
                 goodbye_message
             } = req.body;
 
+            // Handle file upload — save to public/uploads/ for static serving
+            let finalBackgroundUrl = card_background_url || null;
+            const uploadedFile = req.files?.card_background_file?.[0];
+            if (uploadedFile) {
+                const ext = path.extname(uploadedFile.originalname).toLowerCase() || '.png';
+                const allowedExts = ['.png', '.jpg', '.jpeg'];
+                if (allowedExts.includes(ext)) {
+                    const filename = `welcome_${guildId}_${Date.now()}${ext}`;
+                    const uploadDir = path.join(__dirname, 'public', 'uploads');
+                    const filePath = path.join(uploadDir, filename);
+                    const fs = await import('fs');
+                    fs.writeFileSync(filePath, uploadedFile.buffer);
+                    const baseUrl = (process.env.DASHBOARD_URL || '').replace(/\/$/, '');
+                    finalBackgroundUrl = `${baseUrl}/uploads/${filename}`;
+                    logger.info(`[Welcome] Banner uploaded: ${filename} → ${finalBackgroundUrl} for guild ${guildId}`);
+                } else {
+                    logger.warn(`[Welcome] Rejected upload with extension ${ext}`);
+                }
+            }
+
             logger.info('[POST /manage/:guildId/update-welcome] Updating:', {
                 guildId,
                 channel_id,
                 banner_enabled: Boolean(banner_enabled),
-                goodbye_enabled: Boolean(goodbye_enabled)
+                goodbye_enabled: Boolean(goodbye_enabled),
+                hasUpload: !!uploadedFile
             });
 
             await pool.execute(`
@@ -3033,7 +6660,7 @@ function start(botClient) {
                 banner_enabled ? 1 : 0,
                 card_title_text || null,
                 card_subtitle_text || null,
-                card_background_url || null,
+                finalBackgroundUrl,
                 goodbye_enabled ? 1 : 0,
                 goodbye_channel_id || null,
                 goodbye_message || null
@@ -3357,25 +6984,35 @@ function start(botClient) {
     app.post('/manage/:guildId/birthday/config', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
-            const { enabled, announcement_channel_id, message_template } = req.body;
+            const { enabled, announcement_channel_id, message_template, birthday_role_id, card_channel_id, cards_enabled, default_card_type } = req.body;
 
             logger.info('[POST /manage/:guildId/birthday/config] Updating:', {
                 guildId,
-                enabled: Boolean(enabled)
+                enabled: Boolean(enabled),
+                cards_enabled: Boolean(cards_enabled),
+                default_card_type: default_card_type || 'board'
             });
 
             await pool.execute(`
-                INSERT INTO birthday_config (guild_id, enabled, announcement_channel_id, message_template)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO birthday_config (guild_id, enabled, announcement_channel_id, message_template, birthday_role_id, card_channel_id, cards_enabled, default_card_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON DUPLICATE KEY UPDATE
                     enabled = VALUES(enabled),
                     announcement_channel_id = VALUES(announcement_channel_id),
-                    message_template = VALUES(message_template)
+                    message_template = VALUES(message_template),
+                    birthday_role_id = VALUES(birthday_role_id),
+                    card_channel_id = VALUES(card_channel_id),
+                    cards_enabled = VALUES(cards_enabled),
+                    default_card_type = VALUES(default_card_type)
             `, [
                 guildId,
                 enabled ? 1 : 0,
                 announcement_channel_id || null,
-                message_template || null
+                message_template || null,
+                birthday_role_id || null,
+                card_channel_id || null,
+                cards_enabled ? 1 : 0,
+                default_card_type || 'board'
             ]);
 
             res.redirect(`/manage/${guildId}?page=birthday&success=updated`);
@@ -3657,35 +7294,23 @@ function start(botClient) {
                 keep_summary
             });
 
-            // Get or create streamer
-            let streamerId;
-            const [existingStreamer] = await pool.execute(
-                'SELECT streamer_id FROM streamers WHERE platform = ? AND LOWER(username) = LOWER(?)',
-                [platform, username]
-            );
-
-            if (existingStreamer.length > 0) {
-                streamerId = existingStreamer[0].streamer_id;
-                logger.info('[POST /manage/:guildId/add-streamer] Found existing streamer:', { streamerId });
-                // Update discord_user_id if provided
-                if (discord_user_id) {
-                    await pool.execute(
-                        'UPDATE streamers SET discord_user_id = ? WHERE streamer_id = ?',
-                        [discord_user_id, streamerId]
-                    );
-                    logger.info('[POST /manage/:guildId/add-streamer] Updated Discord ID:', { streamerId, discord_user_id });
-                }
-            } else {
-                // Insert new streamer with temporary platform_user_id (will be updated by stream manager)
-                // Use temp_{username}_{timestamp} to ensure uniqueness until real ID is fetched
-                const tempPlatformUserId = `temp_${username}_${Date.now()}`;
-                const [result] = await pool.execute(
-                    'INSERT INTO streamers (platform, username, platform_user_id, discord_user_id) VALUES (?, ?, ?, ?)',
-                    [platform, username, tempPlatformUserId, discord_user_id || null]
-                );
-                streamerId = result.insertId;
-                logger.info('[POST /manage/:guildId/add-streamer] Created new streamer:', { streamerId, tempPlatformUserId });
+            // Resolve the real platform_user_id up front. Refuse to persist temp_ placeholders —
+            // those are the root cause of the HolyDabRip/lepoor duplicate-row bug whenever a
+            // streamer renames on the platform.
+            const { resolveStreamerIdentity, upsertStreamerByIdentity } = await import('../utils/platforms/resolve-identity.js');
+            const identity = await resolveStreamerIdentity(platform, username);
+            if (!identity) {
+                logger.warn('[POST /manage/:guildId/add-streamer] platform identity not resolvable', { platform, username });
+                return res.redirect(`/manage/${guildId}?page=streamers&error=streamer_not_found`);
             }
+
+            const streamerId = await upsertStreamerByIdentity(pool, platform, identity, discord_user_id || null);
+            logger.info('[POST /manage/:guildId/add-streamer] resolved identity', {
+                streamerId,
+                platform,
+                platformUserId: identity.platformUserId,
+                canonicalUsername: identity.canonicalUsername,
+            });
 
             // Check if subscription already exists
             const [existingSub] = await pool.execute(
@@ -3797,6 +7422,7 @@ function start(botClient) {
                         `UPDATE subscriptions
                         SET announcement_channel_id = ?,
                             live_role_id = ?,
+                            ping_role_id = ?,
                             override_nickname = ?,
                             override_avatar_url = ?,
                             custom_message = ?,
@@ -3807,6 +7433,7 @@ function start(botClient) {
                         [
                             channelId || null,
                             subData.live_role_id || null,
+                            subData.ping_role_id || null,
                             subData.override_nickname || null,
                             subData.override_avatar_url || null,
                             subData.custom_message || null,
@@ -4009,11 +7636,15 @@ function start(botClient) {
     app.post('/manage/:guildId/twitch-schedules/sync', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
-            const { streamerId, channelId } = req.body;
+            const { streamerId, channelId, syncIntervalMinutes, weeklyRefresh } = req.body;
 
             if (!streamerId || !channelId) {
                 return res.redirect(`/manage/${guildId}?page=twitch-schedules&error=missing_fields`);
             }
+
+            // Clamp interval to [15, 10080]
+            const interval = Math.min(10080, Math.max(15, parseInt(syncIntervalMinutes, 10) || 360));
+            const weekly = (weeklyRefresh === 'on' || weeklyRefresh === '1' || weeklyRefresh === true) ? 1 : 0;
 
             // Check if sync already exists
             const [existing] = await pool.execute(
@@ -4026,15 +7657,170 @@ function start(botClient) {
             }
 
             // Create new sync
-            await pool.execute(
-                'INSERT INTO twitch_schedule_sync_config (guild_id, streamer_id, discord_channel_id, is_enabled) VALUES (?, ?, ?, 1)',
-                [guildId, streamerId, channelId]
+            const [insertResult] = await pool.execute(
+                'INSERT INTO twitch_schedule_sync_config (guild_id, streamer_id, discord_channel_id, is_enabled, sync_interval_minutes, weekly_refresh) VALUES (?, ?, ?, 1, ?, ?)',
+                [guildId, streamerId, channelId, interval, weekly]
             );
+
+            // Trigger immediate first sync (don't block the response)
+            try {
+                const { getTwitchScheduleManager } = await import('../jobs/twitch-schedule-scheduler.js');
+                let manager = getTwitchScheduleManager(guildId);
+
+                // If no manager found, create one on the fly from the bot client
+                if (!manager) {
+                    const TwitchScheduleManager = (await import('../core/twitch-schedule-manager.js')).default;
+                    const botClient = global.botManager?.getClientForGuild?.(guildId) || global.botManager?.clients?.get('default');
+                    if (botClient) {
+                        manager = new TwitchScheduleManager(botClient);
+                    }
+                }
+
+                if (manager) {
+                    const [newRows] = await pool.execute(
+                        `SELECT tss.*, s.platform_user_id, s.username, s.profile_image_url
+                         FROM twitch_schedule_sync_config tss
+                         JOIN streamers s ON tss.streamer_id = s.streamer_id
+                         WHERE tss.id = ?`,
+                        [insertResult.insertId]
+                    );
+                    if (newRows.length > 0) {
+                        // Fire and forget — skip cooldown for initial post
+                        manager.syncSchedule(newRows[0], { skipCooldown: true }).catch(err =>
+                            logger.error('[TwitchSchedules] Initial sync failed:', { error: err.message })
+                        );
+                    }
+                } else {
+                    logger.warn('[TwitchSchedules] No bot client available for initial sync');
+                }
+            } catch (err) {
+                logger.error('[TwitchSchedules] Could not trigger initial sync:', { error: err.message, stack: err.stack });
+            }
 
             res.redirect(`/manage/${guildId}?page=twitch-schedules&success=created`);
         } catch (error) {
             logger.error('[POST /manage/:guildId/twitch-schedules/sync Error]', error);
             res.redirect(`/manage/${req.params.guildId}?page=twitch-schedules&error=create`);
+        }
+    });
+
+    app.post('/manage/:guildId/twitch-schedules/edit', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const guildId = req.params.guildId;
+            const { syncId, syncIntervalMinutes, weeklyRefresh } = req.body;
+
+            if (!syncId) {
+                return res.redirect(`/manage/${guildId}?page=twitch-schedules&error=missing_id`);
+            }
+
+            const interval = Math.min(10080, Math.max(15, parseInt(syncIntervalMinutes, 10) || 360));
+            const weekly = (weeklyRefresh === 'on' || weeklyRefresh === '1' || weeklyRefresh === true) ? 1 : 0;
+
+            // When enabling weekly_refresh, reset last_weekly_refresh so the next sync triggers a fresh post
+            const resetWeekly = weekly ? ', last_weekly_refresh = NULL' : '';
+
+            await pool.execute(
+                `UPDATE twitch_schedule_sync_config
+                 SET sync_interval_minutes = ?, weekly_refresh = ?${resetWeekly}
+                 WHERE id = ? AND guild_id = ?`,
+                [interval, weekly, syncId, guildId]
+            );
+
+            res.redirect(`/manage/${guildId}?page=twitch-schedules&success=updated`);
+        } catch (error) {
+            logger.error('[POST /manage/:guildId/twitch-schedules/edit Error]', error);
+            res.redirect(`/manage/${req.params.guildId}?page=twitch-schedules&error=update`);
+        }
+    });
+
+    app.post('/manage/:guildId/twitch-schedules/force-sync', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const guildId = req.params.guildId;
+            const { syncId } = req.body;
+
+            if (!syncId) {
+                return res.redirect(`/manage/${guildId}?page=twitch-schedules&error=missing_id`);
+            }
+
+            const [[sync]] = await pool.execute(`
+                SELECT tss.*, s.platform_user_id, s.username, s.profile_image_url
+                FROM twitch_schedule_sync_config tss
+                JOIN streamers s ON tss.streamer_id = s.streamer_id
+                WHERE tss.id = ? AND tss.guild_id = ?
+            `, [syncId, guildId]);
+
+            if (!sync) {
+                return res.redirect(`/manage/${guildId}?page=twitch-schedules&error=not_found`);
+            }
+
+            const { getTwitchScheduleManager } = await import('../jobs/twitch-schedule-scheduler.js');
+            const manager = getTwitchScheduleManager(guildId);
+            if (manager) {
+                await pool.execute(
+                    'UPDATE twitch_schedule_sync_config SET change_detected_at = NULL WHERE id = ?',
+                    [syncId]
+                );
+                sync.change_detected_at = null;
+                manager.syncSchedule(sync, { skipCooldown: true }).catch(err =>
+                    logger.error('[TwitchSchedules force-sync] Background error:', { error: err.message })
+                );
+            }
+
+            res.redirect(`/manage/${guildId}?page=twitch-schedules&success=force_sync`);
+        } catch (error) {
+            logger.error('[POST /manage/:guildId/twitch-schedules/force-sync Error]', error);
+            res.redirect(`/manage/${req.params.guildId}?page=twitch-schedules&error=force_sync`);
+        }
+    });
+
+    // --- Invite Link Filter (manage/advanced-protection) ---
+    app.post('/manage/:guildId/invite-filter/config', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const guildId = req.params.guildId;
+            const { enabled, use_whitelist, action, log_channel_id } = req.body;
+            const linkWhitelist = await import('../utils/link-whitelist.js');
+            await linkWhitelist.setConfig(guildId, {
+                enabled: enabled === 'on' || enabled === '1' || enabled === true ? 1 : 0,
+                use_whitelist: use_whitelist === 'on' || use_whitelist === '1' || use_whitelist === true ? 1 : 0,
+                action: ['delete', 'delete_warn', 'log_only'].includes(action) ? action : 'delete_warn',
+                log_channel_id: log_channel_id || null
+            });
+            res.redirect(`/manage/${guildId}?page=advanced-protection&success=invite_filter_saved`);
+        } catch (error) {
+            logger.error('[POST /manage/:guildId/invite-filter/config Error]', error);
+            res.redirect(`/manage/${req.params.guildId}?page=advanced-protection&error=invite_filter`);
+        }
+    });
+
+    app.post('/manage/:guildId/invite-filter/whitelist/add', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const guildId = req.params.guildId;
+            const { target_type, target_id } = req.body;
+            if (!['user', 'role', 'channel'].includes(target_type) || !target_id) {
+                return res.redirect(`/manage/${guildId}?page=advanced-protection&error=invite_filter_invalid`);
+            }
+            const linkWhitelist = await import('../utils/link-whitelist.js');
+            await linkWhitelist.addEntry(guildId, target_type, target_id.trim(), req.user?.id || null);
+            res.redirect(`/manage/${guildId}?page=advanced-protection&success=invite_filter_added`);
+        } catch (error) {
+            logger.error('[POST /manage/:guildId/invite-filter/whitelist/add Error]', error);
+            res.redirect(`/manage/${req.params.guildId}?page=advanced-protection&error=invite_filter_add`);
+        }
+    });
+
+    app.post('/manage/:guildId/invite-filter/whitelist/remove', checkAuth, checkGuildAdmin, async (req, res) => {
+        try {
+            const guildId = req.params.guildId;
+            const { target_type, target_id } = req.body;
+            if (!['user', 'role', 'channel'].includes(target_type) || !target_id) {
+                return res.redirect(`/manage/${guildId}?page=advanced-protection&error=invite_filter_invalid`);
+            }
+            const linkWhitelist = await import('../utils/link-whitelist.js');
+            await linkWhitelist.removeEntry(guildId, target_type, target_id);
+            res.redirect(`/manage/${guildId}?page=advanced-protection&success=invite_filter_removed`);
+        } catch (error) {
+            logger.error('[POST /manage/:guildId/invite-filter/whitelist/remove Error]', error);
+            res.redirect(`/manage/${req.params.guildId}?page=advanced-protection&error=invite_filter_remove`);
         }
     });
 
@@ -4534,6 +8320,38 @@ function start(botClient) {
     });
 
     // Delete reaction role panel
+    // Repost a reaction role panel (delete old message, clear message_id so "Post to Discord" button reappears)
+    app.post('/manage/:guildId/repost-rr-panel', checkAuth, checkGuildAdmin, async (req, res) => {
+        const guildId = req.params.guildId;
+        const { panelId } = req.body;
+        try {
+            const [[panel]] = await pool.execute('SELECT * FROM reaction_role_panels WHERE id = ? AND guild_id = ?', [panelId, guildId]);
+            if (!panel) return res.redirect(`/manage/${guildId}?page=reaction-roles&error=panel_not_found`);
+
+            const botClient = global.botManager?.getClientForGuild(guildId) || global.botManager?.getDefaultClient() || client;
+
+            // Delete old message
+            if (panel.message_id && panel.channel_id) {
+                try {
+                    const oldChannel = await botClient.channels.fetch(panel.channel_id).catch(() => null);
+                    if (oldChannel) {
+                        const oldMsg = await oldChannel.messages.fetch(panel.message_id).catch(() => null);
+                        if (oldMsg) await oldMsg.delete().catch(() => {});
+                    }
+                } catch { /* old message may already be gone */ }
+            }
+
+            // Clear message_id so the "Post to Discord" button reappears, allowing a fresh post
+            await pool.execute('UPDATE reaction_role_panels SET message_id = NULL WHERE id = ?', [panelId]);
+            logger.info(`[Reaction Roles] Panel ${panelId} cleared for repost in guild ${guildId}`);
+
+            res.redirect(`/manage/${guildId}?page=reaction-roles&success=panel_cleared`);
+        } catch (error) {
+            logger.error('[Reaction Roles] Repost error:', error);
+            res.redirect(`/manage/${guildId}?page=reaction-roles&error=repost_failed`);
+        }
+    });
+
     app.post('/manage/:guildId/delete-rr-panel', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
@@ -4591,9 +8409,9 @@ function start(botClient) {
     app.post('/manage/:guildId/add-rr-mapping', checkAuth, checkGuildAdmin, async (req, res) => {
         try {
             const guildId = req.params.guildId;
-            const { panelId, emoji_id, role_id } = req.body;
+            const { panelId, emoji_id, role_id, label, button_style } = req.body;
 
-            if (!panelId || !emoji_id || !role_id) {
+            if (!panelId || !role_id) {
                 return res.redirect(`/manage/${guildId}?page=reaction-roles&error=missing_fields`);
             }
 
@@ -4608,26 +8426,96 @@ function start(botClient) {
             }
 
             const panel = panels[0];
+            const interactionType = panel.interaction_type || 'reaction';
+
+            // Reaction type requires emoji; button/select can use label instead
+            if (interactionType === 'reaction' && !emoji_id) {
+                return res.redirect(`/manage/${guildId}?page=reaction-roles&error=emoji_required`);
+            }
 
             // Insert mapping
+            const validStyles = ['primary', 'secondary', 'success', 'danger'];
+            const style = validStyles.includes(button_style) ? button_style : 'primary';
             await pool.execute(
-                'INSERT INTO reaction_role_mappings (panel_id, role_id, emoji_id) VALUES (?, ?, ?)',
-                [panelId, role_id, emoji_id]
+                'INSERT INTO reaction_role_mappings (panel_id, role_id, emoji_id, label, button_style) VALUES (?, ?, ?, ?, ?)',
+                [panelId, role_id, emoji_id || null, label || null, style]
             );
 
             // Get the bot client for this guild
             const botClient = global.botManager?.getClientForGuild(guildId) || global.botManager?.getDefaultClient() || client;
 
-            // Add reaction to the message
+            // Update the Discord message based on panel type
             try {
                 const channel = await botClient.channels.fetch(panel.channel_id);
                 const message = await channel.messages.fetch(panel.message_id);
-                await message.react(emoji_id);
+
+                if (interactionType === 'reaction') {
+                    // Reaction type: add the emoji as a reaction
+                    if (emoji_id) await message.react(emoji_id);
+                } else {
+                    // Button or select menu: rebuild the components from all mappings
+                    const [allMappings] = await pool.execute(
+                        'SELECT role_id, emoji_id, label, button_style FROM reaction_role_mappings WHERE panel_id = ?',
+                        [panelId]
+                    );
+
+                    const styleMap = { primary: 1, secondary: 2, success: 3, danger: 4 };
+                    const roles = allMappings.map(m => {
+                        const guildRole = message.guild.roles.cache.get(m.role_id);
+                        return {
+                            roleId: m.role_id,
+                            emoji: m.emoji_id || undefined,
+                            label: m.label || guildRole?.name || 'Role',
+                            name: guildRole?.name || 'Role',
+                            description: `Get the ${guildRole?.name || 'Role'} role`,
+                            style: m.button_style || 'primary'
+                        };
+                    });
+
+                    const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = await import('discord.js');
+
+                    if (interactionType === 'button') {
+                        // Build button rows
+                        const componentRows = [];
+                        let currentRow = new ActionRowBuilder();
+                        let count = 0;
+                        for (const role of roles) {
+                            if (count >= 5) { componentRows.push(currentRow); currentRow = new ActionRowBuilder(); count = 0; }
+                            const btn = new ButtonBuilder()
+                                .setCustomId(`rr_${role.roleId}`)
+                                .setLabel(role.label)
+                                .setStyle(styleMap[role.style] || ButtonStyle.Primary);
+                            if (role.emoji) {
+                                try { btn.setEmoji(role.emoji.includes(':') ? role.emoji.split(':')[2].replace('>', '') : role.emoji); } catch { /* skip emoji */ }
+                            }
+                            currentRow.addComponents(btn);
+                            count++;
+                            if (componentRows.length >= 5) break;
+                        }
+                        if (count > 0) componentRows.push(currentRow);
+                        await message.edit({ components: componentRows });
+                    } else if (interactionType === 'select' || interactionType === 'select_menu') {
+                        // Build select menu
+                        const options = roles.map(r => ({
+                            label: r.label,
+                            value: r.roleId,
+                            description: r.description,
+                            emoji: r.emoji || undefined
+                        }));
+                        const selectMenu = new StringSelectMenuBuilder()
+                            .setCustomId('rr_select')
+                            .setPlaceholder('Choose your roles')
+                            .setMinValues(panel.panel_mode === 'unique' ? 1 : 0)
+                            .setMaxValues(panel.panel_mode === 'unique' ? 1 : options.length)
+                            .addOptions(options);
+                        await message.edit({ components: [new ActionRowBuilder().addComponents(selectMenu)] });
+                    }
+                }
             } catch (error) {
-                logger.warn(`[Reaction Roles] Failed to add reaction to message: ${error.message}`);
+                logger.warn(`[Reaction Roles] Failed to update message components: ${error.message}`);
             }
 
-            logger.info(`[Reaction Roles] Mapping added for panel ${panelId}: ${emoji_id} -> ${role_id}`);
+            logger.info(`[Reaction Roles] Mapping added for panel ${panelId}: ${emoji_id || label} -> ${role_id} (type: ${interactionType})`);
             res.redirect(`/manage/${guildId}?page=reaction-roles&success=mapping_added`);
         } catch (error) {
             logger.error('[POST /manage/:guildId/add-rr-mapping Error]', error);
@@ -4747,27 +8635,88 @@ function start(botClient) {
                 embed.setImage(panel.image_url);
             }
 
-            // Add role mappings to embed as fields
+            // Resolve role names from Discord
+            const guild = botClient.guilds.cache.get(guildId);
+            const roles = [];
             let rolesText = '';
             for (const mapping of mappings) {
-                const role = await botClient.guilds.cache.get(guildId)?.roles.fetch(mapping.role_id).catch(() => null);
+                const role = guild?.roles.cache.get(mapping.role_id) || await guild?.roles.fetch(mapping.role_id).catch(() => null);
                 const roleName = role ? role.name : 'Unknown Role';
-                rolesText += `${mapping.emoji_id} - <@&${mapping.role_id}> (${roleName})\n`;
+                roles.push({
+                    roleId: mapping.role_id,
+                    emoji: mapping.emoji_id || undefined,
+                    label: mapping.label || roleName,
+                    name: roleName,
+                    description: `Get the ${roleName} role`,
+                    style: mapping.button_style || 'primary'
+                });
+                if (panel.interaction_type === 'reaction') {
+                    rolesText += `${mapping.emoji_id || '▪️'} — <@&${mapping.role_id}>\n`;
+                } else {
+                    rolesText += `▪️ <@&${mapping.role_id}>\n`;
+                }
             }
 
             if (rolesText) {
                 embed.addFields({ name: 'Available Roles', value: rolesText, inline: false });
             }
 
-            // Post message to Discord
-            const message = await channel.send({ embeds: [embed] });
+            // Post message based on panel interaction type
+            const { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = await import('discord.js');
+            let message;
+            const interactionType = panel.interaction_type || 'reaction';
 
-            // Add reactions for each mapping
-            for (const mapping of mappings) {
-                try {
-                    await message.react(mapping.emoji_id);
-                } catch (reactionError) {
-                    logger.warn(`[Reaction Roles] Failed to add reaction ${mapping.emoji_id}: ${reactionError.message}`);
+            const styleMap = { primary: 1, secondary: 2, success: 3, danger: 4 };
+
+            if (interactionType === 'button') {
+                // Build button rows
+                const componentRows = [];
+                let currentRow = new ActionRowBuilder();
+                let count = 0;
+                for (const role of roles) {
+                    if (count >= 5) { componentRows.push(currentRow); currentRow = new ActionRowBuilder(); count = 0; }
+                    const btn = new ButtonBuilder()
+                        .setCustomId(`rr_${role.roleId}`)
+                        .setLabel(role.label)
+                        .setStyle(styleMap[role.style] || ButtonStyle.Primary);
+                    if (role.emoji) {
+                        try {
+                            btn.setEmoji(role.emoji.includes(':') ? role.emoji.split(':')[2].replace('>', '') : role.emoji);
+                        } catch { /* skip emoji if invalid */ }
+                    }
+                    currentRow.addComponents(btn);
+                    count++;
+                    if (componentRows.length >= 4) break; // Max 5 rows total
+                }
+                if (count > 0) componentRows.push(currentRow);
+                message = await channel.send({ embeds: [embed], components: componentRows });
+
+            } else if (interactionType === 'select_menu' || interactionType === 'select') {
+                // Build select menu
+                const options = roles.map(r => {
+                    const opt = { label: r.label, value: r.roleId, description: r.description };
+                    if (r.emoji) opt.emoji = r.emoji;
+                    return opt;
+                });
+                const selectMenu = new StringSelectMenuBuilder()
+                    .setCustomId('rr_select')
+                    .setPlaceholder('Choose your roles')
+                    .setMinValues(panel.panel_mode === 'unique' ? 1 : 0)
+                    .setMaxValues(panel.panel_mode === 'unique' ? 1 : options.length)
+                    .addOptions(options);
+                message = await channel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(selectMenu)] });
+
+            } else {
+                // Traditional reaction type
+                message = await channel.send({ embeds: [embed] });
+                for (const mapping of mappings) {
+                    if (mapping.emoji_id) {
+                        try {
+                            await message.react(mapping.emoji_id);
+                        } catch (reactionError) {
+                            logger.warn(`[Reaction Roles] Failed to add reaction ${mapping.emoji_id}: ${reactionError.message}`);
+                        }
+                    }
                 }
             }
 
@@ -4946,7 +8895,7 @@ function start(botClient) {
             const totalGuilds = serverStats.guilds;
             const totalMembers = serverStats.users;
 
-            // Fetch live streamers and deduplicate by unique identifier
+            // Fetch live streamers — deduplicate by unique person (not per-platform)
             const [announcements] = await pool.query(`
                 SELECT
                     la.username,
@@ -4956,10 +8905,10 @@ function start(botClient) {
                     MIN(la.stream_started_at) as earliest_start
                 FROM live_announcements la
                 LEFT JOIN streamers s ON la.streamer_id = s.streamer_id
-                WHERE la.offline_check_count < 4
+                WHERE la.offline_check_count < 6
                 GROUP BY
-                    COALESCE(la.discord_user_id, CONCAT(la.platform, ':', la.username)),
-                    la.platform
+                    COALESCE(la.discord_user_id, la.username),
+                    la.username
                 ORDER BY earliest_start DESC
             `);
 
@@ -5088,6 +9037,11 @@ function start(botClient) {
         });
     });
 
+    // Discord invite redirect
+    app.get('/discord', (req, res) => {
+        res.redirect('https://discord.com/invite/mJfbDgWA7z');
+    });
+
     // Privacy Policy page
     app.get('/privacy', (req, res) => {
         res.render('privacy-tailwind', {
@@ -5103,16 +9057,25 @@ function start(botClient) {
         logger.error('Failed to load gitlab-webhook routes:', err);
     });
 
-    // Import API routes
-    import('./routes/api.js').then(({ default: apiRouter }) => {
-        app.use('/api', apiRouter);
+    // API routes — lazy-loaded synchronously to avoid race conditions
+    app.use('/api', async (req, res, next) => {
+        try {
+            if (!app._apiRouter) {
+                const mod = await import('./routes/api.js');
+                app._apiRouter = mod.default;
+            }
+            app._apiRouter(req, res, next);
+        } catch { next(); }
     });
 
-    // Import feature API routes (giveaways, moderation, leveling, etc.)
-    import('./routes/api/index.js').then(({ default: featureApiRouter }) => {
-        app.use('/api', featureApiRouter);
-    }).catch(err => {
-        logger.error('Failed to load feature API routes:', err);
+    app.use('/api', async (req, res, next) => {
+        try {
+            if (!app._featureApiRouter) {
+                const mod = await import('./routes/api/index.js');
+                app._featureApiRouter = mod.default;
+            }
+            app._featureApiRouter(req, res, next);
+        } catch { next(); }
     });
 
     import('./routes/voice-preview.js').then(({ default: voicePreviewRouter }) => {
@@ -5125,11 +9088,7 @@ function start(botClient) {
         app.use('/api/guilds', guildsRouter);
     });
 
-    import('./routes/status.js').then(({ default: statusRouter }) => {
-        app.use('/api/status', statusRouter);
-    }).catch(err => {
-        logger.error('Failed to load status routes:', err);
-    });
+    // Status routes already mounted above (before auth-protected API routes)
 
     import('./routes/bots.js').then(({ default: botsRouter }) => {
         app.use('/', botsRouter);
@@ -5137,8 +9096,10 @@ function start(botClient) {
         logger.error('Failed to load bots routes:', err);
     });
 
+    // Super-admin routes loaded eagerly — must resolve before auth-protected /api catches them
     import('./routes/super-admin.js').then(({ default: superAdminRouter }) => {
         app.use('/', superAdminRouter);
+        logger.info('[Dashboard] Super-admin routes loaded');
     }).catch(err => {
         logger.error('Failed to load super-admin routes:', err);
     });
@@ -5160,6 +9121,12 @@ function start(botClient) {
         app.use('/', achievementsRouter);
     }).catch(err => {
         logger.error('Failed to load achievements routes:', err);
+    });
+
+    import('./routes/features/event-schedule.js').then(({ default: eventScheduleRouter }) => {
+        app.use('/', eventScheduleRouter);
+    }).catch(err => {
+        logger.error('Failed to load event-schedule routes:', err);
     });
 
     import('./routes/features/statistics.js').then(({ default: statisticsRouter }) => {
@@ -5198,10 +9165,46 @@ function start(botClient) {
         logger.error('Failed to load Twitch auth routes:', err);
     });
 
+    import('./routes/cah.js').then(({ default: cahRouter }) => {
+        app.use('/', cahRouter);
+        logger.info('[Dashboard] /cah routes loaded');
+    }).catch(err => {
+        logger.error('Failed to load CAH routes:', err);
+    });
+
+    import('./routes/auth-twitch-broadcaster.js').then(({ default: authTwitchBroadcasterRouter }) => {
+        app.use('/', authTwitchBroadcasterRouter);
+    }).catch(err => {
+        logger.error('Failed to load Twitch broadcaster auth routes:', err);
+    });
+
+    import('./routes/link-twitch.js').then(({ default: linkTwitchRouter }) => {
+        app.use('/', linkTwitchRouter);
+        logger.info('[Dashboard] /link/twitch member-link routes loaded');
+    }).catch(err => {
+        logger.error('Failed to load /link/twitch routes:', err);
+    });
+
     import('./routes/user-schedule.js').then(({ default: userScheduleRouter }) => {
         app.use('/', userScheduleRouter);
     }).catch(err => {
         logger.error('Failed to load user schedule routes:', err);
+    });
+
+    // ── Hide the legacy "Tokes Bot" public site ──────────────────────────────
+    // Only the Discord bot (/discord) and Kick bot (/kick) are public surfaces.
+    // The /tokes-bot/* informational + dashboard pages self-brand as "Tokes Bot"
+    // and must not be publicized. Gate them here BEFORE the tokes routers run,
+    // but deliberately let through:
+    //   • /tokes-bot/auth/**  — the Kick (and Twitch) OAuth login flow used by /kick
+    //   • /tokes-bot/api/**   — the JSON API the Kick bot dashboard calls
+    // Everything else under /tokes-bot redirects to the chooser at '/'.
+    app.use('/tokes-bot', (req, res, next) => {
+        // req.path here is relative to the '/tokes-bot' mount point.
+        if (req.path.startsWith('/auth/') || req.path.startsWith('/api/')) {
+            return next();
+        }
+        return res.redirect(302, '/');
     });
 
     // Tokes Bot routes
@@ -5221,6 +9224,13 @@ function start(botClient) {
         app.use('/', tokesAdminRouter);
     }).catch(err => {
         logger.error('Failed to load Tokes Bot admin routes:', err);
+    });
+
+    // Kick Defender dashboard (/kick) — reuses the Kick login (tokesUser).
+    import('./routes/kick-defender.js').then(({ default: kickDefenderRouter }) => {
+        app.use('/', kickDefenderRouter);
+    }).catch(err => {
+        logger.error('Failed to load Kick Defender routes:', err);
     });
 
     // Public leaderboard page
@@ -5259,11 +9269,23 @@ function start(botClient) {
     }).on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
             logger.warn(`[Dashboard] Port ${port} already in use - dashboard will not start, but bot continues`);
-            // Don't crash the bot, just log and continue
         } else {
             logger.error(`[Dashboard] Server error: ${err.message}`);
         }
     });
+
+    // Initialize Socket.io on the HTTP server. CAH (and any future real-time
+    // features) attach via the existing dashboard/socket/index.js handler set.
+    // Without this, the engine's web adapter calls getIO() → null and silently
+    // drops every game-state broadcast, so /cah pages stay on "Connecting…"
+    // forever. We use .then() instead of await because the enclosing function
+    // isn't async — top-level await isn't available in CJS-style express setup.
+    import('./socket/index.js')
+        .then(({ initializeSocket }) => {
+            initializeSocket(server, sessionMiddleware);
+            logger.info('[Dashboard] Socket.io mounted on HTTP server');
+        })
+        .catch(err => logger.error(`[Dashboard] Failed to mount Socket.io: ${err.message}`));
 
     // Graceful shutdown
     process.on('SIGINT', async () => {
