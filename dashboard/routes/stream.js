@@ -33,7 +33,10 @@ async function resolveKey(req) {
     return getOrCreateDiscordKey(db, req.user.id);
   }
   if (req.session?.guestStreamKeyId) {
-    const rows = await db.query('SELECT * FROM stream_keys WHERE id = ? AND enabled = 1', [req.session.guestStreamKeyId]);
+    const rows = await db.query(
+      'SELECT * FROM stream_keys WHERE id = ? AND enabled = 1 AND (expires_at IS NULL OR expires_at > NOW())',
+      [req.session.guestStreamKeyId]
+    );
     return rows[0] || null;
   }
   return null;
