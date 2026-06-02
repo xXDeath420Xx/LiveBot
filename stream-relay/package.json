@@ -1,0 +1,15 @@
+{
+  "name": "certifried-stream-relay",
+  "version": "1.0.0",
+  "description": "Free RTMP multistreaming relay for certifriedmultitool.com",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mysql2": "^3.11.5",
+    "node-media-server": "^2.7.0"
+  }
+}
