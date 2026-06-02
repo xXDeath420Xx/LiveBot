@@ -116,12 +116,12 @@ MAX_CONCURRENT=10
 # Per-destination ffmpeg retry policy
 DEST_RETRY_LIMIT=5
 DEST_RETRY_BASE_MS=2000
-# Database (copy values from dashboard/.env)
+# Database (copy values from the repo-root .env that utils/db.js loads; cert_ prefix)
 DB_HOST=localhost
 DB_PORT=3306
-DB_USER=CertiFriedDB
+DB_USER=cert_CertiFriedDB
 DB_PASSWORD=
-DB_NAME=CertiFriedUtility
+DB_NAME=cert_CertiFriedUtility
 ```
 
 - [ ] **Step 4: Write the failing test `stream-relay/test/config.test.js`**
@@ -280,16 +280,16 @@ CREATE TABLE IF NOT EXISTS stream_session_targets (
 
 - [ ] **Step 2: Apply the migration**
 
-Run (paste DB password from `dashboard/.env` when prompted):
+Run (use the repo-root `.env` creds — NOT dashboard/.env which is stale. Tip: `MYSQL_PWD=$(grep ^DB_PASSWORD= .env|cut -d= -f2-)` to avoid quoting):
 ```bash
-mysql -u CertiFriedDB -p CertiFriedUtility < stream-relay/sql/001_stream_tables.sql
+mysql -u cert_CertiFriedDB -p cert_CertiFriedUtility < stream-relay/sql/001_stream_tables.sql
 ```
 
 - [ ] **Step 3: Verify tables exist**
 
 Run:
 ```bash
-mysql -u CertiFriedDB -p CertiFriedUtility -e "SHOW TABLES LIKE 'stream\_%';"
+mysql -u cert_CertiFriedDB -p cert_CertiFriedUtility -e "SHOW TABLES LIKE 'stream\_%';"
 ```
 Expected: 4 rows — `stream_destinations`, `stream_keys`, `stream_session_targets`, `stream_sessions`.
 
@@ -1245,12 +1245,12 @@ module.exports = {
 };
 ```
 
-- [ ] **Step 4: Create `stream-relay/.env`** (copy DB password from `dashboard/.env`)
+- [ ] **Step 4: Create `stream-relay/.env`** (copy DB creds from the repo-root `.env`)
 
 ```bash
 cd /home/death/CertiFriedUtility/stream-relay
 cp .env.example .env
-# then edit .env and set DB_PASSWORD to the value of DB_PASSWORD in ../dashboard/.env
+# then edit .env: set DB_USER=cert_CertiFriedDB, DB_NAME=cert_CertiFriedUtility, and DB_PASSWORD to the value in ../../.env (repo root)
 ```
 
 - [ ] **Step 5: Run full relay test suite**
@@ -1300,7 +1300,7 @@ Insert a test key + a destination pointing at a second local node-media-server (
 
 ```bash
 # a) insert a test key (id captured) and a destination that points to a local file sink via ffmpeg listener
-mysql -u CertiFriedDB -p CertiFriedUtility <<'SQL'
+mysql -u cert_CertiFriedDB -p cert_CertiFriedUtility <<'SQL'
 INSERT INTO stream_keys (owner_type, owner_id, stream_key, label, enabled)
 VALUES ('discord','TEST','cf_testkey_123','integration test',1);
 SET @kid = LAST_INSERT_ID();
@@ -1334,7 +1334,7 @@ Expected: connection rejected almost immediately (relay logs `reject key (not_fo
 - [ ] **Step 6: Clean up test rows**
 
 ```bash
-mysql -u CertiFriedDB -p CertiFriedUtility -e "DELETE FROM stream_keys WHERE stream_key='cf_testkey_123';"
+mysql -u cert_CertiFriedDB -p cert_CertiFriedUtility -e "DELETE FROM stream_keys WHERE stream_key='cf_testkey_123';"
 ```
 
 - [ ] **Step 7: Commit (operational notes only, if any docs changed)**

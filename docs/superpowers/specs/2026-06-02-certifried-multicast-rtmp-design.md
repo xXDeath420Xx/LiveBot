@@ -29,8 +29,9 @@ dashboard shows per-destination health.
 - **Dashboard auth:** Passport + Discord OAuth (`/auth/discord`,
   `req.isAuthenticated()`, `ensureAuthenticated`). ESM Express app. Has socket.io
   (`dashboard/socket/`). Users can already link Twitch.
-- **Database:** MariaDB on `localhost:3306`, database `CertiFriedUtility`
-  (user `CertiFriedDB`).
+- **Database:** MariaDB on `localhost:3306`, database `cert_CertiFriedUtility`
+  (user `cert_CertiFriedDB`) — per the repo-root `.env` that `utils/db.js` loads
+  (the `dashboard/.env` DB_* values are stale/unused).
 - **Firewall:** firewalld active, zone `public`. Port 1935 is **not** in the open
   list; a new ingest port must be explicitly opened.
 
@@ -94,7 +95,7 @@ OBS / Streamlabs ─rtmp://certifriedmultitool.com:1936/live/<KEY>─▶ Relay (
     subscribes to the relay's internal WS on 4090).
   - **Session history**: recent sessions with duration, destinations, status.
 
-### C. Database — new tables in `CertiFriedUtility` (MariaDB)
+### C. Database — new tables in `cert_CertiFriedUtility` (MariaDB)
 
 - `stream_keys` — `id`, `owner_type ENUM('discord','guest')`, `owner_id`,
   `stream_key` (UNIQUE), `label`, `enabled`, `created_at`, `expires_at` (NULL for
