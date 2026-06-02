@@ -163,9 +163,12 @@
 
     <!-- Events -->
     <div class="achievements-section">
-        <div class="achievements-section-header">
-            <i class="fas fa-list"></i>
-            <h3>Events</h3>
+        <div class="achievements-section-header" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span><i class="fas fa-list"></i> <h3 style="display:inline; margin:0;">Events</h3></span>
+            <a href="/auth/twitch/link?guildId=<%= guild.id %>" class="btn btn-primary btn-sm" style="text-decoration:none;">
+                <i class="fab fa-twitch"></i>
+                Connect Twitch
+            </a>
         </div>
         <div id="es-events">
             <div class="loading-state">
