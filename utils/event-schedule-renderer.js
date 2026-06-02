@@ -6,8 +6,39 @@
 //
 // Canvas is optional. If `canvas` (node-canvas) is not installed we return null
 // so callers can gracefully fall back to a text embed.
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 let Canvas = null;
 try { Canvas = await import('canvas'); } catch { /* silent; image gen disabled */ }
+
+// Register a bundled monochrome emoji font so emoji render as clean glyphs
+// (colored via ctx.fillStyle) instead of "tofu" codepoint boxes. Cairo handles
+// monochrome (outline) emoji fonts reliably; do this once at module load.
+const EMOJI_FONT_FAMILY = 'NotoEmoji';
+if (Canvas) {
+  try {
+    Canvas.registerFont(
+      path.join(__dirname, '../assets/fonts/NotoEmoji-Regular.ttf'),
+      { family: EMOJI_FONT_FAMILY },
+    );
+  } catch { /* font registration optional; falls back to tofu */ }
+}
+
+// Draw an emoji glyph with the registered monochrome emoji font, then restore
+// the previous font. Returns the advance width consumed (glyph width).
+// `ctx.fillStyle` is left untouched so the monochrome glyph takes the
+// caller's intended color.
+function drawEmoji(ctx, emoji, x, y, size) {
+  const prevFont = ctx.font;
+  ctx.font = `${size}px ${EMOJI_FONT_FAMILY}`;
+  ctx.fillText(emoji, x, y);
+  const w = ctx.measureText(emoji).width;
+  ctx.font = prevFont;
+  return w;
+}
 
 // ─── Layout constants ───────────────────────────────────────────────────────
 const WIDTH = 1080;
@@ -221,9 +252,14 @@ export default async function renderEventSchedule(model) {
 
     ctx.textAlign = 'left';
     ctx.fillStyle = darken(color, 0.45);
+    const labelBaseline = y + SECTION_LABEL_H / 2 + 9;
+    let labelX = 22;
+    if (sec.emoji) {
+      const ew = drawEmoji(ctx, sec.emoji, labelX, labelBaseline, 26);
+      labelX += ew + 8;
+    }
     ctx.font = 'bold 26px Arial';
-    const labelText = `${sec.emoji ? sec.emoji + ' ' : ''}${sec.name || ''}`;
-    ctx.fillText(labelText, 22, y + SECTION_LABEL_H / 2 + 9);
+    ctx.fillText(sec.name || '', labelX, labelBaseline);
 
     y += SECTION_LABEL_H;
 
@@ -262,9 +298,8 @@ export default async function renderEventSchedule(model) {
       let tx = barX + 18;
       const emoji = item.emoji || '';
       if (emoji) {
-        ctx.font = '30px Arial';
-        ctx.fillText(emoji, tx, barY + ITEM_BAR_H / 2 + 11);
-        tx += ctx.measureText(emoji).width + 12;
+        const ew = drawEmoji(ctx, emoji, tx, barY + ITEM_BAR_H / 2 + 11, 30);
+        tx += ew + 12;
       }
       ctx.font = 'bold 26px Arial';
       const maxTextW = barX + barW - tx - 14;
