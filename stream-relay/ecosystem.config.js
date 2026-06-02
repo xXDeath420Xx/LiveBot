@@ -1,0 +1,12 @@
+module.exports = {
+  apps: [{
+    name: 'certifried-stream',
+    script: 'src/server.js',
+    cwd: '/home/death/CertiFriedUtility/stream-relay',
+    instances: 1,
+    autorestart: true,
+    watch: false,
+    max_memory_restart: '500M',
+    env: { NODE_ENV: 'production' }
+  }]
+};
