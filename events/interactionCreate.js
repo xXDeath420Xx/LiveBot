@@ -419,6 +419,16 @@ export default {
       // Other select menu handlers can be added here
     }
 
+    // Handle user-select menus (e.g. the birthday admin member-picker) via the
+    // same prefix registry used for string selects.
+    else if (interaction.isUserSelectMenu()) {
+      const userSelectHandler = getSelectMenuHandler(interaction.customId);
+      if (userSelectHandler) {
+        await userSelectHandler(interaction);
+        return;
+      }
+    }
+
     // Handle modal submissions
     else if (interaction.isModalSubmit()) {
       logger.debug(`[Modal] ${interaction.customId} submitted by ${interaction.user.tag}`);
