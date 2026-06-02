@@ -18,6 +18,7 @@ import { csrfProtection, csrfToken } from '../utils/csrf-protection.js';
 import { createSessionMiddleware, sessionActivityMiddleware } from './config/session.js';
 import ebookRecordRouter from './routes/ebook-record.js';
 import fourthwallWebhookRouter from './routes/webhooks/fourthwall.js';
+import streamRouter from './routes/stream.js';
 import { invalidateMusicConfigCache } from '../utils/music_helpers.js';
 import encryption from '../utils/encryption.js';
 import cookieParser from 'cookie-parser';
@@ -9246,6 +9247,9 @@ function start(botClient) {
     }).catch(err => {
         logger.error('Failed to load community support routes:', err);
     });
+
+    // Multicast streaming UI + API
+    app.use('/', streamRouter);
 
     // E-Book reader route
     app.get('/E-Book1', (req, res) => {
