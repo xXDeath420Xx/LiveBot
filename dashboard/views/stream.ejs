@@ -1,63 +1,309 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
-  <title>CertiFried Multicast — Stream Everywhere, Free</title>
-  <link rel="stylesheet" href="/css/output.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="CertiFried Multicast — stream once, broadcast everywhere. Free RTMP multistreaming to Twitch, YouTube, Kick, TikTok and more.">
+    <meta name="robots" content="noindex">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title>Multicast Studio | CertiFried MultiTool</title>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --bg-inset: rgba(255, 255, 255, 0.04);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-strong: rgba(255, 255, 255, 0.14);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-purple-dark: #7c3aed;
+            --accent-blue: #60a5fa;
+            --accent-green: #34d399;
+            --accent-yellow: #fbbf24;
+            --accent-red: #f87171;
+        }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; overflow-x: hidden; }
+        a { color: inherit; }
+        ::selection { background: rgba(167, 139, 250, 0.3); }
+
+        /* Background orbs */
+        .bg-effects { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.3; animation: float 22s ease-in-out infinite; }
+        .orb-1 { width: 520px; height: 520px; background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -18%; right: -8%; }
+        .orb-2 { width: 420px; height: 420px; background: linear-gradient(135deg, #2563eb, #34d399); bottom: -18%; left: -10%; animation-delay: -11s; }
+        @keyframes float { 0%, 100% { transform: translate(0,0) scale(1); } 50% { transform: translate(30px, 30px) scale(1.06); } }
+
+        /* Navbar */
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 0.85rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
+        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover { color: var(--text-primary); }
+        .user-menu { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.9rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50px; text-decoration: none; transition: all 0.2s; }
+        .user-menu:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
+        .user-avatar { width: 26px; height: 26px; border-radius: 50%; }
+        .user-name { font-size: 0.85rem; font-weight: 500; }
+
+        main { position: relative; z-index: 1; padding: 96px 1.5rem 4rem; max-width: 1100px; margin: 0 auto; }
+
+        /* Page header */
+        .page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.75rem; }
+        .page-icon { width: 58px; height: 58px; flex-shrink: 0; background: linear-gradient(135deg, rgba(124, 58, 237, 0.25), rgba(167, 139, 250, 0.15)); border: 1px solid rgba(167, 139, 250, 0.35); border-radius: 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 25px rgba(167, 139, 250, 0.2); }
+        .page-icon i { font-size: 1.6rem; color: var(--accent-purple); }
+        .page-title { font-size: clamp(1.6rem, 4vw, 2.1rem); font-weight: 800; line-height: 1.1; background: linear-gradient(135deg, #fff, var(--accent-purple)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        .page-subtitle { color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.3rem; }
+
+        /* Guest banner */
+        .banner { display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1.1rem; border-radius: 12px; font-size: 0.875rem; margin-bottom: 1.5rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.25); color: var(--accent-yellow); }
+        .banner i { font-size: 1rem; }
+        .banner a { color: #fff; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+
+        /* Live status strip */
+        .status-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem; padding: 1rem 1.25rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; backdrop-filter: blur(10px); margin-bottom: 1.5rem; }
+        .live-pill { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.85rem; border-radius: 50px; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; background: rgba(255,255,255,0.06); color: var(--text-muted); border: 1px solid var(--border-color); transition: all 0.3s; }
+        .live-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+        .live-pill.is-live { background: rgba(248, 113, 113, 0.15); color: #fca5a5; border-color: rgba(248, 113, 113, 0.4); }
+        .live-pill.is-live .dot { background: var(--accent-red); animation: pulse 1.4s infinite; }
+        .status-meta { display: flex; gap: 1.5rem; margin-left: auto; }
+        .status-meta .item { text-align: right; }
+        .status-meta .item .v { font-size: 1.1rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+        .status-meta .item .l { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        /* Cards */
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; backdrop-filter: blur(10px); margin-bottom: 1.5rem; overflow: hidden; }
+        .card-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.35rem; border-bottom: 1px solid var(--border-color); }
+        .card-title { display: flex; align-items: center; gap: 0.65rem; font-weight: 600; font-size: 1rem; }
+        .card-title i { color: var(--accent-purple); }
+        .card-badge { padding: 0.25rem 0.6rem; background: rgba(167,139,250,0.15); color: var(--accent-purple); border-radius: 6px; font-size: 0.72rem; font-weight: 700; }
+        .card-body { padding: 1.35rem; }
+        .card-help { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.85rem; line-height: 1.5; }
+        .card-help strong { color: var(--accent-purple); }
+
+        /* Field (readable inputs!) */
+        .field { margin-bottom: 1.1rem; }
+        .field:last-child { margin-bottom: 0; }
+        .field-label { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin-bottom: 0.45rem; font-weight: 600; }
+        .field-row { display: flex; gap: 0.5rem; }
+        .field-input { flex: 1; min-width: 0; background: var(--bg-inset); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 10px; padding: 0.7rem 0.85rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; transition: border-color 0.2s, box-shadow 0.2s; }
+        .field-input::placeholder { color: var(--text-muted); font-family: 'Inter', sans-serif; }
+        .field-input:focus { outline: none; border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167,139,250,0.15); }
+        .field-input[readonly] { cursor: default; color: var(--text-secondary); }
+        select.field-input { font-family: 'Inter', sans-serif; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.7rem center; background-size: 1rem; padding-right: 2.2rem; }
+        select.field-input option { background: #161b1f; color: #fff; }
+
+        /* Buttons */
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.7rem 1rem; border-radius: 10px; font-size: 0.85rem; font-weight: 600; border: 1px solid transparent; cursor: pointer; transition: all 0.2s; white-space: nowrap; font-family: inherit; }
+        .btn i { font-size: 0.85rem; }
+        .btn-icon { padding: 0.7rem 0.85rem; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-purple-dark), var(--accent-purple)); color: #fff; box-shadow: 0 4px 14px rgba(124,58,237,0.35); }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(124,58,237,0.5); }
+        .btn-ghost { background: var(--bg-inset); color: var(--text-secondary); border-color: var(--border-color); }
+        .btn-ghost:hover { background: var(--bg-card-hover); color: #fff; border-color: var(--border-strong); }
+        .btn-danger { background: rgba(248,113,113,0.12); color: #fca5a5; border-color: rgba(248,113,113,0.3); }
+        .btn-danger:hover { background: rgba(248,113,113,0.2); color: #fff; }
+        .btn-block { width: 100%; }
+
+        /* Destination list */
+        .dest-list { display: flex; flex-direction: column; gap: 0.7rem; }
+        .dest-item { display: flex; align-items: center; gap: 0.9rem; padding: 0.85rem 0.95rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); border-radius: 12px; transition: all 0.2s; }
+        .dest-item:hover { background: var(--bg-card-hover); border-color: rgba(167,139,250,0.3); }
+        .dest-item.is-disabled { opacity: 0.55; }
+        .platform-icon { width: 44px; height: 44px; flex-shrink: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 1.2rem; }
+        .platform-twitch { background: #9146FF; }
+        .platform-kick { background: #53FC18; color: #000; }
+        .platform-youtube { background: #FF0000; }
+        .platform-tiktok { background: #010101; border: 1px solid #FE2C55; }
+        .platform-trovo { background: #19D760; color: #000; }
+        .platform-facebook { background: #1877F2; }
+        .platform-instagram { background: linear-gradient(45deg, #F58529, #DD2A7B, #8134AF); }
+        .platform-twitter { background: #000; border: 1px solid var(--border-strong); }
+        .platform-custom { background: linear-gradient(135deg, #7c3aed, #60a5fa); }
+        .dest-info { flex: 1; min-width: 0; }
+        .dest-name { font-weight: 600; font-size: 0.92rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dest-sub { font-size: 0.72rem; color: var(--text-muted); margin-top: 0.1rem; display: flex; align-items: center; gap: 0.4rem; }
+        .dest-state { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 600; padding: 0.25rem 0.55rem; border-radius: 50px; background: rgba(255,255,255,0.05); color: var(--text-muted); }
+        .dest-state .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+        .dest-state.s-live { background: rgba(52,211,153,0.15); color: var(--accent-green); }
+        .dest-state.s-live .dot { background: var(--accent-green); animation: pulse 1.6s infinite; }
+        .dest-state.s-failed { background: rgba(248,113,113,0.15); color: var(--accent-red); }
+        .dest-state.s-failed .dot { background: var(--accent-red); }
+        .dest-state.s-connecting { background: rgba(251,191,36,0.15); color: var(--accent-yellow); }
+        .dest-state.s-connecting .dot { background: var(--accent-yellow); animation: pulse 1s infinite; }
+        .dest-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+        .icon-btn { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-inset); color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+        .icon-btn:hover { color: #fff; border-color: var(--border-strong); background: var(--bg-card-hover); }
+        .icon-btn.danger:hover { color: var(--accent-red); border-color: rgba(248,113,113,0.4); }
+
+        /* Empty state */
+        .empty-state { text-align: center; padding: 2.5rem 1.5rem; color: var(--text-muted); }
+        .empty-state i { font-size: 2.25rem; opacity: 0.3; margin-bottom: 0.85rem; }
+        .empty-state p { font-size: 0.9rem; }
+        .empty-state .sub { font-size: 0.78rem; margin-top: 0.3rem; opacity: 0.7; }
+
+        /* Add destination form */
+        .add-form { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px dashed var(--border-color); }
+        .add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
+        .add-grid .full { grid-column: 1 / -1; }
+        @media (max-width: 560px) { .add-grid { grid-template-columns: 1fr; } }
+
+        /* Toast */
+        #toast-host { position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 2000; display: flex; flex-direction: column; gap: 0.6rem; }
+        .toast { display: flex; align-items: center; gap: 0.65rem; padding: 0.8rem 1.1rem; border-radius: 12px; font-size: 0.85rem; font-weight: 500; background: #161b1f; border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: toastIn 0.25s ease-out; max-width: 340px; }
+        .toast.ok { border-color: rgba(52,211,153,0.4); } .toast.ok i { color: var(--accent-green); }
+        .toast.err { border-color: rgba(248,113,113,0.4); } .toast.err i { color: var(--accent-red); }
+        .toast.info i { color: var(--accent-purple); }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+        /* Footer */
+        .footer { position: relative; z-index: 1; padding: 2.5rem 1.5rem; border-top: 1px solid var(--border-color); text-align: center; color: var(--text-muted); font-size: 0.82rem; }
+        .footer a { color: var(--text-secondary); text-decoration: none; }
+        .footer a:hover { color: var(--accent-purple); }
+
+        @media (max-width: 768px) {
+            .navbar-links { display: none; }
+            main { padding: 86px 1rem 3rem; }
+            .status-meta { margin-left: 0; width: 100%; justify-content: space-between; }
+            .status-meta .item { text-align: left; }
+        }
+    </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
-  <main class="max-w-3xl mx-auto p-6 space-y-8">
-    <header class="space-y-1">
-      <h1 class="text-2xl font-bold">CertiFried Multicast</h1>
-      <p class="text-gray-400">Push once. We relay your live stream to every platform — free.</p>
-      <% if (isGuest) { %>
-        <p class="text-amber-400 text-sm">Guest session<% if (expiresAt) { %> — expires <%= new Date(expiresAt).toLocaleString() %><% } %>. <a class="underline" href="/auth/discord">Log in with Discord</a> to keep your setup.</p>
-      <% } %>
-    </header>
+<body>
+    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
 
-    <section class="bg-gray-900 rounded-xl p-5 space-y-3">
-      <h2 class="font-semibold">Your ingest (point OBS here)</h2>
-      <label class="block text-sm text-gray-400">Server / URL</label>
-      <div class="flex gap-2">
-        <input id="ingestUrl" readonly value="rtmp://<%= ingestUrl.split('/live/')[0].replace('rtmp://','') %>" class="flex-1 bg-gray-800 rounded px-3 py-2 text-sm" />
-        <button data-copy="#ingestUrl" class="bg-indigo-600 px-3 rounded text-sm">Copy</button>
-      </div>
-      <label class="block text-sm text-gray-400">Stream key</label>
-      <div class="flex gap-2">
-        <input id="streamKey" readonly value="<%= streamKey %>" type="password" class="flex-1 bg-gray-800 rounded px-3 py-2 text-sm" />
-        <button id="revealKey" class="bg-gray-700 px-3 rounded text-sm">Show</button>
-        <button data-copy="#streamKey" class="bg-indigo-600 px-3 rounded text-sm">Copy</button>
-        <% if (!isGuest) { %><button id="regenKey" class="bg-red-700 px-3 rounded text-sm">Regenerate</button><% } %>
-      </div>
-      <p class="text-xs text-gray-500">In OBS: Settings → Stream → Custom. Note the port is <strong>1936</strong>.</p>
-    </section>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/" class="navbar-brand">
+                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo" onerror="this.style.display='none'">
+                <span>CertiFried</span>
+            </a>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/servers">Servers</a>
+                <a href="/commands">Commands</a>
+                <a href="/status">Live</a>
+            </div>
+            <% if (typeof user !== 'undefined' && user) { %>
+                <a href="/profile" class="user-menu">
+                    <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="Avatar" class="user-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                    <span class="user-name"><%= user.username %></span>
+                </a>
+            <% } else { %>
+                <a href="/auth/discord" class="user-menu"><span class="user-name"><i class="fab fa-discord"></i>&nbsp; Login</span></a>
+            <% } %>
+        </div>
+    </nav>
 
-    <section class="bg-gray-900 rounded-xl p-5 space-y-4">
-      <div class="flex items-center justify-between">
-        <h2 class="font-semibold">Destinations</h2>
-        <span id="liveBadge" class="text-xs px-2 py-1 rounded bg-gray-700">offline</span>
-      </div>
-      <ul id="destList" class="space-y-2"></ul>
+    <main>
+        <div class="page-header">
+            <div class="page-icon"><i class="fas fa-tower-broadcast"></i></div>
+            <div>
+                <h1 class="page-title">Multicast Studio</h1>
+                <p class="page-subtitle">Stream once to CertiFried — we relay it everywhere, instantly. Free, forever.</p>
+            </div>
+        </div>
 
-      <form id="addDest" class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-gray-800">
-        <select name="platform" id="platformSel" class="bg-gray-800 rounded px-3 py-2 text-sm">
-          <% Object.entries(platforms).forEach(([k, p]) => { %>
-            <option value="<%= k %>"><%= p.name %></option>
-          <% }) %>
-        </select>
-        <input name="name" placeholder="Label (e.g. My Twitch)" class="bg-gray-800 rounded px-3 py-2 text-sm" />
-        <input name="rtmp_url" id="rtmpUrl" placeholder="rtmp://..." class="bg-gray-800 rounded px-3 py-2 text-sm" />
-        <input name="dest_stream_key" placeholder="platform stream key" class="bg-gray-800 rounded px-3 py-2 text-sm" />
-        <button class="sm:col-span-2 bg-green-600 rounded py-2 text-sm font-medium">Add destination</button>
-      </form>
-    </section>
-  </main>
+        <% if (isGuest) { %>
+        <div class="banner">
+            <i class="fas fa-user-clock"></i>
+            <span>
+                You're on a <strong>guest session</strong><% if (expiresAt) { %> — expires <%= new Date(expiresAt).toLocaleString() %><% } %>.
+                <a href="/auth/discord">Log in with Discord</a> to keep your key &amp; destinations permanently.
+            </span>
+        </div>
+        <% } %>
 
-  <script>window.__PLATFORMS__ = <%- JSON.stringify(platforms) %>;</script>
-  <!-- csrf.js patches window.fetch to add X-CSRF-Token on POST/PATCH/DELETE; must load before stream.js -->
-  <script src="/js/csrf.js"></script>
-  <script src="/js/stream.js"></script>
+        <!-- Live status strip -->
+        <div class="status-strip">
+            <span class="live-pill" id="livePill"><span class="dot"></span><span id="livePillText">Offline</span></span>
+            <div class="status-meta">
+                <div class="item"><div class="v" id="metaUptime">—</div><div class="l">Uptime</div></div>
+                <div class="item"><div class="v" id="metaActive">0</div><div class="l">Live outputs</div></div>
+                <div class="item"><div class="v" id="metaTotal"><%= destinations.length %></div><div class="l">Destinations</div></div>
+            </div>
+        </div>
+
+        <!-- Ingest card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fas fa-satellite-dish"></i> Your Ingest</div>
+                <span class="card-badge">OBS / Streamlabs</span>
+            </div>
+            <div class="card-body">
+                <div class="field">
+                    <label class="field-label">Server URL</label>
+                    <div class="field-row">
+                        <input id="ingestUrl" class="field-input" readonly value="rtmp://<%= ingestUrl.split('/live/')[0].replace('rtmp://','') %>/live">
+                        <button class="btn btn-ghost btn-icon" data-copy="#ingestUrl" title="Copy"><i class="fas fa-copy"></i></button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label class="field-label">Stream Key</label>
+                    <div class="field-row">
+                        <input id="streamKey" class="field-input" type="password" readonly value="<%= streamKey %>">
+                        <button class="btn btn-ghost btn-icon" id="revealKey" title="Show / hide"><i class="fas fa-eye"></i></button>
+                        <button class="btn btn-ghost btn-icon" data-copy="#streamKey" title="Copy"><i class="fas fa-copy"></i></button>
+                        <% if (!isGuest) { %><button class="btn btn-danger btn-icon" id="regenKey" title="Regenerate key"><i class="fas fa-rotate"></i></button><% } %>
+                    </div>
+                </div>
+                <p class="card-help">
+                    In OBS: <strong>Settings → Stream → Service: Custom</strong>. Paste the Server URL and Stream Key above.
+                    Heads-up — the port is <strong>1936</strong> (not the usual 1935), and it's already baked into the URL.
+                </p>
+            </div>
+        </div>
+
+        <!-- Destinations card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fas fa-share-nodes"></i> Destinations <span class="card-badge" id="destCount"><%= destinations.length %></span></div>
+            </div>
+            <div class="card-body">
+                <div class="dest-list" id="destList"></div>
+                <div class="empty-state" id="destEmpty" style="display:none;">
+                    <i class="fas fa-satellite"></i>
+                    <p>No destinations yet</p>
+                    <p class="sub">Add Twitch, YouTube, Kick or any RTMP target below to start multicasting.</p>
+                </div>
+
+                <form class="add-form" id="addDest">
+                    <div class="add-grid">
+                        <select name="platform" id="platformSel" class="field-input">
+                            <% Object.entries(platforms).forEach(([k, p]) => { %>
+                                <option value="<%= k %>"><%= p.name %></option>
+                            <% }) %>
+                        </select>
+                        <input name="name" class="field-input" placeholder="Label (e.g. My Twitch)" maxlength="120" required>
+                        <input name="rtmp_url" id="rtmpUrl" class="field-input full" placeholder="rtmp://..." required>
+                        <input name="dest_stream_key" id="destKey" class="field-input full" placeholder="Platform stream key">
+                        <a id="helpUrl" class="card-help full" href="#" target="_blank" rel="noopener" style="display:none;"><i class="fas fa-up-right-from-square"></i> Where do I find my stream key?</a>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block"><i class="fas fa-plus"></i> Add destination</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        Powered by <a href="/">CertiFried MultiTool</a> · Free multistreaming · <a href="/status">Live streams</a>
+    </footer>
+
+    <div id="toast-host"></div>
+
+    <script>window.__PLATFORMS__ = <%- JSON.stringify(platforms) %>;</script>
+    <!-- csrf.js patches window.fetch to add X-CSRF-Token on POST/PATCH/DELETE; must load before stream.js -->
+    <script src="/js/csrf.js"></script>
+    <script src="/js/stream.js"></script>
 </body>
 </html>
