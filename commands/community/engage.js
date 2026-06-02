@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import * as achievementHandlers from './engage-achievement-handler.js';
 import * as birthdayHandlers from './engage-birthday-handler.js';
+import * as eventsHandlers from './engage-events-handler.js';
 import * as reportHandlers from './engage-report-handler.js';
 import * as suggestHandlers from './engage-suggest-handler.js';
 import * as tagsHandlers from './engage-tags-handler.js';
@@ -528,6 +529,100 @@ export default {
                                 )
                         )
                 )
+        )
+
+        // ── Events group (9 subcmds) — self-service event schedule board ──
+        .addSubcommandGroup(group =>
+            group
+                .setName('events')
+                .setDescription('Self-service event schedule board')
+                .addSubcommand(sub =>
+                    sub.setName('add')
+                        .setDescription('Add an event to the schedule board')
+                        .addStringOption(opt => opt.setName('title').setDescription('Event title').setRequired(true).setMaxLength(120))
+                        .addStringOption(opt => opt.setName('time').setDescription('Start time (HH:MM, 24h UTC)').setRequired(true))
+                        .addStringOption(opt =>
+                            opt.setName('recurrence').setDescription('How often this event happens').setRequired(true)
+                                .addChoices(
+                                    { name: 'One-off', value: 'once' },
+                                    { name: 'Weekly', value: 'weekly' }
+                                )
+                        )
+                        .addStringOption(opt => opt.setName('date').setDescription('Date for one-off events (MM-DD)').setRequired(false))
+                        .addStringOption(opt =>
+                            opt.setName('day').setDescription('Day of week for weekly events').setRequired(false)
+                                .addChoices(
+                                    { name: 'Sunday', value: '0' },
+                                    { name: 'Monday', value: '1' },
+                                    { name: 'Tuesday', value: '2' },
+                                    { name: 'Wednesday', value: '3' },
+                                    { name: 'Thursday', value: '4' },
+                                    { name: 'Friday', value: '5' },
+                                    { name: 'Saturday', value: '6' }
+                                )
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('duration').setDescription('Duration in minutes (default 60)').setRequired(false)
+                                .setMinValue(15).setMaxValue(1440)
+                        )
+                        .addStringOption(opt => opt.setName('category').setDescription('Category name (optional)').setRequired(false))
+                        .addStringOption(opt => opt.setName('emoji').setDescription('Emoji for this event (optional)').setRequired(false))
+                )
+                .addSubcommand(sub =>
+                    sub.setName('list')
+                        .setDescription('List your own events')
+                )
+                .addSubcommand(sub =>
+                    sub.setName('remove')
+                        .setDescription('Remove one of your events')
+                        .addIntegerOption(opt => opt.setName('id').setDescription('Event ID (from /engage events list)').setRequired(true))
+                )
+                .addSubcommand(sub =>
+                    sub.setName('twitch-sync')
+                        .setDescription('Import your public Twitch schedule into the board')
+                        .addStringOption(opt => opt.setName('username').setDescription('Your Twitch username').setRequired(true))
+                )
+                .addSubcommand(sub =>
+                    sub.setName('setup')
+                        .setDescription('Enable the schedule board (Admin)')
+                        .addChannelOption(opt =>
+                            opt.setName('channel').setDescription('Channel for the board (defaults to here)').setRequired(false)
+                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                        )
+                        .addStringOption(opt =>
+                            opt.setName('mode').setDescription('Board layout mode').setRequired(false)
+                                .addChoices(
+                                    { name: 'Combined', value: 'combined' },
+                                    { name: 'Per user', value: 'per_user' }
+                                )
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub.setName('category')
+                        .setDescription('Add a schedule category (Admin)')
+                        .addStringOption(opt => opt.setName('name').setDescription('Category name').setRequired(true))
+                        .addStringOption(opt => opt.setName('emoji').setDescription('Category emoji').setRequired(false))
+                        .addStringOption(opt => opt.setName('color').setDescription('Category color (hex like #3498DB)').setRequired(false))
+                )
+                .addSubcommand(sub =>
+                    sub.setName('mode')
+                        .setDescription('Change board layout mode (Admin)')
+                        .addStringOption(opt =>
+                            opt.setName('mode').setDescription('Board layout mode').setRequired(true)
+                                .addChoices(
+                                    { name: 'Combined', value: 'combined' },
+                                    { name: 'Per user', value: 'per_user' }
+                                )
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub.setName('disable')
+                        .setDescription('Disable the schedule board (Admin)')
+                )
+                .addSubcommand(sub =>
+                    sub.setName('refresh')
+                        .setDescription('Force-refresh the schedule board now (Admin)')
+                )
         ),
 
     async execute(interaction) {
@@ -621,6 +716,20 @@ export default {
                         case 'stats': return await voiceHandlers.handleStats(interaction);
                         case 'leaderboard': return await voiceHandlers.handleLeaderboard(interaction);
                         case 'channels': return await voiceHandlers.handleChannels(interaction);
+                    }
+                    break;
+
+                case 'events':
+                    switch (subcommand) {
+                        case 'add': return await eventsHandlers.handleAdd(interaction);
+                        case 'list': return await eventsHandlers.handleList(interaction);
+                        case 'remove': return await eventsHandlers.handleRemove(interaction);
+                        case 'twitch-sync': return await eventsHandlers.handleTwitchSync(interaction);
+                        case 'setup': return await eventsHandlers.handleSetup(interaction);
+                        case 'category': return await eventsHandlers.handleCategory(interaction);
+                        case 'mode': return await eventsHandlers.handleMode(interaction);
+                        case 'disable': return await eventsHandlers.handleDisable(interaction);
+                        case 'refresh': return await eventsHandlers.handleRefresh(interaction);
                     }
                     break;
             }
