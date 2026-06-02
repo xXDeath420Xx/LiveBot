@@ -4,8 +4,8 @@ const { config } = require('./config');
 const { validateStreamKey } = require('./keys');
 const { createSession, endSession } = require('./sessions');
 
-// db: { query }, registry: StatusRegistry, multistreamer: Multistreamer
-function createRelay({ db, registry, multistreamer }) {
+// db: { query }, registry: StatusRegistry, makeMultistreamer: (onState) => Multistreamer
+function createRelay({ db, registry, makeMultistreamer }) {
   const nms = new NodeMediaServer({
     rtmp: { port: config.rtmpPort, chunk_size: 60000, gop_cache: true, ping: 30, ping_timeout: 60 },
     http: { port: 0, allow_origin: '*' } // disabled-ish; no public playback used
@@ -13,6 +13,8 @@ function createRelay({ db, registry, multistreamer }) {
 
   // streamId -> { sessionId }
   const sessions = new Map();
+  // streamId -> Multistreamer instance
+  const streamers = new Map();
 
   nms.on('prePublish', async (id, StreamPath) => {
     const streamKey = StreamPath.split('/')[2];
@@ -63,13 +65,14 @@ function createRelay({ db, registry, multistreamer }) {
     registry.startStream(id, { keyId, startedAt: Date.now() });
     const inputUrl = `rtmp://127.0.0.1:${config.rtmpPort}${StreamPath}`;
 
-    multistreamer.onState = (name, patch) => registry.setDestination(id, name, patch);
-    multistreamer.start(id, inputUrl, destinations);
+    const ms = makeMultistreamer((name, patch) => registry.setDestination(id, name, patch));
+    streamers.set(id, ms);
+    ms.start(id, inputUrl, destinations);
     console.log(`[relay] fan-out started: ${destinations.length} destinations (key ${keyId})`);
   });
 
   nms.on('donePublish', async (id) => {
-    multistreamer.stop(id);
+    const ms = streamers.get(id); if (ms) ms.stop(id); streamers.delete(id);
     registry.endStream(id);
     const meta = sessions.get(id);
     if (meta && meta.sessionId) { try { await endSession(db, meta.sessionId, 'ended'); } catch {} }
