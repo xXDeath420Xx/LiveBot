@@ -8,7 +8,10 @@ const { createSession, endSession } = require('./sessions');
 function createRelay({ db, registry, makeMultistreamer }) {
   const nms = new NodeMediaServer({
     rtmp: { port: config.rtmpPort, chunk_size: 60000, gop_cache: true, ping: 30, ping_timeout: 60 },
-    http: { port: 0, allow_origin: '*' } // disabled-ish; no public playback used
+    // NMS v2 always starts an HTTP server; port 0 misbinds to :80 (EACCES).
+    // Use a high port that is NOT opened in the firewall, so playback is never
+    // publicly reachable (only 1936 is open). Effectively no public CDN surface.
+    http: { port: 8935, allow_origin: '*' }
   });
 
   // streamId -> { sessionId }
