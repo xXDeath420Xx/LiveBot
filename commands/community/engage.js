@@ -86,6 +86,31 @@ export default {
                         .addStringOption(opt =>
                             opt.setName('date').setDescription('Your birthday in MM-DD format (e.g., 03-15)').setRequired(true)
                         )
+                        .addIntegerOption(opt =>
+                            opt.setName('year').setDescription('Birth year (optional — shows your age)').setRequired(false)
+                                .setMinValue(1900).setMaxValue(2026)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub.setName('setfor')
+                        .setDescription('Set another member\'s birthday (Admin)')
+                        .addUserOption(opt =>
+                            opt.setName('user').setDescription('The member whose birthday to set').setRequired(true)
+                        )
+                        .addStringOption(opt =>
+                            opt.setName('date').setDescription('Birthday in MM-DD format (e.g., 03-15)').setRequired(true)
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('year').setDescription('Birth year (optional)').setRequired(false)
+                                .setMinValue(1900).setMaxValue(2026)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub.setName('panel')
+                        .setDescription('Post a birthday date-picker panel (Admin)')
+                        .addChannelOption(opt =>
+                            opt.setName('channel').setDescription('Channel to post the panel in (defaults to here)').setRequired(false)
+                        )
                 )
                 .addSubcommand(sub =>
                     sub.setName('remove')
@@ -526,6 +551,8 @@ export default {
                 case 'birthday':
                     switch (subcommand) {
                         case 'set': return await birthdayHandlers.handleSet(interaction);
+                        case 'setfor': return await birthdayHandlers.handleSetFor(interaction);
+                        case 'panel': return await birthdayHandlers.handlePanel(interaction);
                         case 'remove': return await birthdayHandlers.handleRemove(interaction);
                         case 'view': return await birthdayHandlers.handleView(interaction);
                         case 'list': return await birthdayHandlers.handleList(interaction);
