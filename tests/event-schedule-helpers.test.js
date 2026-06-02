@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { weekStartFor, materializeWeek, groupByCategory, scheduleHash, parseCustomEmoji } from '../core/event-schedule-helpers.js';
+import { weekStartFor, materializeWeek, groupByCategory, scheduleHash, parseCustomEmoji, formatTimeLabel } from '../core/event-schedule-helpers.js';
+
+test('formatTimeLabel: same-day shows 24h range + duration; multi-day shows start + length', () => {
+    const h = (iso) => new Date(iso).getTime();
+    // 2h same-day window
+    assert.equal(formatTimeLabel(h('2026-06-02T19:00:00Z'), h('2026-06-02T21:00:00Z')), '19:00–21:00 · 2h');
+    // sub-hour
+    assert.equal(formatTimeLabel(h('2026-06-02T19:00:00Z'), h('2026-06-02T19:45:00Z')), '19:00–19:45 · 45m');
+    // hours + minutes
+    assert.equal(formatTimeLabel(h('2026-06-02T19:00:00Z'), h('2026-06-02T21:30:00Z')), '19:00–21:30 · 2h 30m');
+    // multi-day: start time only + day-rolled duration
+    assert.equal(formatTimeLabel(h('2026-06-02T19:00:00Z'), h('2026-06-04T23:00:00Z')), '19:00 · 2d 4h');
+});
 
 test('parseCustomEmoji: custom mention parsed, unicode/empty -> null', () => {
     assert.deepEqual(parseCustomEmoji('<:weed:1322212094963351562>'), { animated: false, name: 'weed', id: '1322212094963351562' });
