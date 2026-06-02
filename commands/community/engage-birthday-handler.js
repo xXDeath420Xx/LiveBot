@@ -252,3 +252,47 @@ export async function handleSetFor(interaction) {
         await interaction.editReply({ content: `Failed to set birthday: ${error.message}` });
     }
 }
+
+export async function handlePanel(interaction) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: 'You need Administrator permission to post a birthday panel.', ephemeral: true });
+    }
+    const { EmbedBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = await import('discord.js');
+
+    const channel = interaction.options.getChannel('channel') || interaction.channel;
+    if (!channel?.isTextBased?.()) {
+        return interaction.reply({ content: 'Please choose a text channel.', ephemeral: true });
+    }
+
+    const months = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const embed = new EmbedBuilder()
+        .setColor('#FF69B4')
+        .setTitle('🎂 Set Your Birthday')
+        .setDescription('Pick your birth **month** below, then enter your day (and optionally your year, which shows your age on your birthday). No commands needed!');
+
+    const monthSelect = new StringSelectMenuBuilder()
+        .setCustomId('bday:month')
+        .setPlaceholder('Select your birth month')
+        .addOptions(months.map((name, i) => ({ label: name, value: String(i + 1) })));
+
+    const adminButton = new ButtonBuilder()
+        .setCustomId('bday:adminstart')
+        .setLabel('Set for a member')
+        .setEmoji('🔧')
+        .setStyle(ButtonStyle.Secondary);
+
+    try {
+        await channel.send({
+            embeds: [embed],
+            components: [
+                new ActionRowBuilder().addComponents(monthSelect),
+                new ActionRowBuilder().addComponents(adminButton),
+            ],
+        });
+        await interaction.reply({ content: `Birthday panel posted in ${channel}.`, ephemeral: true });
+    } catch (error) {
+        await interaction.reply({ content: `Failed to post panel: ${error.message}`, ephemeral: true });
+    }
+}
