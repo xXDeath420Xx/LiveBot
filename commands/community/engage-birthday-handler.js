@@ -8,6 +8,7 @@ export async function handleSet(interaction) {
     }
 
     const dateString = interaction.options.getString('date');
+    const year = interaction.options.getInteger('year'); // null if omitted
 
     const match = dateString.match(/^(\d{1,2})-(\d{1,2})$/);
     if (!match) {
@@ -17,26 +18,19 @@ export async function handleSet(interaction) {
         });
     }
 
-    const month = parseInt(match[1]);
-    const day = parseInt(match[2]);
-
-    if (month < 1 || month > 12 || day < 1 || day > 31) {
-        return interaction.reply({
-            content: 'Invalid date! Month must be 1-12 and day must be 1-31.',
-            ephemeral: true
-        });
-    }
+    const month = parseInt(match[1], 10);
+    const day = parseInt(match[2], 10);
 
     await interaction.deferReply({ ephemeral: true });
 
     try {
-        await birthdayManager.setBirthday(interaction.user.id, interaction.guild.id, month, day);
+        await birthdayManager.setBirthday(interaction.user.id, interaction.guild.id, month, day, year);
 
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
                            'July', 'August', 'September', 'October', 'November', 'December'];
 
         await interaction.editReply({
-            content: `Your birthday has been set to ${monthNames[month - 1]} ${day}!`
+            content: `Your birthday has been set to ${monthNames[month - 1]} ${day}${year ? ', ' + year : ''}!`
         });
     } catch (error) {
         await interaction.editReply({
@@ -88,7 +82,7 @@ export async function handleView(interaction) {
     const embed = new EmbedBuilder()
         .setColor('#FF69B4')
         .setTitle(`${user.username}'s Birthday`)
-        .setDescription(`${monthNames[birthday.month - 1]} ${birthday.day}`)
+        .setDescription(`${monthNames[birthday.month - 1]} ${birthday.day}${birthday.year ? ` (${birthday.year})` : ''}`)
         .setThumbnail(user.displayAvatarURL({ size: 256 }))
         .setTimestamp();
 
@@ -225,5 +219,36 @@ export async function handleDisable(interaction) {
         await interaction.editReply({ content: 'Birthday announcements have been disabled.' });
     } else {
         await interaction.editReply({ content: 'Failed to disable birthday announcements.' });
+    }
+}
+
+export async function handleSetFor(interaction) {
+    const birthdayManager = interaction.client.birthdayManager;
+    if (!birthdayManager) {
+        return interaction.reply({ content: 'The birthday system is not available.', ephemeral: true });
+    }
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: 'You need Administrator permission to set birthdays for others.', ephemeral: true });
+    }
+
+    const target = interaction.options.getUser('user');
+    const dateString = interaction.options.getString('date');
+    const year = interaction.options.getInteger('year');
+
+    const match = dateString.match(/^(\d{1,2})-(\d{1,2})$/);
+    if (!match) {
+        return interaction.reply({ content: 'Invalid date format! Use MM-DD (e.g., 03-15).', ephemeral: true });
+    }
+    const month = parseInt(match[1], 10);
+    const day = parseInt(match[2], 10);
+
+    await interaction.deferReply({ ephemeral: true });
+    try {
+        await birthdayManager.setBirthday(target.id, interaction.guild.id, month, day, year);
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                           'July', 'August', 'September', 'October', 'November', 'December'];
+        await interaction.editReply({ content: `Set ${target.username}'s birthday to ${monthNames[month - 1]} ${day}${year ? ', ' + year : ''}.` });
+    } catch (error) {
+        await interaction.editReply({ content: `Failed to set birthday: ${error.message}` });
     }
 }
