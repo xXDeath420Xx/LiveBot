@@ -1,5 +1,6 @@
 'use strict';
 require('dotenv').config();
+const crypto = require('node:crypto');
 
 function int(val, def) {
   const n = parseInt(val, 10);
@@ -15,6 +16,10 @@ function loadConfig(env = process.env) {
     maxConcurrentStreams: int(env.MAX_CONCURRENT, 10),
     destRetryLimit: int(env.DEST_RETRY_LIMIT, 5),
     destRetryBaseMs: int(env.DEST_RETRY_BASE_MS, 2000),
+    // Secret used to sign external playback URLs. We never hand it out, so
+    // external HTTP-FLV/RTMP playback is effectively impossible; the relay's
+    // own loopback pull is exempt (NMS skips play-auth when isLocal).
+    playSecret: env.RELAY_PLAY_SECRET || crypto.randomBytes(24).toString('hex'),
     db: {
       host: env.DB_HOST || 'localhost',
       port: int(env.DB_PORT, 3306),

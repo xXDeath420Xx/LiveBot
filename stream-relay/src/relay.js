@@ -8,10 +8,14 @@ const { createSession, endSession } = require('./sessions');
 function createRelay({ db, registry, makeMultistreamer }) {
   const nms = new NodeMediaServer({
     rtmp: { port: config.rtmpPort, chunk_size: 60000, gop_cache: true, ping: 30, ping_timeout: 60 },
-    // NMS v2 always starts an HTTP server; port 0 misbinds to :80 (EACCES).
-    // Use a high port that is NOT opened in the firewall, so playback is never
-    // publicly reachable (only 1936 is open). Effectively no public CDN surface.
-    http: { port: 8935, allow_origin: '*' }
+    // NMS v2 always starts an HTTP server; port 0 misbinds to :80 (EACCES), so
+    // we give it a high port NOT opened in the firewall. Defense in depth on top
+    // of that: disable the admin API (no stream-key enumeration) and tighten CORS.
+    http: { port: 8935, allow_origin: '127.0.0.1', api: false },
+    // Require a signed URL for playback so live streams can't be replayed by
+    // anyone who reaches :8935 locally. The relay's own loopback pull is exempt
+    // (NMS skips play-auth when the client isLocal), so fan-out still works.
+    auth: { play: true, secret: config.playSecret }
   });
 
   // streamId -> { sessionId }
