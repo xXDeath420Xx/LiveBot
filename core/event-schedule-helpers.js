@@ -61,3 +61,14 @@ export function scheduleHash(segments) {
     const norm = segments.map(s => `${s.start}|${s.end}|${s.categoryId}|${s.title}|${s.userId ?? ''}`).sort();
     return crypto.createHash('sha256').update(norm.join('\n')).digest('hex');
 }
+
+/**
+ * Parse a Discord custom-emoji mention `<:name:id>` / `<a:name:id>`.
+ * Custom emoji are images (no unicode), so the renderer fetches their CDN image.
+ * Returns { id, name, animated } or null for unicode/plain strings.
+ */
+export function parseCustomEmoji(str) {
+    const m = /^<(a)?:([A-Za-z0-9_]+):(\d{15,25})>$/.exec(String(str ?? '').trim());
+    if (!m) return null;
+    return { animated: Boolean(m[1]), name: m[2], id: m[3] };
+}

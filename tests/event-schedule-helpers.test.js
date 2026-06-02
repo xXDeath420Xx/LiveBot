@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { weekStartFor, materializeWeek, groupByCategory, scheduleHash } from '../core/event-schedule-helpers.js';
+import { weekStartFor, materializeWeek, groupByCategory, scheduleHash, parseCustomEmoji } from '../core/event-schedule-helpers.js';
+
+test('parseCustomEmoji: custom mention parsed, unicode/empty -> null', () => {
+    assert.deepEqual(parseCustomEmoji('<:weed:1322212094963351562>'), { animated: false, name: 'weed', id: '1322212094963351562' });
+    assert.deepEqual(parseCustomEmoji('<a:spin:123456789012345678>'), { animated: true, name: 'spin', id: '123456789012345678' });
+    assert.equal(parseCustomEmoji('🔥'), null);
+    assert.equal(parseCustomEmoji(':weed:'), null);
+    assert.equal(parseCustomEmoji(''), null);
+    assert.equal(parseCustomEmoji(null), null);
+});
 
 test('weekStartFor: returns the Sunday 00:00 UTC of the week', () => {
     const ws = weekStartFor(new Date('2026-06-02T13:00:00Z'));
