@@ -4,14 +4,14 @@ const APP_ID = process.env.META_APP_ID;
 const APP_SECRET = process.env.META_APP_SECRET;
 const BASE_URL = (process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/+$/, '');
 const REDIRECT_URI = `${BASE_URL}/stream/connect/facebook/callback`;
-const GRAPH = 'https://graph.facebook.com/v19.0';
+const GRAPH = 'https://graph.facebook.com/v21.0';
 const SCOPE = 'publish_video';
 
 export function getAuthUrl(state) {
   const params = new URLSearchParams({
     client_id: APP_ID, redirect_uri: REDIRECT_URI, response_type: 'code', scope: SCOPE, state,
   });
-  return `https://www.facebook.com/v19.0/dialog/oauth?${params}`;
+  return `https://www.facebook.com/v21.0/dialog/oauth?${params}`;
 }
 
 export async function handleCallback(code, opts = {}) {
