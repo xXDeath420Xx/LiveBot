@@ -111,8 +111,14 @@ router.post('/stream/api/destinations', async (req, res) => {
 router.patch('/stream/api/destinations/:id', async (req, res) => {
   const key = await resolveKey(req);
   if (!key) return res.status(401).json({ error: 'No active stream key' });
-  const enabled = req.body.enabled ? 1 : 0;
-  await db.query('UPDATE stream_destinations SET enabled = ? WHERE id = ? AND stream_key_id = ?', [enabled, req.params.id, key.id]);
+  // Partial update: enable toggle, stream key, and/or label. Scoped to caller's key.
+  const sets = [], params = [];
+  if (typeof req.body.enabled !== 'undefined') { sets.push('enabled = ?'); params.push(req.body.enabled ? 1 : 0); }
+  if (typeof req.body.dest_stream_key === 'string') { sets.push('dest_stream_key = ?'); params.push(req.body.dest_stream_key.trim().slice(0, 500)); }
+  if (typeof req.body.name === 'string' && req.body.name.trim()) { sets.push('name = ?'); params.push(req.body.name.trim().slice(0, 120)); }
+  if (!sets.length) return res.status(400).json({ error: 'nothing to update' });
+  params.push(req.params.id, key.id);
+  await db.query(`UPDATE stream_destinations SET ${sets.join(', ')} WHERE id = ? AND stream_key_id = ?`, params);
   res.json({ ok: true });
 });
 

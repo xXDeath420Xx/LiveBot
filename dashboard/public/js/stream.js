@@ -123,7 +123,17 @@
       del.className = 'icon-btn danger'; del.title = 'Delete';
       del.innerHTML = '<i class="fas fa-trash"></i>';
       del.onclick = () => deleteDest(d.id, d.name);
-      actions.append(toggle, del);
+      // Key editor (static destinations only; dynamic platforms mint a key at go-live)
+      const keyBtn = document.createElement('button');
+      keyBtn.className = 'icon-btn' + (d.dest_stream_key ? '' : ' needkey');
+      keyBtn.title = d.dest_stream_key ? 'Edit stream key' : 'Add stream key';
+      keyBtn.innerHTML = '<i class="fas fa-key"></i>';
+      keyBtn.onclick = async () => {
+        const k = prompt((d.dest_stream_key ? 'Replace' : 'Paste') + ' your ' + labelFor(d.platform) + ' stream key:', '');
+        if (k && k.trim()) { await patchDest(d.id, { dest_stream_key: k.trim() }); toast('Stream key saved', 'ok'); }
+      };
+      if (d.resolution === 'dynamic') actions.append(toggle, del);
+      else actions.append(keyBtn, toggle, del);
 
       row.append(badge, info, state, actions);
       list.appendChild(row);
