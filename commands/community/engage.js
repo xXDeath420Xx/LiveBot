@@ -540,7 +540,6 @@ export default {
                     sub.setName('add')
                         .setDescription('Add an event to the schedule board')
                         .addStringOption(opt => opt.setName('title').setDescription('Event title').setRequired(true).setMaxLength(120))
-                        .addStringOption(opt => opt.setName('time').setDescription('Start time (HH:MM, 24h UTC)').setRequired(true))
                         .addStringOption(opt =>
                             opt.setName('recurrence').setDescription('How often this event happens').setRequired(true)
                                 .addChoices(
@@ -548,6 +547,7 @@ export default {
                                     { name: 'Weekly', value: 'weekly' }
                                 )
                         )
+                        .addStringOption(opt => opt.setName('time').setDescription('Start time (HH:MM, 24h UTC) — leave blank for "Time TBD"').setRequired(false))
                         .addStringOption(opt => opt.setName('date').setDescription('Date for one-off events (MM-DD)').setRequired(false))
                         .addStringOption(opt =>
                             opt.setName('day').setDescription('Day of week for weekly events').setRequired(false)
