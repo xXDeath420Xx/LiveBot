@@ -180,7 +180,11 @@
 
         /* Add-Platform chooser */
         .connect-bar { position: relative; margin-bottom: 1rem; }
-        .connect-menu { position: absolute; z-index: 20; margin-top: 0.4rem; background: #161b1f; border: 1px solid var(--border-color); border-radius: 12px; padding: 0.4rem; display: flex; flex-direction: column; min-width: 220px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        /* Inline panel (not an absolute dropdown) so it can never render behind the
+           list, and an explicit [hidden] rule so the toggle actually hides it
+           (a bare `display:flex` would override the [hidden] attribute). */
+        .connect-menu { margin-top: 0.5rem; background: #161b1f; border: 1px solid var(--border-color); border-radius: 12px; padding: 0.4rem; display: flex; flex-direction: column; gap: 0.15rem; max-width: 340px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .connect-menu[hidden] { display: none; }
         .connect-opt { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.7rem; border-radius: 8px; color: var(--text-secondary); text-decoration: none; background: none; border: none; cursor: pointer; font: inherit; text-align: left; }
         .connect-opt:hover { background: var(--bg-card-hover); color: #fff; }
         .connect-opt .platform-icon { width: 22px; height: 22px; border-radius: 6px; }
