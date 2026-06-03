@@ -36,8 +36,12 @@ router.get('/stream/connect/:platform/callback', ensureDiscordAuthed, async (req
   const platform = req.params.platform;
   const meta = PLATFORM_META[platform];
   if (!meta) return res.redirect('/stream?error=unknown_platform');
-  if (req.query.error) return res.redirect('/stream?error=oauth_denied');
+  if (req.query.error) {
+    logger.warn(`[stream-connect] ${platform} provider returned error: ${req.query.error} — ${req.query.error_description || 'no description'}`);
+    return res.redirect('/stream?error=oauth_denied');
+  }
   if (!req.query.code || req.query.state !== req.session.streamOAuthState || platform !== req.session.streamOAuthPlatform) {
+    logger.warn(`[stream-connect] ${platform} state check failed (hasCode=${!!req.query.code}, stateMatch=${req.query.state === req.session.streamOAuthState}, platformMatch=${platform === req.session.streamOAuthPlatform})`);
     return res.redirect('/stream?error=oauth_state');
   }
   const codeVerifier = req.session.streamOAuthVerifier;
