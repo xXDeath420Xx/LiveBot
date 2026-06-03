@@ -27,13 +27,13 @@ export function materializeWeek(events, weekStart) {
             const start = dayStart + e.recur_start_min * 60 * 1000;
             const end = e.recur_end_min != null ? dayStart + e.recur_end_min * 60 * 1000 : start + 60 * 60 * 1000;
             if (start >= ws && start < we) {
-                out.push({ start, end, title: e.title, emoji: e.emoji ?? null, categoryId: e.category_id ?? null, userId: e.user_id, source: e.source ?? 'manual' });
+                out.push({ start, end, title: e.title, emoji: e.emoji ?? null, categoryId: e.category_id ?? null, userId: e.user_id, source: e.source ?? 'manual', allDay: Boolean(e.all_day) });
             }
         } else if (e.start_time) {
             const start = new Date(e.start_time).getTime();
             if (start >= ws && start < we) {
                 const end = e.end_time ? new Date(e.end_time).getTime() : start + 60 * 60 * 1000;
-                out.push({ start, end, title: e.title, emoji: e.emoji ?? null, categoryId: e.category_id ?? null, userId: e.user_id, source: e.source ?? 'manual' });
+                out.push({ start, end, title: e.title, emoji: e.emoji ?? null, categoryId: e.category_id ?? null, userId: e.user_id, source: e.source ?? 'manual', allDay: Boolean(e.all_day) });
             }
         }
     }

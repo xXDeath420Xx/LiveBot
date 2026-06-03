@@ -52,9 +52,14 @@ export async function handleAdd(interaction) {
     const categoryName = interaction.options.getString('category');
     const emoji = interaction.options.getString('emoji');
 
-    const t = parseTime(time);
-    if (!t) {
-        return interaction.reply({ content: 'Invalid time. Use HH:MM in 24h UTC (e.g., 19:30).', ephemeral: true });
+    // Time is optional: omit it for a "Time TBD" event (date/weekday known, time not).
+    const allDay = !time;
+    let t = null;
+    if (!allDay) {
+        t = parseTime(time);
+        if (!t) {
+            return interaction.reply({ content: 'Invalid time. Use HH:MM in 24h UTC (e.g., 19:30), or leave it blank for "Time TBD".', ephemeral: true });
+        }
     }
 
     await interaction.deferReply({ ephemeral: true });
@@ -70,20 +75,28 @@ export async function handleAdd(interaction) {
             return interaction.editReply({ content: 'Invalid date. Use MM-DD (e.g., 03-15).' });
         }
         const year = new Date().getUTCFullYear();
-        const start = `${year}-${pad(d.mo)}-${pad(d.da)} ${pad(t.hh)}:${pad(t.mm)}:00`;
-        const startMs = Date.UTC(year, d.mo - 1, d.da, t.hh, t.mm, 0);
-        const endDate = new Date(startMs + duration * 60000);
-        const endTime = endDate.toISOString().slice(0, 19).replace('T', ' ');
+        let start, endTime;
+        if (allDay) {
+            // Span the whole day so the bar fills that column; the board shows "Time TBD".
+            start = `${year}-${pad(d.mo)}-${pad(d.da)} 00:00:00`;
+            const endMs = Date.UTC(year, d.mo - 1, d.da) + 24 * 60 * 60 * 1000;
+            endTime = new Date(endMs).toISOString().slice(0, 19).replace('T', ' ');
+        } else {
+            start = `${year}-${pad(d.mo)}-${pad(d.da)} ${pad(t.hh)}:${pad(t.mm)}:00`;
+            const startMs = Date.UTC(year, d.mo - 1, d.da, t.hh, t.mm, 0);
+            endTime = new Date(startMs + duration * 60000).toISOString().slice(0, 19).replace('T', ' ');
+        }
 
         await pool.execute(
             `INSERT INTO event_schedule_events
-                (guild_id, user_id, category_id, title, emoji, start_time, end_time, recurrence, source)
-             VALUES (?,?,?,?,?,?,?, 'none', 'manual')`,
-            [guildId, interaction.user.id, categoryId, title, emoji || null, start, endTime]
+                (guild_id, user_id, category_id, title, emoji, start_time, end_time, recurrence, all_day, source)
+             VALUES (?,?,?,?,?,?,?, 'none', ?, 'manual')`,
+            [guildId, interaction.user.id, categoryId, title, emoji || null, start, endTime, allDay ? 1 : 0]
         );
 
+        const whenTxt = allDay ? '**Time TBD**' : `at ${pad(t.hh)}:${pad(t.mm)} UTC (${duration} min)`;
         return interaction.editReply({
-            content: `Added one-off event **${title}** on ${pad(d.mo)}-${pad(d.da)} at ${pad(t.hh)}:${pad(t.mm)} UTC (${duration} min).`
+            content: `Added one-off event **${title}** on ${pad(d.mo)}-${pad(d.da)} — ${whenTxt}.`
         });
     }
 
@@ -95,18 +108,20 @@ export async function handleAdd(interaction) {
     if (isNaN(dow) || dow < 0 || dow > 6) {
         return interaction.editReply({ content: 'Invalid day of week.' });
     }
-    const startMin = t.hh * 60 + t.mm;
-    const endMin = startMin + duration;
+    // all-day weekly fills the column (00:00–24:00); the board shows "Time TBD".
+    const startMin = allDay ? 0 : t.hh * 60 + t.mm;
+    const endMin = allDay ? 1440 : startMin + duration;
 
     await pool.execute(
         `INSERT INTO event_schedule_events
-            (guild_id, user_id, category_id, title, emoji, start_time, end_time, recurrence, recur_dow, recur_start_min, recur_end_min, source)
-         VALUES (?,?,?,?,?, NULL, NULL, 'weekly', ?, ?, ?, 'manual')`,
-        [guildId, interaction.user.id, categoryId, title, emoji || null, dow, startMin, endMin]
+            (guild_id, user_id, category_id, title, emoji, start_time, end_time, recurrence, recur_dow, recur_start_min, recur_end_min, all_day, source)
+         VALUES (?,?,?,?,?, NULL, NULL, 'weekly', ?, ?, ?, ?, 'manual')`,
+        [guildId, interaction.user.id, categoryId, title, emoji || null, dow, startMin, endMin, allDay ? 1 : 0]
     );
 
+    const whenTxt = allDay ? '**Time TBD**' : `at ${pad(t.hh)}:${pad(t.mm)} UTC (${duration} min)`;
     return interaction.editReply({
-        content: `Added weekly event **${title}** every ${DOW_NAMES[dow]} at ${pad(t.hh)}:${pad(t.mm)} UTC (${duration} min).`
+        content: `Added weekly event **${title}** every ${DOW_NAMES[dow]} — ${whenTxt}.`
     });
 }
 
@@ -115,7 +130,7 @@ export async function handleList(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
     const [rows] = await pool.execute(
-        `SELECT e.id, e.title, e.recurrence, e.recur_dow, e.recur_start_min, e.start_time, e.category_id,
+        `SELECT e.id, e.title, e.recurrence, e.recur_dow, e.recur_start_min, e.start_time, e.all_day, e.category_id,
                 c.name AS category_name
          FROM event_schedule_events e
          LEFT JOIN event_schedule_categories c ON c.id = e.category_id
@@ -132,10 +147,12 @@ export async function handleList(interaction) {
         let when;
         if (r.recurrence === 'weekly') {
             const sm = r.recur_start_min ?? 0;
-            when = `every ${DOW_NAMES[r.recur_dow] || '?'} at ${pad(Math.floor(sm / 60))}:${pad(sm % 60)} UTC`;
+            const at = r.all_day ? 'time TBD' : `at ${pad(Math.floor(sm / 60))}:${pad(sm % 60)} UTC`;
+            when = `every ${DOW_NAMES[r.recur_dow] || '?'} ${at}`;
         } else if (r.start_time) {
             const d = new Date(r.start_time);
-            when = `${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} at ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+            const at = r.all_day ? 'time TBD' : `at ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+            when = `${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${at}`;
         } else {
             when = 'unscheduled';
         }
