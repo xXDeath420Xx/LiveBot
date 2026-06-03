@@ -19,6 +19,7 @@ import { createSessionMiddleware, sessionActivityMiddleware } from './config/ses
 import ebookRecordRouter from './routes/ebook-record.js';
 import fourthwallWebhookRouter from './routes/webhooks/fourthwall.js';
 import streamRouter from './routes/stream.js';
+import streamInternalRouter from './routes/stream-internal.js';
 import { invalidateMusicConfigCache } from '../utils/music_helpers.js';
 import encryption from '../utils/encryption.js';
 import cookieParser from 'cookie-parser';
@@ -239,6 +240,7 @@ function start(botClient) {
     app.use(csrfProtection({
         ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
         ignorePaths: [
+            '/internal/resolve-destinations',
             '/auth/discord/callback',
             '/tokes-bot/auth/twitch/callback',
             '/tokes-bot/auth/kick/callback',
@@ -9247,6 +9249,9 @@ function start(botClient) {
     }).catch(err => {
         logger.error('Failed to load community support routes:', err);
     });
+
+    // Internal resolver endpoint (relay calls at go-live, secret-gated)
+    app.use('/', streamInternalRouter);
 
     // Multicast streaming UI + API
     app.use('/', streamRouter);
