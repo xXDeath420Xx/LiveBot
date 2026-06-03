@@ -3,6 +3,7 @@ const NodeMediaServer = require('node-media-server');
 const { config } = require('./config');
 const { validateStreamKey } = require('./keys');
 const { createSession, endSession } = require('./sessions');
+const { resolveViaDashboard } = require('./resolver-client');
 
 // db: { query }, registry: StatusRegistry, makeMultistreamer: (onState) => Multistreamer
 function createRelay({ db, registry, makeMultistreamer }) {
@@ -54,12 +55,19 @@ function createRelay({ db, registry, makeMultistreamer }) {
 
     let destinations = [];
     try {
-      destinations = await db.query(
-        'SELECT * FROM stream_destinations WHERE stream_key_id = ? AND enabled = 1 ORDER BY priority ASC',
-        [keyId]
-      );
-    } catch (err) { console.error('[relay] dest load error:', err.message); return; }
-
+      // Primary path: dashboard resolver (handles dynamic OAuth platforms).
+      destinations = await resolveViaDashboard(streamKey);
+      console.log(`[relay] resolver returned ${destinations.length} destination(s)`);
+    } catch (err) {
+      console.error('[relay] resolver unavailable, falling back to static rows:', err.message);
+      try {
+        const rows = await db.query(
+          "SELECT name, platform, rtmp_url, dest_stream_key FROM stream_destinations WHERE stream_key_id = ? AND enabled = 1 AND resolution = 'static' ORDER BY priority ASC",
+          [keyId]
+        );
+        destinations = rows;
+      } catch (e) { console.error('[relay] static fallback failed:', e.message); return; }
+    }
     destinations = destinations.slice(0, config.maxDestinationsPerKey);
     if (destinations.length === 0) { console.log('[relay] no destinations enabled'); return; }
 
