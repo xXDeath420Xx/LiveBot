@@ -316,32 +316,38 @@ class PhishingDetectionManager {
             ocrText = await extractImageText(message.attachments.values());
         }
 
-        const combined = `${message.content || ''}\n${ocrText}`;
-        const domains = this.extractDomains(combined);
+        // Domains the user actually TYPED (vs. ones only read out of an image). The
+        // distinction matters for the evidence exemption below: a typed link can be a
+        // member pasting a scam URL to warn others, so it keeps the (softer) evidence
+        // heuristic; a link that exists ONLY inside an image is image-derived and is
+        // hardened — see the image-path note below.
+        const textDomainSet = new Set(this.extractDomains(message.content || '').map(d => d.domain));
+        const domains = this.extractDomains(`${message.content || ''}\n${ocrText}`);
 
         // Known phishing domain (in text OR image) — high confidence.
         for (const { domain, url } of domains) {
             if (this.domainSet.has(domain) && !this.isWhitelisted(domain, config)) {
-                const source = ocrText && new RegExp(domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(ocrText)
-                    ? 'image-domain' : 'auto-list';
-                if (this.looksLikeEvidencePost(message)) {
+                const inText = textDomainSet.has(domain);
+                // Image-path hardening: the evidence DOWNGRADE (delete-but-don't-punish)
+                // is gated on a forgeable caption keyword, so we only honor it for TYPED
+                // links. Links/scams that are image-only rely on the non-forgeable
+                // exemptions already applied above (exempt channel, admin/owner, whitelist).
+                if (inText && this.looksLikeEvidencePost(message)) {
                     await this.forwardEvidencePost(message, domain, url, config);
                     return true;
                 }
-                await this.takeAction(message, domain, url, config, source);
+                await this.takeAction(message, domain, url, config, inText ? 'auto-list' : 'image-domain');
                 return true;
             }
         }
 
         // Scam-genre heuristic — runs ONLY on image-derived text (never plain chat).
+        // Image-derived → no forgeable-caption downgrade; channel/admin/whitelist
+        // exemptions (applied above) are the legitimate "this is a report" signals.
         if (ocrText) {
             const genre = scoreScamText(ocrText);
             if (genre.matched) {
                 const reason = `image-scam (${genre.groups.join('+')})`;
-                if (this.looksLikeEvidencePost(message)) {
-                    await this.forwardEvidencePost(message, reason, '(in image)', config);
-                    return true;
-                }
                 await this.takeAction(message, reason, '(text inside image)', config, 'image-genre');
                 return true;
             }
