@@ -21,6 +21,11 @@ test('getAdapter returns an adapter with the required methods', () => {
 test('listConnectable excludes review-gated when flag is off', () => {
   const names = listConnectable({ enableGated: false }).map(p => p.platform);
   assert.ok(names.includes('twitch'));
-  assert.ok(names.includes('kick'));
   assert.ok(!names.includes('youtube'));
+});
+
+test('listConnectable excludes platforms with no key API (kick is manual-only)', () => {
+  const names = listConnectable({ enableGated: true }).map(p => p.platform);
+  assert.ok(!names.includes('kick'), 'kick has no stream-key API; offered as manual preset, not OAuth');
+  assert.ok(names.includes('youtube'));
 });
