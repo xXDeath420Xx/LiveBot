@@ -224,6 +224,20 @@
   document.addEventListener('click', (e) => { if (menu && !menu.hidden && !menu.contains(e.target) && e.target !== addBtn) menu.hidden = true; });
   document.getElementById('manualOpt')?.addEventListener('click', () => { menu.hidden = true; document.getElementById('addDest')?.scrollIntoView({ behavior: 'smooth' }); });
 
+  /* ---------- disconnect a connected account ---------- */
+  document.querySelectorAll('[data-disconnect]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const platform = btn.dataset.disconnect;
+      if (!confirm('Disconnect ' + platform + '? This also removes its destination(s).')) return;
+      try {
+        const res = await fetch('/stream/api/connections/' + platform, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Disconnect failed');
+        toast('Disconnected ' + platform, 'ok');
+        setTimeout(() => location.reload(), 600);
+      } catch (err) { toast(err.message || 'Disconnect failed', 'err'); }
+    });
+  });
+
   /* ---------- One-time notice from OAuth round-trip ---------- */
   (function notice() {
     const p = new URLSearchParams(location.search);

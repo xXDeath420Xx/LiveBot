@@ -18,14 +18,14 @@ test('getAdapter returns an adapter with the required methods', () => {
   }
 });
 
-test('listConnectable excludes review-gated when flag is off', () => {
+test('listConnectable includes OAuth platforms, excludes review-gated when flag is off', () => {
   const names = listConnectable({ enableGated: false }).map(p => p.platform);
   assert.ok(names.includes('twitch'));
+  assert.ok(names.includes('kick'));   // kick OAuth restored (identity connect; key stays manual)
   assert.ok(!names.includes('youtube'));
 });
 
-test('listConnectable excludes platforms with no key API (kick is manual-only)', () => {
-  const names = listConnectable({ enableGated: true }).map(p => p.platform);
-  assert.ok(!names.includes('kick'), 'kick has no stream-key API; offered as manual preset, not OAuth');
-  assert.ok(names.includes('youtube'));
+test('kick is OAuth-connectable but has no key API (key entered manually)', () => {
+  assert.strictEqual(PLATFORM_META.kick.oauthConnect, true);
+  assert.strictEqual(PLATFORM_META.kick.keyApi, false);
 });

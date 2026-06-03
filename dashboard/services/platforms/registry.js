@@ -3,13 +3,14 @@ import * as kick from './kick.js';
 import * as youtube from './youtube.js';
 import * as facebook from './facebook.js';
 
-// oauthConnect:false => platform has no stream-key API, so OAuth can't auto-fill
-// a key; it's offered as a manual preset instead (no "Connect" OAuth button).
+// oauthConnect:false => no "Connect" OAuth button (manual preset only).
+// keyApi:false => OAuth connects identity but the platform has no stream-key API,
+// so the user still pastes their key (Kick): connect = identity + prefilled URL.
 export const PLATFORM_META = {
-  twitch:   { platform: 'twitch',   label: 'Twitch',   mode: 'static',  reviewGated: false, oauthConnect: true,  adapter: twitch },
-  kick:     { platform: 'kick',     label: 'Kick',     mode: 'static',  reviewGated: false, oauthConnect: false, adapter: kick },
-  youtube:  { platform: 'youtube',  label: 'YouTube',  mode: 'dynamic', reviewGated: true,  oauthConnect: true,  adapter: youtube },
-  facebook: { platform: 'facebook', label: 'Facebook', mode: 'dynamic', reviewGated: true,  oauthConnect: true,  adapter: facebook },
+  twitch:   { platform: 'twitch',   label: 'Twitch',   mode: 'static',  reviewGated: false, oauthConnect: true, keyApi: true,  adapter: twitch },
+  kick:     { platform: 'kick',     label: 'Kick',     mode: 'static',  reviewGated: false, oauthConnect: true, keyApi: false, adapter: kick },
+  youtube:  { platform: 'youtube',  label: 'YouTube',  mode: 'dynamic', reviewGated: true,  oauthConnect: true, keyApi: true,  adapter: youtube },
+  facebook: { platform: 'facebook', label: 'Facebook', mode: 'dynamic', reviewGated: true,  oauthConnect: true, keyApi: true,  adapter: facebook },
 };
 
 export function getAdapter(platform) {
