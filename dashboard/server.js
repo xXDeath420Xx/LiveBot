@@ -20,6 +20,7 @@ import ebookRecordRouter from './routes/ebook-record.js';
 import fourthwallWebhookRouter from './routes/webhooks/fourthwall.js';
 import streamRouter from './routes/stream.js';
 import streamInternalRouter from './routes/stream-internal.js';
+import streamConnectRouter from './routes/stream-connect.js';
 import { invalidateMusicConfigCache } from '../utils/music_helpers.js';
 import encryption from '../utils/encryption.js';
 import cookieParser from 'cookie-parser';
@@ -9252,6 +9253,9 @@ function start(botClient) {
 
     // Internal resolver endpoint (relay calls at go-live, secret-gated)
     app.use('/', streamInternalRouter);
+
+    // OAuth connect flow + connection management
+    app.use('/', streamConnectRouter);
 
     // Multicast streaming UI + API
     app.use('/', streamRouter);
