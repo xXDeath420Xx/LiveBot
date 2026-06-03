@@ -177,6 +177,13 @@
             .status-meta { margin-left: 0; width: 100%; justify-content: space-between; }
             .status-meta .item { text-align: left; }
         }
+
+        /* Add-Platform chooser */
+        .connect-bar { position: relative; margin-bottom: 1rem; }
+        .connect-menu { position: absolute; z-index: 20; margin-top: 0.4rem; background: #161b1f; border: 1px solid var(--border-color); border-radius: 12px; padding: 0.4rem; display: flex; flex-direction: column; min-width: 220px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .connect-opt { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0.7rem; border-radius: 8px; color: var(--text-secondary); text-decoration: none; background: none; border: none; cursor: pointer; font: inherit; text-align: left; }
+        .connect-opt:hover { background: var(--bg-card-hover); color: #fff; }
+        .connect-opt .platform-icon { width: 22px; height: 22px; border-radius: 6px; }
     </style>
 </head>
 <body>
@@ -270,6 +277,17 @@
                 <div class="card-title"><i class="fas fa-share-nodes"></i> Destinations <span class="card-badge" id="destCount"><%= destinations.length %></span></div>
             </div>
             <div class="card-body">
+                <% if (!isGuest) { %>
+                <div class="connect-bar">
+                  <button type="button" class="btn btn-primary" id="addPlatformBtn"><i class="fas fa-plug"></i> Add Platform</button>
+                  <div class="connect-menu" id="connectMenu" hidden>
+                    <% connectable.forEach((p) => { %>
+                      <a class="connect-opt" href="/stream/connect/<%= p.platform %>"><span class="platform-icon platform-<%= p.platform %>"></span><%= p.label %></a>
+                    <% }) %>
+                    <button type="button" class="connect-opt" id="manualOpt"><i class="fas fa-sliders"></i> Custom RTMP (manual)</button>
+                  </div>
+                </div>
+                <% } %>
                 <div class="dest-list" id="destList"></div>
                 <div class="empty-state" id="destEmpty" style="display:none;">
                     <i class="fas fa-satellite"></i>
