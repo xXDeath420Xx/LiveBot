@@ -30,7 +30,8 @@ router.get('/stream/connect/:platform', ensureDiscordAuthed, (req, res) => {
   req.session.streamOAuthPlatform = meta.platform;
   req.session.streamOAuthVerifier = codeVerifier;
   const authUrl = getAdapter(meta.platform).getAuthUrl(state, { codeChallenge });
-  logger.info(`[stream-connect] initiate ${meta.platform} oauth (user ${req.user.id}) -> ${authUrl}`);
+  // Log only non-secret context (no state/code_challenge/full URL).
+  logger.info(`[stream-connect] initiate ${meta.platform} oauth (user ${req.user.id})`);
   res.redirect(authUrl);
 });
 
