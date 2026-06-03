@@ -23,7 +23,7 @@ export async function handleCallback(code, opts = {}) {
   if (!tokens.access_token) throw new Error('facebook token exchange failed');
   let username = 'facebook', platformUserId = 'me';
   try {
-    const me = await fetchFn(`${GRAPH}/me?fields=id,name&access_token=${tokens.access_token}`);
+    const me = await fetchFn(`${GRAPH}/me?fields=id,name`, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
     const u = await me.json();
     if (u.id) { platformUserId = u.id; username = u.name || 'facebook'; }
   } catch { /* best effort */ }
@@ -40,8 +40,9 @@ export async function resolveAtGoLive(account, cfg = {}, opts = {}) {
   const fetchFn = opts.fetchFn || fetch;
   const target = cfg.target || account.platformUserId || 'me';
   const res = await fetchFn(`${GRAPH}/${target}/live_videos`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'LIVE_NOW', title: cfg.title || 'CertiFried Stream', access_token: account.accessToken }),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${account.accessToken}` },
+    body: JSON.stringify({ status: 'LIVE_NOW', title: cfg.title || 'CertiFried Stream' }),
   });
   if (!res.ok) throw new Error('fb live_videos ' + res.status);
   const lv = await res.json();
