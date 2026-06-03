@@ -29,7 +29,9 @@ router.get('/stream/connect/:platform', ensureDiscordAuthed, (req, res) => {
   req.session.streamOAuthState = state;
   req.session.streamOAuthPlatform = meta.platform;
   req.session.streamOAuthVerifier = codeVerifier;
-  res.redirect(getAdapter(meta.platform).getAuthUrl(state, { codeChallenge }));
+  const authUrl = getAdapter(meta.platform).getAuthUrl(state, { codeChallenge });
+  logger.info(`[stream-connect] initiate ${meta.platform} oauth (user ${req.user.id}) -> ${authUrl}`);
+  res.redirect(authUrl);
 });
 
 router.get('/stream/connect/:platform/callback', ensureDiscordAuthed, async (req, res) => {
