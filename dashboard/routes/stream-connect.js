@@ -24,9 +24,12 @@ router.get('/stream/connect/:platform', ensureDiscordAuthed, (req, res) => {
   if (!meta) return res.redirect('/stream?error=unknown_platform');
   if (meta.reviewGated && !ENABLE_GATED) return res.redirect('/stream?error=platform_coming_soon');
   const state = crypto.randomBytes(16).toString('hex');
+  const codeVerifier = crypto.randomBytes(32).toString('base64url');
+  const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
   req.session.streamOAuthState = state;
   req.session.streamOAuthPlatform = meta.platform;
-  res.redirect(getAdapter(meta.platform).getAuthUrl(state));
+  req.session.streamOAuthVerifier = codeVerifier;
+  res.redirect(getAdapter(meta.platform).getAuthUrl(state, { codeChallenge }));
 });
 
 router.get('/stream/connect/:platform/callback', ensureDiscordAuthed, async (req, res) => {
@@ -37,15 +40,16 @@ router.get('/stream/connect/:platform/callback', ensureDiscordAuthed, async (req
   if (!req.query.code || req.query.state !== req.session.streamOAuthState || platform !== req.session.streamOAuthPlatform) {
     return res.redirect('/stream?error=oauth_state');
   }
-  delete req.session.streamOAuthState; delete req.session.streamOAuthPlatform;
+  const codeVerifier = req.session.streamOAuthVerifier;
+  delete req.session.streamOAuthState; delete req.session.streamOAuthPlatform; delete req.session.streamOAuthVerifier;
   try {
     const adapter = getAdapter(platform);
-    const result = await adapter.handleCallback(req.query.code);
+    const result = await adapter.handleCallback(req.query.code, { codeVerifier });
     await accountStore.saveAccount({
       ownerDiscordId: req.user.id, platform,
       platformUserId: result.platformUserId, platformUsername: result.username,
       accessToken: result.tokens.access_token, refreshToken: result.tokens.refresh_token || null,
-      expiresAt: result.tokens.expires_at || null, scopes: result.tokens.scope || meta.scopesStr || null,
+      expiresAt: result.tokens.expires_at || null, scopes: result.tokens.scope || null,
     });
     const account = await accountStore.getAccount(req.user.id, platform);
 

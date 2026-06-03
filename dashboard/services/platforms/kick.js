@@ -7,18 +7,24 @@ const REDIRECT_URI = `${BASE_URL}/stream/connect/kick/callback`;
 const SCOPES = 'user:read';
 export const KICK_INGEST = 'rtmps://fa723fc1b171.global-contribute.live-video.net/app';
 
-export function getAuthUrl(state) {
+export function getAuthUrl(state, opts = {}) {
   const params = new URLSearchParams({
     client_id: CLIENT_ID, redirect_uri: REDIRECT_URI, response_type: 'code', scope: SCOPES, state,
   });
+  if (opts.codeChallenge) {
+    params.set('code_challenge', opts.codeChallenge);
+    params.set('code_challenge_method', 'S256');
+  }
   return `https://id.kick.com/oauth/authorize?${params}`;
 }
 
 export async function handleCallback(code, opts = {}) {
   const fetchFn = opts.fetchFn || fetch;
+  const tokenParams = new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, code, grant_type: 'authorization_code', redirect_uri: REDIRECT_URI });
+  if (opts.codeVerifier) tokenParams.set('code_verifier', opts.codeVerifier);
   const res = await fetchFn('https://id.kick.com/oauth/token', {
     method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: CLIENT_ID, client_secret: CLIENT_SECRET, code, grant_type: 'authorization_code', redirect_uri: REDIRECT_URI }),
+    body: tokenParams,
   });
   const tokens = await res.json();
   if (!tokens.access_token) throw new Error('kick token exchange failed');
