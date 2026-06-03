@@ -20,6 +20,8 @@ function loadConfig(env = process.env) {
     // external HTTP-FLV/RTMP playback is effectively impossible; the relay's
     // own loopback pull is exempt (NMS skips play-auth when isLocal).
     playSecret: env.RELAY_PLAY_SECRET || crypto.randomBytes(24).toString('hex'),
+    resolverUrl: env.DASHBOARD_RESOLVER_URL || 'http://127.0.0.1:3001/internal/resolve-destinations',
+    internalSecret: env.RELAY_INTERNAL_SECRET || '',
     db: {
       host: env.DB_HOST || 'localhost',
       port: int(env.DB_PORT, 3306),
