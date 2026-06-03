@@ -16,6 +16,8 @@ import {
   validateDestinationInput, generateStreamKey
 } from '../services/stream-store.js';
 import { getRelayStatus } from '../services/relay-client.js';
+import { listConnectable } from '../services/platforms/registry.js';
+import { accountStore } from '../services/platforms/accounts.js';
 
 const router = express.Router();
 const db = { query };
@@ -45,13 +47,18 @@ async function resolveKey(req) {
 router.get('/stream', ensureDiscordAuthed, async (req, res) => {
   const key = await getOrCreateDiscordKey(db, req.user.id);
   const destinations = await listDestinations(db, key.id);
+  const connections = await accountStore.listAccounts(req.user.id);
+  const connectable = listConnectable({ enableGated: process.env.STREAM_ENABLE_GATED_PLATFORMS === '1' });
   res.render('stream', {
     user: req.user,
     ingestUrl: `rtmp://${PUBLIC_HOST}:${RTMP_PORT}/live/${key.stream_key}`,
     streamKey: key.stream_key,
     destinations,
     platforms: PLATFORMS,
-    isGuest: false
+    isGuest: false,
+    connections,
+    connectable,
+    notice: { ok: req.query.ok || null, error: req.query.error || null, platform: req.query.platform || null }
   });
 });
 
@@ -75,7 +82,10 @@ router.get('/stream/quick', guestLimiter, async (req, res) => {
     destinations,
     platforms: PLATFORMS,
     isGuest: true,
-    expiresAt: key.expires_at
+    expiresAt: key.expires_at,
+    connections: [],
+    connectable: [],
+    notice: { ok: req.query.ok || null, error: req.query.error || null, platform: req.query.platform || null }
   });
 });
 

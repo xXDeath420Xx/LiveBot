@@ -216,4 +216,23 @@
   loadDestinations();
   pollStatus();
   setInterval(pollStatus, 2000);
+
+  /* ---------- Add-Platform chooser ---------- */
+  const addBtn = document.getElementById('addPlatformBtn');
+  const menu = document.getElementById('connectMenu');
+  addBtn?.addEventListener('click', () => { menu.hidden = !menu.hidden; });
+  document.addEventListener('click', (e) => { if (menu && !menu.hidden && !menu.contains(e.target) && e.target !== addBtn) menu.hidden = true; });
+  document.getElementById('manualOpt')?.addEventListener('click', () => { menu.hidden = true; document.getElementById('addDest')?.scrollIntoView({ behavior: 'smooth' }); });
+
+  /* ---------- One-time notice from OAuth round-trip ---------- */
+  (function notice() {
+    const p = new URLSearchParams(location.search);
+    const ok = p.get('ok'), err = p.get('error'), platform = p.get('platform') || '';
+    if (ok === 'connected') toast(`Connected ${platform} — destination added`, 'ok');
+    else if (ok === 'connected_need_key') toast(`Connected ${platform} — paste your stream key on the new destination`, 'info');
+    else if (ok === 'connected_dynamic') toast(`Connected ${platform} — it'll go live automatically when you start streaming`, 'ok');
+    else if (err === 'platform_coming_soon') toast('That platform is coming soon', 'info');
+    else if (err) toast('Could not connect: ' + err.replace(/_/g, ' '), 'err');
+    if (ok || err) history.replaceState({}, '', '/stream');
+  })();
 })();
