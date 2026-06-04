@@ -12,6 +12,43 @@ export default {
       // Only the default bot should ignore guilds with custom bots
       if (newState.guild && newState.client.isDefaultBot && await shouldIgnoreGuild(newState.guild.id)) return;
 
+      // Voice channel guard: kick any non-allowed member who lands in a guarded channel
+      // (runs before logging/XP so we don't credit a session the user is about to be removed from)
+      if (newState.channelId && newState.channelId !== oldState.channelId) {
+        try {
+          const [guardRows] = await pool.execute(
+            'SELECT allowed_user_id, allowed_role_id, allowed_role_ids, allowed_user_ids, allow_admins FROM voice_channel_guards WHERE guild_id = ? AND channel_id = ?',
+            [newState.guild.id, newState.channelId]
+          );
+          if (guardRows.length) {
+            const guard = guardRows[0];
+            // CSV columns let one channel admit several roles/users without schema churn.
+            const splitIds = (v) => (v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : []);
+            const allowedUsers = new Set([guard.allowed_user_id, ...splitIds(guard.allowed_user_ids)].filter(Boolean));
+            const allowedRoles = [guard.allowed_role_id, ...splitIds(guard.allowed_role_ids)].filter(Boolean);
+            const member = newState.member;
+            const isAllowedUser = allowedUsers.has(newState.id);
+            const isAllowedRole = allowedRoles.some(rid => member?.roles?.cache?.has(rid));
+            const isAllowedAdmin = guard.allow_admins
+              ? Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator))
+              : false;
+            if (!isAllowedUser && !isAllowedRole && !isAllowedAdmin) {
+              await newState.disconnect('Voice channel guard: not an allowed user/role').catch(err => {
+                logger.warn('[VoiceGuard] Failed to disconnect intruder', {
+                  guildId: newState.guild.id,
+                  channelId: newState.channelId,
+                  userId: newState.id,
+                  error: err.message,
+                });
+              });
+              return; // skip the remaining logic — they were never really here
+            }
+          }
+        } catch (err) {
+          logger.error('[VoiceGuard] Lookup error', { error: err.message });
+        }
+      }
+
       // Log voice activity for tracking (time spent in voice channels)
       logVoiceActivity(oldState, newState);
 
@@ -57,40 +94,41 @@ async function handleTempChannels(oldState, newState) {
   try {
     const guildId = newState.guild.id;
 
-    // Fetch temp channel config
     const [configs] = await pool.execute(
       'SELECT * FROM temp_channel_config WHERE guild_id = ?',
       [guildId]
     );
 
-    if (configs.length === 0) {
-      return; // No config, skip
-    }
+    if (configs.length === 0) return;
 
-    const config = configs[0];
+    const joinedCreator = (channelId) => configs.find(c => c.creator_channel_id === channelId);
 
-    // User joined a voice channel
-    if (!oldState.channelId && newState.channelId) {
-      // Check if they joined the creator channel
-      if (newState.channelId === config.creator_channel_id) {
-        await createTempChannel(newState, config);
+    // User joined a voice channel (or moved into one)
+    const justJoined = (!oldState.channelId && newState.channelId)
+      || (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId);
+
+    if (justJoined) {
+      const matched = joinedCreator(newState.channelId);
+      if (matched) {
+        if (matched.required_role_id && !newState.member?.roles?.cache?.has(matched.required_role_id)) {
+          // Member lacks the gating role — disconnect them so they don't sit in the creator channel
+          await newState.disconnect(`Temp-VC creator ${matched.creator_channel_id} requires role ${matched.required_role_id}`).catch(() => {});
+          logger.info('[TempChannels] Blocked spawn - missing required role', {
+            guildId, userId: newState.id, creatorChannelId: matched.creator_channel_id, requiredRoleId: matched.required_role_id,
+          });
+        } else {
+          await createTempChannel(newState, matched);
+        }
       }
     }
 
     // User left a voice channel
     if (oldState.channelId && !newState.channelId) {
-      // Check if they left a temp channel and delete if empty
       await checkAndDeleteTempChannel(oldState.channel);
     }
 
-    // User moved between channels
+    // User moved out of one channel into another - clean up the old one if empty
     if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
-      // Check if they joined the creator channel
-      if (newState.channelId === config.creator_channel_id) {
-        await createTempChannel(newState, config);
-      }
-
-      // Check if they left a temp channel and delete if empty
       await checkAndDeleteTempChannel(oldState.channel);
     }
   } catch (error) {
@@ -142,8 +180,8 @@ async function createTempChannel(voiceState, config) {
       channelName = channelName.replace('{number}', (maxNumber + 1).toString());
     }
 
-    // Create temp voice channel
-    const tempChannel = await guild.channels.create({
+    const userLimit = Number(config.default_user_limit);
+    const channelOpts = {
       name: channelName,
       type: ChannelType.GuildVoice,
       parent: category.id,
@@ -157,7 +195,11 @@ async function createTempChannel(voiceState, config) {
           allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.ViewChannel]
         }
       ]
-    });
+    };
+    if (Number.isFinite(userLimit) && userLimit > 0 && userLimit <= 99) {
+      channelOpts.userLimit = userLimit;
+    }
+    const tempChannel = await guild.channels.create(channelOpts);
 
     // Track the temp channel in database
     await pool.execute(
@@ -227,62 +269,32 @@ async function logVoiceStateChanges(oldState, newState) {
   try {
     const changes = [];
 
-    // Server mute changes
+    // Server mute changes — uses its own key, NOT voiceUpdate
     if (oldState.serverMute !== newState.serverMute) {
-      if (newState.serverMute) {
-        const embed = new EmbedBuilder()
-          .setColor(0xED4245) // Red
-          .setTitle('🔇 Server Muted')
-          .setDescription(`${newState.member} was server muted in ${newState.channel}`)
-          .addFields(
-            { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
-            { name: 'Channel', value: newState.channel.name, inline: true }
-          )
-          .setTimestamp();
-
-        await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
-      } else {
-        const embed = new EmbedBuilder()
-          .setColor(0x57F287) // Green
-          .setTitle('🔊 Server Unmuted')
-          .setDescription(`${newState.member} was server unmuted in ${newState.channel}`)
-          .addFields(
-            { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
-            { name: 'Channel', value: newState.channel.name, inline: true }
-          )
-          .setTimestamp();
-
-        await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
-      }
+      const embed = new EmbedBuilder()
+        .setColor(newState.serverMute ? 0xED4245 : 0x57F287)
+        .setTitle(newState.serverMute ? '🔇 Server Muted' : '🔊 Server Unmuted')
+        .setDescription(`${newState.member} was ${newState.serverMute ? 'server muted' : 'server unmuted'} in ${newState.channel}`)
+        .addFields(
+          { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
+          { name: 'Channel', value: newState.channel.name, inline: true }
+        )
+        .setTimestamp();
+      await sendLogEmbed(newState.guild, 'voiceServerMute', embed);
     }
 
     // Server deafen changes
     if (oldState.serverDeaf !== newState.serverDeaf) {
-      if (newState.serverDeaf) {
-        const embed = new EmbedBuilder()
-          .setColor(0xED4245) // Red
-          .setTitle('🔇 Server Deafened')
-          .setDescription(`${newState.member} was server deafened in ${newState.channel}`)
-          .addFields(
-            { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
-            { name: 'Channel', value: newState.channel.name, inline: true }
-          )
-          .setTimestamp();
-
-        await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
-      } else {
-        const embed = new EmbedBuilder()
-          .setColor(0x57F287) // Green
-          .setTitle('🔊 Server Undeafened')
-          .setDescription(`${newState.member} was server undeafened in ${newState.channel}`)
-          .addFields(
-            { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
-            { name: 'Channel', value: newState.channel.name, inline: true }
-          )
-          .setTimestamp();
-
-        await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
-      }
+      const embed = new EmbedBuilder()
+        .setColor(newState.serverDeaf ? 0xED4245 : 0x57F287)
+        .setTitle(newState.serverDeaf ? '🔇 Server Deafened' : '🔊 Server Undeafened')
+        .setDescription(`${newState.member} was ${newState.serverDeaf ? 'server deafened' : 'server undeafened'} in ${newState.channel}`)
+        .addFields(
+          { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
+          { name: 'Channel', value: newState.channel.name, inline: true }
+        )
+        .setTimestamp();
+      await sendLogEmbed(newState.guild, 'voiceServerDeaf', embed);
     }
 
     // Self mute changes
@@ -297,66 +309,36 @@ async function logVoiceStateChanges(oldState, newState) {
 
     // Streaming changes
     if (oldState.streaming !== newState.streaming) {
-      if (newState.streaming) {
-        const embed = new EmbedBuilder()
-          .setColor(0x593695) // Purple
-          .setTitle('📡 Stream Started')
-          .setDescription(`${newState.member} started streaming in ${newState.channel}`)
-          .addFields(
-            { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
-            { name: 'Channel', value: newState.channel.name, inline: true }
-          )
-          .setTimestamp();
-
-        await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
-      } else {
-        const embed = new EmbedBuilder()
-          .setColor(0x5865F2) // Blurple
-          .setTitle('📴 Stream Stopped')
-          .setDescription(`${newState.member} stopped streaming in ${newState.channel}`)
-          .addFields(
-            { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
-            { name: 'Channel', value: newState.channel.name, inline: true }
-          )
-          .setTimestamp();
-
-        await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
-      }
+      const embed = new EmbedBuilder()
+        .setColor(newState.streaming ? 0x593695 : 0x5865F2)
+        .setTitle(newState.streaming ? '📡 Stream Started' : '📴 Stream Stopped')
+        .setDescription(`${newState.member} ${newState.streaming ? 'started' : 'stopped'} streaming in ${newState.channel}`)
+        .addFields(
+          { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
+          { name: 'Channel', value: newState.channel.name, inline: true }
+        )
+        .setTimestamp();
+      await sendLogEmbed(newState.guild, 'voiceStream', embed);
     }
 
     // Video changes
     if (oldState.selfVideo !== newState.selfVideo) {
-      if (newState.selfVideo) {
-        const embed = new EmbedBuilder()
-          .setColor(0x57F287) // Green
-          .setTitle('📹 Video Started')
-          .setDescription(`${newState.member} turned on their camera in ${newState.channel}`)
-          .addFields(
-            { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
-            { name: 'Channel', value: newState.channel.name, inline: true }
-          )
-          .setTimestamp();
-
-        await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
-      } else {
-        const embed = new EmbedBuilder()
-          .setColor(0xFEE75C) // Yellow
-          .setTitle('📴 Video Stopped')
-          .setDescription(`${newState.member} turned off their camera in ${newState.channel}`)
-          .addFields(
-            { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
-            { name: 'Channel', value: newState.channel.name, inline: true }
-          )
-          .setTimestamp();
-
-        await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
-      }
+      const embed = new EmbedBuilder()
+        .setColor(newState.selfVideo ? 0x57F287 : 0xFEE75C)
+        .setTitle(newState.selfVideo ? '📹 Camera On' : '📴 Camera Off')
+        .setDescription(`${newState.member} turned ${newState.selfVideo ? 'on' : 'off'} their camera in ${newState.channel}`)
+        .addFields(
+          { name: 'User', value: `${newState.member.user.tag} (${newState.member.id})`, inline: true },
+          { name: 'Channel', value: newState.channel.name, inline: true }
+        )
+        .setTimestamp();
+      await sendLogEmbed(newState.guild, 'voiceVideo', embed);
     }
 
-    // Log self-mute/self-deafen changes as a single event if they changed
+    // Log self-mute/self-deafen changes
     if (changes.length > 0) {
       const embed = new EmbedBuilder()
-        .setColor(0x5865F2) // Blurple
+        .setColor(0x5865F2)
         .setTitle('🎙️ Voice State Changed')
         .setDescription(`${newState.member} changed their voice state in ${newState.channel}`)
         .addFields(
@@ -365,8 +347,7 @@ async function logVoiceStateChanges(oldState, newState) {
           { name: 'Changes', value: changes.join('\n'), inline: false }
         )
         .setTimestamp();
-
-      await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
+      await sendLogEmbed(newState.guild, 'voiceSelfMute', embed);
     }
   } catch (error) {
     logger.error('[VoiceStateChanges] Error logging voice state changes', {
