@@ -48,11 +48,11 @@ async function handle(message, session) {
 
   if (wordBank.isLoaded() && !wordBank.isValidGuess(word, 5)) {
     try { await message.react('❌'); } catch { /* ignore */ }
-    return true; // a 5-letter guess attempt, just not a word — doesn't burn a guess
+    return false; // not a real word — fall through so moderation/leveling still run (and it doesn't burn a guess)
   }
 
   const res = applyGuess(session.state, word);
-  if (!res.ok) return true;
+  if (!res.ok) return false; // game already over (stale session) → don't consume future messages
   if (!res.nextState.participants.includes(message.author.id)) res.nextState.participants.push(message.author.id);
   session.state = res.nextState;
   try { await message.react(res.status === 'won' ? '🎉' : res.status === 'lost' ? '💀' : '✅'); } catch { /* ignore */ }

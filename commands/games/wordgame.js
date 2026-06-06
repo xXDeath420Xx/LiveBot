@@ -11,10 +11,11 @@ import {
 } from '../../core/word-game-manager.js';
 
 // Posts an initial board/grid message and records its id on the session.
+// `ctx` only needs a `.channel` (a TextChannel) — NOT a full interaction.
 function boardPoster(embedFor) {
-  return async (interaction, session) => {
+  return async (ctx, session) => {
     try {
-      const sent = await interaction.channel.send({ embeds: [embedFor(session.state)] });
+      const sent = await ctx.channel.send({ embeds: [embedFor(session.state)] });
       session.state.boardMessageId = sent.id;
       await saveState(session);
     } catch { /* board can be re-created lazily on first move */ }
@@ -129,8 +130,10 @@ export default {
       const channel = interaction.options.getChannel('channel');
       if (sub === 'setup') {
         if (getSessionByChannel(channel.id)) return interaction.reply({ content: `A word game is already active in ${channel}.`, ephemeral: true });
+        let setupState;
+        try { setupState = game.init(); } catch { return interaction.reply({ content: '⚠️ The word list isn’t loaded yet — try again in a moment.', ephemeral: true }); }
         await bindChannel({ guildId, channelId: channel.id, gameType: game.type, createdBy: interaction.user.id });
-        const setupSession = await createSession({ guildId, channelId: channel.id, gameType: game.type, mode: 'persistent', hostUserId: interaction.user.id, state: game.init() });
+        const setupSession = await createSession({ guildId, channelId: channel.id, gameType: game.type, mode: 'persistent', hostUserId: interaction.user.id, state: setupState });
         if (game.afterStart) await game.afterStart({ channel }, setupSession);
         return interaction.reply(`${game.emoji} **${game.label}** is now live in ${channel}. ${game.startBlurb}`);
       }
@@ -140,7 +143,9 @@ export default {
 
     if (sub === 'start') {
       if (getSessionByChannel(interaction.channelId)) return interaction.reply({ content: 'A word game is already active in this channel.', ephemeral: true });
-      const startSession = await createSession({ guildId, channelId: interaction.channelId, gameType: game.type, mode: 'round', hostUserId: interaction.user.id, state: game.init() });
+      let startState;
+      try { startState = game.init(); } catch { return interaction.reply({ content: '⚠️ The word list isn’t loaded yet — try again in a moment.', ephemeral: true }); }
+      const startSession = await createSession({ guildId, channelId: interaction.channelId, gameType: game.type, mode: 'round', hostUserId: interaction.user.id, state: startState });
       await interaction.reply(`${game.emoji} **${game.label}** round started! ${game.startBlurb}`);
       if (game.afterStart) await game.afterStart({ channel: interaction.channel }, startSession);
       return;
