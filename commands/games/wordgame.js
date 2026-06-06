@@ -3,20 +3,25 @@ import { initState as lastLetterInit } from '../../core/games/last-letter.js';
 import { initState as storyInit, renderStory } from '../../core/games/one-word-story.js';
 import { initState as coordleInit } from '../../core/games/coordle.js';
 import { boardEmbed as coordleBoardEmbed } from '../../core/games/coordle-runtime.js';
+import { gridEmbed as wordseekGridEmbed, freshGridState as wordseekFresh } from '../../core/games/wordseek-runtime.js';
 import * as wordBank from '../../core/word-bank.js';
 import {
   createSession, endSession, getSessionByChannel, bindChannel, unbindChannel,
   saveState, getStats, getLeaderboard,
 } from '../../core/word-game-manager.js';
 
-// Posts the initial Coordle board and records its message id on the session.
-async function startCoordleBoard(interaction, session) {
-  try {
-    const sent = await interaction.channel.send({ embeds: [coordleBoardEmbed(session.state)] });
-    session.state.boardMessageId = sent.id;
-    await saveState(session);
-  } catch { /* board can be re-created lazily on first guess */ }
+// Posts an initial board/grid message and records its id on the session.
+function boardPoster(embedFor) {
+  return async (interaction, session) => {
+    try {
+      const sent = await interaction.channel.send({ embeds: [embedFor(session.state)] });
+      session.state.boardMessageId = sent.id;
+      await saveState(session);
+    } catch { /* board can be re-created lazily on first move */ }
+  };
 }
+const startCoordleBoard = boardPoster(coordleBoardEmbed);
+const startWordseekBoard = boardPoster(wordseekGridEmbed);
 
 // Per-group game metadata. Adding a new typed game = add an entry + a subcommand group.
 const GAMES = {
@@ -44,6 +49,15 @@ const GAMES = {
     statLines: (st) => `Wins: **${st.wins}** / Played: **${st.games_played}**\nBest solve (higher = fewer guesses): **${st.best_score}**`,
     lbLine: (r, i) => `**${i + 1}.** <@${r.user_id}> — ${r.wins} wins`,
     endLine: (s) => `🏳️ Coordle ended — the word was **${s.state.answer.toUpperCase()}**.`,
+  },
+  wordseek: {
+    type: 'wordseek', label: 'WordSeek', emoji: '🔡',
+    init: () => wordseekFresh(),
+    afterStart: startWordseekBoard,
+    startBlurb: 'Find the hidden words in the grid — type any word you spot. Longer words score more.',
+    statLines: (st) => `Words found: **${st.words_contributed}**\nLongest find: **${st.best_score}** letters`,
+    lbLine: (r, i) => `**${i + 1}.** <@${r.user_id}> — ${r.words_contributed} found (longest ${r.best_score})`,
+    endLine: (s) => `🏳️ WordSeek ended — the words were: **${s.state.words.map(w => w.toUpperCase()).join(', ')}**.`,
   },
 };
 
@@ -88,7 +102,19 @@ export default {
       .addSubcommand(s => s.setName('end').setDescription('End the Coordle puzzle in this channel'))
       .addSubcommand(s => s.setName('stats').setDescription('Your Coordle stats')
         .addUserOption(o => o.setName('user').setDescription('Whose stats').setRequired(false)))
-      .addSubcommand(s => s.setName('leaderboard').setDescription('Top Coordle players'))),
+      .addSubcommand(s => s.setName('leaderboard').setDescription('Top Coordle players')))
+    .addSubcommandGroup(g => g
+      .setName('wordseek')
+      .setDescription('Find hidden words in a letter grid')
+      .addSubcommand(s => s.setName('setup').setDescription('Bind a persistent WordSeek channel (admin)')
+        .addChannelOption(o => o.setName('channel').setDescription('Channel to host the game').addChannelTypes(ChannelType.GuildText).setRequired(true)))
+      .addSubcommand(s => s.setName('disable').setDescription('Unbind the WordSeek game from a channel (admin)')
+        .addChannelOption(o => o.setName('channel').setDescription('Bound channel').addChannelTypes(ChannelType.GuildText).setRequired(true)))
+      .addSubcommand(s => s.setName('start').setDescription('Start a WordSeek round in this channel'))
+      .addSubcommand(s => s.setName('end').setDescription('End the WordSeek round and reveal the words'))
+      .addSubcommand(s => s.setName('stats').setDescription('Your WordSeek stats')
+        .addUserOption(o => o.setName('user').setDescription('Whose stats').setRequired(false)))
+      .addSubcommand(s => s.setName('leaderboard').setDescription('Top WordSeek players'))),
 
   async execute(interaction) {
     const group = interaction.options.getSubcommandGroup();

@@ -334,6 +334,7 @@ async function initializeManagers(client) {
     await import('./core/games/last-letter-runtime.js'); // self-registers the 'last_letter' engine
     await import('./core/games/one-word-story-runtime.js'); // self-registers the 'one_word_story' engine
     await import('./core/games/coordle-runtime.js'); // self-registers the 'coordle' engine
+    await import('./core/games/wordseek-runtime.js'); // self-registers the 'wordseek' engine
     if (client.isDefaultBot) {
       const { rehydrateWordGames } = await import('./core/word-game-manager.js');
       await rehydrateWordGames();
