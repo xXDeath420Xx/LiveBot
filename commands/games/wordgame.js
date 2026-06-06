@@ -1,10 +1,22 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
 import { initState as lastLetterInit } from '../../core/games/last-letter.js';
 import { initState as storyInit, renderStory } from '../../core/games/one-word-story.js';
+import { initState as coordleInit } from '../../core/games/coordle.js';
+import { boardEmbed as coordleBoardEmbed } from '../../core/games/coordle-runtime.js';
+import * as wordBank from '../../core/word-bank.js';
 import {
   createSession, endSession, getSessionByChannel, bindChannel, unbindChannel,
-  getStats, getLeaderboard,
+  saveState, getStats, getLeaderboard,
 } from '../../core/word-game-manager.js';
+
+// Posts the initial Coordle board and records its message id on the session.
+async function startCoordleBoard(interaction, session) {
+  try {
+    const sent = await interaction.channel.send({ embeds: [coordleBoardEmbed(session.state)] });
+    session.state.boardMessageId = sent.id;
+    await saveState(session);
+  } catch { /* board can be re-created lazily on first guess */ }
+}
 
 // Per-group game metadata. Adding a new typed game = add an entry + a subcommand group.
 const GAMES = {
@@ -23,6 +35,15 @@ const GAMES = {
     statLines: (st) => `Words contributed: **${st.words_contributed}**\nLongest story: **${st.best_score}**`,
     lbLine: (r, i) => `**${i + 1}.** <@${r.user_id}> — ${r.words_contributed} words`,
     endLine: (s) => `🏁 Story ended with **${s.state.words.length}** words.`,
+  },
+  coordle: {
+    type: 'coordle', label: 'Coordle', emoji: '🟩',
+    init: () => coordleInit(wordBank.randomAnswer(5) || 'crane'),
+    afterStart: startCoordleBoard,
+    startBlurb: 'Guess the secret **5-letter word** together — type 5-letter words. 6 shared guesses.',
+    statLines: (st) => `Wins: **${st.wins}** / Played: **${st.games_played}**\nBest solve (higher = fewer guesses): **${st.best_score}**`,
+    lbLine: (r, i) => `**${i + 1}.** <@${r.user_id}> — ${r.wins} wins`,
+    endLine: (s) => `🏳️ Coordle ended — the word was **${s.state.answer.toUpperCase()}**.`,
   },
 };
 
@@ -55,7 +76,19 @@ export default {
       .addSubcommand(s => s.setName('show').setDescription('Show the story so far'))
       .addSubcommand(s => s.setName('stats').setDescription('Your One Word Story stats')
         .addUserOption(o => o.setName('user').setDescription('Whose stats').setRequired(false)))
-      .addSubcommand(s => s.setName('leaderboard').setDescription('Top One Word Story players'))),
+      .addSubcommand(s => s.setName('leaderboard').setDescription('Top One Word Story players')))
+    .addSubcommandGroup(g => g
+      .setName('coordle')
+      .setDescription('Collaborative Wordle: guess the 5-letter word together')
+      .addSubcommand(s => s.setName('setup').setDescription('Bind a persistent Coordle channel (admin)')
+        .addChannelOption(o => o.setName('channel').setDescription('Channel to host the game').addChannelTypes(ChannelType.GuildText).setRequired(true)))
+      .addSubcommand(s => s.setName('disable').setDescription('Unbind the Coordle game from a channel (admin)')
+        .addChannelOption(o => o.setName('channel').setDescription('Bound channel').addChannelTypes(ChannelType.GuildText).setRequired(true)))
+      .addSubcommand(s => s.setName('start').setDescription('Start a Coordle puzzle in this channel'))
+      .addSubcommand(s => s.setName('end').setDescription('End the Coordle puzzle in this channel'))
+      .addSubcommand(s => s.setName('stats').setDescription('Your Coordle stats')
+        .addUserOption(o => o.setName('user').setDescription('Whose stats').setRequired(false)))
+      .addSubcommand(s => s.setName('leaderboard').setDescription('Top Coordle players'))),
 
   async execute(interaction) {
     const group = interaction.options.getSubcommandGroup();
@@ -71,7 +104,8 @@ export default {
       if (sub === 'setup') {
         if (getSessionByChannel(channel.id)) return interaction.reply({ content: `A word game is already active in ${channel}.`, ephemeral: true });
         await bindChannel({ guildId, channelId: channel.id, gameType: game.type, createdBy: interaction.user.id });
-        await createSession({ guildId, channelId: channel.id, gameType: game.type, mode: 'persistent', hostUserId: interaction.user.id, state: game.init() });
+        const setupSession = await createSession({ guildId, channelId: channel.id, gameType: game.type, mode: 'persistent', hostUserId: interaction.user.id, state: game.init() });
+        if (game.afterStart) await game.afterStart({ channel }, setupSession);
         return interaction.reply(`${game.emoji} **${game.label}** is now live in ${channel}. ${game.startBlurb}`);
       }
       await unbindChannel(guildId, channel.id);
@@ -80,8 +114,10 @@ export default {
 
     if (sub === 'start') {
       if (getSessionByChannel(interaction.channelId)) return interaction.reply({ content: 'A word game is already active in this channel.', ephemeral: true });
-      await createSession({ guildId, channelId: interaction.channelId, gameType: game.type, mode: 'round', hostUserId: interaction.user.id, state: game.init() });
-      return interaction.reply(`${game.emoji} **${game.label}** round started! ${game.startBlurb}`);
+      const startSession = await createSession({ guildId, channelId: interaction.channelId, gameType: game.type, mode: 'round', hostUserId: interaction.user.id, state: game.init() });
+      await interaction.reply(`${game.emoji} **${game.label}** round started! ${game.startBlurb}`);
+      if (game.afterStart) await game.afterStart({ channel: interaction.channel }, startSession);
+      return;
     }
 
     if (sub === 'show') { // story only
