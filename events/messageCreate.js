@@ -7,6 +7,7 @@ import TagsManager from '../core/tags-manager.js';
 import AutoResponseManager from '../core/auto-response-manager.js';
 import { handleAutoPublisher } from '../core/auto-publisher.js';
 import { handleMessage as handleCountingMessage } from '../core/counting-manager.js';
+import { handleWordGameMessage } from '../core/word-game-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 import { handlePrefixCommand } from '../core/prefix-command-manager.js';
 import { handleSelfPromoMessage, checkAnnounceChannelGate } from '../core/self-promo-handler.js';
@@ -347,6 +348,12 @@ export default {
       if (wasCountingMessage) {
         // Message was part of counting game, don't process further
         return;
+      }
+
+      // Word games (Last Letter, etc.) — typed-in-channel games
+      const wasWordGame = await handleWordGameMessage(message);
+      if (wasWordGame) {
+        return; // consumed by an active word game in this channel
       }
 
       // Handle RPG session replies (players replying to bot's RPG messages)
