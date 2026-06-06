@@ -22,6 +22,12 @@ export function getSessionByChannel(channelId) { return sessionsByChannel.get(ch
 export async function createSession({ guildId, channelId, gameType, mode, hostUserId, state }) {
   const id = randomUUID();
   const session = { id, guildId, channelId, gameType, mode, status: 'active', hostUserId: hostUserId || null, state };
+  // Guarantee at most one active session per channel: retire any stale active
+  // DB rows (split-brain after a crash, or a lingering row) before inserting.
+  await pool.execute(
+    "UPDATE word_game_sessions SET status = 'ended', ended_at = NOW() WHERE channel_id = ? AND status = 'active'",
+    [channelId]
+  );
   sessionsByChannel.set(channelId, session);
   await pool.execute(
     `INSERT INTO word_game_sessions (id, guild_id, channel_id, game_type, mode, status, host_user_id, state_json)
@@ -67,7 +73,7 @@ export async function bumpStats(guildId, userId, gameType, { words = 0, played =
        wins              = wins + VALUES(wins),
        best_score        = GREATEST(best_score, VALUES(best_score)),
        current_streak    = VALUES(current_streak),
-       best_streak       = GREATEST(best_streak, VALUES(current_streak))`,
+       best_streak       = GREATEST(best_streak, VALUES(best_streak))`,
     [guildId, userId, gameType, words, played, wins, bestScore ?? 0, streak ?? 0, streak ?? 0]
   );
 }

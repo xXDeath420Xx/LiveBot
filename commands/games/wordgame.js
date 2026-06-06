@@ -54,7 +54,7 @@ export default {
     if (sub === 'end') {
       const session = getSessionByChannel(interaction.channelId);
       if (!session || session.gameType !== gameType) return interaction.reply({ content: 'No Last Letter game is active here.', ephemeral: true });
-      if (session.mode === 'persistent' && !isAdmin) return interaction.reply({ content: 'This is a persistent game — an admin must `disable` it.', ephemeral: true });
+      if (session.mode === 'persistent') return interaction.reply({ content: 'This is a persistent game — use `/wordgame lastletter disable` to stop it (that also clears the channel binding).', ephemeral: true });
       await endSession(session, 'ended');
       return interaction.reply(`🏁 Last Letter ended after **${session.state.count}** words.`);
     }
