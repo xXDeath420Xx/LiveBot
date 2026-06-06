@@ -327,6 +327,20 @@ async function initializeManagers(client) {
     logger.error(`[Core] CAH init failed: ${err.message}`);
   }
 
+  // Word games — load dictionary, register engines, rehydrate active sessions (default bot only)
+  try {
+    const wordBank = await import('./core/word-bank.js');
+    wordBank.load();
+    await import('./core/games/last-letter-runtime.js'); // self-registers the 'last_letter' engine
+    if (client.isDefaultBot) {
+      const { rehydrateWordGames } = await import('./core/word-game-manager.js');
+      await rehydrateWordGames();
+    }
+    logger.info('[Core] Word games ready');
+  } catch (err) {
+    logger.error(`[Core] Word games init failed: ${err.message}`);
+  }
+
   // Fourthwall integration manager
   try {
     const { default: FourthwallManager } = await import('./core/fourthwall-manager.js');
