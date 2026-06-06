@@ -34,3 +34,10 @@ test('wordsByLength: returns words within the range', () => {
   assert.ok(ws.length > 100);
   assert.ok(ws.every(w => w.length === 4));
 });
+
+test('randomWords: distinct real words within the length range', () => {
+  const ws = wordBank.randomWords(8, 4, 7);
+  assert.equal(ws.length, 8);
+  assert.equal(new Set(ws).size, 8); // distinct
+  assert.ok(ws.every(w => w.length >= 4 && w.length <= 7 && wordBank.isWord(w)));
+});

@@ -70,3 +70,14 @@ export function wordsByLength(min, max) {
   for (let L = min; L <= max; L++) if (byLength.has(L)) out.push(...byLength.get(L));
   return out;
 }
+
+/** Up to `count` distinct random words with length in [minLen, maxLen]. */
+export function randomWords(count, minLen, maxLen, rng = Math.random) {
+  const pool = wordsByLength(minLen, maxLen);
+  if (!pool.length) return [];
+  const out = new Set();
+  for (let attempts = 0; out.size < count && attempts < count * 50; attempts++) {
+    out.add(pool[Math.floor(rng() * pool.length)]);
+  }
+  return [...out];
+}
