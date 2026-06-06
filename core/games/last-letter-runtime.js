@@ -34,7 +34,11 @@ async function handle(message, session) {
     if (hint) {
       message.channel.send(hint).then(m => setTimeout(() => m.delete().catch(() => {}), 6000)).catch(() => {});
     }
-    return true; // consumed (it was a game move, just invalid)
+    // Only consume real game moves. `not_a_word` content (URLs, gibberish, scam
+    // text) must fall through so phishing/automod/selfbot detection still runs —
+    // a game channel must not be a moderation blind spot. `wrong_letter`/`repeat`
+    // already passed the dictionary check, so they're safe to consume.
+    return res.reason !== 'not_a_word';
   }
   session.state = res.nextState;
   await saveState(session);
