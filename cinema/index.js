@@ -5,12 +5,16 @@
 
 import 'dotenv/config';
 import express from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import { Client } from 'discord.js-selfbot-v13';
 import pool from '../utils/db.js';
 import { CinemaStreamer } from './streamer.js';
 
 const PORT = Number(process.env.CINEMA_PORT || 8099);
+// Fail closed: an empty/absent secret would let any loopback request through.
 const SECRET = process.env.CINEMA_API_SECRET || '';
+if (!SECRET) { console.error('[cinema] CINEMA_API_SECRET must be set — refusing to start'); process.exit(1); }
+const SECRET_BUF = Buffer.from(SECRET);
 const IDLE_MIN = Number(process.env.CINEMA_IDLE_TIMEOUT_MIN || 10);
 const ENC = { width: 1280, height: 720, fps: 30, bitrateKbps: 2500 }; // free-tier 720p
 
@@ -39,7 +43,9 @@ streamer.onError = (e) => console.error('[cinema] stream error:', e?.message || 
 const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
-  if (req.headers['x-cinema-secret'] !== SECRET) return res.status(401).json({ error: 'unauthorized' });
+  const provided = Buffer.from(String(req.headers['x-cinema-secret'] || ''));
+  const ok = provided.length === SECRET_BUF.length && timingSafeEqual(provided, SECRET_BUF);
+  if (!ok) return res.status(401).json({ error: 'unauthorized' });
   next();
 });
 
