@@ -20,10 +20,8 @@
 //     and rejects on abort; both run the library's cleanup (which stops Go Live).
 //     We drive deliberate stops via an AbortController so cleanup is deterministic.
 
-import { spawn } from 'node:child_process';
-import { Streamer, playStream } from '@dank074/discord-video-stream';
+import { Streamer, playStream, prepareStream } from '@dank074/discord-video-stream';
 import { streamUrl } from '../utils/jellyfin.js';
-import { buildFfmpegArgs } from './encode.js';
 
 export class CinemaStreamer {
   constructor(client, encodeDefaults) {
@@ -57,37 +55,32 @@ export class CinemaStreamer {
   async _spawnPipe(startSecs) {
     const s = this.session;
     const url = streamUrl(s.itemId);
-    const args = buildFfmpegArgs({
-      streamUrl: url, startSecs,
-      audioIndex: s.audioIndex, subIndex: s.subIndex,
-      width: this.enc.width, height: this.enc.height,
-      fps: this.enc.fps, bitrateKbps: this.enc.bitrateKbps,
-    });
-    // encode.js produces final H264+Opus; mux to NUT — the exact container the
-    // library's LibavDemuxer expects (matroska/AVCC made frame extraction fail).
-    const child = spawn('ffmpeg', [...args, '-progress', 'pipe:2', '-f', 'nut', 'pipe:1'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    this.ff = child;
     this._base = startSecs;
     this._intentionalStop = false;
-    child.stderr.on('data', (b) => { if (child === this.ff) this._trackProgress(b.toString()); });
-    child.on('exit', (code) => this._onFfmpegExit(code, child));
-
-    // Fresh abort controller per pipe so a deliberate kill/stop aborts playStream.
     this._abort = new AbortController();
-    // v6: playStream(input, streamer, options, cancelSignal). It runs
-    // streamer.createStream() (Go Live) itself; we pass the matroska Readable.
-    this._playPromise = playStream(
-      this.ff.stdout,
-      this.streamer,
-      { type: 'go-live', format: 'nut' },
+    // Use the library's OWN ffmpeg pipeline (prepareStream) — it produces exactly
+    // the stream its LibavDemuxer/packetizer expect. (Our hand-rolled ffmpeg output
+    // failed frame extraction.) Trade-off for now: default audio track, no burned
+    // subtitles — re-added once base playback is confirmed.
+    const { command, output } = prepareStream(
+      url,
+      {
+        width: this.enc.width, height: this.enc.height, frameRate: this.enc.fps,
+        bitrateVideo: this.enc.bitrateKbps, bitrateVideoMax: this.enc.bitrateKbps,
+        customInputOptions: startSecs > 0 ? [`-ss ${startSecs}`] : [],
+      },
       this._abort.signal,
-    ).catch((e) => {
-      // Aborts (deliberate pause/seek/stop) reject with the abort reason — ignore.
-      if (this._intentionalStop || this.status === 'idle') return;
-      this.onError?.(e);
+    );
+    this._command = command;
+    command?.on?.('progress', (p) => {
+      const m = /(\d+):(\d+):(\d+)/.exec(p?.timemark || '');
+      if (m) this.positionSecs = this._base + (+m[1] * 3600 + +m[2] * 60 + +m[3]);
     });
+
+    // playStream resolves on media EOF (natural end) and rejects on abort/error.
+    this._playPromise = playStream(output, this.streamer, { type: 'go-live' }, this._abort.signal)
+      .then(() => { if (!this._intentionalStop) { this.onEnd?.(); this._teardown(); } })
+      .catch((e) => { if (!this._intentionalStop && this.status !== 'idle') this.onError?.(e); });
   }
 
   _trackProgress(text) {
@@ -146,7 +139,7 @@ export class CinemaStreamer {
   _killPipe() {
     this._intentionalStop = true;
     if (this._abort) { try { this._abort.abort(); } catch { /* */ } this._abort = null; }
-    if (this.ff) { try { this.ff.kill('SIGKILL'); } catch { /* */ } this.ff = null; }
+    if (this._command) { try { this._command.kill('SIGKILL'); } catch { /* */ } this._command = null; }
     this._playPromise = null;
   }
 
