@@ -63,8 +63,9 @@ export class CinemaStreamer {
       width: this.enc.width, height: this.enc.height,
       fps: this.enc.fps, bitrateKbps: this.enc.bitrateKbps,
     });
-    // encode.js produces final matroska; the library demuxes it (no re-encode).
-    const child = spawn('ffmpeg', [...args, '-progress', 'pipe:2', '-f', 'matroska', 'pipe:1'], {
+    // encode.js produces final H264+Opus; mux to NUT — the exact container the
+    // library's LibavDemuxer expects (matroska/AVCC made frame extraction fail).
+    const child = spawn('ffmpeg', [...args, '-progress', 'pipe:2', '-f', 'nut', 'pipe:1'], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     this.ff = child;
@@ -80,7 +81,7 @@ export class CinemaStreamer {
     this._playPromise = playStream(
       this.ff.stdout,
       this.streamer,
-      { type: 'go-live', format: 'matroska' },
+      { type: 'go-live', format: 'nut' },
       this._abort.signal,
     ).catch((e) => {
       // Aborts (deliberate pause/seek/stop) reject with the abort reason — ignore.

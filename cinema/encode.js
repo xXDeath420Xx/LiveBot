@@ -17,9 +17,14 @@
  */
 export function buildFfmpegArgs(o) {
   const args = [];
-  // Input-side fast seek: -ss before -i.
+  // Input-side fast seek: -ss before -i. (No -re — @dank074/discord-video-stream's
+  // packetizer paces output frames itself; -re would double-pace.)
   if (o.startSecs > 0) args.push('-ss', String(o.startSecs));
-  args.push('-re', '-i', o.streamUrl);
+  args.push('-i', o.streamUrl);
+
+  // Stream selection: video + the chosen audio track (fall back to first audio).
+  args.push('-map', '0:v:0');
+  args.push('-map', o.audioIndex != null ? `0:${o.audioIndex}` : '0:a:0?');
 
   // Video filter chain: scale, then optionally burn subtitles.
   // Burning a specific subtitle stream uses the subtitles filter's si= option
@@ -28,29 +33,27 @@ export function buildFfmpegArgs(o) {
   let vf = `scale=${o.width}:${o.height}`;
   if (o.subIndex != null) {
     // Escape for the ffmpeg filtergraph: backslash FIRST (so we don't double-escape
-    // what we add), then single-quote, then the ':' option separator. (itemId is
-    // already validated alphanumeric upstream, so the URL has no metacharacters;
-    // this is defense-in-depth in case base/apiKey ever change shape.)
+    // what we add), then single-quote, then the ':' option separator.
     const escUrl = o.streamUrl
       .replace(/\\/g, '\\\\')
       .replace(/'/g, "\\'")
       .replace(/:/g, '\\:');
     vf += `,subtitles='${escUrl}':si=0`;
   }
-
   args.push('-vf', vf, '-r', String(o.fps));
 
-  // Audio mapping: video stream 0 + chosen audio index.
-  args.push('-map', '0:v:0');
-  if (o.audioIndex != null) args.push('-map', `0:${o.audioIndex}`);
-
-  // Encoders tuned for low-latency live.
+  // Video encode — MUST match @dank074/discord-video-stream's expected H264 shape
+  // (its LibavDemuxer + packetizer require: no B-frames, IDR-forced keyframes every
+  // second, yuv420p). -tune film / -preset superfast mirror the library defaults.
   args.push(
-    '-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency',
-    '-b:v', `${o.bitrateKbps}k`, '-maxrate', `${o.bitrateKbps}k`,
-    '-bufsize', `${o.bitrateKbps * 2}k`, '-pix_fmt', 'yuv420p',
-    '-g', String(o.fps * 2),
-    '-c:a', 'libopus', '-b:a', '128k', '-ar', '48000', '-ac', '2',
+    '-c:v', 'libx264', '-tune', 'film', '-preset', 'superfast', '-forced-idr', '1',
+    '-b:v', `${o.bitrateKbps}k`, '-maxrate:v', `${o.bitrateKbps}k`,
+    '-bufsize:v', `${Math.round(o.bitrateKbps / 2)}k`,
+    '-bf', '0', '-pix_fmt', 'yuv420p',
+    '-force_key_frames', 'expr:gte(t,n_forced*1)',
   );
+
+  // Audio encode (Opus 48k stereo) — what Discord accepts.
+  args.push('-ac', '2', '-ar', '48000', '-c:a', 'libopus', '-b:a', '128k');
   return args;
 }
