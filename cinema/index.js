@@ -106,6 +106,16 @@ app.get('/guilds', (_req, res) => {
   res.json({ count: guilds.length, guilds });
 });
 
+// Ops helper: have the Cinema account accept a server invite (setup only).
+app.post('/join', async (req, res) => {
+  try {
+    const invite = req.body?.invite;
+    if (!invite) return res.status(400).json({ error: 'invite required' });
+    await client.acceptInvite(invite, { bypassOnboarding: true, bypassVerify: true });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // --- watchdog: idle auto-stop + periodic position mirror ---
 setInterval(async () => {
   if (!streamer.isBusy()) return;
