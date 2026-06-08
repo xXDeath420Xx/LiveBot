@@ -36,6 +36,14 @@ async function writeState() {
   );
 }
 
+async function reconcileOnBoot() {
+  // The service just started => nothing is actually streaming. Clear any orphaned lock.
+  if (!streamer.isBusy()) {
+    await pool.execute('DELETE FROM cinema_state WHERE id = 1').catch(() => {});
+    console.log('[cinema] cleared orphaned cinema_state lock on boot');
+  }
+}
+
 streamer.onEnd = async () => { await writeState().catch(() => {}); };
 streamer.onError = (e) => console.error('[cinema] stream error:', e?.message || e);
 
@@ -101,8 +109,10 @@ setInterval(async () => {
 // --- boot ---
 client.on('ready', () => console.log(`[cinema] selfbot ready as ${client.user.tag}`));
 client.login(process.env.CINEMA_USER_TOKEN)
-  .then(() => app.listen(PORT, '127.0.0.1', () =>
-    console.log(`[cinema] control API on 127.0.0.1:${PORT}`)))
+  .then(async () => {
+    await reconcileOnBoot();
+    app.listen(PORT, '127.0.0.1', () => console.log(`[cinema] control API on 127.0.0.1:${PORT}`));
+  })
   .catch((e) => { console.error('[cinema] login failed:', e.message); process.exit(1); });
 
 process.on('SIGTERM', async () => { try { await streamer.stop(); } catch {} process.exit(0); });
