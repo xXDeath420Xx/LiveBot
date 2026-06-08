@@ -1,11 +1,12 @@
 // commands/media/movie.js
 import {
   SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder,
-  ButtonBuilder, ButtonStyle, ChannelType,
+  ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits,
 } from 'discord.js';
 import * as jf from '../../utils/jellyfin.js';
 import { cinema } from '../../utils/cinema-client.js';
 import { getActiveState, getConfig } from '../../handlers/cinema/state.js';
+import pool from '../../utils/db.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -15,7 +16,10 @@ export default {
       .addStringOption((o) => o.setName('title').setDescription('Search the library')
         .setRequired(true).setAutocomplete(true)))
     .addSubcommand((s) => s.setName('stop').setDescription('Stop the current movie'))
-    .addSubcommand((s) => s.setName('status').setDescription('Show what is playing')),
+    .addSubcommand((s) => s.setName('status').setDescription('Show what is playing'))
+    .addSubcommand((s) => s.setName('config').setDescription('Enable Cinema and set the control role (admin)')
+      .addBooleanOption((o) => o.setName('enabled').setDescription('Enable in this server').setRequired(true))
+      .addRoleOption((o) => o.setName('control_role').setDescription('Role allowed to control playback'))),
 
   async autocomplete(interaction) {
     const term = interaction.options.getFocused();
@@ -30,6 +34,19 @@ export default {
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
+
+    if (sub === 'config') {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        return interaction.reply({ content: 'Manage Server required.', ephemeral: true });
+      }
+      const enabled = interaction.options.getBoolean('enabled') ? 1 : 0;
+      const role = interaction.options.getRole('control_role');
+      await pool.execute(
+        `INSERT INTO cinema_config (guild_id, enabled, control_role_id) VALUES (?,?,?)
+         ON DUPLICATE KEY UPDATE enabled=VALUES(enabled), control_role_id=VALUES(control_role_id)`,
+        [interaction.guildId, enabled, role?.id ?? null]);
+      return interaction.reply({ content: `Cinema ${enabled ? 'enabled' : 'disabled'}${role ? `, control role <@&${role.id}>` : ''}.`, ephemeral: true });
+    }
 
     const config = await getConfig(interaction.guildId);
     if (!config?.enabled) {
