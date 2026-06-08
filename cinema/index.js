@@ -93,6 +93,19 @@ app.post('/seek', async (req, res) => {
 
 app.get('/status', (_req, res) => res.json(streamer.state()));
 
+// Ops helper: which guilds is the Cinema account in, and their voice channels?
+// Used during setup to confirm the account can actually join a target VC.
+app.get('/guilds', (_req, res) => {
+  const guilds = [...client.guilds.cache.values()].map((g) => ({
+    id: g.id,
+    name: g.name,
+    voiceChannels: [...g.channels.cache.values()]
+      .filter((c) => c.type === 2 /* GuildVoice */)
+      .map((c) => ({ id: c.id, name: c.name })),
+  }));
+  res.json({ count: guilds.length, guilds });
+});
+
 // --- watchdog: idle auto-stop + periodic position mirror ---
 setInterval(async () => {
   if (!streamer.isBusy()) return;
