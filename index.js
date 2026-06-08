@@ -716,6 +716,11 @@ async function initializeSchedulersAndDashboard(client) {
   startStreamCheckScheduler(client);
   logger.info('[Core] Stream check scheduler initialized');
 
+  // Cinema panel reaper: edit a dangling control panel to "ended" when a movie
+  // finishes unattended (state cleared by the cinema service, no Stop pressed).
+  (await import('./jobs/cinema-panel-reaper.js')).startCinemaPanelReaper(client);
+  logger.info('[Core] Cinema panel reaper initialized');
+
   // Retry blocked command deployments every 5 min. Without this, a bot whose
   // boot deploy timed out stays without commands until next PM2 restart, even
   // after Discord's rate-limit hold clears.
