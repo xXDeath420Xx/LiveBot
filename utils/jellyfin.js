@@ -62,8 +62,18 @@ export async function search(term, overrides = {}) {
 /** Fetch a single item with its MediaStreams for track selection. */
 export async function getItem(itemId, overrides = {}) {
   const { base, apiKey } = cfg(overrides);
-  const url = `${base}/Items/${encodeURIComponent(assertItemId(itemId))}?Fields=MediaStreams&api_key=${apiKey}`;
+  // Jellyfin has no GET /Items/{id} (returns 400). Query the list endpoint by id
+  // (same family as search) with Fields=MediaStreams and take the first result.
+  const url = `${base}/Items?ids=${encodeURIComponent(assertItemId(itemId))}` +
+    `&Fields=MediaStreams,MediaSources&Recursive=true&api_key=${apiKey}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Jellyfin getItem ${res.status}`);
-  return res.json();
+  const data = await res.json();
+  const item = (data.Items || [])[0];
+  if (!item) throw new Error('Jellyfin item not found');
+  // Some library views nest streams under MediaSources; surface them at the top.
+  if (!Array.isArray(item.MediaStreams) && item.MediaSources?.[0]?.MediaStreams) {
+    item.MediaStreams = item.MediaSources[0].MediaStreams;
+  }
+  return item;
 }
