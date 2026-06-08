@@ -151,5 +151,6 @@ export async function handleCinemaStart(interaction) {
   const state = await getActiveState();
   const panel = await interaction.channel.send(buildPanel(state));
   await setPanelMessageId(panel.id);
+  (await import('../../jobs/cinema-panel-reaper.js')).rememberPanel(panel.channelId, panel.id);
   return true;
 }
