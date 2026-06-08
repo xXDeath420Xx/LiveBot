@@ -64,13 +64,14 @@ export class CinemaStreamer {
       fps: this.enc.fps, bitrateKbps: this.enc.bitrateKbps,
     });
     // encode.js produces final matroska; the library demuxes it (no re-encode).
-    this.ff = spawn('ffmpeg', [...args, '-progress', 'pipe:2', '-f', 'matroska', 'pipe:1'], {
+    const child = spawn('ffmpeg', [...args, '-progress', 'pipe:2', '-f', 'matroska', 'pipe:1'], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    this.ff = child;
     this._base = startSecs;
     this._intentionalStop = false;
-    this.ff.stderr.on('data', (b) => this._trackProgress(b.toString()));
-    this.ff.on('exit', (code) => this._onFfmpegExit(code));
+    child.stderr.on('data', (b) => { if (child === this.ff) this._trackProgress(b.toString()); });
+    child.on('exit', (code) => this._onFfmpegExit(code, child));
 
     // Fresh abort controller per pipe so a deliberate kill/stop aborts playStream.
     this._abort = new AbortController();
@@ -93,13 +94,17 @@ export class CinemaStreamer {
     if (m) this.positionSecs = this._base + Math.floor(Number(m[1]) / 1_000_000);
   }
 
-  _onFfmpegExit(code) {
+  async _onFfmpegExit(code, child) {
+    // Ignore exits from a stale pipe we already killed/replaced (seek/resume
+    // SIGKILLs the old ffmpeg and spawns a new one; the old exit must not tear
+    // down the current stream).
+    if (child !== this.ff) return;
     // A clean ffmpeg exit while playing (not a deliberate kill) means the media
     // reached its end. code === null also covers a normal end-of-input close.
     if (this._intentionalStop) return;
     if (this.status === 'playing' && (code === 0 || code === null)) {
-      this.onEnd?.();
-      this._teardown();
+      this._teardown();           // clears session/status FIRST so writeState() DELETEs
+      await this.onEnd?.();        // now state().busy === false
     }
   }
 

@@ -124,33 +124,40 @@ export async function handleCinemaSelect(interaction) {
 
 export async function handleCinemaStart(interaction) {
   if (!interaction.customId.startsWith('cinema_start:')) return false;
-  const itemId = interaction.customId.split(':')[1];
-  const sel = pending.get(interaction.user.id) || { itemId, audioIndex: null, subIndex: null };
-  const vc = interaction.member?.voice?.channel;
-  if (!vc) { await interaction.reply({ content: 'Join a voice channel first.', ephemeral: true }); return true; }
+  try {
+    const itemId = interaction.customId.split(':')[1];
+    const sel = pending.get(interaction.user.id) || { itemId, audioIndex: null, subIndex: null };
+    const vc = interaction.member?.voice?.channel;
+    if (!vc) { await interaction.reply({ content: 'Join a voice channel first.', ephemeral: true }); return true; }
 
-  // Re-check the global lock right before starting (TOCTOU guard).
-  if (await getActiveState()) {
-    await interaction.update({ content: '🎬 Cinema just became busy — try again shortly.', components: [] });
+    // Re-check the global lock right before starting (TOCTOU guard).
+    if (await getActiveState()) {
+      await interaction.update({ content: '🎬 Cinema just became busy — try again shortly.', components: [] });
+      return true;
+    }
+
+    const item = await jf.getItem(itemId);
+    const r = await cinema.play({
+      guildId: interaction.guildId, voiceChannelId: vc.id, channelId: interaction.channelId,
+      itemId, itemName: item.Name, startedBy: interaction.user.id,
+      audioIndex: sel.audioIndex, subIndex: sel.subIndex,
+    });
+    pending.delete(interaction.user.id);
+    if (!r.ok) {
+      await interaction.update({ content: `Failed to start: ${r.data?.error || r.status}`, components: [] });
+      return true;
+    }
+    await interaction.update({ content: `🎬 Starting **${item.Name}** — opening the control panel…`, components: [] });
+
+    const state = await getActiveState();
+    const panel = await interaction.channel.send(buildPanel(state));
+    await setPanelMessageId(panel.id);
+    (await import('../../jobs/cinema-panel-reaper.js')).rememberPanel(panel.channelId, panel.id);
+    return true;
+  } catch (e) {
+    const msg = { content: `Failed to start the movie: ${e.message}`, components: [] };
+    if (interaction.deferred || interaction.replied) await interaction.editReply(msg).catch(() => {});
+    else await interaction.update(msg).catch(() => interaction.reply({ ...msg, ephemeral: true }).catch(() => {}));
     return true;
   }
-
-  const item = await jf.getItem(itemId);
-  const r = await cinema.play({
-    guildId: interaction.guildId, voiceChannelId: vc.id, channelId: interaction.channelId,
-    itemId, itemName: item.Name, startedBy: interaction.user.id,
-    audioIndex: sel.audioIndex, subIndex: sel.subIndex,
-  });
-  pending.delete(interaction.user.id);
-  if (!r.ok) {
-    await interaction.update({ content: `Failed to start: ${r.data?.error || r.status}`, components: [] });
-    return true;
-  }
-  await interaction.update({ content: `🎬 Starting **${item.Name}** — opening the control panel…`, components: [] });
-
-  const state = await getActiveState();
-  const panel = await interaction.channel.send(buildPanel(state));
-  await setPanelMessageId(panel.id);
-  (await import('../../jobs/cinema-panel-reaper.js')).rememberPanel(panel.channelId, panel.id);
-  return true;
 }
