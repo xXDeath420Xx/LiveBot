@@ -48,6 +48,7 @@ import { handleBirthdayMonthSelect } from './select-menus/birthday_month.js';
 import { handleBirthdayAdminUserSelect } from './select-menus/birthday_admin_user.js';
 import { handleBirthdayAdminStart } from './buttons/birthday_admin.js';
 import { handleBirthdaySetModal } from './modals/birthday_set.js';
+import { handleCinemaButton, handleCinemaSeekModal } from '../handlers/cinema/panel.js';
 
 /**
  * Button handler registry
@@ -110,7 +111,13 @@ export const buttonHandlers = {
   'fw_shop_page:': handleFourthwallShopPage,
 
   // Birthday admin entry button
-  'bday:adminstart': handleBirthdayAdminStart
+  'bday:adminstart': handleBirthdayAdminStart,
+
+  // Cinema control buttons
+  'cinema_pause': handleCinemaButton,
+  'cinema_resume': handleCinemaButton,
+  'cinema_seek': handleCinemaButton,
+  'cinema_stop': handleCinemaButton
 };
 
 /**
@@ -151,7 +158,10 @@ export const modalHandlers = {
   'fourthwall_setup_submit': handleFourthwallSetupSubmit,
 
   // Birthday set modal (self + admin)
-  'bday:modal:': handleBirthdaySetModal
+  'bday:modal:': handleBirthdaySetModal,
+
+  // Cinema seek modal
+  'cinema_seek_modal': handleCinemaSeekModal
 };
 
 /**
