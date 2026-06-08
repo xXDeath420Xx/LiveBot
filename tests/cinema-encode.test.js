@@ -5,7 +5,7 @@ import { buildFfmpegArgs } from '../cinema/encode.js';
 const base = {
   streamUrl: 'http://jf/Videos/x/stream?static=true',
   width: 1280, height: 720, fps: 30, bitrateKbps: 2500,
-  startSecs: 0, audioIndex: 1, subIndex: null,
+  startSecs: 0, audioIndex: 1, subUrl: null,
 };
 
 test('maps the chosen audio track and scales to target resolution', () => {
@@ -25,15 +25,14 @@ test('seeks with -ss BEFORE -i when startSecs > 0', () => {
   assert.equal(args[ssIdx + 1], '42');
 });
 
-test('burns the chosen subtitle into the video filter chain', () => {
-  const args = buildFfmpegArgs({ ...base, subIndex: 3 });
+test('burns the subtitle into the video filter chain when a subUrl is given', () => {
+  const args = buildFfmpegArgs({ ...base, subUrl: 'http://jf/Videos/x/x/Subtitles/2/0/Stream.srt' });
   const vf = args[args.indexOf('-vf') + 1];
   assert.ok(vf.includes('subtitles='), 'has subtitles filter');
-  assert.ok(vf.includes("si=") || vf.includes(':stream_index=3') || vf.includes('si=0'),
-    'targets a subtitle stream');
+  assert.ok(vf.includes('Stream.srt'), 'burns the standalone srt');
 });
 
-test('omits subtitles filter when subIndex is null', () => {
+test('omits subtitles filter when no subUrl', () => {
   const args = buildFfmpegArgs(base);
   const vf = args[args.indexOf('-vf') + 1];
   assert.ok(!vf.includes('subtitles='));

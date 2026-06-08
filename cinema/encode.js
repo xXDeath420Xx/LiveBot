@@ -12,7 +12,7 @@
  * @param {number} o.bitrateKbps
  * @param {number} o.startSecs   seek target (0 = start)
  * @param {number|null} o.audioIndex  Jellyfin MediaStream Index for audio
- * @param {number|null} o.subIndex    Jellyfin MediaStream Index for subtitle, or null
+ * @param {string|null} o.subUrl      standalone .srt URL to burn in, or null/absent
  * @returns {string[]} argv for ffmpeg
  */
 export function buildFfmpegArgs(o) {
@@ -27,18 +27,17 @@ export function buildFfmpegArgs(o) {
   args.push('-map', o.audioIndex != null ? `0:${o.audioIndex}` : '0:a:0?');
 
   // Video filter chain: scale, then optionally burn subtitles.
-  // Burning a specific subtitle stream uses the subtitles filter's si= option
-  // (zero-based index among subtitle streams). For v1 we burn the first text
-  // stream (si=0); multi-text refinement is a documented follow-up.
+  // o.subUrl is a STANDALONE .srt (Jellyfin subtitle endpoint) — burning that is
+  // fast and streams, unlike re-opening the whole remote video in the filter.
   let vf = `scale=${o.width}:${o.height}`;
-  if (o.subIndex != null) {
+  if (o.subUrl) {
     // Escape for the ffmpeg filtergraph: backslash FIRST (so we don't double-escape
     // what we add), then single-quote, then the ':' option separator.
-    const escUrl = o.streamUrl
+    const escUrl = o.subUrl
       .replace(/\\/g, '\\\\')
       .replace(/'/g, "\\'")
       .replace(/:/g, '\\:');
-    vf += `,subtitles='${escUrl}':si=0`;
+    vf += `,subtitles='${escUrl}'`;
   }
   args.push('-vf', vf, '-r', String(o.fps));
 
