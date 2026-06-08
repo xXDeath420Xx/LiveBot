@@ -29,6 +29,17 @@ export function streamUrl(itemId, overrides = {}) {
   return `${base}/Videos/${encodeURIComponent(assertItemId(itemId))}/stream?static=true&api_key=${apiKey}`;
 }
 
+/**
+ * URL for a single subtitle track delivered as a standalone .srt (small + fast).
+ * Burning from this avoids re-opening the whole remote video in the ffmpeg
+ * subtitles filter. mediaSourceId == itemId for single-source library items.
+ */
+export function subtitleUrl(itemId, streamIndex, overrides = {}) {
+  const { base, apiKey } = cfg(overrides);
+  const id = encodeURIComponent(assertItemId(itemId));
+  return `${base}/Videos/${id}/${id}/Subtitles/${Number(streamIndex)}/0/Stream.srt?api_key=${apiKey}`;
+}
+
 /** Split an item's MediaStreams into selectable audio + subtitle tracks. */
 export function parseMediaStreams(item) {
   const streams = Array.isArray(item?.MediaStreams) ? item.MediaStreams : [];
