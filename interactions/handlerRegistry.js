@@ -48,7 +48,7 @@ import { handleBirthdayMonthSelect } from './select-menus/birthday_month.js';
 import { handleBirthdayAdminUserSelect } from './select-menus/birthday_admin_user.js';
 import { handleBirthdayAdminStart } from './buttons/birthday_admin.js';
 import { handleBirthdaySetModal } from './modals/birthday_set.js';
-import { handleCinemaButton, handleCinemaSeekModal } from '../handlers/cinema/panel.js';
+import { handleCinemaButton, handleCinemaSeekModal, handleCinemaSelect, handleCinemaStart } from '../handlers/cinema/panel.js';
 
 /**
  * Button handler registry
@@ -117,7 +117,8 @@ export const buttonHandlers = {
   'cinema_pause': handleCinemaButton,
   'cinema_resume': handleCinemaButton,
   'cinema_seek': handleCinemaButton,
-  'cinema_stop': handleCinemaButton
+  'cinema_stop': handleCinemaButton,
+  'cinema_start:': handleCinemaStart
 };
 
 /**
@@ -134,7 +135,11 @@ export const selectMenuHandlers = {
   // Birthday panel selects
   'bday:month': handleBirthdayMonthSelect,
   'bday:adminmonth:': handleBirthdayMonthSelect,
-  'bday:adminuser': handleBirthdayAdminUserSelect
+  'bday:adminuser': handleBirthdayAdminUserSelect,
+
+  // Cinema track-select menus
+  'cinema_audio:': handleCinemaSelect,
+  'cinema_sub:': handleCinemaSelect
 };
 
 /**
