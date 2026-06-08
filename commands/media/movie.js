@@ -5,7 +5,7 @@ import {
 } from 'discord.js';
 import * as jf from '../../utils/jellyfin.js';
 import { cinema } from '../../utils/cinema-client.js';
-import { getActiveState, getConfig } from '../../handlers/cinema/state.js';
+import { getActiveState, getConfig, canControl } from '../../handlers/cinema/state.js';
 import pool from '../../utils/db.js';
 
 export default {
@@ -58,14 +58,22 @@ export default {
 
     if (sub === 'status') {
       const st = await getActiveState();
+      const here = st && st.guild_id === interaction.guildId;
       return interaction.reply({
-        content: st ? `🎬 **${st.item_name}** — ${st.status} in <#${st.voice_channel_id}>`
-                    : 'Nothing is playing.',
+        content: here ? `🎬 **${st.item_name}** — ${st.status} in <#${st.voice_channel_id}>`
+                      : 'Nothing is playing.',
         ephemeral: true,
       });
     }
 
     if (sub === 'stop') {
+      const st = await getActiveState();
+      if (!st || st.guild_id !== interaction.guildId) {
+        return interaction.reply({ content: 'No movie is playing in this server.', ephemeral: true });
+      }
+      if (!canControl(interaction.member, st, config)) {
+        return interaction.reply({ content: 'Only the host or a mod can stop playback.', ephemeral: true });
+      }
       await cinema.stop();
       return interaction.reply({ content: '⏹ Stopped.', ephemeral: true });
     }
