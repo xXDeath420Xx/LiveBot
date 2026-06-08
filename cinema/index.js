@@ -9,9 +9,15 @@ import dotenv from 'dotenv';
 dotenv.config({ path: new URL('.env', import.meta.url) });
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
+import { WebSocket } from 'ws';
 import { Client } from 'discord.js-selfbot-v13';
 import pool from '../utils/db.js';
 import { CinemaStreamer } from './streamer.js';
+
+// @dank074/discord-video-stream's voice/media transport uses the GLOBAL WebSocket,
+// which only became a Node global in v22. We run on Node 20, so polyfill it from
+// the already-present `ws` package. Must be set before any Go Live connection.
+globalThis.WebSocket ??= WebSocket;
 
 const PORT = Number(process.env.CINEMA_PORT || 8099);
 // Fail closed: an empty/absent secret would let any loopback request through.
