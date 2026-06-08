@@ -144,7 +144,9 @@ export async function handleCinemaStart(interaction) {
     });
     pending.delete(interaction.user.id);
     if (!r.ok) {
-      await interaction.update({ content: `Failed to start: ${r.data?.error || r.status}`, components: [] });
+      console.error('[cinema:start] play failed', r.status, r.data?.error);
+      const reason = r.status === 409 ? 'Cinema is busy right now.' : 'Could not start the movie. Please try again.';
+      await interaction.update({ content: `🎬 ${reason}`, components: [] });
       return true;
     }
     await interaction.update({ content: `🎬 Starting **${item.Name}** — opening the control panel…`, components: [] });
@@ -155,7 +157,9 @@ export async function handleCinemaStart(interaction) {
     (await import('../../jobs/cinema-panel-reaper.js')).rememberPanel(panel.channelId, panel.id);
     return true;
   } catch (e) {
-    const msg = { content: `Failed to start the movie: ${e.message}`, components: [] };
+    // Log full detail internally; the error may embed the Jellyfin URL incl. api_key.
+    console.error('[cinema:start] unexpected error', e);
+    const msg = { content: '🎬 Could not start the movie. Please try again later.', components: [] };
     if (interaction.deferred || interaction.replied) await interaction.editReply(msg).catch(() => {});
     else await interaction.update(msg).catch(() => interaction.reply({ ...msg, ephemeral: true }).catch(() => {}));
     return true;

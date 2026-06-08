@@ -10,10 +10,23 @@ function cfg(overrides = {}) {
   };
 }
 
+// itemId is effectively user-controlled (a /movie 'title' option value can be any
+// string the client sends, not only an autocomplete pick). Jellyfin item ids are
+// alphanumeric (32-char hex). Reject anything else BEFORE it reaches a URL path
+// segment or the ffmpeg filtergraph — neutralizes URL- and filter-injection.
+const ITEM_ID_RE = /^[A-Za-z0-9]{1,64}$/;
+export function isValidItemId(itemId) {
+  return typeof itemId === 'string' && ITEM_ID_RE.test(itemId);
+}
+function assertItemId(itemId) {
+  if (!isValidItemId(itemId)) throw new Error('Invalid Jellyfin item id');
+  return itemId;
+}
+
 /** Build a static (direct-play, NO Jellyfin transcode) stream URL. */
 export function streamUrl(itemId, overrides = {}) {
   const { base, apiKey } = cfg(overrides);
-  return `${base}/Videos/${itemId}/stream?static=true&api_key=${apiKey}`;
+  return `${base}/Videos/${encodeURIComponent(assertItemId(itemId))}/stream?static=true&api_key=${apiKey}`;
 }
 
 /** Split an item's MediaStreams into selectable audio + subtitle tracks. */
@@ -49,7 +62,7 @@ export async function search(term, overrides = {}) {
 /** Fetch a single item with its MediaStreams for track selection. */
 export async function getItem(itemId, overrides = {}) {
   const { base, apiKey } = cfg(overrides);
-  const url = `${base}/Items/${itemId}?Fields=MediaStreams&api_key=${apiKey}`;
+  const url = `${base}/Items/${encodeURIComponent(assertItemId(itemId))}?Fields=MediaStreams&api_key=${apiKey}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Jellyfin getItem ${res.status}`);
   return res.json();

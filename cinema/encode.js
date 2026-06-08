@@ -27,7 +27,15 @@ export function buildFfmpegArgs(o) {
   // stream (si=0); multi-text refinement is a documented follow-up.
   let vf = `scale=${o.width}:${o.height}`;
   if (o.subIndex != null) {
-    vf += `,subtitles='${o.streamUrl.replace(/:/g, '\\:').replace(/'/g, "\\'")}':si=0`;
+    // Escape for the ffmpeg filtergraph: backslash FIRST (so we don't double-escape
+    // what we add), then single-quote, then the ':' option separator. (itemId is
+    // already validated alphanumeric upstream, so the URL has no metacharacters;
+    // this is defense-in-depth in case base/apiKey ever change shape.)
+    const escUrl = o.streamUrl
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/:/g, '\\:');
+    vf += `,subtitles='${escUrl}':si=0`;
   }
 
   args.push('-vf', vf, '-r', String(o.fps));
