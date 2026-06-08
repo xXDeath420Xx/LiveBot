@@ -1,0 +1,17 @@
+{
+  "name": "certifried-cinema",
+  "version": "1.0.0",
+  "description": "Isolated Node 22 service: streams Jellyfin titles into Discord voice via Go Live. Runs separately from the main bot (Node 20) so its native deps (node-av) build for the runtime the library requires.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.4.0"
+  },
+  "dependencies": {
+    "@dank074/discord-video-stream": "^6.0.0",
+    "discord.js-selfbot-v13": "^3.7.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ws": "^8.19.0"
+  }
+}
