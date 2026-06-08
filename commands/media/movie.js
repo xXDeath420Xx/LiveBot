@@ -92,8 +92,18 @@ export default {
     }
 
     const itemId = interaction.options.getString('title');
+    // 'title' carries the Jellyfin id from autocomplete, but a client can send any
+    // string — reject non-ids before they reach a URL path / the ffmpeg filtergraph.
+    if (!jf.isValidItemId(itemId)) {
+      return interaction.reply({ content: 'Pick a title from the suggestions.', ephemeral: true });
+    }
     await interaction.deferReply({ ephemeral: true });
-    const item = await jf.getItem(itemId);
+    let item;
+    try {
+      item = await jf.getItem(itemId);
+    } catch {
+      return interaction.editReply({ content: 'Could not load that title. Please try again.' });
+    }
     const { audio, subtitles } = jf.parseMediaStreams(item);
 
     const audioMenu = new StringSelectMenuBuilder().setCustomId(`cinema_audio:${itemId}`)
