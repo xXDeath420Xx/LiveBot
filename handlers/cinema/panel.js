@@ -32,7 +32,15 @@ export function buildPanel(state) {
 async function guard(interaction) {
   const state = await getActiveState();
   if (!state) { await interaction.reply({ content: 'No movie is playing.', ephemeral: true }); return null; }
-  const config = await getConfig(interaction.guildId);
+  // cinema_state is a GLOBAL singleton; the movie plays in exactly one host guild.
+  // Controls must originate from that host guild — otherwise a member of any other
+  // guild the shared account is in could forge a static-customId button and drive
+  // playback. Gate on the host guild, and evaluate permissions against IT.
+  if (interaction.guildId !== state.guild_id) {
+    await interaction.reply({ content: 'No movie is playing in this server.', ephemeral: true });
+    return null;
+  }
+  const config = await getConfig(state.guild_id);
   if (!canControl(interaction.member, state, config)) {
     await interaction.reply({ content: 'Only the host or a mod can control playback.', ephemeral: true });
     return null;
@@ -45,16 +53,14 @@ export async function handleCinemaButton(interaction) {
   if (!id.startsWith('cinema_')) return false;
 
   if (id === 'cinema_seek') {
+    // Gate BEFORE showing the modal (a modal must be the first ack). guard()
+    // applies the host-guild + canControl checks and replies ephemerally on denial.
+    const state = await guard(interaction);
+    if (!state) return true;
     const modal = new ModalBuilder().setCustomId('cinema_seek_modal').setTitle('Seek to timestamp');
     modal.addComponents(new ActionRowBuilder().addComponents(
       new TextInputBuilder().setCustomId('ts').setLabel('HH:MM:SS or seconds')
         .setStyle(TextInputStyle.Short).setRequired(true)));
-    const state = await getActiveState();
-    const config = await getConfig(interaction.guildId);
-    if (!state || !canControl(interaction.member, state, config)) {
-      await interaction.reply({ content: 'Only the host or a mod can control playback.', ephemeral: true });
-      return true;
-    }
     await interaction.showModal(modal);
     return true;
   }
@@ -72,10 +78,18 @@ export async function handleCinemaButton(interaction) {
 
 export async function handleCinemaSeekModal(interaction) {
   if (interaction.customId !== 'cinema_seek_modal') return false;
+  // Re-authorize on submit (state may have changed since the modal opened, and a
+  // crafted submit must not bypass the gate). guard() enforces host-guild + role.
+  const state = await guard(interaction);
+  if (!state) return true;
   const raw = interaction.fields.getTextInputValue('ts').trim();
   const secs = raw.includes(':')
     ? raw.split(':').reverse().reduce((a, p, i) => a + Number(p) * 60 ** i, 0)
     : Number(raw);
+  if (!Number.isFinite(secs) || secs < 0) {
+    await interaction.reply({ content: 'Invalid timestamp — use seconds or HH:MM:SS.', ephemeral: true });
+    return true;
+  }
   await cinema.seek(secs);
   await refreshPanel(interaction);
   return true;
