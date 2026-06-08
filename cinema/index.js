@@ -3,7 +3,10 @@
 // API to the main bot, mirrors live state into the shared DB, and runs an
 // idle/health watchdog. Loads NO bot token — only its own cinema/.env.
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
+// Load THIS service's own .env (cinema/.env) regardless of the process CWD —
+// it holds CINEMA_USER_TOKEN, which the root .env does not.
+dotenv.config({ path: new URL('.env', import.meta.url) });
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { Client } from 'discord.js-selfbot-v13';
