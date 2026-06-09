@@ -1,43 +1,30 @@
 // cinema/streamer.js
-// Owns the single live playback. Wraps @dank074/discord-video-stream so the rest
-// of the service deals in play/pause/resume/stop/seek + a position counter.
-// Pause/seek/resume are implemented by tearing down and rebuilding the ffmpeg
-// pipe at a tracked position. The voice connection (joinVoice) stays up across
-// pause/seek; the Go Live stream itself is restarted each time.
+// Owns the single live playback. Uses @dank074/discord-video-stream's OWN ffmpeg
+// pipeline (prepareStream) because its output is exactly what the library's
+// demuxer expects — a hand-rolled `-f nut` pipe produced "No main startcode found"
+// and never went live. Trade-off: default audio track, no burned subtitles (the
+// custom-encoder path that supported the picker doesn't actually stream).
 //
-// v6.0.0 API notes (confirmed against dist/*.d.ts + newApi.js):
-//   - new Streamer(client); streamer.joinVoice(guildId, channelId); leaveVoice()
-//   - playStream(input, streamer, options?, cancelSignal?) where `input` is a
-//     Readable that the library demuxes itself (`options.format`), and `streamer`
-//     is the SECOND argument. For Go Live it calls streamer.createStream()
-//     internally, so we only joinVoice() first — playStream handles Go Live.
-//   - prepareStream() is NOT used: in v6 it runs its OWN ffmpeg (fluent-ffmpeg)
-//     against a URL/Readable. We already produce final H.264+Opus matroska via
-//     cinema/encode.js (subtitle burn, audio-track map, seek), so we spawn ffmpeg
-//     ourselves and feed its matroska stdout straight into playStream with
-//     { type:'go-live', format:'matroska' }.
-//   - playStream's returned promise resolves when the input EOFs (media ended)
-//     and rejects on abort; both run the library's cleanup (which stops Go Live).
-//     We drive deliberate stops via an AbortController so cleanup is deterministic.
+// Pause WITHOUT dropping viewers: SIGSTOP the underlying ffmpeg process (frames
+// halt, Go Live stays up on the last frame), SIGCONT to resume. Seek rebuilds the
+// pipeline (can't seek a live encoder) and re-freezes if it was paused.
 
-import { spawn } from 'node:child_process';
-import { Streamer, playStream } from '@dank074/discord-video-stream';
-import { streamUrl, subtitleUrl } from '../utils/jellyfin.js';
-import { buildFfmpegArgs } from './encode.js';
+import { Streamer, playStream, prepareStream } from '@dank074/discord-video-stream';
+import { streamUrl } from '../utils/jellyfin.js';
 
 export class CinemaStreamer {
   constructor(client, encodeDefaults) {
     this.streamer = new Streamer(client);
     this.enc = encodeDefaults; // { width, height, fps, bitrateKbps }
     this.session = null;
-    this.ff = null;
+    this.ff = null;            // underlying ffmpeg child process (for SIGSTOP pause)
+    this._command = null;      // fluent-ffmpeg command from prepareStream
     this.positionSecs = 0;
-    this.status = 'idle'; // idle | playing | paused
+    this.status = 'idle';      // idle | playing | paused
     this._base = 0;
     this._abort = null;
     this._playPromise = null;
     this._intentionalStop = false;
-    // Hooks set by the owning service.
     this.onEnd = null;
     this.onError = null;
   }
@@ -57,94 +44,59 @@ export class CinemaStreamer {
   async _spawnPipe(startSecs) {
     const s = this.session;
     const url = streamUrl(s.itemId);
-    const args = buildFfmpegArgs({
-      streamUrl: url, startSecs,
-      audioIndex: s.audioIndex,
-      // Burn from the small standalone .srt, not the full remote video.
-      subUrl: s.subIndex != null ? subtitleUrl(s.itemId, s.subIndex) : null,
-      width: this.enc.width, height: this.enc.height,
-      fps: this.enc.fps, bitrateKbps: this.enc.bitrateKbps,
-    });
-    // encode.js produces final H264+Opus; mux to NUT — the exact container the
-    // library's LibavDemuxer expects (matroska/AVCC made frame extraction fail).
-    const child = spawn('ffmpeg', [...args, '-progress', 'pipe:2', '-f', 'nut', 'pipe:1'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    this.ff = child;
     this._base = startSecs;
     this._intentionalStop = false;
-    child.stderr.on('data', (b) => { if (child === this.ff) this._trackProgress(b.toString()); });
-    child.on('exit', (code) => this._onFfmpegExit(code, child));
-
-    // Fresh abort controller per pipe so a deliberate kill/stop aborts playStream.
     this._abort = new AbortController();
-    // v6: playStream(input, streamer, options, cancelSignal). It runs
-    // streamer.createStream() (Go Live) itself; we pass the matroska Readable.
-    this._playPromise = playStream(
-      this.ff.stdout,
-      this.streamer,
-      { type: 'go-live', format: 'nut' },
+    const { command, output } = prepareStream(
+      url,
+      {
+        width: this.enc.width, height: this.enc.height, frameRate: this.enc.fps,
+        bitrateVideo: this.enc.bitrateKbps, bitrateVideoMax: this.enc.bitrateKbps,
+        customInputOptions: startSecs > 0 ? [`-ss ${startSecs}`] : [],
+      },
       this._abort.signal,
-    ).catch((e) => {
-      // Aborts (deliberate pause/seek/stop) reject with the abort reason — ignore.
-      if (this._intentionalStop || this.status === 'idle') return;
-      this.onError?.(e);
+    );
+    this._command = command;
+    this.ff = command?.ffmpegProc || null;
+    // ffmpegProc is set when the command actually spawns — capture it for pause.
+    command?.on?.('start', () => { this.ff = command.ffmpegProc || this.ff; });
+    command?.on?.('progress', (p) => {
+      const m = /(\d+):(\d+):(\d+)/.exec(p?.timemark || '');
+      if (m) this.positionSecs = this._base + (+m[1] * 3600 + +m[2] * 60 + +m[3]);
     });
+    // playStream resolves on media EOF (natural end), rejects on abort/error.
+    this._playPromise = playStream(output, this.streamer, { type: 'go-live' }, this._abort.signal)
+      .then(() => { if (!this._intentionalStop) { this._teardown(); this.onEnd?.(); } })
+      .catch((e) => { if (!this._intentionalStop && this.status !== 'idle') this.onError?.(e); });
   }
 
-  _trackProgress(text) {
-    const m = /out_time_ms=(\d+)/.exec(text);
-    if (m) this.positionSecs = this._base + Math.floor(Number(m[1]) / 1_000_000);
-  }
-
-  async _onFfmpegExit(code, child) {
-    // Ignore exits from a stale pipe we already killed/replaced (seek/resume
-    // SIGKILLs the old ffmpeg and spawns a new one; the old exit must not tear
-    // down the current stream).
-    if (child !== this.ff) return;
-    // A clean ffmpeg exit while playing (not a deliberate kill) means the media
-    // reached its end. code === null also covers a normal end-of-input close.
-    if (this._intentionalStop) return;
-    if (this.status === 'playing' && (code === 0 || code === null)) {
-      this._teardown();           // clears session/status FIRST so writeState() DELETEs
-      await this.onEnd?.();        // now state().busy === false
-    }
-  }
+  _proc() { return this.ff || this._command?.ffmpegProc || null; }
 
   async pause() {
     if (this.status !== 'playing') return;
     this.status = 'paused';
-    // Freeze the encoder instead of killing it: SIGSTOP halts ffmpeg's output so
-    // the Go Live session (and every viewer's connection) stays up on the last
-    // frame. No teardown, no abort. -progress stops too, so positionSecs holds.
-    if (this.ff) { try { this.ff.kill('SIGSTOP'); } catch { /* */ } }
+    // Freeze the encoder — Go Live (and viewers) stay up on the last frame.
+    const proc = this._proc();
+    if (proc) { try { proc.kill('SIGSTOP'); } catch { /* */ } }
   }
 
   async resume() {
     if (this.status !== 'paused') return;
     this.status = 'playing';
-    if (this.ff) {
-      // Unfreeze the same encoder — viewers never disconnected.
-      try { this.ff.kill('SIGCONT'); } catch { /* */ }
-    } else {
-      // Fallback: pipe was gone (e.g. after a seek) — rebuild at position.
-      await this._spawnPipe(this.positionSecs);
-    }
+    const proc = this._proc();
+    if (proc) { try { proc.kill('SIGCONT'); } catch { /* */ } }
+    else await this._spawnPipe(this.positionSecs); // fallback if process vanished
   }
 
   async seek(secs) {
     if (!this.session) return;
     const wasPaused = this.status === 'paused';
-    // Seek requires a rebuild (you can't seek a live encoder) — this DOES briefly
-    // drop Go Live, unlike pause. Kill the (possibly frozen) pipe and respawn.
+    // Seek needs a rebuild (briefly drops Go Live, unlike pause).
     this._killPipe();
     this.positionSecs = Math.max(0, secs);
     await this._spawnPipe(this.positionSecs);
     this.status = wasPaused ? 'paused' : 'playing';
-    if (wasPaused && this.ff) {
-      // Stay paused: freeze the freshly-built encoder at the new position.
-      try { this.ff.kill('SIGSTOP'); } catch { /* */ }
-    }
+    if (wasPaused) { const proc = this._proc(); if (proc) { try { proc.kill('SIGSTOP'); } catch { /* */ } } }
   }
 
   async stop() {
@@ -152,12 +104,14 @@ export class CinemaStreamer {
     try { await this.streamer.leaveVoice(); } catch { /* ignore */ }
   }
 
-  // Kill the current ffmpeg + abort the live playStream, without clearing session.
-  // Used for seek (rebuild) and stop/teardown. NOT pause — pause freezes via SIGSTOP.
+  // Abort the live playStream + kill ffmpeg, keeping session (seek) or as teardown step.
   _killPipe() {
     this._intentionalStop = true;
     if (this._abort) { try { this._abort.abort(); } catch { /* */ } this._abort = null; }
-    if (this.ff) { try { this.ff.kill('SIGKILL'); } catch { /* */ } this.ff = null; }
+    const proc = this._proc();
+    if (proc) { try { proc.kill('SIGKILL'); } catch { /* */ } }
+    this.ff = null;
+    this._command = null;
     this._playPromise = null;
   }
 
