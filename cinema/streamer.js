@@ -114,27 +114,36 @@ export class CinemaStreamer {
   async pause() {
     if (this.status !== 'playing') return;
     this.status = 'paused';
-    this._killPipe();
+    // Freeze the encoder instead of killing it: SIGSTOP halts ffmpeg's output so
+    // the Go Live session (and every viewer's connection) stays up on the last
+    // frame. No teardown, no abort. -progress stops too, so positionSecs holds.
+    if (this.ff) { try { this.ff.kill('SIGSTOP'); } catch { /* */ } }
   }
 
   async resume() {
     if (this.status !== 'paused') return;
-    await this._spawnPipe(this.positionSecs);
     this.status = 'playing';
+    if (this.ff) {
+      // Unfreeze the same encoder — viewers never disconnected.
+      try { this.ff.kill('SIGCONT'); } catch { /* */ }
+    } else {
+      // Fallback: pipe was gone (e.g. after a seek) — rebuild at position.
+      await this._spawnPipe(this.positionSecs);
+    }
   }
 
   async seek(secs) {
     if (!this.session) return;
     const wasPaused = this.status === 'paused';
+    // Seek requires a rebuild (you can't seek a live encoder) — this DOES briefly
+    // drop Go Live, unlike pause. Kill the (possibly frozen) pipe and respawn.
     this._killPipe();
     this.positionSecs = Math.max(0, secs);
     await this._spawnPipe(this.positionSecs);
-    if (wasPaused) {
-      // Re-establish the paused state: tear the freshly-built pipe back down.
-      this.status = 'paused';
-      this._killPipe();
-    } else {
-      this.status = 'playing';
+    this.status = wasPaused ? 'paused' : 'playing';
+    if (wasPaused && this.ff) {
+      // Stay paused: freeze the freshly-built encoder at the new position.
+      try { this.ff.kill('SIGSTOP'); } catch { /* */ }
     }
   }
 
@@ -144,7 +153,7 @@ export class CinemaStreamer {
   }
 
   // Kill the current ffmpeg + abort the live playStream, without clearing session.
-  // Used for pause/seek (we rebuild) and as the inner step of teardown.
+  // Used for seek (rebuild) and stop/teardown. NOT pause — pause freezes via SIGSTOP.
   _killPipe() {
     this._intentionalStop = true;
     if (this._abort) { try { this._abort.abort(); } catch { /* */ } this._abort = null; }
