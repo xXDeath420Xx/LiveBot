@@ -12,7 +12,7 @@ import RPGStateManager from './rpg-state-manager.js';
 
 // Initialize Gemini client
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
-const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 // DM Personality templates
 const DM_PERSONALITIES = {
