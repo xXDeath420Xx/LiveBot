@@ -38,3 +38,28 @@ if (answers.length < 500) {
 }
 fs.writeFileSync(path.join(OUT, 'coordle-answers.txt'), answers.join('\n') + '\n');
 console.log(`coordle-answers.txt: ${answers.length} words`);
+
+// wordseek-words.txt: the most-common English words (frequency-ranked), filtered
+// to 4-7 letter REAL dictionary words — so WordSeek grids are common AND findable.
+const dictSet = new Set(uniq);
+const seenWs = new Set();
+const wordseek = [];
+for (const url of [
+  'https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english.txt',
+  'https://raw.githubusercontent.com/first20hours/google-10000-english/master/20k.txt',
+]) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) continue;
+    for (const raw of (await res.text()).split('\n')) {
+      const w = raw.trim().toLowerCase();
+      if (/^[a-z]{4,7}$/.test(w) && dictSet.has(w) && !seenWs.has(w)) { seenWs.add(w); wordseek.push(w); }
+    }
+  } catch (err) { console.warn('wordseek list fetch failed:', url, err.message); }
+}
+if (wordseek.length < 500) {
+  console.warn('common-word fetch failed; falling back to 4-7 letter english subset');
+  for (const w of uniq) if (w.length >= 4 && w.length <= 7 && !seenWs.has(w)) { seenWs.add(w); wordseek.push(w); }
+}
+fs.writeFileSync(path.join(OUT, 'wordseek-words.txt'), wordseek.join('\n') + '\n');
+console.log(`wordseek-words.txt: ${wordseek.length} words`);
