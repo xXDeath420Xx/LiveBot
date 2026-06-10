@@ -30,3 +30,25 @@ export async function channelStats(channelId) {
     );
     return { banned: Number(banned.n), deleted: Number(deleted.n), dormant: Number(dormant.n) };
 }
+
+export function makeListEvents({ pool }) {
+    return async function listEvents({ channelId, action = null, limit = 50, offset = 0 }) {
+        const where = ['channel_id = ?'];
+        const params = [String(channelId)];
+        if (action) { where.push('action = ?'); params.push(action); }
+        const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+        const off = Math.max(parseInt(offset, 10) || 0, 0);
+        params.push(lim, off);
+        const [rows] = await pool.execute(
+            `SELECT id, channel_id, target_user_id, target_username, action, reason, success, created_at
+             FROM kbd_enforcement_log
+             WHERE ${where.join(' AND ')}
+             ORDER BY created_at DESC
+             LIMIT ? OFFSET ?`,
+            params
+        );
+        return rows;
+    };
+}
+
+export const listEvents = makeListEvents({ pool });
