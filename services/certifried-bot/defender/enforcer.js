@@ -50,7 +50,10 @@ export function createEnforcer(deps) {
         const reason = 'KBD banlist';
 
         if (scopes.includes(BAN_SCOPE)) {
-            return act(() => deps.banUser(channel.broadcasterId, userId, { reason }, channel.token),
+            const settings = deps.getSettings ? await deps.getSettings(channelId) : {};
+            const opts = { reason };
+            if (settings.banDurationMin != null) opts.durationMin = settings.banDurationMin;
+            return act(() => deps.banUser(channel.broadcasterId, userId, opts, channel.token),
                 { channelId, targetUserId: userId, targetUsername: username, action: 'ban', reason });
         }
         if (scopes.includes(MANAGE_SCOPE) && messageId) {
@@ -69,15 +72,19 @@ export function createEnforcer(deps) {
         const scopes = channel.scopes || [];
         const reason = `phishing:${domain}`;
 
+        const settings = deps.getSettings ? await deps.getSettings(channelId) : {};
+        const threshold = Number.isInteger(settings.phishingThreshold) ? settings.phishingThreshold : 2;
         const count = deps.recordOffense ? await deps.recordOffense(event.platform, userId, username, domain) : 1;
-        const repeat = count >= 2;
+        const repeat = count >= threshold;
 
         if (repeat && scopes.includes(BAN_SCOPE)) {
             // Best-effort delete the offending message too, then ban.
             if (scopes.includes(MANAGE_SCOPE) && messageId) {
                 try { await deps.deleteMessage(messageId, channel.token); } catch { /* best effort */ }
             }
-            return act(() => deps.banUser(channel.broadcasterId, userId, { reason }, channel.token),
+            const banOpts = { reason };
+            if (settings.banDurationMin != null) banOpts.durationMin = settings.banDurationMin;
+            return act(() => deps.banUser(channel.broadcasterId, userId, banOpts, channel.token),
                 { channelId, targetUserId: userId, targetUsername: username, action: 'ban', reason });
         }
 
@@ -87,7 +94,9 @@ export function createEnforcer(deps) {
                 { channelId, targetUserId: userId, targetUsername: username, action: 'delete', reason });
             // Warn the user once (best effort; never throws into the pipeline).
             if (!repeat && typeof reply === 'function') {
-                try { reply(`@${username} posted a known scam link and it was removed. Repeat offenses = ban.`); } catch { /* ignore */ }
+                const tpl = settings.warningTemplate || '@{{username}} posted a known scam link and it was removed. Repeat offenses = ban.';
+                // Function replacement avoids $-interpolation ($&, $1, $$) when a username contains '$'.
+                try { reply(tpl.replace(/\{\{username\}\}/g, () => username)); } catch { /* ignore */ }
             }
             return r;
         }
