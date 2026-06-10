@@ -45,13 +45,19 @@ router.patch('/kick/api/channel/:channelId', requireKickAuth, async (req, res) =
         const owned = await resolveOwnedChannel(userId, req.params.channelId);
         if (!owned) return res.status(404).json({ error: 'Channel not found' });
         const { command_prefix, cooldown_global, cooldown_user, features_enabled } = req.body;
-        const prefix = command_prefix != null ? String(command_prefix).slice(0, 5) : '!';
-        const cg = Math.max(0, Math.min(60, parseInt(cooldown_global, 10) || 0));
-        const cu = Math.max(0, Math.min(300, parseInt(cooldown_user, 10) || 0));
+        // Partial update: only fields present in the body are changed; COALESCE
+        // leaves the existing column value when a field is omitted (null param).
+        const prefix = command_prefix != null ? String(command_prefix).slice(0, 5) : null;
+        const cg = cooldown_global != null ? Math.max(0, Math.min(60, parseInt(cooldown_global, 10) || 0)) : null;
+        const cu = cooldown_user != null ? Math.max(0, Math.min(300, parseInt(cooldown_user, 10) || 0)) : null;
         const feats = features_enabled != null ? JSON.stringify(features_enabled) : null;
         await pool.execute(
-            `UPDATE tokes_channels SET command_prefix = ?, cooldown_global = ?, cooldown_user = ?,
-                features_enabled = COALESCE(?, features_enabled) WHERE id = ?`,
+            `UPDATE tokes_channels SET
+                command_prefix = COALESCE(?, command_prefix),
+                cooldown_global = COALESCE(?, cooldown_global),
+                cooldown_user = COALESCE(?, cooldown_user),
+                features_enabled = COALESCE(?, features_enabled)
+             WHERE id = ?`,
             [prefix, cg, cu, feats, owned.id]
         );
         invalidateChannelCache(owned.id);
