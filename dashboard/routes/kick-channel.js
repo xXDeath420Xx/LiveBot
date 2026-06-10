@@ -126,6 +126,8 @@ router.put('/kick/api/channel/:channelId/commands/:commandKey', requireKickAuth,
         }
         const cdV = validateCooldown(req.body.cooldown_override);
         const modV = validateBoolean(req.body.mod_only, false);
+        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
+        if (!modV.valid) return res.status(400).json({ error: modV.error });
         await pool.execute(
             `INSERT INTO tokes_channel_commands
                 (channel_id, command_key, custom_aliases, custom_response, cooldown_override, mod_only)
@@ -157,6 +159,8 @@ router.post('/kick/api/channel/:channelId/custom', requireKickAuth, async (req, 
         if (!respV.valid) return res.status(400).json({ error: respV.error });
         const cdV = validateCooldown(req.body.cooldown);
         const modV = validateBoolean(req.body.mod_only, false);
+        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
+        if (!modV.valid) return res.status(400).json({ error: modV.error });
         const [[builtin]] = await pool.execute(
             'SELECT command_key FROM tokes_global_command_config WHERE command_key = ?', [nameV.value]
         );
@@ -193,6 +197,9 @@ router.put('/kick/api/channel/:channelId/custom/:cmdId', requireKickAuth, async 
         const cdV = validateCooldown(req.body.cooldown);
         const modV = validateBoolean(req.body.mod_only, false);
         const enV = validateBoolean(req.body.is_enabled, true);
+        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
+        if (!modV.valid) return res.status(400).json({ error: modV.error });
+        if (!enV.valid) return res.status(400).json({ error: enV.error });
         await pool.execute(
             'UPDATE tokes_custom_commands SET response = ?, cooldown = ?, mod_only = ?, is_enabled = ? WHERE id = ?',
             [respV.value, cdV.value, modV.value ? 1 : 0, enV.value ? 1 : 0, req.params.cmdId]
