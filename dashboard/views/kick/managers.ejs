@@ -21,6 +21,13 @@
     <div class="stat kick"><b><%= phishingCount.toLocaleString() %></b><span>Phishing domains</span></div>
   </div>
 
+  <!-- ── Recent network activity ────────────────────────────── -->
+  <div class="card">
+    <h2>Recent network activity <button id="net-refresh" class="ghost" style="float:right">Refresh</button></h2>
+    <p class="muted" style="margin-bottom:.7rem">Live defender actions across every connected channel.</p>
+    <div id="net-feed" class="log-out">Loading…</div>
+  </div>
+
   <!-- ── Add to banlist ─────────────────────────────────────── -->
   <div class="card">
     <h2>Add to banlist</h2>
@@ -155,6 +162,22 @@
       else { const j = await res.json().catch(() => ({})); alert(j.error || 'Request failed.'); }
     }
     const v = id => document.getElementById(id).value.trim();
+    const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    // Network-wide recent defender activity feed.
+    async function loadNetFeed(){
+      try{
+        const r=await fetch('/kick/api/network-activity?limit=40');
+        const j=await r.json();
+        if(!r.ok) throw 0;
+        const el=document.getElementById('net-feed');
+        if(!j.events.length){el.textContent='No actions recorded yet.';return;}
+        el.innerHTML='<table>'+j.events.map(e=>'<tr><td>'+(e.created_at?new Date(e.created_at).toISOString().slice(0,16).replace('T',' '):'—')+'</td><td>'+esc(e.channel_name||e.channel_id)+'</td><td>'+esc(e.action)+(e.success?'':' (failed)')+'</td><td>'+esc(e.target_username)+'</td><td>'+esc(e.reason)+'</td></tr>').join('')+'</table>';
+      }catch(_){ const el=document.getElementById('net-feed'); if(el) el.textContent='Failed to load.'; }
+    }
+    loadNetFeed();
+    const netRefresh=document.getElementById('net-refresh');
+    if(netRefresh) netRefresh.onclick=loadNetFeed;
 
     document.getElementById('ban-add').onclick = () =>
       v('ban-username') && send('POST', '/kick/api/ban', { username: v('ban-username'), reason: v('ban-reason'), listType: v('ban-type') });
