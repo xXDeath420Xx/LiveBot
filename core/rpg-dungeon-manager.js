@@ -76,7 +76,7 @@ class RPGDungeonManager {
 
         return dungeons.map(d => ({
             ...d,
-            rewards: typeof d.rewards === 'string' ? JSON.parse(d.rewards) : d.rewards
+            rewards: { completionXP: d.reward_exp_base || 0, completionGold: d.reward_gold_base || 0 }
         }));
     }
 
@@ -94,16 +94,16 @@ class RPGDungeonManager {
         if (dungeons.length === 0) return null;
 
         const dungeon = dungeons[0];
-        dungeon.rewards = typeof dungeon.rewards === 'string' ? JSON.parse(dungeon.rewards) : dungeon.rewards;
+        dungeon.rewards = { completionXP: dungeon.reward_exp_base || 0, completionGold: dungeon.reward_gold_base || 0 };
 
         const [rooms] = await pool.execute(
-            'SELECT * FROM dnd_dungeon_rooms WHERE dungeon_id = ? ORDER BY room_order',
+            'SELECT * FROM dnd_dungeon_rooms WHERE dungeon_id = ? ORDER BY room_number',
             [dungeonId]
         );
 
         dungeon.rooms = rooms.map(r => ({
             ...r,
-            encounters: typeof r.encounters === 'string' ? JSON.parse(r.encounters) : r.encounters,
+            encounters: typeof r.enemies === 'string' ? JSON.parse(r.enemies) : r.enemies,
             loot_table: typeof r.loot_table === 'string' ? JSON.parse(r.loot_table) : r.loot_table
         }));
 
@@ -117,28 +117,42 @@ class RPGDungeonManager {
      * @param {string} difficulty - Difficulty level
      * @returns {object} Run info
      */
-    static async startRun(partyId, dungeonId, difficulty = 'normal') {
+    static async startRun(partyId, dungeonId, difficulty = 'normal', options = {}) {
+        // Backwards-compatible: callers may pass a guildId/characterId via options.
+        // guild_id is NOT NULL on dnd_dungeon_runs, so it must always be provided.
+        const { guildId, characterId } = options;
+        if (!guildId) {
+            throw new Error('guildId is required to start a dungeon run');
+        }
+
         const dungeon = await this.getDungeon(dungeonId);
         if (!dungeon) {
             throw new Error('Dungeon not found');
         }
 
-        // Check for existing active run
-        const [existing] = await pool.execute(
-            `SELECT run_id FROM dnd_dungeon_runs
-             WHERE party_id = ? AND status = 'in_progress'`,
-            [partyId]
-        );
+        // Check for existing active run (by party if present, else by character)
+        let existing;
+        if (partyId) {
+            [existing] = await pool.execute(
+                `SELECT run_id FROM dnd_dungeon_runs WHERE party_id = ? AND status = 'active'`,
+                [partyId]
+            );
+        } else {
+            [existing] = await pool.execute(
+                `SELECT run_id FROM dnd_dungeon_runs WHERE character_id = ? AND status = 'active'`,
+                [characterId]
+            );
+        }
 
         if (existing.length > 0) {
-            throw new Error('Party already has an active dungeon run');
+            throw new Error('There is already an active dungeon run');
         }
 
         const [result] = await pool.execute(
             `INSERT INTO dnd_dungeon_runs
-             (party_id, dungeon_id, difficulty, current_room, status)
-             VALUES (?, ?, ?, 1, 'in_progress')`,
-            [partyId, dungeonId, difficulty]
+             (party_id, character_id, guild_id, dungeon_id, current_room, status)
+             VALUES (?, ?, ?, ?, 1, 'active')`,
+            [partyId || null, characterId || null, guildId, dungeonId]
         );
 
         logger.info('[Dungeon] Started run', { partyId, dungeonId, difficulty });
@@ -174,7 +188,7 @@ class RPGDungeonManager {
         const run = runs[0];
 
         const [rooms] = await pool.execute(
-            'SELECT * FROM dnd_dungeon_rooms WHERE dungeon_id = ? AND room_order = ?',
+            'SELECT * FROM dnd_dungeon_rooms WHERE dungeon_id = ? AND room_number = ?',
             [run.dungeon_id, run.current_room]
         );
 
@@ -183,7 +197,7 @@ class RPGDungeonManager {
         }
 
         const room = rooms[0];
-        room.encounters = typeof room.encounters === 'string' ? JSON.parse(room.encounters) : room.encounters;
+        room.encounters = typeof room.enemies === 'string' ? JSON.parse(room.enemies) : room.enemies;
         room.loot_table = typeof room.loot_table === 'string' ? JSON.parse(room.loot_table) : room.loot_table;
 
         return {
@@ -205,16 +219,14 @@ class RPGDungeonManager {
         // Update run stats
         const xpGained = result.xp || 0;
         const goldGained = result.gold || 0;
-        const enemiesKilled = result.enemiesKilled || 0;
 
         await pool.execute(
             `UPDATE dnd_dungeon_runs
-             SET total_xp = total_xp + ?,
-                 total_gold = total_gold + ?,
-                 enemies_defeated = enemies_defeated + ?,
-                 rooms_cleared = rooms_cleared + 1
+             SET total_exp = COALESCE(total_exp, 0) + ?,
+                 total_gold = COALESCE(total_gold, 0) + ?,
+                 rooms_cleared = COALESCE(rooms_cleared, 0) + 1
              WHERE run_id = ?`,
-            [xpGained, goldGained, enemiesKilled, runId]
+            [xpGained, goldGained, runId]
         );
 
         // Get total rooms
@@ -246,7 +258,7 @@ class RPGDungeonManager {
      */
     static async completeRun(runId) {
         const [runs] = await pool.execute(
-            `SELECT dr.*, d.rewards, d.dungeon_name
+            `SELECT dr.*, d.reward_exp_base, d.reward_gold_base, d.dungeon_name
              FROM dnd_dungeon_runs dr
              JOIN dnd_dungeons d ON dr.dungeon_id = d.dungeon_id
              WHERE dr.run_id = ?`,
@@ -258,29 +270,23 @@ class RPGDungeonManager {
         }
 
         const run = runs[0];
-        const rewards = typeof run.rewards === 'string' ? JSON.parse(run.rewards) : run.rewards;
         const diffMod = DIFFICULTY_MODIFIERS[run.difficulty] || DIFFICULTY_MODIFIERS.normal;
 
         // Calculate final rewards
-        const totalXP = Math.floor(run.total_xp * diffMod.xpMult);
-        const totalGold = Math.floor(run.total_gold * diffMod.goldMult);
-        const completionBonus = rewards?.completionXP || 100;
+        const totalXP = Math.floor((run.total_exp || 0) * diffMod.xpMult);
+        const totalGold = Math.floor((run.total_gold || 0) * diffMod.goldMult);
+        const completionBonus = run.reward_exp_base || 100;
+        const completionGold = run.reward_gold_base || 0;
 
         // Update run status
         await pool.execute(
             `UPDATE dnd_dungeon_runs
              SET status = 'completed',
-                 completed_at = NOW(),
-                 total_xp = ?,
+                 ended_at = NOW(),
+                 total_exp = ?,
                  total_gold = ?
              WHERE run_id = ?`,
-            [totalXP + completionBonus, totalGold, runId]
-        );
-
-        // Increment dungeon completion count
-        await pool.execute(
-            'UPDATE dnd_dungeons SET times_completed = times_completed + 1 WHERE dungeon_id = ?',
-            [run.dungeon_id]
+            [totalXP + completionBonus, totalGold + completionGold, runId]
         );
 
         logger.info('[Dungeon] Completed run', { runId, totalXP, totalGold });
@@ -289,11 +295,10 @@ class RPGDungeonManager {
             completed: true,
             dungeon_name: run.dungeon_name,
             difficulty: run.difficulty,
-            rooms_cleared: run.rooms_cleared + 1,
-            enemies_defeated: run.enemies_defeated,
+            rooms_cleared: Number(run.rooms_cleared || 0) + 1,
             total_xp: totalXP + completionBonus,
-            total_gold: totalGold,
-            time_taken: run.completed_at ? Math.floor((new Date(run.completed_at) - new Date(run.started_at)) / 1000) : null
+            total_gold: totalGold + completionGold,
+            time_taken: run.ended_at ? Math.floor((new Date(run.ended_at) - new Date(run.started_at)) / 1000) : null
         };
     }
 
@@ -304,7 +309,7 @@ class RPGDungeonManager {
     static async abandonRun(runId) {
         await pool.execute(
             `UPDATE dnd_dungeon_runs
-             SET status = 'abandoned', completed_at = NOW()
+             SET status = 'abandoned', ended_at = NOW()
              WHERE run_id = ?`,
             [runId]
         );
@@ -320,7 +325,7 @@ class RPGDungeonManager {
             `SELECT dr.*, d.dungeon_name, d.total_rooms
              FROM dnd_dungeon_runs dr
              JOIN dnd_dungeons d ON dr.dungeon_id = d.dungeon_id
-             WHERE dr.party_id = ? AND dr.status = 'in_progress'`,
+             WHERE dr.party_id = ? AND dr.status = 'active'`,
             [partyId]
         );
 
@@ -337,8 +342,8 @@ class RPGDungeonManager {
             `SELECT dr.*, d.dungeon_name
              FROM dnd_dungeon_runs dr
              JOIN dnd_dungeons d ON dr.dungeon_id = d.dungeon_id
-             WHERE dr.party_id = ? AND dr.status != 'in_progress'
-             ORDER BY dr.completed_at DESC
+             WHERE dr.party_id = ? AND dr.status != 'active'
+             ORDER BY dr.ended_at DESC
              LIMIT 20`,
             [partyId]
         );

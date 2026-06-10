@@ -48,8 +48,8 @@ class RPGCombatManager {
             }
 
             // Check if character meets level requirement
-            if (character.level < enemy.min_level) {
-                throw new Error(`You need to be at least level ${enemy.min_level} to fight ${enemy.enemy_name}`);
+            if (character.level < enemy.level) {
+                throw new Error(`You need to be at least level ${enemy.level} to fight ${enemy.enemy_name}`);
             }
 
             // Calculate character damage
@@ -80,7 +80,7 @@ class RPGCombatManager {
                     health: enemy.health,
                     maxHealth: enemy.health,
                     damage: enemy.damage,
-                    level: enemy.min_level
+                    level: enemy.level
                 },
                 turn: 1
             };
@@ -217,12 +217,12 @@ class RPGCombatManager {
                 `SELECT i.*, inv.quantity
                  FROM dnd_items i
                  JOIN dnd_inventory inv ON i.item_id = inv.item_id
-                 WHERE inv.character_id = ? AND i.item_id = ? AND i.item_type = 'consumable'`,
+                 WHERE inv.character_id = ? AND i.item_id = ? AND i.item_type IN ('consumable', 'potion')`,
                 [characterId, itemId]
             );
 
             if (items.length === 0) {
-                throw new Error('Item not found in inventory or is not consumable');
+                throw new Error('Item not found in inventory or is not a usable consumable/potion');
             }
 
             const item = items[0];
@@ -238,8 +238,8 @@ class RPGCombatManager {
             let manaAmount = 0;
 
             // Apply item effects
-            if (item.heal_amount) {
-                healAmount = item.heal_amount;
+            if (item.healing) {
+                healAmount = item.healing;
                 const newHealth = Math.min(battle.character.health + healAmount, await this.getCharacterMaxHealth(characterId));
                 await pool.execute(
                     'UPDATE dnd_battles SET character_health = ? WHERE battle_id = ?',
@@ -247,8 +247,8 @@ class RPGCombatManager {
                 );
             }
 
-            if (item.mana_amount) {
-                manaAmount = item.mana_amount;
+            if (item.mana_restore) {
+                manaAmount = item.mana_restore;
                 await this.characterManager.restoreMana(characterId, manaAmount);
             }
 
@@ -358,7 +358,7 @@ class RPGCombatManager {
         try {
             // Get battle info
             const [battles] = await pool.execute(
-                `SELECT b.*, e.reward_exp, e.reward_gold, e.reward_item_id, c.character_id
+                `SELECT b.*, e.exp_reward, e.gold_reward, c.character_id
                  FROM dnd_battles b
                  JOIN dnd_enemies e ON b.enemy_id = e.enemy_id
                  JOIN dnd_characters c ON b.character_id = c.character_id
@@ -372,10 +372,14 @@ class RPGCombatManager {
 
             const battle = battles[0];
 
+            // Map logical result to the dnd_battles.status enum ('ongoing','won','lost','fled')
+            const statusMap = { victory: 'won', defeat: 'lost', won: 'won', lost: 'lost', fled: 'fled' };
+            const dbStatus = statusMap[result] || 'lost';
+
             // Update battle status
             await pool.execute(
                 'UPDATE dnd_battles SET status = ?, ended_at = NOW() WHERE battle_id = ?',
-                [result, battleId]
+                [dbStatus, battleId]
             );
 
             // Update character health
@@ -393,8 +397,8 @@ class RPGCombatManager {
 
             // Award rewards for victory
             if (result === 'victory') {
-                rewards.exp = battle.reward_exp || 0;
-                rewards.gold = battle.reward_gold || 0;
+                rewards.exp = battle.exp_reward || 0;
+                rewards.gold = battle.gold_reward || 0;
 
                 // Add gold
                 if (rewards.gold > 0) {
@@ -407,20 +411,6 @@ class RPGCombatManager {
                     if (expResult && expResult.leveledUp) {
                         rewards.leveledUp = true;
                         rewards.newLevel = expResult.newLevel;
-                    }
-                }
-
-                // Award item (random chance)
-                if (battle.reward_item_id && Math.random() < 0.3) {
-                    await this.characterManager.addItem(battle.character_id, battle.reward_item_id, 1);
-
-                    const [items] = await pool.execute(
-                        'SELECT item_name FROM dnd_items WHERE item_id = ?',
-                        [battle.reward_item_id]
-                    );
-
-                    if (items.length > 0) {
-                        rewards.item = items[0].item_name;
                     }
                 }
             }
@@ -444,7 +434,7 @@ class RPGCombatManager {
     async getEnemiesByZone(zoneName) {
         try {
             const [enemies] = await pool.execute(
-                'SELECT * FROM dnd_enemies WHERE zone = ? ORDER BY min_level, enemy_name',
+                'SELECT * FROM dnd_enemies WHERE zone = ? ORDER BY level, enemy_name',
                 [zoneName]
             );
 
@@ -461,7 +451,7 @@ class RPGCombatManager {
     async getAllEnemies() {
         try {
             const [enemies] = await pool.execute(
-                'SELECT * FROM dnd_enemies ORDER BY min_level, enemy_name'
+                'SELECT * FROM dnd_enemies ORDER BY level, enemy_name'
             );
 
             return enemies;

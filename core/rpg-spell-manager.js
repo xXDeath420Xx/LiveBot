@@ -329,7 +329,7 @@ class RPGSpellManager {
         }
 
         await pool.execute(
-            'INSERT INTO dnd_character_spells (character_id, spell_id, source) VALUES (?, ?, ?)',
+            'INSERT INTO dnd_character_spells (character_id, spell_id, spell_source) VALUES (?, ?, ?)',
             [characterId, spell.spell_id, source]
         );
 
@@ -343,7 +343,7 @@ class RPGSpellManager {
      */
     static async getKnownSpells(characterId) {
         const [spells] = await pool.execute(
-            `SELECT s.*, cs.source, cs.prepared
+            `SELECT s.*, cs.spell_source AS source, cs.is_prepared AS prepared
              FROM dnd_character_spells cs
              JOIN dnd_spells s ON cs.spell_id = s.spell_id
              WHERE cs.character_id = ?
@@ -371,8 +371,8 @@ class RPGSpellManager {
         }
 
         await pool.execute(
-            'UPDATE dnd_character_spells SET prepared = ? WHERE character_id = ? AND spell_id = ?',
-            [prepared, characterId, spell.spell_id]
+            'UPDATE dnd_character_spells SET is_prepared = ? WHERE character_id = ? AND spell_id = ?',
+            [prepared ? 1 : 0, characterId, spell.spell_id]
         );
     }
 
@@ -452,9 +452,9 @@ class RPGSpellManager {
         }
 
         const character = characters[0];
-        const stats = typeof character.stats === 'string' ? JSON.parse(character.stats) : character.stats;
         const spellAbility = SPELLCASTING_ABILITY[character.class] || 'intelligence';
-        const abilityMod = Math.floor((stats[spellAbility] - 10) / 2);
+        const abilityScore = character[spellAbility] ?? 10;
+        const abilityMod = Math.floor((abilityScore - 10) / 2);
         const profBonus = Math.ceil(character.level / 4) + 1;
         const spellDC = 8 + profBonus + abilityMod;
         const spellAttack = profBonus + abilityMod;
@@ -477,10 +477,9 @@ class RPGSpellManager {
             }
 
             // Roll damage
-            const damageRoll = RPGDiceEngine.rollDice(
-                damageDice.count || 1,
-                damageDice.die || 6
-            );
+            const dmgCount = damageDice.count || 1;
+            const dmgDie = damageDice.die || 6;
+            const damageRoll = RPGDiceEngine.roll(`${dmgCount}d${dmgDie}`);
 
             result.damage = {
                 roll: damageRoll,
@@ -502,10 +501,9 @@ class RPGSpellManager {
                 };
             }
 
-            const healRoll = RPGDiceEngine.rollDice(
-                healDice.count || 1,
-                healDice.die || 8
-            );
+            const healCount = healDice.count || 1;
+            const healDie = healDice.die || 8;
+            const healRoll = RPGDiceEngine.roll(`${healCount}d${healDie}`);
 
             result.healing = {
                 roll: healRoll,
@@ -515,12 +513,13 @@ class RPGSpellManager {
 
         // Spell attack roll
         if (spell.attack_type === 'ranged' || spell.attack_type === 'melee') {
-            const attackRoll = RPGDiceEngine.rollDice(1, 20);
+            const attackRoll = RPGDiceEngine.roll('1d20');
+            const natural = attackRoll.rolls[0];
             result.attackRoll = {
-                natural: attackRoll.rolls[0],
+                natural,
                 total: attackRoll.total + spellAttack,
-                critical: attackRoll.rolls[0] === 20,
-                fumble: attackRoll.rolls[0] === 1
+                critical: natural === 20,
+                fumble: natural === 1
             };
         }
 
@@ -550,7 +549,7 @@ class RPGSpellManager {
         // Set new concentration
         await pool.execute(
             `UPDATE dnd_characters
-             SET concentration_spell_id = ?, concentration_started = NOW()
+             SET concentration_spell_id = ?
              WHERE character_id = ?`,
             [spellId, characterId]
         );
@@ -562,7 +561,7 @@ class RPGSpellManager {
      */
     static async breakConcentration(characterId) {
         await pool.execute(
-            'UPDATE dnd_characters SET concentration_spell_id = NULL, concentration_started = NULL WHERE character_id = ?',
+            'UPDATE dnd_characters SET concentration_spell_id = NULL WHERE character_id = ?',
             [characterId]
         );
     }
@@ -587,15 +586,14 @@ class RPGSpellManager {
         }
 
         const character = characters[0];
-        const stats = typeof character.stats === 'string' ? JSON.parse(character.stats) : character.stats;
-        const conMod = Math.floor((stats.constitution - 10) / 2);
+        const conMod = Math.floor(((character.constitution ?? 10) - 10) / 2);
         const profBonus = Math.ceil(character.level / 4) + 1;
 
         // DC is 10 or half damage, whichever is higher
         const dc = Math.max(10, Math.floor(damage / 2));
 
         // Constitution saving throw
-        const roll = RPGDiceEngine.rollDice(1, 20);
+        const roll = RPGDiceEngine.roll('1d20');
         const total = roll.total + conMod; // Add proficiency if they have it
 
         const success = total >= dc;

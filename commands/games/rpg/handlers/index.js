@@ -437,20 +437,35 @@ export async function handleSpell(interaction, subcommand, characterManager) {
         const spellName = interaction.options.getString('name', true);
         const level = interaction.options.getInteger('level');
 
-        const result = await RPGSpellManager.castSpell(character, spellName, level);
+        let result;
+        try {
+            result = await RPGSpellManager.castSpell(character.character_id, spellName, level);
+        } catch (err) {
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor('#E74C3C').setTitle('Casting Failed').setDescription(err.message)]
+            });
+            return;
+        }
 
         const embed = new EmbedBuilder()
-            .setColor(result.success ? '#9B59B6' : '#E74C3C')
-            .setTitle(result.success ? `${character.character_name} casts ${result.spell.name}!` : 'Casting Failed')
-            .setDescription(result.message);
+            .setColor('#9B59B6')
+            .setTitle(`${character.character_name} casts ${result.spell}!`)
+            .setDescription(result.description || `A level ${result.level} ${result.school || ''} spell.`);
 
-        if (result.success && result.spell) {
-            if (result.spell.damage) {
-                embed.addFields({ name: 'Damage', value: result.spell.damage, inline: true });
-            }
-            if (result.spell.effect) {
-                embed.addFields({ name: 'Effect', value: result.spell.effect, inline: true });
-            }
+        if (result.castAt > result.level) {
+            embed.addFields({ name: 'Cast At', value: `Level ${result.castAt}`, inline: true });
+        }
+        if (result.damage) {
+            embed.addFields({ name: 'Damage', value: `${result.damage.total} ${result.damage.type || ''}`.trim(), inline: true });
+        }
+        if (result.healing) {
+            embed.addFields({ name: 'Healing', value: `${result.healing.total} HP`, inline: true });
+        }
+        if (result.attackRoll) {
+            embed.addFields({ name: 'Attack Roll', value: `${result.attackRoll.total}${result.attackRoll.critical ? ' (CRIT!)' : ''}`, inline: true });
+        }
+        if (result.saveType) {
+            embed.addFields({ name: 'Save', value: `${result.saveType.toUpperCase()} DC ${result.saveDC}`, inline: true });
         }
 
         await interaction.editReply({ embeds: [embed] });
@@ -459,18 +474,18 @@ export async function handleSpell(interaction, subcommand, characterManager) {
     else if (subcommand === 'slots') {
         await interaction.deferReply();
 
-        const slots = await RPGSpellManager.getSpellSlots(character);
+        const slots = await RPGSpellManager.getSpellSlots(character.character_id);
 
         const embed = new EmbedBuilder()
             .setColor('#9B59B6')
             .setTitle(`${character.character_name}'s Spell Slots`);
 
         let slotsText = '';
-        for (let i = 1; i <= 9; i++) {
-            if (slots[i] && slots[i].max > 0) {
-                const filled = '●'.repeat(slots[i].current);
-                const empty = '○'.repeat(slots[i].max - slots[i].current);
-                slotsText += `**Level ${i}:** ${filled}${empty} (${slots[i].current}/${slots[i].max})\n`;
+        for (const slot of slots) {
+            if (slot.total > 0) {
+                const filled = '●'.repeat(slot.available);
+                const empty = '○'.repeat(slot.total - slot.available);
+                slotsText += `**Level ${slot.level}:** ${filled}${empty} (${slot.available}/${slot.total})\n`;
             }
         }
 
@@ -481,19 +496,19 @@ export async function handleSpell(interaction, subcommand, characterManager) {
     else if (subcommand === 'known') {
         await interaction.deferReply();
 
-        const spells = await RPGSpellManager.getKnownSpells(character);
+        const spells = await RPGSpellManager.getKnownSpells(character.character_id);
 
         const embed = new EmbedBuilder()
             .setColor('#9B59B6')
             .setTitle(`${character.character_name}'s Known Spells`);
 
         if (spells.length === 0) {
-            embed.setDescription('No spells known yet.');
+            embed.setDescription('No spells known yet. Learn one with `/rpg spell learn`.');
         } else {
             const byLevel = {};
             for (const spell of spells) {
-                if (!byLevel[spell.level]) byLevel[spell.level] = [];
-                byLevel[spell.level].push(spell.name);
+                if (!byLevel[spell.spell_level]) byLevel[spell.spell_level] = [];
+                byLevel[spell.spell_level].push(spell.spell_name);
             }
 
             for (const [level, names] of Object.entries(byLevel)) {
@@ -512,26 +527,28 @@ export async function handleSpell(interaction, subcommand, characterManager) {
         await interaction.deferReply();
 
         const spellName = interaction.options.getString('name', true);
-        const result = await RPGSpellManager.learnSpell(character, spellName);
-
-        await interaction.editReply({
-            content: result.success
-                ? `${character.character_name} learned **${result.spell.name}**!`
-                : result.message
-        });
+        try {
+            const spell = await RPGSpellManager.learnSpell(character.character_id, spellName);
+            await interaction.editReply({
+                content: `${character.character_name} learned **${spell.spell_name}**!`
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
     }
 
     else if (subcommand === 'prepare') {
         await interaction.deferReply();
 
         const spellName = interaction.options.getString('name', true);
-        const result = await RPGSpellManager.prepareSpell(character, spellName);
-
-        await interaction.editReply({
-            content: result.success
-                ? `${character.character_name} prepared **${result.spell.name}** for casting.`
-                : result.message
-        });
+        try {
+            await RPGSpellManager.prepareSpell(character.character_id, spellName);
+            await interaction.editReply({
+                content: `${character.character_name} prepared **${spellName}** for casting.`
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
     }
 }
 
@@ -552,22 +569,26 @@ export async function handleResource(interaction, subcommand, characterManager) 
     if (subcommand === 'view') {
         await interaction.deferReply();
 
-        const resources = await RPGClassResourceManager.getResources(character);
+        const resources = await RPGClassResourceManager.getResources(character.character_id);
 
         const embed = new EmbedBuilder()
             .setColor('#E67E22')
             .setTitle(`${character.character_name}'s Class Resources`);
 
-        if (Object.keys(resources).length === 0) {
+        if (resources.length === 0) {
             embed.setDescription('No class resources available for your class.');
         } else {
-            for (const [name, resource] of Object.entries(resources)) {
-                const bar = createProgressBar(resource.current, resource.max);
-                embed.addFields({
-                    name: name,
-                    value: `${bar} ${resource.current}/${resource.max}`,
-                    inline: false
-                });
+            for (const resource of resources) {
+                if (resource.isUnlimited) {
+                    embed.addFields({ name: resource.name, value: 'Unlimited', inline: false });
+                } else {
+                    const bar = createProgressBar(resource.current, resource.max);
+                    embed.addFields({
+                        name: resource.name,
+                        value: `${bar} ${resource.current}/${resource.max}`,
+                        inline: false
+                    });
+                }
             }
         }
 
@@ -580,39 +601,41 @@ export async function handleResource(interaction, subcommand, characterManager) 
         const resourceName = interaction.options.getString('name', true);
         const amount = interaction.options.getInteger('amount') || 1;
 
-        const result = await RPGClassResourceManager.useResource(character, resourceName, amount);
-
-        await interaction.editReply({
-            content: result.success
-                ? `Used ${amount} ${resourceName}. Remaining: ${result.remaining}/${result.max}`
-                : result.message
-        });
+        try {
+            const result = await RPGClassResourceManager.useResource(character.character_id, resourceName, amount);
+            const remainingText = result.remaining === 'unlimited'
+                ? 'unlimited'
+                : `${result.remaining}/${result.max}`;
+            await interaction.editReply({
+                content: `Used ${amount} ${result.resourceName}. Remaining: ${remainingText}`
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
     }
 
     else if (subcommand === 'rest') {
         await interaction.deferReply();
 
         const restType = interaction.options.getString('type', true);
-        const result = await RPGClassResourceManager.rest(character, restType);
+        const restored = await RPGClassResourceManager.restoreOnRest(character.character_id, restType);
 
         const embed = new EmbedBuilder()
             .setColor('#27AE60')
             .setTitle(`${restType === 'long' ? 'Long' : 'Short'} Rest Complete`)
             .setDescription(`${character.character_name} takes a ${restType} rest.`);
 
-        if (result.restored && result.restored.length > 0) {
+        if (restored && restored.length > 0) {
             embed.addFields({
                 name: 'Resources Restored',
-                value: result.restored.join('\n'),
+                value: restored.map(r => `**${r.name}** → ${r.restored}`).join('\n'),
                 inline: false
             });
-        }
-
-        if (result.healthRestored) {
+        } else {
             embed.addFields({
-                name: 'Health Restored',
-                value: `+${result.healthRestored} HP`,
-                inline: true
+                name: 'Resources Restored',
+                value: 'No class resources to restore.',
+                inline: false
             });
         }
 
@@ -625,7 +648,9 @@ export async function handleResource(interaction, subcommand, characterManager) 
  */
 export async function handleCondition(interaction, subcommand, characterManager) {
     if (subcommand === 'list') {
-        const conditions = RPGConditionManager.getAllConditions();
+        await interaction.deferReply();
+
+        const conditions = await RPGConditionManager.getAllConditions();
 
         const embed = new EmbedBuilder()
             .setColor('#E74C3C')
@@ -633,42 +658,44 @@ export async function handleCondition(interaction, subcommand, characterManager)
             .setDescription('Status conditions that can affect creatures');
 
         for (const condition of conditions) {
+            const desc = condition.description || '';
             embed.addFields({
-                name: condition.name,
-                value: condition.shortDescription || condition.description.substring(0, 100) + '...',
+                name: `${condition.icon_emoji || ''} ${condition.condition_name}`.trim(),
+                value: desc.length > 100 ? desc.substring(0, 100) + '...' : (desc || 'No description'),
                 inline: true
             });
         }
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     }
 
     else if (subcommand === 'info') {
+        await interaction.deferReply();
+
         const conditionName = interaction.options.getString('name', true);
-        const condition = RPGConditionManager.getCondition(conditionName);
+        const condition = await RPGConditionManager.getCondition(conditionName);
 
         if (!condition) {
-            await interaction.reply({
-                content: `Unknown condition: ${conditionName}`,
-                ephemeral: true
-            });
+            await interaction.editReply({ content: `Unknown condition: ${conditionName}` });
             return;
         }
 
         const embed = new EmbedBuilder()
             .setColor('#E74C3C')
-            .setTitle(condition.name)
-            .setDescription(condition.description);
+            .setTitle(`${condition.icon_emoji || ''} ${condition.condition_name}`.trim())
+            .setDescription(condition.description || 'No description available.');
 
-        if (condition.effects && condition.effects.length > 0) {
+        if (condition.effects && Object.keys(condition.effects).length > 0) {
+            const effectLines = Object.entries(condition.effects)
+                .map(([key, value]) => value === true ? `• ${key.replace(/_/g, ' ')}` : `• ${key.replace(/_/g, ' ')}: ${value}`);
             embed.addFields({
-                name: 'Effects',
-                value: condition.effects.join('\n'),
+                name: 'Mechanical Effects',
+                value: effectLines.join('\n'),
                 inline: false
             });
         }
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [embed] });
     }
 
     else if (subcommand === 'active') {
@@ -684,7 +711,7 @@ export async function handleCondition(interaction, subcommand, characterManager)
 
         await interaction.deferReply();
 
-        const conditions = await RPGConditionManager.getActiveConditions(character.character_id);
+        const conditions = await RPGConditionManager.getCharacterConditions(character.character_id);
 
         const embed = new EmbedBuilder()
             .setColor('#E74C3C')
@@ -695,8 +722,8 @@ export async function handleCondition(interaction, subcommand, characterManager)
         } else {
             for (const cond of conditions) {
                 embed.addFields({
-                    name: cond.name,
-                    value: `Duration: ${cond.duration || 'Until removed'}`,
+                    name: `${cond.emoji || ''} ${cond.name}`.trim(),
+                    value: `Duration: ${cond.durationRemaining ? `${cond.durationRemaining} rounds` : 'Until removed'}`,
                     inline: true
                 });
             }
@@ -907,7 +934,7 @@ export async function handleCondition(interaction, subcommand, characterManager)
 /**
  * Handle stats/leaderboard subcommands
  */
-export async function handleStats(interaction, subcommand) {
+export async function handleStats(interaction, subcommand, characterManager) {
     if (subcommand === 'leaderboard') {
         await interaction.deferReply();
 
@@ -946,19 +973,25 @@ export async function handleStats(interaction, subcommand) {
     else if (subcommand === 'achievements') {
         await interaction.deferReply();
 
-        const achievements = await RPGLeaderboardManager.getAchievements(interaction.user.id, interaction.guild.id);
+        const character = await characterManager.getCharacter(interaction.user.id, interaction.guild.id);
+        if (!character) {
+            await interaction.editReply({ content: 'You need a character first. Create one with `/rpg character create`' });
+            return;
+        }
+
+        const achievements = await RPGLeaderboardManager.getCharacterAchievements(character.character_id);
 
         const embed = new EmbedBuilder()
             .setColor('#9B59B6')
-            .setTitle('Your Achievements');
+            .setTitle(`${character.character_name}'s Achievements`);
 
         if (achievements.length === 0) {
             embed.setDescription('No achievements yet. Keep adventuring!');
         } else {
             for (const ach of achievements) {
                 embed.addFields({
-                    name: `${ach.icon || '🏆'} ${ach.name}`,
-                    value: ach.description,
+                    name: `${ach.icon_emoji || '🏆'} ${ach.name}`,
+                    value: ach.description || '​',
                     inline: true
                 });
             }
@@ -970,20 +1003,26 @@ export async function handleStats(interaction, subcommand) {
     else if (subcommand === 'progress') {
         await interaction.deferReply();
 
-        const progress = await RPGLeaderboardManager.getAchievementProgress(interaction.user.id, interaction.guild.id);
+        const character = await characterManager.getCharacter(interaction.user.id, interaction.guild.id);
+        if (!character) {
+            await interaction.editReply({ content: 'You need a character first. Create one with `/rpg character create`' });
+            return;
+        }
+
+        const progress = await RPGLeaderboardManager.getAchievementProgress(character.character_id);
 
         const embed = new EmbedBuilder()
             .setColor('#3498DB')
             .setTitle('Achievement Progress');
 
         if (progress.length === 0) {
-            embed.setDescription('Start playing to track achievement progress!');
+            embed.setDescription('All achievements earned, or none to track yet!');
         } else {
-            for (const p of progress) {
-                const bar = createProgressBar(p.current, p.target);
+            for (const p of progress.slice(0, 15)) {
+                const bar = createProgressBar(p.current, p.required);
                 embed.addFields({
-                    name: p.name,
-                    value: `${bar} ${p.current}/${p.target}`,
+                    name: `${p.icon_emoji || ''} ${p.name}`.trim(),
+                    value: `${bar} ${p.current}/${p.required} (${p.percentage}%)`,
                     inline: false
                 });
             }
@@ -995,19 +1034,31 @@ export async function handleStats(interaction, subcommand) {
     else if (subcommand === 'server') {
         await interaction.deferReply();
 
-        const stats = await RPGLeaderboardManager.getServerStats(interaction.guild.id);
+        const stats = await RPGLeaderboardManager.getGuildStats(interaction.guild.id);
+        const c = stats.characters || {};
+        const p = stats.pvp || {};
 
         const embed = new EmbedBuilder()
             .setColor('#3498DB')
             .setTitle('Server RPG Statistics')
             .addFields(
-                { name: 'Total Characters', value: stats.totalCharacters?.toString() || '0', inline: true },
-                { name: 'Active Campaigns', value: stats.activeCampaigns?.toString() || '0', inline: true },
-                { name: 'Total Sessions', value: stats.totalSessions?.toString() || '0', inline: true },
-                { name: 'Monsters Slain', value: stats.monstersKilled?.toString() || '0', inline: true },
-                { name: 'Quests Completed', value: stats.questsCompleted?.toString() || '0', inline: true },
-                { name: 'Gold in Circulation', value: stats.totalGold?.toString() || '0', inline: true }
+                { name: 'Total Characters', value: (c.total_characters ?? 0).toString(), inline: true },
+                { name: 'Average Level', value: c.avg_level ? Number(c.avg_level).toFixed(1) : '0', inline: true },
+                { name: 'Highest Level', value: (c.max_level ?? 0).toString(), inline: true },
+                { name: 'Monsters Slain', value: (c.total_monsters_killed ?? 0).toString(), inline: true },
+                { name: 'Dungeons Cleared', value: (c.total_dungeons ?? 0).toString(), inline: true },
+                { name: 'Gold in Circulation', value: (c.total_gold ?? 0).toString(), inline: true },
+                { name: 'PvP Players', value: (p.pvp_players ?? 0).toString(), inline: true },
+                { name: 'PvP Matches', value: (p.total_matches ?? 0).toString(), inline: true }
             );
+
+        if (stats.classDistribution && stats.classDistribution.length > 0) {
+            embed.addFields({
+                name: 'Class Distribution',
+                value: stats.classDistribution.map(cd => `${cd.class}: ${cd.count}`).join(' | '),
+                inline: false
+            });
+        }
 
         await interaction.editReply({ embeds: [embed] });
     }
@@ -1272,6 +1323,801 @@ export async function handlePlay(interaction, subcommand, characterManager) {
             await interaction.reply({ embeds: [embed] });
         }
     }
+}
+
+/**
+ * Handle combat subcommands (enemies, fight, attack, flee, item, status)
+ * Turn-based PvE battle system backed by rpg-combat-manager + dnd_battles.
+ */
+export async function handleCombat(interaction, subcommand, characterManager, combatManager) {
+    const character = await characterManager.getCharacter(interaction.user.id, interaction.guild.id);
+
+    if (!character) {
+        await interaction.reply({
+            content: 'You need a character first. Create one with `/rpg character create`',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const cid = character.character_id;
+
+    // Render the current battle state as an embed
+    const battleEmbed = (battle, extra = {}) => {
+        const embed = new EmbedBuilder()
+            .setColor(extra.color || '#E74C3C')
+            .setTitle(extra.title || `⚔️ Battle: ${character.character_name} vs ${battle.enemy.name}`);
+        const lines = [];
+        lines.push(`**${character.character_name}** — ❤️ ${battle.character.health} HP`);
+        lines.push(`**${battle.enemy.name}** — ❤️ ${battle.enemy.health} HP`);
+        embed.setDescription(lines.join('\n'));
+        if (extra.log) embed.addFields({ name: 'Round', value: extra.log, inline: false });
+        embed.setFooter({ text: `Turn ${battle.turn} | /rpg combat attack · flee · item` });
+        return embed;
+    };
+
+    if (subcommand === 'enemies') {
+        await interaction.deferReply();
+
+        const zone = character.current_zone || 'forest';
+        let enemies = await combatManager.getEnemiesByZone(zone);
+        if (enemies.length === 0) enemies = await combatManager.getAllEnemies();
+
+        const embed = new EmbedBuilder()
+            .setColor('#95A5A6')
+            .setTitle('Enemies')
+            .setDescription(enemies.length ? `Foes you may challenge (your level: ${character.level})` : 'No enemies defined.');
+
+        for (const e of enemies.slice(0, 20)) {
+            embed.addFields({
+                name: `${e.enemy_name} (ID: ${e.enemy_id})`,
+                value: `Lvl ${e.level} | ❤️ ${e.health} | 🗡️ ${e.damage} | 🛡️ ${e.defense} | Zone: ${e.zone}`,
+                inline: true
+            });
+        }
+        embed.setFooter({ text: 'Start a fight with /rpg combat fight enemy_id:<ID>' });
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+
+    else if (subcommand === 'fight') {
+        await interaction.deferReply();
+
+        const enemyId = interaction.options.getInteger('enemy_id', true);
+        try {
+            const battle = await combatManager.startBattle(cid, enemyId);
+            await interaction.editReply({
+                embeds: [battleEmbed(battle, { title: `⚔️ ${character.character_name} engages ${battle.enemy.name}!`, color: '#C0392B' })]
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'attack') {
+        await interaction.deferReply();
+
+        try {
+            const result = await combatManager.attack(cid);
+            if (result.status === 'victory' || result.status === 'won') {
+                const r = result.rewards || {};
+                const embed = new EmbedBuilder()
+                    .setColor('#2ECC71')
+                    .setTitle('🏆 Victory!')
+                    .setDescription(`${character.character_name} is victorious!`)
+                    .addFields(
+                        { name: 'XP', value: `✨ ${r.exp || 0}`, inline: true },
+                        { name: 'Gold', value: `💰 ${r.gold || 0}`, inline: true }
+                    );
+                if (r.leveledUp) embed.addFields({ name: 'Level Up!', value: `Now level ${r.newLevel}`, inline: true });
+                await interaction.editReply({ embeds: [embed] });
+            } else if (result.status === 'defeat' || result.status === 'lost') {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor('#7F8C8D').setTitle('💀 Defeat').setDescription(`${character.character_name} has fallen in battle...`)]
+                });
+            } else {
+                const battle = await combatManager.getActiveBattle(cid);
+                await interaction.editReply({
+                    embeds: [battleEmbed(battle, {
+                        log: `You hit for **${result.playerDamage}**. Enemy hit back for **${result.enemyDamage}**.`
+                    })]
+                });
+            }
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'flee') {
+        await interaction.deferReply();
+
+        try {
+            const result = await combatManager.flee(cid);
+            if (result.status === 'fled') {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor('#F39C12').setTitle('🏃 Escaped!').setDescription(`${character.character_name} fled from battle.`)]
+                });
+            } else if (result.status === 'defeat' || result.status === 'lost') {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor('#7F8C8D').setTitle('💀 Defeat').setDescription('You failed to flee and were defeated...')]
+                });
+            } else {
+                const battle = await combatManager.getActiveBattle(cid);
+                await interaction.editReply({
+                    embeds: [battleEmbed(battle, { title: '🏃 Failed to Flee!', log: `The enemy struck you for **${result.enemyDamage}** as you tried to run.` })]
+                });
+            }
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'item') {
+        await interaction.deferReply();
+
+        const itemId = interaction.options.getInteger('item_id', true);
+        try {
+            const result = await combatManager.useItem(cid, itemId);
+            if (result.status === 'defeat' || result.status === 'lost') {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor('#7F8C8D').setTitle('💀 Defeat').setDescription('You were defeated...')]
+                });
+                return;
+            }
+            const battle = await combatManager.getActiveBattle(cid);
+            const effects = [];
+            if (result.healAmount) effects.push(`Healed **${result.healAmount}** HP`);
+            if (result.manaAmount) effects.push(`Restored **${result.manaAmount}** mana`);
+            await interaction.editReply({
+                embeds: [battleEmbed(battle, {
+                    color: '#27AE60',
+                    title: `Used ${result.itemName}`,
+                    log: `${effects.join(', ') || 'No effect.'} Enemy hit for **${result.enemyDamage}**.`
+                })]
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'status') {
+        await interaction.deferReply();
+
+        const battle = await combatManager.getActiveBattle(cid);
+        if (!battle) {
+            await interaction.editReply({ content: 'You are not in an active battle. Start one with `/rpg combat fight`.' });
+            return;
+        }
+        await interaction.editReply({ embeds: [battleEmbed(battle, { title: `⚔️ Active Battle` })] });
+    }
+}
+
+/**
+ * Handle shop subcommands (browse, buy, sell)
+ */
+export async function handleShop(interaction, subcommand, characterManager, shopManager) {
+    const character = await characterManager.getCharacter(interaction.user.id, interaction.guild.id);
+
+    if (!character) {
+        await interaction.reply({
+            content: 'You need a character first. Create one with `/rpg character create`',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const zone = character.current_zone || 'town';
+
+    if (subcommand === 'browse') {
+        await interaction.deferReply();
+
+        const items = await shopManager.getShopItems(zone);
+
+        const embed = new EmbedBuilder()
+            .setColor('#F1C40F')
+            .setTitle(`Shop — ${zone.charAt(0).toUpperCase() + zone.slice(1)}`)
+            .setDescription(`Your gold: 💰 ${character.gold}`);
+
+        if (items.length === 0) {
+            embed.addFields({ name: 'Sold Out', value: 'No items available in this zone right now.' });
+        } else {
+            const byType = {};
+            for (const item of items) {
+                (byType[item.item_type] ||= []).push(item);
+            }
+            for (const [type, typeItems] of Object.entries(byType)) {
+                const list = typeItems.slice(0, 15).map(i => {
+                    const stockText = i.stock === -1 ? '' : ` (stock: ${i.stock})`;
+                    return `**${i.item_name}** (ID: ${i.item_id}) — 💰 ${i.price}${stockText}`;
+                }).join('\n');
+                embed.addFields({
+                    name: type.charAt(0).toUpperCase() + type.slice(1) + 's',
+                    value: list,
+                    inline: false
+                });
+            }
+            embed.setFooter({ text: 'Buy with /rpg shop buy item_id:<ID>' });
+        }
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+
+    else if (subcommand === 'buy') {
+        await interaction.deferReply();
+
+        const itemId = interaction.options.getInteger('item_id', true);
+        const quantity = interaction.options.getInteger('quantity') || 1;
+
+        try {
+            const result = await shopManager.buyItem(character.character_id, itemId, quantity, zone);
+            const embed = new EmbedBuilder()
+                .setColor('#27AE60')
+                .setTitle('Purchase Complete')
+                .setDescription(`Bought **${result.quantity}x ${result.itemName}** for 💰 ${result.totalCost}`)
+                .addFields({ name: 'Remaining Gold', value: `💰 ${result.remainingGold}`, inline: true });
+            await interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            await interaction.editReply({ content: `Purchase failed: ${err.message}` });
+        }
+    }
+
+    else if (subcommand === 'sell') {
+        await interaction.deferReply();
+
+        const itemId = interaction.options.getInteger('item_id', true);
+        const quantity = interaction.options.getInteger('quantity') || 1;
+
+        try {
+            const result = await shopManager.sellItem(character.character_id, itemId, quantity);
+            const embed = new EmbedBuilder()
+                .setColor('#27AE60')
+                .setTitle('Item Sold')
+                .setDescription(`Sold **${result.quantity}x ${result.itemName}** for 💰 ${result.totalGold}`)
+                .addFields({ name: 'Per Item', value: `💰 ${result.sellPrice}`, inline: true });
+            await interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            await interaction.editReply({ content: `Sale failed: ${err.message}` });
+        }
+    }
+}
+
+/**
+ * Handle party subcommands (create, invite, accept, leave, info, list)
+ * Backed by the static RPGPartyManager.
+ */
+export async function handleParty(interaction, subcommand, characterManager) {
+    const character = await characterManager.getCharacter(interaction.user.id, interaction.guild.id);
+
+    if (!character) {
+        await interaction.reply({
+            content: 'You need a character first. Create one with `/rpg character create`',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const cid = character.character_id;
+
+    if (subcommand === 'create') {
+        await interaction.deferReply();
+
+        const name = interaction.options.getString('name', true);
+        try {
+            const party = await RPGPartyManager.createParty(interaction.guild.id, interaction.user.id, name, cid);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor('#27AE60').setTitle('Party Formed!')
+                    .setDescription(`**${party.party_name}** (ID: ${party.party_id})`)
+                    .setFooter({ text: 'Invite members with /rpg party invite' })]
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'invite') {
+        await interaction.deferReply();
+
+        const target = interaction.options.getUser('user', true);
+        const party = await RPGPartyManager.getCharacterParty(cid);
+        if (!party) {
+            await interaction.editReply({ content: 'You are not in a party. Create one with `/rpg party create`.' });
+            return;
+        }
+        if (party.leader_user_id !== interaction.user.id) {
+            await interaction.editReply({ content: 'Only the party leader can invite.' });
+            return;
+        }
+        try {
+            const invite = await RPGPartyManager.sendInvite(party.party_id, target.id, interaction.user.id);
+            await interaction.editReply({ content: `Invited ${target} to **${invite.party_name}**! They can accept with \`/rpg party accept\`.` });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'accept') {
+        await interaction.deferReply();
+
+        try {
+            const result = await RPGPartyManager.acceptInvite(interaction.user.id, cid);
+            await interaction.editReply({ content: `You joined **${result.party_name}**!` });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'leave') {
+        await interaction.deferReply();
+
+        try {
+            await RPGPartyManager.leaveParty(cid);
+            await interaction.editReply({ content: 'You left your party.' });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'info') {
+        await interaction.deferReply();
+
+        const party = await RPGPartyManager.getCharacterParty(cid);
+        if (!party) {
+            await interaction.editReply({ content: 'You are not in a party.' });
+            return;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor('#9B59B6')
+            .setTitle(`Party: ${party.party_name}`)
+            .addFields(
+                { name: 'Status', value: party.status, inline: true },
+                { name: 'Members', value: `${party.members.length}/${party.max_members}`, inline: true },
+                { name: 'Shared Gold', value: `💰 ${party.shared_gold || 0}`, inline: true }
+            );
+
+        embed.addFields({
+            name: 'Roster',
+            value: party.members.map(m =>
+                `${m.role === 'leader' ? '👑' : '•'} **${m.character_name}** — Lvl ${m.level} ${m.class} (❤️ ${m.health}/${m.max_health})`
+            ).join('\n'),
+            inline: false
+        });
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+
+    else if (subcommand === 'list') {
+        await interaction.deferReply();
+
+        const parties = await RPGPartyManager.listParties(interaction.guild.id);
+        const embed = new EmbedBuilder()
+            .setColor('#3498DB')
+            .setTitle('Parties in this Server');
+
+        if (parties.length === 0) {
+            embed.setDescription('No active parties. Form one with `/rpg party create`.');
+        } else {
+            for (const p of parties.slice(0, 20)) {
+                embed.addFields({
+                    name: `${p.party_name} (ID: ${p.party_id})`,
+                    value: `Status: ${p.status} | Members: ${p.member_count}/${p.max_members}`,
+                    inline: false
+                });
+            }
+        }
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+}
+
+/**
+ * Handle pvp subcommands (challenge, accept, decline, resolve, stats, leaderboard)
+ * Backed by the static RPGPvPManager. Direct-challenge model (both sides required).
+ */
+export async function handlePvP(interaction, subcommand, characterManager) {
+    const character = await characterManager.getCharacter(interaction.user.id, interaction.guild.id);
+
+    if (!character) {
+        await interaction.reply({
+            content: 'You need a character first. Create one with `/rpg character create`',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const cid = character.character_id;
+    const guildId = interaction.guild.id;
+
+    if (subcommand === 'challenge') {
+        await interaction.deferReply();
+
+        const target = interaction.options.getUser('user', true);
+        const matchType = interaction.options.getString('type') || 'duel';
+        const wager = interaction.options.getInteger('wager') || 0;
+
+        const defender = await characterManager.getCharacter(target.id, guildId);
+        if (!defender) {
+            await interaction.editReply({ content: `${target.username} does not have a character in this server.` });
+            return;
+        }
+        if (wager > 0 && character.gold < wager) {
+            await interaction.editReply({ content: `You don't have ${wager} gold to wager.` });
+            return;
+        }
+
+        try {
+            const match = await RPGPvPManager.createMatch(
+                guildId,
+                { userId: interaction.user.id, characterId: cid },
+                { userId: target.id, characterId: defender.character_id },
+                matchType,
+                wager
+            );
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor('#E67E22').setTitle('⚔️ Challenge Issued!')
+                    .setDescription(`**${character.character_name}** challenges **${defender.character_name}** to a ${matchType}!`)
+                    .addFields(
+                        { name: 'Match ID', value: `#${match.match_id}`, inline: true },
+                        { name: 'Wager', value: `💰 ${match.wager_gold}`, inline: true }
+                    )
+                    .setFooter({ text: `${target.username}: accept with /rpg pvp accept match_id:${match.match_id}` })]
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'accept') {
+        await interaction.deferReply();
+
+        const matchId = interaction.options.getInteger('match_id', true);
+        try {
+            await RPGPvPManager.acceptMatch(matchId, interaction.user.id);
+            await interaction.editReply({ content: `Match #${matchId} accepted! The duel is now active. Resolve it with \`/rpg pvp resolve\`.` });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'decline') {
+        await interaction.deferReply();
+
+        const matchId = interaction.options.getInteger('match_id', true);
+        try {
+            await RPGPvPManager.declineMatch(matchId, interaction.user.id);
+            await interaction.editReply({ content: `Match #${matchId} declined.` });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'resolve') {
+        await interaction.deferReply();
+
+        const matchId = interaction.options.getInteger('match_id', true);
+        const match = await RPGPvPManager.getMatch(matchId);
+        if (!match || match.status !== 'active') {
+            await interaction.editReply({ content: 'No active match with that ID.' });
+            return;
+        }
+        if (![match.challenger_user_id, match.defender_user_id].includes(interaction.user.id)) {
+            await interaction.editReply({ content: 'You are not a participant in that match.' });
+            return;
+        }
+
+        // Resolve by comparing a simple power roll for each side (level + d20)
+        const challRoll = RPGDiceEngine.roll('1d20').total + (match.challenger_level || 1);
+        const defRoll = RPGDiceEngine.roll('1d20').total + (match.defender_level || 1);
+        const winnerCharId = challRoll >= defRoll ? match.challenger_id : match.defender_id;
+        const winnerName = challRoll >= defRoll ? match.challenger_name : match.defender_name;
+
+        try {
+            const result = await RPGPvPManager.endMatch(matchId, winnerCharId, 'ko');
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor('#F1C40F').setTitle('⚔️ Duel Resolved!')
+                    .setDescription(`**${winnerName}** wins the duel!`)
+                    .addFields(
+                        { name: `${match.challenger_name}`, value: `Power: ${challRoll}`, inline: true },
+                        { name: `${match.defender_name}`, value: `Power: ${defRoll}`, inline: true },
+                        { name: 'ELO Change', value: `Winner ${result.elo_changes.winner >= 0 ? '+' : ''}${result.elo_changes.winner} | Loser ${result.elo_changes.loser}`, inline: false }
+                    )]
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'stats') {
+        await interaction.deferReply();
+
+        const stats = await RPGPvPManager.getPlayerStats(cid, guildId);
+        const embed = new EmbedBuilder()
+            .setColor('#9B59B6')
+            .setTitle(`${character.character_name}'s PvP Stats`)
+            .addFields(
+                { name: 'Rank', value: stats.rank, inline: true },
+                { name: 'ELO', value: `${stats.elo_rating}`, inline: true },
+                { name: 'Record', value: `${stats.wins}W / ${stats.losses}L / ${stats.draws || 0}D`, inline: true },
+                { name: 'Win Rate', value: `${stats.winRate}%`, inline: true },
+                { name: 'Best Streak', value: `${stats.best_streak || 0}`, inline: true }
+            );
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+
+    else if (subcommand === 'leaderboard') {
+        await interaction.deferReply();
+
+        const board = await RPGPvPManager.getLeaderboard(guildId);
+        const embed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle('PvP Leaderboard');
+
+        if (board.length === 0) {
+            embed.setDescription('No ranked players yet. Challenge someone with `/rpg pvp challenge`!');
+        } else {
+            embed.setDescription(board.map((p, i) => {
+                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+                return `${medal} **${p.character_name || 'Unknown'}** — ${p.rank} (${p.elo_rating}) ${p.wins}W/${p.losses}L`;
+            }).join('\n'));
+        }
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+}
+
+/**
+ * Handle quest subcommands (list, start, active, complete, abandon)
+ * Backed by the instance rpg-quest-manager (client.rpgQuestManager).
+ */
+export async function handleQuest(interaction, subcommand, characterManager, questManager) {
+    const character = await characterManager.getCharacter(interaction.user.id, interaction.guild.id);
+
+    if (!character) {
+        await interaction.reply({
+            content: 'You need a character first. Create one with `/rpg character create`',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const cid = character.character_id;
+
+    if (subcommand === 'list') {
+        await interaction.deferReply();
+
+        const quests = await questManager.getAvailableQuests(character.level);
+
+        const embed = new EmbedBuilder()
+            .setColor('#D4AC0D')
+            .setTitle('Available Quests')
+            .setDescription(quests.length ? `Quests for level ${character.level} and below` : 'No quests available yet.');
+
+        for (const q of quests.slice(0, 20)) {
+            embed.addFields({
+                name: `${q.quest_name} (ID: ${q.quest_id})`,
+                value: `${q.description || ''}\nLvl ${q.required_level}+ | ✨ ${q.reward_exp} XP | 💰 ${q.reward_gold} | ${q.difficulty || 'normal'}`,
+                inline: false
+            });
+        }
+        if (quests.length) embed.setFooter({ text: 'Start with /rpg quest start quest_id:<ID>' });
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+
+    else if (subcommand === 'start') {
+        await interaction.deferReply();
+
+        const questId = interaction.options.getInteger('quest_id', true);
+        try {
+            const quest = await questManager.startQuest(cid, questId);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor('#27AE60').setTitle('Quest Accepted')
+                    .setDescription(`**${quest.quest_name}**\n${quest.description || ''}`)
+                    .setFooter({ text: 'Track it with /rpg quest active' })]
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'active') {
+        await interaction.deferReply();
+
+        const quests = await questManager.getActiveQuests(cid);
+
+        const embed = new EmbedBuilder()
+            .setColor('#3498DB')
+            .setTitle(`${character.character_name}'s Active Quests`);
+
+        if (quests.length === 0) {
+            embed.setDescription('No active quests. Find one with `/rpg quest list`.');
+        } else {
+            for (const q of quests) {
+                const bar = createProgressBar(q.progress || 0, 100);
+                embed.addFields({
+                    name: `${q.quest_name} (ID: ${q.quest_id})`,
+                    value: `${bar} ${q.progress || 0}%`,
+                    inline: false
+                });
+            }
+        }
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+
+    else if (subcommand === 'complete') {
+        await interaction.deferReply();
+
+        const questId = interaction.options.getInteger('quest_id', true);
+        try {
+            const result = await questManager.completeQuest(cid, questId);
+            const r = result.rewards;
+            const embed = new EmbedBuilder()
+                .setColor('#F1C40F')
+                .setTitle('Quest Complete!')
+                .setDescription(`**${result.quest.quest_name}** completed!`)
+                .addFields(
+                    { name: 'XP', value: `✨ ${r.exp}`, inline: true },
+                    { name: 'Gold', value: `💰 ${r.gold}`, inline: true }
+                );
+            if (r.item) embed.addFields({ name: 'Item', value: `🎁 ${r.item}`, inline: true });
+            if (r.leveledUp) embed.addFields({ name: 'Level Up!', value: `Now level ${r.newLevel}`, inline: true });
+            await interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'abandon') {
+        await interaction.deferReply();
+
+        const questId = interaction.options.getInteger('quest_id', true);
+        try {
+            await questManager.abandonQuest(cid, questId);
+            await interaction.editReply({ content: 'Quest abandoned.' });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+}
+
+/**
+ * Handle dungeon subcommands (list, enter, room, advance, status, leave)
+ * Backed by the static RPGDungeonManager. Solo-friendly (character_id run).
+ */
+export async function handleDungeon(interaction, subcommand, characterManager) {
+    const character = await characterManager.getCharacter(interaction.user.id, interaction.guild.id);
+
+    if (!character) {
+        await interaction.reply({
+            content: 'You need a character first. Create one with `/rpg character create`',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const cid = character.character_id;
+    const guildId = interaction.guild.id;
+
+    const roomEmbed = (state, title) => {
+        const room = state.room;
+        const embed = new EmbedBuilder()
+            .setColor('#8E44AD')
+            .setTitle(title || `${state.roomType.icon} ${room.room_name}`)
+            .setDescription(room.description || state.roomType.description)
+            .addFields(
+                { name: 'Room', value: `${room.room_number}`, inline: true },
+                { name: 'Type', value: state.roomType.name, inline: true }
+            )
+            .setFooter({ text: 'Advance with /rpg dungeon advance' });
+        return embed;
+    };
+
+    if (subcommand === 'list') {
+        await interaction.deferReply();
+
+        const dungeons = await RPGDungeonManager.getAvailableDungeons(guildId, character.level);
+
+        const embed = new EmbedBuilder()
+            .setColor('#9B59B6')
+            .setTitle('Available Dungeons')
+            .setDescription(dungeons.length ? `Dungeons for level ${character.level}` : 'No dungeons available at your level.');
+
+        for (const d of dungeons.slice(0, 20)) {
+            embed.addFields({
+                name: `${d.dungeon_name} (ID: ${d.dungeon_id})`,
+                value: `${d.description || ''}\nLvl ${d.min_level}-${d.max_level} | Rooms: ${d.total_rooms} | ${d.difficulty || 'normal'}`,
+                inline: false
+            });
+        }
+        if (dungeons.length) embed.setFooter({ text: 'Enter with /rpg dungeon enter dungeon_id:<ID>' });
+
+        await interaction.editReply({ embeds: [embed] });
+    }
+
+    else if (subcommand === 'enter') {
+        await interaction.deferReply();
+
+        const dungeonId = interaction.options.getInteger('dungeon_id', true);
+        const difficulty = interaction.options.getString('difficulty') || 'normal';
+        try {
+            const run = await RPGDungeonManager.startRun(null, dungeonId, difficulty, { guildId, characterId: cid });
+            const state = await RPGDungeonManager.getCurrentRoom(run.run_id);
+            await interaction.editReply({
+                embeds: [roomEmbed(state, `🚪 Entered ${run.dungeon_name} (${difficulty})`)]
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'room' || subcommand === 'status') {
+        await interaction.deferReply();
+
+        const run = await getActiveRunForCharacter(cid);
+        if (!run) {
+            await interaction.editReply({ content: 'You are not in an active dungeon run. Start one with `/rpg dungeon enter`.' });
+            return;
+        }
+        const state = await RPGDungeonManager.getCurrentRoom(run.run_id);
+        await interaction.editReply({ embeds: [roomEmbed(state)] });
+    }
+
+    else if (subcommand === 'advance') {
+        await interaction.deferReply();
+
+        const run = await getActiveRunForCharacter(cid);
+        if (!run) {
+            await interaction.editReply({ content: 'You are not in an active dungeon run. Start one with `/rpg dungeon enter`.' });
+            return;
+        }
+
+        // Award a simple per-room reward (scaled by character level) and advance
+        const roomReward = { xp: 25 + character.level * 5, gold: 10 + character.level * 2 };
+        const next = await RPGDungeonManager.completeRoom(run.run_id, roomReward);
+
+        if (next.completed) {
+            await characterManager.addExperience(cid, next.total_xp);
+            await characterManager.addGold(cid, next.total_gold);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor('#F1C40F').setTitle('🏆 Dungeon Cleared!')
+                    .setDescription(`**${next.dungeon_name}** conquered on ${next.difficulty}!`)
+                    .addFields(
+                        { name: 'Total XP', value: `✨ ${next.total_xp}`, inline: true },
+                        { name: 'Total Gold', value: `💰 ${next.total_gold}`, inline: true },
+                        { name: 'Rooms Cleared', value: `${next.rooms_cleared}`, inline: true }
+                    )]
+            });
+        } else {
+            await interaction.editReply({ embeds: [roomEmbed(next, `➡️ ${next.roomType.icon} ${next.room.room_name}`)] });
+        }
+    }
+
+    else if (subcommand === 'leave') {
+        await interaction.deferReply();
+
+        const run = await getActiveRunForCharacter(cid);
+        if (!run) {
+            await interaction.editReply({ content: 'You are not in an active dungeon run.' });
+            return;
+        }
+        await RPGDungeonManager.abandonRun(run.run_id);
+        await interaction.editReply({ content: 'You left the dungeon. Progress abandoned.' });
+    }
+}
+
+// Helper: find an active solo dungeon run for a character (character-scoped runs)
+async function getActiveRunForCharacter(characterId) {
+    const [runs] = await pool.execute(
+        `SELECT dr.*, d.dungeon_name, d.total_rooms
+         FROM dnd_dungeon_runs dr
+         JOIN dnd_dungeons d ON dr.dungeon_id = d.dungeon_id
+         WHERE dr.character_id = ? AND dr.status = 'active'
+         ORDER BY dr.run_id DESC LIMIT 1`,
+        [characterId]
+    );
+    return runs[0] || null;
 }
 
 /**
