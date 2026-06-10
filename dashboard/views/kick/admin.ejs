@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="<%= csrfToken %>" />
+  <title>Kick Defender — Connected Accounts</title>
+  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: radial-gradient(circle at 50% 0%, #1e1b2e 0%, #0b0a12 70%); color: #ECECEC; min-height: 100vh; padding: 2rem 1.25rem; }
+    .wrap { max-width: 64rem; margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    h1 { font-size: 1.6rem; font-weight: 800; }
+    .nav a { color: #9a93b3; text-decoration: none; margin-left: 1rem; font-size: .9rem; }
+    .nav a:hover { color: #fff; }
+    .counts { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .stat { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 12px; padding: .9rem 1.25rem; min-width: 7rem; }
+    .stat b { display: block; font-size: 1.5rem; }
+    .stat span { color: #9a93b3; font-size: .8rem; }
+    .card { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 14px; padding: 1.1rem 1.25rem; margin-bottom: .9rem; }
+    .acct-head { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; }
+    .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #14121d; }
+    .name { font-weight: 700; font-size: 1.05rem; }
+    .sub { color: #9a93b3; font-size: .8rem; }
+    .pills { display: flex; gap: .4rem; flex-wrap: wrap; margin-left: auto; }
+    .pill { font-size: .72rem; font-weight: 700; padding: .2rem .55rem; border-radius: 999px; letter-spacing: .02em; }
+    .pill.kick { background: rgba(83,252,24,.15); color: #7dfc4f; }
+    .pill.twitch { background: rgba(145,70,255,.18); color: #c4b5fd; }
+    .pill.admin { background: rgba(245,158,11,.18); color: #fcd34d; }
+    .pill.manager { background: rgba(59,130,246,.18); color: #93c5fd; }
+    .pill.bot { background: rgba(255,255,255,.1); color: #cbd5e1; }
+    .pill.banned { background: rgba(239,68,68,.2); color: #fca5a5; }
+    .pill.warn { background: rgba(239,68,68,.16); color: #fca5a5; }
+    .pill.ok { background: rgba(34,197,94,.16); color: #86efac; }
+    .pill.muted { background: rgba(255,255,255,.06); color: #9a93b3; }
+    .chs { margin-top: .8rem; display: flex; flex-direction: column; gap: .4rem; }
+    .ch { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .55rem .7rem; border-radius: 9px; background: rgba(255,255,255,.03); flex-wrap: wrap; }
+    .ch .cn { font-weight: 600; }
+    .ch .cs { color: #9a93b3; font-size: .8rem; }
+    .none { color: #9a93b3; font-size: .85rem; margin-top: .6rem; }
+    .scopes { color: #6f6a85; font-size: .72rem; margin-top: .55rem; word-break: break-word; }
+    .search { width: 100%; font-family: inherit; font-size: .9rem; padding: .6rem .8rem; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); background: #14121d; color: #ECECEC; margin-bottom: 1.1rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🐻 Connected Accounts</h1>
+      <nav class="nav">
+        <a href="/kick">My channels</a>
+        <a href="/kick/managers">Manager console</a>
+        <a href="/logout">Log out</a>
+      </nav>
+    </header>
+
+    <div class="counts">
+      <div class="stat"><b><%= totals.accounts %></b><span>Connected accounts</span></div>
+      <div class="stat"><b><%= totals.kick %></b><span>Kick accounts</span></div>
+      <div class="stat"><b><%= totals.channels %></b><span>Channels</span></div>
+      <div class="stat"><b><%= totals.enrolled %></b><span>Defender-enrolled</span></div>
+    </div>
+
+    <input id="search" class="search" placeholder="Filter by username…" />
+
+    <% if (!accounts.length) { %>
+      <div class="card none">No connected accounts yet.</div>
+    <% } %>
+
+    <% accounts.forEach(a => { %>
+      <div class="card acct" data-name="<%= (a.platformName || a.primaryName || '').toLowerCase() %>">
+        <div class="acct-head">
+          <img class="avatar" src="<%= a.avatar || '/images/CertiFried.png' %>" alt="" onerror="this.src='/images/CertiFried.png'" />
+          <div>
+            <div class="name"><%= a.platformName || a.primaryName || 'Unknown' %></div>
+            <div class="sub">
+              user #<%= a.userId %>
+              <% if (a.lastSeen) { %> · last seen <%= new Date(a.lastSeen).toISOString().slice(0,16).replace('T',' ') %> UTC<% } %>
+            </div>
+          </div>
+          <div class="pills">
+            <span class="pill <%= a.platform %>"><%= a.platform %></span>
+            <% if (a.isAdmin) { %><span class="pill admin">admin</span><% } %>
+            <% if (a.isManager && !a.isAdmin) { %><span class="pill manager">manager</span><% } %>
+            <% if (a.isBotAccount) { %><span class="pill bot">bot account</span><% } %>
+            <% if (a.isBanned) { %><span class="pill banned">banned</span><% } %>
+            <% if (a.platform === 'kick') { %>
+              <span class="pill <%= a.hasBanScope ? 'ok' : 'warn' %>"><%= a.hasBanScope ? 'can ban' : 'no ban scope' %></span>
+            <% } %>
+            <% if (a.tokenExpired) { %><span class="pill warn">token expired</span><% } %>
+          </div>
+        </div>
+
+        <% if (!a.channels.length) { %>
+          <div class="none">No channels registered.</div>
+        <% } else { %>
+          <div class="chs">
+            <% a.channels.forEach(ch => { %>
+              <div class="ch">
+                <span class="cn"><%= ch.channelName %></span>
+                <span class="cs">
+                  <% if (ch.stats) { %>banned <%= ch.stats.banned %> · deleted <%= ch.stats.deleted %> · <% } %>
+                  <span class="pill <%= ch.defenderEnabled ? 'ok' : 'muted' %>"><%= ch.defenderEnabled ? 'defender ON' : 'defender off' %></span>
+                  <% if (!ch.enabled) { %><span class="pill muted">disabled</span><% } %>
+                </span>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+
+        <% if (a.scopes.length) { %>
+          <div class="scopes">scopes: <%= a.scopes.join('  ') %></div>
+        <% } else { %>
+          <div class="scopes">scopes: (none granted)</div>
+        <% } %>
+      </div>
+    <% }) %>
+  </div>
+
+  <script>
+    // Client-side filter — no requests, purely cosmetic.
+    const search = document.getElementById('search');
+    if (search) {
+      search.addEventListener('input', () => {
+        const q = search.value.trim().toLowerCase();
+        document.querySelectorAll('.acct').forEach(el => {
+          el.style.display = !q || (el.dataset.name || '').includes(q) ? '' : 'none';
+        });
+      });
+    }
+  </script>
+</body>
+</html>

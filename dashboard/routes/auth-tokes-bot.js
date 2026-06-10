@@ -21,11 +21,12 @@ const TWITCH_SCOPES = ['user:read:email', 'chat:read', 'chat:edit'].join(' ');
 const KICK_CLIENT_ID = process.env.KICK_BOT_CLIENT_ID || process.env.KICK_CLIENT_ID;
 const KICK_CLIENT_SECRET = process.env.KICK_BOT_CLIENT_SECRET || process.env.KICK_CLIENT_SECRET;
 const KICK_REDIRECT_URI = `${BASE_URL}/tokes-bot/auth/kick/callback`;
-const KICK_SCOPES = ['user:read', 'chat:write', 'events:subscribe', 'channel:read'].join(' ');
+const KICK_SCOPES = ['user:read', 'chat:write', 'events:subscribe', 'channel:read', 'moderation:ban', 'moderation:chat_message:manage'].join(' ');
 
 // Allowed return paths (prevent open redirect)
-const ALLOWED_RETURN_PATHS = ['/tokes-bot', '/tokes-bot/dashboard', '/tokes-bot/channels', '/tokes-bot/profile'];
-const DEFAULT_RETURN_PATH = '/tokes-bot/dashboard';
+const ALLOWED_RETURN_PATHS = ['/tokes-bot', '/tokes-bot/dashboard', '/tokes-bot/channels', '/tokes-bot/profile', '/kick'];
+// The legacy /tokes-bot dashboard is hidden; the Kick bot lives at /kick.
+const DEFAULT_RETURN_PATH = '/kick';
 
 /**
  * Generate PKCE code verifier and challenge for Kick OAuth
@@ -261,26 +262,30 @@ router.get('/tokes-bot/auth/kick', (req, res) => {
 router.get('/tokes-bot/auth/kick/callback', async (req, res) => {
     const { code, error, state } = req.query;
 
+    // Route auth errors back to wherever the flow began: /kick (defender) or
+    // /tokes-bot. tokesReturnTo was stashed (sanitized) when the flow started.
+    const errorBase = (req.session?.tokesReturnTo || '').startsWith('/kick') ? '/kick' : '/tokes-bot';
+
     if (!state || state !== req.session?.kickOAuthState) {
         logger.warn('[Tokes Bot Auth] Invalid Kick OAuth state');
-        return res.redirect('/tokes-bot?error=invalid_state');
+        return res.redirect(`${errorBase}?error=invalid_state`);
     }
     delete req.session.kickOAuthState;
 
     if (error) {
         logger.error('[Tokes Bot Auth] Kick OAuth error', { error });
-        return res.redirect('/tokes-bot?error=kick_auth_denied');
+        return res.redirect(`${errorBase}?error=kick_auth_denied`);
     }
 
     if (!code) {
-        return res.redirect('/tokes-bot?error=no_code');
+        return res.redirect(`${errorBase}?error=no_code`);
     }
 
     const codeVerifier = req.session.kickPKCE;
     delete req.session.kickPKCE;
 
     if (!codeVerifier) {
-        return res.redirect('/tokes-bot?error=missing_pkce');
+        return res.redirect(`${errorBase}?error=missing_pkce`);
     }
 
     try {
@@ -306,7 +311,7 @@ router.get('/tokes-bot/auth/kick/callback', async (req, res) => {
                 error: tokenData.error || 'unknown',
                 errorDescription: tokenData.error_description || 'No access token returned'
             });
-            return res.redirect('/tokes-bot?error=token_failed');
+            return res.redirect(`${errorBase}?error=token_failed`);
         }
 
         // Fetch user info from Kick official API
@@ -320,7 +325,7 @@ router.get('/tokes-bot/auth/kick/callback', async (req, res) => {
         if (!userResponse.ok) {
             const errorText = await userResponse.text();
             logger.error('[Tokes Bot Auth] Kick user API failed', { status: userResponse.status, error: errorText.substring(0, 500) });
-            return res.redirect('/tokes-bot?error=user_fetch_failed');
+            return res.redirect(`${errorBase}?error=user_fetch_failed`);
         }
 
         const userData = await userResponse.json();
@@ -328,7 +333,7 @@ router.get('/tokes-bot/auth/kick/callback', async (req, res) => {
 
         if (!kickUser || !kickUser.user_id) {
             logger.error('[Tokes Bot Auth] Failed to get Kick user - no valid user data');
-            return res.redirect('/tokes-bot?error=user_fetch_failed');
+            return res.redirect(`${errorBase}?error=user_fetch_failed`);
         }
 
         // Calculate token expiry
@@ -357,6 +362,15 @@ router.get('/tokes-bot/auth/kick/callback', async (req, res) => {
         req.session.lastActivity = Date.now();
         req.session.loginTime = Date.now();
 
+        // Auto-provision the streamer's own Kick channel so the /kick (Defender)
+        // panel has something to show. The Kick user IS their channel, so
+        // channel_id = kick user_id and channel_name = kick username. This
+        // replaces the old "add channel" step that lived on the now-hidden
+        // tokes dashboard — without it, brand-new users land on an empty panel
+        // with no way to enroll. Idempotent and best-effort: a failure here must
+        // never block login.
+        await ensureKickChannel(userId, kickUser);
+
         // Log the login event
         const ipAddress = req.ip || req.connection?.remoteAddress;
         const userAgent = req.headers['user-agent'];
@@ -370,7 +384,7 @@ router.get('/tokes-bot/auth/kick/callback', async (req, res) => {
 
     } catch (error) {
         logger.error('[Tokes Bot Auth] Kick auth error', { error: error.message, stack: error.stack });
-        res.redirect('/tokes-bot?error=auth_error');
+        res.redirect(`${errorBase}?error=auth_error`);
     }
 });
 
@@ -433,9 +447,95 @@ export function requireTokesAuth(req, res, next) {
     next();
 }
 
+/**
+ * Same as requireTokesAuth but, for the Kick Defender (/kick) product, sends
+ * logged-out users to KICK OAuth (not Twitch) and returns them to where they
+ * were. Same tokesUser session + same OAuth app — just the right login surface
+ * for a Kick product, and Kick login is what grants the moderation scopes the
+ * defender needs.
+ */
+export function requireKickAuth(req, res, next) {
+    if (!req.session?.tokesUser) {
+        if (req.xhr || req.headers.accept?.includes('application/json')) {
+            return res.status(401).json({ error: 'Authentication required' });
+        }
+        return res.redirect(`/tokes-bot/auth/kick?returnTo=${encodeURIComponent(req.originalUrl)}`);
+    }
+    next();
+}
+
 // ============================================================
 // DATABASE HELPERS
 // ============================================================
+
+/**
+ * Ensure a Kick streamer has a tokes_channels row for their own channel.
+ *
+ * On Kick the authenticated user IS their channel, so we register
+ * channel_id = kick user_id and channel_name = kick username. This is what the
+ * old /tokes-bot/api/channels "add channel" endpoint did, but that UI is now
+ * hidden — so we provision here on login instead. Idempotent (keyed on the
+ * existing channel_id) and best-effort: any failure is logged and swallowed so
+ * it can never block the login redirect.
+ *
+ * @param {number} userId   tokes_users.id (owner)
+ * @param {object} kickUser Kick API user object ({ user_id, name })
+ */
+async function ensureKickChannel(userId, kickUser) {
+    try {
+        const channelId = String(kickUser.user_id);
+        const channelName = String(kickUser.name || '').toLowerCase();
+        if (!channelId || !channelName) return;
+
+        // Look up the user's Kick connection id (FK required by tokes_channels).
+        const [[conn]] = await pool.execute(
+            "SELECT id FROM tokes_platform_connections WHERE user_id = ? AND platform = 'kick' AND platform_id = ? LIMIT 1",
+            [userId, channelId]
+        );
+        if (!conn) {
+            logger.warn('[Tokes Bot Auth] ensureKickChannel: no kick connection found', { userId, channelId });
+            return;
+        }
+
+        // Already provisioned? (Match on channel_id — the stable identifier.)
+        const [[existing]] = await pool.execute(
+            "SELECT id FROM tokes_channels WHERE platform = 'kick' AND channel_id = ? LIMIT 1",
+            [channelId]
+        );
+        if (existing) {
+            // Keep ownership/name fresh in case the user reconnected or renamed.
+            await pool.execute(
+                "UPDATE tokes_channels SET owner_id = ?, connection_id = ?, channel_name = ? WHERE id = ?",
+                [userId, conn.id, channelName, existing.id]
+            );
+            return;
+        }
+
+        // Auto-enable the defender on first add. The Kick OAuth grant already
+        // includes moderation:ban + moderation:chat_message:manage, so a brand-new
+        // channel is immediately protected without a second manual step. This only
+        // fires on INSERT — a later manual "disable" is never overridden (the
+        // UPDATE branch above leaves defender_enabled untouched).
+        await pool.execute(
+            `INSERT INTO tokes_channels
+                (owner_id, connection_id, platform, channel_id, channel_name, is_enabled, defender_enabled, command_prefix)
+             VALUES (?, ?, 'kick', ?, ?, 1, 1, '!')`,
+            [userId, conn.id, channelId, channelName]
+        );
+        logger.info('[Tokes Bot Auth] Auto-provisioned + enrolled Kick channel', { userId, channelName });
+
+        // Best-effort: have the live bot join the new channel immediately.
+        try {
+            if (global.certiFriedBot?.kickBot?.isConnected) {
+                await global.certiFriedBot.kickBot.joinChannel(channelName, channelId);
+            }
+        } catch (joinErr) {
+            logger.warn('[Tokes Bot Auth] ensureKickChannel: bot join failed (non-fatal)', { channelName, error: joinErr.message });
+        }
+    } catch (error) {
+        logger.error('[Tokes Bot Auth] ensureKickChannel failed (non-fatal)', { userId, error: error.message });
+    }
+}
 
 /**
  * Upsert user and platform connection
@@ -943,5 +1043,15 @@ router.get('/twitch-bot/auth/*', (req, res) => {
     const newPath = req.originalUrl.replace('/twitch-bot', '/tokes-bot');
     res.redirect(301, newPath);
 });
+
+/**
+ * True if the given space-separated OAuth scope string grants at least one
+ * moderation capability (ban or message-delete). Used by the /kick dashboard
+ * to decide whether to show the "re-authorize to enable moderation" banner.
+ */
+export function hasModerationScopes(scopesStr) {
+    const s = scopesStr ? String(scopesStr).split(/\s+/) : [];
+    return s.includes('moderation:ban') || s.includes('moderation:chat_message:manage');
+}
 
 export default router;

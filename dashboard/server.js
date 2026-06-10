@@ -596,25 +596,38 @@ function start(botClient) {
             logger.warn('[Landing Chooser] Session/auth check failed:', { error: err.message });
         }
 
-        // Live "reach" counts for the chooser cards. Each source is isolated so a
+        // Live "reach" counts for the landing cards. Each source is isolated so a
         // failure (bot not ready, DB hiccup, missing table) never blocks the page.
+        let discordUsers = 0;
+        let kickEnrolled = 0;
+        let phishingBlocked = 0;
         try {
             // getServerStats() dedupes guilds across the main client AND every
             // custom bot in global.botManager — same number used by /discord and /status.
             if (typeof getServerStats === 'function') {
-                discordServers = getServerStats(client)?.guilds || 0;
+                const s = getServerStats(client);
+                discordServers = s?.guilds || 0;
+                discordUsers = s?.users || 0;
             }
         } catch (err) {
             logger.warn('[Landing Chooser] Failed to get Discord server count:', { error: err.message });
         }
         try {
             const [[row]] = await pool.execute(
-                'SELECT COUNT(*) AS c FROM tokes_channels WHERE is_enabled = 1'
+                "SELECT COUNT(*) AS c FROM tokes_channels WHERE platform = 'kick' AND is_enabled = 1"
             );
             kickChannels = row?.c || 0;
+            const [[enr]] = await pool.execute(
+                "SELECT COUNT(*) AS c FROM tokes_channels WHERE platform = 'kick' AND defender_enabled = 1"
+            );
+            kickEnrolled = enr?.c || 0;
         } catch (err) {
             logger.warn('[Landing Chooser] Failed to get Kick channel count:', { error: err.message });
         }
+        try {
+            const mod = await import('./../services/certifried-bot/defender/phishing-domains.js');
+            phishingBlocked = (typeof mod.size === 'function' ? mod.size() : 0) || 0;
+        } catch (err) { /* optional stat */ }
 
         const viewData = {
             discordLoggedIn,
@@ -622,7 +635,10 @@ function start(botClient) {
             discordHref: discordLoggedIn ? '/dashboard' : '/auth/discord',
             kickHref: kickLoggedIn ? '/kick' : '/tokes-bot/auth/kick',
             discordServers,
-            kickChannels
+            discordUsers,
+            kickChannels,
+            kickEnrolled,
+            phishingBlocked
         };
 
         try {
@@ -641,6 +657,7 @@ function start(botClient) {
             );
         }
     });
+
 
     // Discord marketing/landing page (formerly at '/').
     app.get('/discord', async (req, res) => {

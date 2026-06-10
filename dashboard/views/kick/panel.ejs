@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="<%= csrfToken %>" />
+  <title>Kick Defender — Your Channels</title>
+  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: radial-gradient(circle at 50% 0%, #1e1b2e 0%, #0b0a12 70%); color: #ECECEC; min-height: 100vh; padding: 2rem 1.25rem; }
+    .wrap { max-width: 56rem; margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
+    h1 { font-size: 1.6rem; font-weight: 800; }
+    .nav a { color: #9a93b3; text-decoration: none; margin-left: 1rem; font-size: .9rem; }
+    .nav a:hover { color: #fff; }
+    .card { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 16px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .name { font-weight: 700; font-size: 1.1rem; }
+    .stats { color: #9a93b3; font-size: .85rem; margin-top: .5rem; }
+    .banner { margin-top: .85rem; padding: .7rem .9rem; border-radius: 10px; background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.4); color: #fcd34d; font-size: .85rem; }
+    .banner a { color: #fde68a; }
+    button { font-family: inherit; font-weight: 600; font-size: .9rem; border: none; border-radius: 10px; padding: .55rem 1rem; cursor: pointer; }
+    .on { background: #53FC18; color: #0b0a12; }
+    .off { background: rgba(255,255,255,.1); color: #ECECEC; }
+    .empty { color: #9a93b3; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🐻 Kick Defender</h1>
+      <nav class="nav">
+        <% if (typeof isAdmin !== 'undefined' && isAdmin) { %><a href="/kick/admin">Connected accounts</a><% } %>
+        <% if (isManager) { %><a href="/kick/managers">Manager console</a><% } %>
+        <a href="/logout">Log out</a>
+      </nav>
+    </header>
+
+    <% if (!channels.length) { %>
+      <div class="card empty">
+        No Kick channels linked to your account yet.
+        <a href="<%= reauthHref %>" style="color:#53FC18">Authorize with Kick</a> to connect your channel and grant moderation permissions, then return here to enable the defender.
+      </div>
+    <% } %>
+
+    <% channels.forEach(ch => { %>
+      <div class="card">
+        <div class="row">
+          <div>
+            <div class="name"><%= ch.channelName %></div>
+            <div class="stats">Banned: <%= ch.stats.banned %> · Deleted: <%= ch.stats.deleted %> · Detected (couldn't act): <%= ch.stats.dormant %></div>
+          </div>
+          <button class="enroll <%= ch.enabled ? 'on' : 'off' %>"
+                  data-channel="<%= ch.channelId %>" data-enabled="<%= ch.enabled ? 0 : 1 %>">
+            <%= ch.enabled ? 'Defender ON' : 'Enable defender' %>
+          </button>
+        </div>
+        <% if (ch.enabled && !ch.hasBanScope) { %>
+          <div class="banner">
+            ⚠ This channel can't issue bans yet. <a href="<%= reauthHref %>">Re-authorize with Kick</a> to grant moderation permissions.
+            <% if (!ch.hasManageScope) { %> (No moderation scopes granted at all.)<% } else { %> (Messages can be deleted, but users can't be banned.)<% } %>
+          </div>
+        <% } %>
+      </div>
+    <% }) %>
+  </div>
+
+  <script>
+    // Self-contained CSRF + request helper. Reads the token straight from the
+    // meta tag and sends it BOTH as the X-CSRF-Token header AND in the JSON body
+    // (_csrf). Reverse proxies sometimes strip non-standard X- headers, which
+    // was breaking enrollment in production; the server accepts either, so
+    // sending both is belt-and-suspenders. On failure we surface the real status
+    // and server message instead of a generic "Network error".
+    const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content
+              || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    async function postJson(url, payload) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({ ...payload, _csrf: CSRF })
+      });
+      let data = null;
+      try { data = await res.json(); } catch (_) { /* non-JSON response */ }
+      if (!res.ok) {
+        const msg = (data && data.error) ? data.error : `Request failed (HTTP ${res.status}).`;
+        const err = new Error(msg); err.status = res.status; throw err;
+      }
+      return data;
+    }
+
+    document.querySelectorAll('.enroll').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+          await postJson('/kick/api/enroll', {
+            channelId: btn.dataset.channel,
+            enabled: Number(btn.dataset.enabled)
+          });
+          location.reload();
+        } catch (e) {
+          btn.disabled = false;
+          alert(e.message || 'Could not update enrollment. Please refresh and try again.');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

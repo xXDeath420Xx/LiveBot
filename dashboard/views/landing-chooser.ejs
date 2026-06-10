@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CertiFried Utility — Discord &amp; Kick bots</title>
+  <meta name="description" content="CertiFried Utility — server management and community games on Discord, and a shared-banlist defense network on Kick. Pick where you need us." />
+  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#0a0911;--ink:#f1f0f6;--muted:#928da8;--discord:#7c84ff;--kick:#53FC18}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+    .bg{position:fixed;inset:0;z-index:0;background:
+      radial-gradient(40rem 30rem at 20% -10%,rgba(124,132,255,.16),transparent 60%),
+      radial-gradient(40rem 30rem at 85% 0%,rgba(83,252,24,.10),transparent 55%);pointer-events:none}
+    .wrap{position:relative;z-index:1;max-width:62rem;margin:0 auto;padding:3rem 1.5rem 4rem;text-align:center}
+    .logo{display:inline-flex;align-items:center;gap:.6rem;font-weight:700;font-size:1rem;margin-bottom:3rem}
+    .logo img{width:32px;height:32px;border-radius:8px}
+    h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(2.4rem,6vw,4rem);line-height:1.05;letter-spacing:-.02em;margin-bottom:1.1rem}
+    h1 .g{background:linear-gradient(100deg,var(--discord),var(--kick));-webkit-background-clip:text;background-clip:text;color:transparent}
+    .lede{color:var(--muted);font-size:1.15rem;max-width:46ch;margin:0 auto 2.5rem;line-height:1.6}
+    .statbar{display:flex;justify-content:center;gap:0;flex-wrap:wrap;margin-bottom:3.5rem;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden;background:rgba(255,255,255,.02)}
+    .statbar .s{padding:1.2rem 1.8rem;border-right:1px solid rgba(255,255,255,.07);min-width:9rem;flex:1}
+    .statbar .s:last-child{border-right:none}
+    .statbar b{display:block;font-family:'Space Grotesk',sans-serif;font-size:1.9rem;font-weight:700}
+    .statbar span{color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.06em}
+    .cards{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;text-align:left}
+    @media(max-width:720px){.cards{grid-template-columns:1fr}}
+    .card{position:relative;border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2rem;background:rgba(255,255,255,.025);text-decoration:none;color:inherit;transition:transform .15s,border-color .15s,background .15s;overflow:hidden}
+    .card:hover{transform:translateY(-4px);background:rgba(255,255,255,.05)}
+    .card.d:hover{border-color:rgba(124,132,255,.6)}.card.k:hover{border-color:rgba(83,252,24,.5)}
+    .badge{display:inline-flex;align-items:center;gap:.45rem;font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:.25rem .7rem;border-radius:999px;margin-bottom:1rem}
+    .card.d .badge{background:rgba(124,132,255,.16);color:#bcc2ff}.card.k .badge{background:rgba(83,252,24,.15);color:#7dfc4f}
+    .signed{font-size:.66rem;color:#7dfc4f;letter-spacing:.04em}
+    .card h3{font-family:'Space Grotesk',sans-serif;font-size:1.5rem;font-weight:700;margin-bottom:.6rem}
+    .card p{color:var(--muted);font-size:.96rem;line-height:1.55;margin-bottom:1.4rem}
+    .go{display:inline-flex;align-items:center;gap:.5rem;font-weight:700;font-size:.95rem;padding:.7rem 1.3rem;border-radius:11px}
+    .card.d .go{background:var(--discord);color:#0a0911}.card.k .go{background:var(--kick);color:#06140a}
+    .mini{margin-top:1.3rem;display:flex;gap:1.5rem}
+    .mini b{display:block;font-family:'Space Grotesk',sans-serif;font-size:1.3rem}
+    .mini span{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
+    footer{position:relative;z-index:1;text-align:center;color:var(--muted);font-size:.8rem;padding:1.5rem}
+    footer a{color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="wrap">
+    <div class="logo"><img src="/images/CertiFried.png" alt=""/> CertiFried Utility</div>
+    <h1>One toolkit for <span class="g">Discord</span> and <span class="g">Kick</span>.</h1>
+    <p class="lede">Server management and community games on Discord. A shared-banlist defense network on Kick. Pick where you need us.</p>
+
+    <div class="statbar">
+      <div class="s"><b><%= Number(locals.discordServers || 0).toLocaleString() %></b><span>Discord servers</span></div>
+      <div class="s"><b><%= Number(locals.discordUsers || 0).toLocaleString() %></b><span>Members reached</span></div>
+      <div class="s"><b><%= Number(locals.kickChannels || 0).toLocaleString() %></b><span>Kick channels</span></div>
+      <div class="s"><b><%= Number(locals.phishingBlocked || 0).toLocaleString() %></b><span>Scam domains blocked</span></div>
+    </div>
+
+    <div class="cards">
+      <a class="card d" href="<%= discordHref %>">
+        <span class="badge">Discord Bot<% if (locals.discordLoggedIn) { %> <span class="signed">● signed in</span><% } %></span>
+        <h3>Command your community</h3>
+        <p>Moderation, anti-nuke, leveling, economy, music, giveaways, reaction roles and stream alerts — all dashboard-driven.</p>
+        <span class="go"><%= locals.discordLoggedIn ? 'Open your dashboard' : 'Log in with Discord' %> →</span>
+        <div class="mini">
+          <div><b><%= Number(locals.discordServers || 0).toLocaleString() %></b><span>servers served</span></div>
+        </div>
+      </a>
+      <a class="card k" href="<%= kickHref %>">
+        <span class="badge">Kick Bot<% if (locals.kickLoggedIn) { %> <span class="signed">● signed in</span><% } %></span>
+        <h3>Defend your channel</h3>
+        <p>Bad actors and scam links banned across every connected channel — automatically, the moment you connect. No mod-setup required.</p>
+        <span class="go"><%= locals.kickLoggedIn ? 'Open the defender' : 'Log in with Kick' %> →</span>
+        <div class="mini">
+          <div><b><%= Number(locals.kickChannels || 0).toLocaleString() %></b><span>channels</span></div>
+          <div><b><%= Number(locals.kickEnrolled || 0).toLocaleString() %></b><span>defender-on</span></div>
+        </div>
+      </a>
+    </div>
+  </div>
+  <footer><a href="/discord">About the Discord bot</a> · <a href="/donate">Donate</a></footer>
+</body>
+</html>

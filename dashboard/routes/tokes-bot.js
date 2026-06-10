@@ -4,6 +4,7 @@ import logger from '../../utils/logger.js';
 import { requireTokesAuth } from './auth-tokes-bot.js';
 import { isSuperAdmin } from '../../utils/constants.js';
 import { invalidateGlobalCache, invalidateChannelCache } from '../../services/certifried-bot/command-registry.js';
+import { clearChannelFeaturesCache } from '../../services/certifried-bot/automod.js';
 import {
     validateCommandName,
     validateCommandResponse,
@@ -1050,6 +1051,22 @@ router.patch('/tokes-bot/api/channels/:channelId', requireTokesAuth, async (req,
             `UPDATE tokes_channels SET ${updates.join(', ')} WHERE id = ?`,
             params
         );
+
+        // Drop the automod features cache so emote_filter (and any future
+        // per-channel toggles) take effect on the next chat message.
+        if (features_enabled) {
+            try {
+                const [[row]] = await pool.execute(
+                    `SELECT channel_name, platform FROM tokes_channels WHERE id = ?`,
+                    [channelId]
+                );
+                if (row?.platform === 'twitch' && row.channel_name) {
+                    clearChannelFeaturesCache(row.channel_name);
+                }
+            } catch (err) {
+                logger.warn('[Tokes Bot] Failed to clear automod features cache', { error: err.message });
+            }
+        }
 
         res.json({ success: true, message: 'Channel updated' });
 
