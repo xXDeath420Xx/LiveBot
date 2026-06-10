@@ -63,6 +63,7 @@
                   data-channel="<%= ch.channelId %>" data-enabled="<%= ch.enabled ? 0 : 1 %>">
             <%= ch.enabled ? 'Defender ON' : 'Enable defender' %>
           </button>
+          <a class="settings-link" href="/kick/channel/<%= ch.channelId %>" style="margin-left:.5rem;font-size:.85rem;color:#9a93b3;text-decoration:none">Settings &amp; commands →</a>
         </div>
         <% if (ch.enabled && !ch.hasBanScope) { %>
           <div class="banner">
