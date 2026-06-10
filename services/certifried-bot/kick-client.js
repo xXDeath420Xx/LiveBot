@@ -26,6 +26,9 @@ export class KickBot {
         this.accessToken = null;
         this.appAccessToken = null;
         this.appTokenExpiry = null;
+        // Expose this instance for the defender's lazy token refresher
+        // (services/certifried-bot/defender/channel-tokens.js).
+        global.kickBot = this;
     }
 
     /**
@@ -330,7 +333,13 @@ export class KickBot {
                 userId: data.sender?.id?.toString(),
                 username: data.sender?.username || data.sender?.slug,
                 message: data.content?.trim() || '',
-                isBroadcaster: data.sender?.id === channelInfo.broadcasterId,
+                messageId: data.id,   // Kick chat message UUID (for defender delete fallback)
+                // String-coerce both sides: data.sender.id is a number (parsed JSON)
+                // but broadcasterId derives from tokes_channels.channel_id (VARCHAR).
+                // A number===string comparison is always false, which would leave a
+                // broadcaster unexempted and let the defender try to ban them.
+                isBroadcaster: data.sender?.id != null
+                    && String(data.sender.id) === String(channelInfo.broadcasterId),
                 isMod: data.sender?.is_moderator || data.sender?.is_staff,
                 reply: (text) => this.sendMessage(chatroomId, text)
             });

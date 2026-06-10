@@ -52,6 +52,7 @@ import { startCommunityRotation, stopCommunityRotation } from './jobs/community-
 import { startMonthlyResetScheduler, stopMonthlyResetScheduler } from './jobs/leveling-monthly-reset.js';
 import { startUnverifiedReaper, stopUnverifiedReaper } from './jobs/unverified-reaper.js';
 import { startAffiliateRecheckScheduler, stopAffiliateRecheckScheduler } from './jobs/affiliate-recheck-scheduler.js';
+import { startKickTokenRefreshScheduler, stopKickTokenRefreshScheduler } from './jobs/kick-token-refresh-scheduler.js';
 import { startTimeCapsuleScheduler, stopTimeCapsuleScheduler } from './jobs/time-capsule-scheduler.js';
 import { startHabitTrackerScheduler, stopHabitTrackerScheduler } from './jobs/habit-tracker-scheduler.js';
 import { startPetStatDecayScheduler, stopPetStatDecayScheduler } from './jobs/pet-stat-decay-scheduler.js';
@@ -786,6 +787,10 @@ async function initializeSchedulersAndDashboard(client) {
   // Start affiliate status re-check scheduler
   startAffiliateRecheckScheduler();
   logger.info('[Core] Affiliate re-check scheduler initialized');
+
+  // Start Kick token-refresh scheduler (keeps defender OAuth tokens alive)
+  startKickTokenRefreshScheduler();
+  logger.info('[Core] Kick token-refresh scheduler initialized');
 
   // Start time capsule scheduler
   startTimeCapsuleScheduler(client);
