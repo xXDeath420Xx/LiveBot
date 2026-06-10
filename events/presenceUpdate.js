@@ -1,9 +1,9 @@
 import { Events, ActivityType } from 'discord.js';
 import logger from '../utils/logger.js';
-import { saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 import pool from '../utils/db.js';
 import { crossPollinateStreamer } from '../utils/streamer-cross-pollinate.js';
+import { syncLinkedPlatforms } from '../core/streamer-sync.js';
 
 // Track recently auto-registered streamers to avoid spamming DB lookups
 const recentlyChecked = new Map(); // `${guildId}:${userId}` -> timestamp
@@ -23,7 +23,7 @@ async function getAutoTrackConfigs(guildId) {
 
     try {
         const [rows] = await pool.execute(
-            'SELECT role_id, announcement_channel_id, live_role_id, delete_on_end, edit_on_end FROM guild_streamer_auto_track WHERE guild_id = ? AND enabled = 1',
+            'SELECT role_id, announcement_channel_id, live_role_id, delete_on_end, edit_on_end, min_level FROM guild_streamer_auto_track WHERE guild_id = ? AND enabled = 1',
             [guildId]
         );
         autoTrackConfigCache.set(guildId, { data: rows, ts: Date.now() });
@@ -127,37 +127,11 @@ export default {
             const oldStatus = oldPresence?.status || 'offline';
             const newStatus = newPresence.status || 'offline';
 
-            // Only log online/offline transitions
+            // Only log significant online/offline transitions (debug logger only, no DB write)
             if ((oldStatus === 'offline' && newStatus !== 'offline') ||
                 (oldStatus !== 'offline' && newStatus === 'offline')) {
 
                 logger.debug(`[Presence] ${newPresence.user.tag}: ${oldStatus} → ${newStatus}`, {
-                    guildId: newPresence.guild.id,
-                    userId: newPresence.user.id,
-                    category: 'presence'
-                });
-
-                await saveAuditLog(
-                    newPresence.guild.id,
-                    'PRESENCE_UPDATE',
-                    newPresence.user.id,
-                    null,
-                    null,
-                    null,
-                    newStatus === 'offline' ? 'Went offline' : 'Came online',
-                    null,
-                    oldStatus,
-                    newStatus,
-                    { username: newPresence.user.tag }
-                );
-            }
-
-            // Log custom status changes
-            const oldCustom = oldPresence?.activities?.find(a => a.type === 4)?.state;
-            const newCustom = newPresence.activities?.find(a => a.type === 4)?.state;
-
-            if (oldCustom !== newCustom && (oldCustom || newCustom)) {
-                logger.debug(`[Presence] ${newPresence.user.tag} status: "${oldCustom || 'none'}" → "${newCustom || 'none'}"`, {
                     guildId: newPresence.guild.id,
                     userId: newPresence.user.id,
                     category: 'presence'
@@ -201,6 +175,46 @@ async function autoRegisterStreamer(oldPresence, newPresence) {
         if (lastCheck && Date.now() - lastCheck < CHECK_COOLDOWN_MS) return;
         recentlyChecked.set(cacheKey, Date.now());
 
+        // ── community_twitch_links auto-population ───────────────────────────
+        // Independent of guild_streamer_auto_track. Whenever we see a member
+        // streaming on Twitch, record their twitch_username ↔ discord_user_id
+        // link so the Twitch role-sync engine (jobs/twitch-role-sync-scheduler.js)
+        // can grant Discord roles to Twitch mods/VIPs even when the guild has
+        // no auto-track config wired up.
+        try {
+            const twitchUrlEarly = newStreaming.url;
+            const twitchUsernameEarly = twitchUrlEarly.replace(/https?:\/\/(www\.)?twitch\.tv\//i, '').split(/[/?#]/)[0].toLowerCase();
+            if (twitchUsernameEarly && twitchUsernameEarly.length >= 2) {
+                // Cheap path: look up twitch_user_id from streamers table by username
+                let twitchUserId = null;
+                const [existing] = await pool.execute(
+                    'SELECT platform_user_id FROM streamers WHERE platform = ? AND LOWER(username) = ? LIMIT 1',
+                    ['twitch', twitchUsernameEarly]
+                );
+                if (existing.length && existing[0].platform_user_id) {
+                    twitchUserId = existing[0].platform_user_id;
+                } else {
+                    // Fallback: hit Twitch API once to resolve
+                    try {
+                        const twitchApi = await import('../utils/platforms/twitch.js');
+                        const tu = await twitchApi.getTwitchUser(twitchUsernameEarly);
+                        if (tu?.id) twitchUserId = tu.id;
+                    } catch { /* swallow — link write is best-effort */ }
+                }
+                if (twitchUserId) {
+                    await pool.execute(
+                        `INSERT INTO community_twitch_links (guild_id, discord_user_id, twitch_username, twitch_user_id, last_checked)
+                         VALUES (?, ?, ?, ?, NOW())
+                         ON DUPLICATE KEY UPDATE twitch_username = VALUES(twitch_username), twitch_user_id = VALUES(twitch_user_id), last_checked = NOW()`,
+                        [guildId, userId, twitchUsernameEarly, twitchUserId]
+                    );
+                    logger.debug(`[Presence] community_twitch_links upserted: ${twitchUsernameEarly} ↔ ${userId} in guild ${guildId}`, { category: 'streams' });
+                }
+            }
+        } catch (linkErr) {
+            logger.debug(`[Presence] community_twitch_links write failed: ${linkErr.message}`, { category: 'streams' });
+        }
+
         // Check if this guild has auto-track config (cached)
         const configs = await getAutoTrackConfigs(guildId);
         if (!configs.length) return;
@@ -211,6 +225,21 @@ async function autoRegisterStreamer(oldPresence, newPresence) {
 
         const matchingConfig = configs.find(c => !c.role_id || member.roles.cache.has(c.role_id));
         if (!matchingConfig) return;
+
+        // Level gate (min_level > 0): require the member to have reached the level
+        // before they're auto-tracked. 0 = no gate (prior behavior).
+        if (matchingConfig.min_level > 0) {
+            const lm = newPresence.client?.levelingManager;
+            let level = 0;
+            if (lm?.getUserRank) {
+                const rank = await lm.getUserRank(guildId, userId).catch(() => null);
+                level = Number(rank?.level) || 0;
+            }
+            if (level < matchingConfig.min_level) {
+                logger.debug(`[AutoTrack] Skipping ${userId} — level ${level} < required ${matchingConfig.min_level}`, { guildId, category: 'streams' });
+                return;
+            }
+        }
 
         // Extract Twitch username from URL (e.g., https://www.twitch.tv/username)
         const twitchUrl = newStreaming.url;
@@ -289,6 +318,35 @@ async function autoRegisterStreamer(oldPresence, newPresence) {
         logger.info(`[AutoTrack] Auto-subscribed guild ${guildId} to streamer ${twitchUsername} -> #${matchingConfig.announcement_channel_id}`, {
             guildId, streamerId, twitchUsername, category: 'streams'
         });
+
+        // Auto-assign Streamer role if one exists for this guild's auto-track config
+        try {
+            // Find a "Streamer" role in the guild (by name pattern)
+            const streamerRole = newPresence.guild.roles.cache.find(r => r.name.includes('Streamer') && !r.managed);
+            if (streamerRole && member && !member.roles.cache.has(streamerRole.id)) {
+                await member.roles.add(streamerRole, 'Auto-detected as Twitch streamer');
+                logger.info(`[AutoTrack] Auto-assigned Streamer role to ${member.user.tag} in guild ${guildId}`, { category: 'streams' });
+            }
+        } catch (roleErr) {
+            logger.debug(`[AutoTrack] Could not assign Streamer role: ${roleErr.message}`, { category: 'streams' });
+        }
+
+        // Cross-PLATFORM sync: pull in this user's other linked platforms
+        // (kick/youtube/trovo/…) to the same channel so all platforms ride along.
+        try {
+            const synced = await syncLinkedPlatforms(newPresence.guild, userId, matchingConfig.announcement_channel_id, {
+                liveRoleId: matchingConfig.live_role_id,
+                deleteOnEnd: matchingConfig.delete_on_end,
+                editOnEnd: matchingConfig.edit_on_end,
+            });
+            if (synced.length) {
+                logger.info(`[AutoTrack] Cross-platform synced ${synced.length} extra platform(s) for ${userId}`, {
+                    guildId, platforms: synced.map(s => s.platform), category: 'streams'
+                });
+            }
+        } catch (syncErr) {
+            logger.warn(`[AutoTrack] Cross-platform sync failed: ${syncErr.message}`, { guildId, userId, category: 'streams' });
+        }
 
         // Cross-pollinate to other servers where this user is a member
         const crossAdded = await crossPollinateStreamer(streamerId, userId, guildId);
