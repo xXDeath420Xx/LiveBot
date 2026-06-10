@@ -1,170 +1,156 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="csrf-token" content="<%= csrfToken %>" />
-  <title>Kick Defender — Manager Console</title>
-  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: radial-gradient(circle at 50% 0%, #1e1b2e 0%, #0b0a12 70%); color: #ECECEC; min-height: 100vh; padding: 2rem 1.25rem; }
-    .wrap { max-width: 56rem; margin: 0 auto; }
-    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
-    h1 { font-size: 1.6rem; font-weight: 800; }
-    h2 { font-size: 1.1rem; font-weight: 700; margin: 1.75rem 0 .75rem; }
-    .nav a { color: #9a93b3; text-decoration: none; margin-left: 1rem; font-size: .9rem; }
-    .nav a:hover { color: #fff; }
-    .counts { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .stat { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 12px; padding: .9rem 1.25rem; min-width: 7rem; }
-    .stat b { display: block; font-size: 1.5rem; }
-    .stat span { color: #9a93b3; font-size: .8rem; }
-    .card { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; }
-    input, select { font-family: inherit; font-size: .9rem; padding: .55rem .7rem; border-radius: 9px; border: 1px solid rgba(255,255,255,.15); background: #14121d; color: #ECECEC; }
-    button { font-family: inherit; font-weight: 600; font-size: .9rem; border: none; border-radius: 9px; padding: .55rem 1rem; cursor: pointer; background: #53FC18; color: #0b0a12; }
-    button.danger { background: rgba(239,68,68,.85); color: #fff; }
-    .formrow { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; }
-    ul { list-style: none; margin-top: .75rem; }
-    li { display: flex; justify-content: space-between; align-items: center; padding: .5rem 0; border-bottom: 1px solid rgba(255,255,255,.06); font-size: .9rem; }
-    .muted { color: #9a93b3; font-size: .85rem; }
-    code { background: rgba(255,255,255,.08); padding: .1rem .35rem; border-radius: 5px; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <header>
+<%- include('_head', { pageTitle: 'Manager Console', csrfToken, kickUser: user }) %>
+
+  <div class="pagehead">
+    <div>
       <h1>🐻 Manager Console</h1>
-      <nav class="nav">
-        <a href="/kick">My channels</a>
-        <% if (isAdmin) { %><a href="/kick/admin">Connected accounts</a><% } %>
-        <a href="/logout">Log out</a>
-      </nav>
-    </header>
-
-    <div class="counts">
-      <div class="stat"><b><%= counts.banlist %></b><span>Banlist</span></div>
-      <div class="stat"><b><%= counts.sublist %></b><span>Sublist</span></div>
-      <div class="stat"><b><%= counts.unbanlist %></b><span>Unban list</span></div>
-      <div class="stat"><b><%= counts.sites %></b><span>Manual sites</span></div>
-      <div class="stat"><b><%= phishingCount.toLocaleString() %></b><span>Phishing domains blocked</span></div>
+      <div class="sub">Curate the shared banlist that protects every connected channel.</div>
     </div>
+    <nav class="subnav">
+      <a href="/kick">Channels</a>
+      <a href="/kick/managers" class="active">Manager console</a>
+      <% if (isAdmin) { %><a href="/kick/admin">Connected accounts</a><% } %>
+    </nav>
+  </div>
 
+  <!-- ── Overview stats ─────────────────────────────────────── -->
+  <div class="statgrid">
+    <div class="stat"><b><%= counts.banlist %></b><span>Banlist</span></div>
+    <div class="stat"><b><%= counts.sublist %></b><span>Sublist</span></div>
+    <div class="stat"><b><%= counts.unbanlist %></b><span>Unban list</span></div>
+    <div class="stat"><b><%= counts.sites %></b><span>Manual sites</span></div>
+    <div class="stat kick"><b><%= phishingCount.toLocaleString() %></b><span>Phishing domains</span></div>
+  </div>
+
+  <!-- ── Add to banlist ─────────────────────────────────────── -->
+  <div class="card">
     <h2>Add to banlist</h2>
-    <div class="card">
-      <div class="formrow">
-        <input id="ban-username" placeholder="username" />
-        <input id="ban-reason" placeholder="reason (optional)" />
-        <select id="ban-type">
-          <option value="ban">banlist</option>
-          <option value="sublist">sublist</option>
-        </select>
-        <button id="ban-add">Add ban</button>
-        <button id="ban-remove" class="danger">Remove ban</button>
-      </div>
+    <div class="srow">
+      <input id="ban-username" placeholder="username" />
+      <input id="ban-reason" placeholder="reason (optional)" />
+      <select id="ban-type">
+        <option value="ban">banlist</option>
+        <option value="sublist">sublist</option>
+      </select>
+      <button id="ban-add">Add ban</button>
+      <button id="ban-remove" class="danger">Remove ban</button>
     </div>
+  </div>
 
+  <!-- ── Banlist ────────────────────────────────────────────── -->
+  <div class="card">
     <h2>Banlist <span class="muted">(<%= counts.banlist %>)</span></h2>
-    <div class="card">
-      <% if (!bans.length) { %>
-        <p class="muted">No users on the banlist yet. Add one above, or use <code>!add-ban &lt;user&gt;</code> in chat.</p>
-      <% } else { %>
-        <ul>
-          <% bans.forEach(b => { %>
-            <li>
-              <span><strong><%= b.username || b.platform_user_id %></strong><% if (b.reason) { %> <span class="muted">— <%= b.reason %></span><% } %></span>
-              <button class="danger ban-remove" data-username="<%= b.username || b.platform_user_id %>">Remove</button>
-            </li>
-          <% }) %>
-        </ul>
-        <% if (counts.banlist > bans.length) { %><p class="muted">Showing latest <%= bans.length %> of <%= counts.banlist %>.</p><% } %>
-      <% } %>
-    </div>
-
-    <h2>Phishing / scam links</h2>
-    <div class="card">
-      <p class="muted" style="margin-bottom:.75rem">
-        Auto-protected against <strong><%= phishingCount.toLocaleString() %></strong> known phishing/scam domains
-        (synced from community lists every 4h). Posting one in an enrolled channel = delete + warn, then ban on repeat.
-      </p>
-      <div class="formrow">
-        <input id="check-domain" placeholder="check a domain, e.g. free-nitro.xyz" style="flex:1;min-width:16rem" />
-        <button id="check-btn">Check</button>
-      </div>
-      <p id="check-result" class="muted" style="margin-top:.6rem"></p>
-    </div>
-
-    <h2>Sublist <span class="muted">(<%= counts.sublist %>)</span> — raid / bot defense</h2>
-    <div class="card">
-      <p class="muted" style="margin-bottom:.6rem">Mass-add names during a raid; cleared in one click.</p>
-      <div class="formrow">
-        <input id="sub-username" placeholder="username" />
-        <input id="sub-reason" placeholder="reason (optional)" />
-        <button id="sub-add">Add to sublist</button>
-        <button id="sub-clear" class="danger">Clear sublist</button>
-      </div>
-      <% if (sublist.length) { %>
-        <ul>
-          <% sublist.forEach(b => { %>
-            <li>
-              <span><strong><%= b.username || b.platform_user_id %></strong><% if (b.reason) { %> <span class="muted">— <%= b.reason %></span><% } %></span>
-              <button class="danger ban-remove" data-username="<%= b.username || b.platform_user_id %>">Remove</button>
-            </li>
-          <% }) %>
-        </ul>
-      <% } %>
-    </div>
-
-    <h2>Unban / protection list <span class="muted">(<%= counts.unbanlist %>)</span></h2>
-    <div class="card">
-      <p class="muted" style="margin-bottom:.6rem">Whitelisted users are never actioned (false-positive protection).</p>
-      <div class="formrow">
-        <input id="unban-username" placeholder="username" />
-        <button id="unban-add">Add to whitelist</button>
-      </div>
-      <% if (unbans && unbans.length) { %>
-        <ul>
-          <% unbans.forEach(u => { %>
-            <li><span><strong><%= u.username || u.platform_user_id %></strong></span>
-              <button class="danger unban-remove" data-username="<%= u.username || u.platform_user_id %>">Remove</button></li>
-          <% }) %>
-        </ul>
-      <% } %>
-    </div>
-
-    <h2>Manual sites <span class="muted">(<%= counts.sites %>)</span></h2>
-    <div class="card">
-      <p class="muted" style="margin-bottom:.6rem">Add Kick-specific bad domains beyond the shared list.</p>
-      <div class="formrow">
-        <input id="site-uri" placeholder="https://bad.example" style="flex:1;min-width:14rem" />
-        <button id="site-add">Add site</button>
-      </div>
-      <% if (sites.length) { %>
-        <ul>
-          <% sites.forEach(s => { %>
-            <li><span><%= s.uri %></span><button class="danger site-remove" data-uri="<%= s.uri %>">Remove</button></li>
-          <% }) %>
-        </ul>
-      <% } %>
-    </div>
-
-    <% if (isAdmin) { %>
-      <h2>Managers (admin)</h2>
-      <div class="card">
-        <div class="formrow">
-          <input id="mgr-id" placeholder="Kick username (or user id)" style="min-width:16rem" />
-          <button id="mgr-add">Add manager</button>
-          <button id="mgr-remove" class="danger">Remove manager</button>
-        </div>
-      </div>
+    <% if (!bans.length) { %>
+      <p class="muted">No users on the banlist yet. Add one above, or use <code>!add-ban &lt;user&gt;</code> in chat.</p>
+    <% } else { %>
+      <ul class="clean">
+        <% bans.forEach(function(b){ %>
+          <li>
+            <span><strong><%= b.username || b.platform_user_id %></strong><% if (b.reason) { %> <span class="muted">— <%= b.reason %></span><% } %></span>
+            <button class="danger ban-remove" data-username="<%= b.username || b.platform_user_id %>">Remove</button>
+          </li>
+        <% }) %>
+      </ul>
+      <% if (counts.banlist > bans.length) { %><p class="muted" style="margin-top:.6rem">Showing latest <%= bans.length %> of <%= counts.banlist %>.</p><% } %>
     <% } %>
   </div>
 
-  <script src="/js/csrf.js"></script>
+  <!-- ── Phishing / scam links ──────────────────────────────── -->
+  <div class="card">
+    <h2>Phishing / scam links</h2>
+    <p class="muted" style="margin-bottom:.85rem">
+      Auto-protected against <strong><%= phishingCount.toLocaleString() %></strong> known phishing/scam domains
+      (synced from community lists every 4h). Posting one in an enrolled channel = delete + warn, then ban on repeat.
+    </p>
+    <div class="srow">
+      <input id="check-domain" placeholder="check a domain, e.g. free-nitro.xyz" style="flex:1;min-width:16rem" />
+      <button id="check-btn">Check</button>
+    </div>
+    <p id="check-result" class="muted" style="margin-top:.7rem"></p>
+  </div>
+
+  <!-- ── Sublist ────────────────────────────────────────────── -->
+  <div class="card">
+    <h2>Sublist <span class="muted">(<%= counts.sublist %>)</span> — raid / bot defense</h2>
+    <p class="muted" style="margin-bottom:.7rem">Mass-add names during a raid; cleared in one click.</p>
+    <div class="srow">
+      <input id="sub-username" placeholder="username" />
+      <input id="sub-reason" placeholder="reason (optional)" />
+      <button id="sub-add">Add to sublist</button>
+      <button id="sub-clear" class="danger">Clear sublist</button>
+    </div>
+    <% if (sublist.length) { %>
+      <ul class="clean">
+        <% sublist.forEach(function(b){ %>
+          <li>
+            <span><strong><%= b.username || b.platform_user_id %></strong><% if (b.reason) { %> <span class="muted">— <%= b.reason %></span><% } %></span>
+            <button class="danger ban-remove" data-username="<%= b.username || b.platform_user_id %>">Remove</button>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+
+  <!-- ── Unban / protection list ────────────────────────────── -->
+  <div class="card">
+    <h2>Unban / protection list <span class="muted">(<%= counts.unbanlist %>)</span></h2>
+    <p class="muted" style="margin-bottom:.7rem">Whitelisted users are never actioned (false-positive protection).</p>
+    <div class="srow">
+      <input id="unban-username" placeholder="username" />
+      <button id="unban-add">Add to whitelist</button>
+    </div>
+    <% if (unbans && unbans.length) { %>
+      <ul class="clean">
+        <% unbans.forEach(function(u){ %>
+          <li>
+            <span><strong><%= u.username || u.platform_user_id %></strong></span>
+            <button class="danger unban-remove" data-username="<%= u.username || u.platform_user_id %>">Remove</button>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+
+  <!-- ── Manual sites ───────────────────────────────────────── -->
+  <div class="card">
+    <h2>Manual sites <span class="muted">(<%= counts.sites %>)</span></h2>
+    <p class="muted" style="margin-bottom:.7rem">Add Kick-specific bad domains beyond the shared list.</p>
+    <div class="srow">
+      <input id="site-uri" placeholder="https://bad.example" style="flex:1;min-width:14rem" />
+      <button id="site-add">Add site</button>
+    </div>
+    <% if (sites.length) { %>
+      <ul class="clean">
+        <% sites.forEach(function(s){ %>
+          <li>
+            <span><%= s.uri %></span>
+            <button class="danger site-remove" data-uri="<%= s.uri %>">Remove</button>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+
+  <!-- ── Managers (admin) ───────────────────────────────────── -->
+  <% if (isAdmin) { %>
+    <div class="card">
+      <h2>Managers (admin)</h2>
+      <div class="srow">
+        <input id="mgr-id" placeholder="Kick username (or user id)" style="min-width:16rem" />
+        <button id="mgr-add">Add manager</button>
+        <button id="mgr-remove" class="danger">Remove manager</button>
+      </div>
+    </div>
+  <% } %>
+
+<% var pageJs = `
   <script>
+    const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
     async function send(method, url, body) {
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({ ...(body || {}), _csrf: CSRF })
+      });
       if (res.ok) { location.reload(); }
       else { const j = await res.json().catch(() => ({})); alert(j.error || 'Request failed.'); }
     }
@@ -194,9 +180,9 @@
         try {
           const res = await fetch('/kick/api/check-domain?q=' + encodeURIComponent(q));
           const j = await res.json();
-          if (j.safe) el.textContent = `✅ "${j.query}" is explicitly allow-listed (never blocked).`;
-          else if (j.blocked) el.textContent = `🚫 "${j.query}" IS blocked (matched: ${j.matched}).`;
-          else el.textContent = `— "${j.query}" is not in the blocklist.`;
+          if (j.safe) el.textContent = '✅ "' + j.query + '" is explicitly allow-listed (never blocked).';
+          else if (j.blocked) el.textContent = '🚫 "' + j.query + '" IS blocked (matched: ' + j.matched + ').';
+          else el.textContent = '— "' + j.query + '" is not in the blocklist.';
         } catch { el.textContent = 'Check failed.'; }
       };
       checkBtn.onclick = runCheck;
@@ -220,6 +206,5 @@
       document.querySelectorAll('.unban-remove').forEach(b =>
         b.onclick = () => send('DELETE', '/kick/api/unban', { username: b.dataset.username }));
     }
-  </script>
-</body>
-</html>
+  </script>`; %>
+<%- include('_foot', { extraJs: pageJs }) %>
