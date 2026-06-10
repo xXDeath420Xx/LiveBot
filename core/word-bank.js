@@ -35,7 +35,9 @@ export function load() {
       byLength.get(L).push(w);
     }
     answers = readLines('coordle-answers.txt').filter(w => /^[a-z]{5}$/.test(w));
-    try { common = readLines('wordseek-words.txt').filter(w => /^[a-z]{3,}$/.test(w)); } catch { common = []; }
+    // Intersect the curated list with the dictionary so WordSeek only ever
+    // plants real English words, even if the curated file is edited later.
+    try { common = readLines('wordseek-words.txt').filter(w => /^[a-z]{3,}$/.test(w) && english.has(w)); } catch { common = []; }
     logger.info('[WordBank] loaded', { english: english.size, answers: answers.length, common: common.length });
     return true;
   } catch (err) {
