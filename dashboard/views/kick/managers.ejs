@@ -96,17 +96,6 @@
       </div>
     <% } %>
 
-    <% if (unbans.length) { %>
-      <h2>Unban (protection) list <span class="muted">(<%= counts.unbanlist %>)</span></h2>
-      <div class="card">
-        <ul>
-          <% unbans.forEach(u => { %>
-            <li><span><strong><%= u.username || u.platform_user_id %></strong></span></li>
-          <% }) %>
-        </ul>
-      </div>
-    <% } %>
-
     <h2>Phishing / scam links</h2>
     <div class="card">
       <p class="muted" style="margin-bottom:.75rem">
@@ -118,6 +107,34 @@
         <button id="check-btn">Check</button>
       </div>
       <p id="check-result" class="muted" style="margin-top:.6rem"></p>
+    </div>
+
+    <h2>Sublist <span class="muted">(<%= counts.sublist %>)</span> — raid / bot defense</h2>
+    <div class="card">
+      <p class="muted" style="margin-bottom:.6rem">Mass-add names during a raid; cleared in one click.</p>
+      <div class="formrow">
+        <input id="sub-username" placeholder="username" />
+        <input id="sub-reason" placeholder="reason (optional)" />
+        <button id="sub-add">Add to sublist</button>
+        <button id="sub-clear" class="danger">Clear sublist</button>
+      </div>
+    </div>
+
+    <h2>Unban / protection list <span class="muted">(<%= counts.unbanlist %>)</span></h2>
+    <div class="card">
+      <p class="muted" style="margin-bottom:.6rem">Whitelisted users are never actioned (false-positive protection).</p>
+      <div class="formrow">
+        <input id="unban-username" placeholder="username" />
+        <button id="unban-add">Add to whitelist</button>
+      </div>
+      <% if (unbans && unbans.length) { %>
+        <ul>
+          <% unbans.forEach(u => { %>
+            <li><span><strong><%= u.username || u.platform_user_id %></strong></span>
+              <button class="danger unban-remove" data-username="<%= u.username || u.platform_user_id %>">Remove</button></li>
+          <% }) %>
+        </ul>
+      <% } %>
     </div>
 
     <h2>Manual sites <span class="muted">(<%= counts.sites %>)</span></h2>
@@ -194,6 +211,18 @@
     if (mgrAdd) {
       mgrAdd.onclick = () => v('mgr-id') && send('POST', '/kick/api/managers', { user: v('mgr-id'), action: 'add' });
       document.getElementById('mgr-remove').onclick = () => v('mgr-id') && send('POST', '/kick/api/managers', { user: v('mgr-id'), action: 'remove' });
+    }
+
+    const subAdd = document.getElementById('sub-add');
+    if (subAdd) {
+      subAdd.onclick = () => v('sub-username') && send('POST', '/kick/api/sublist', { username: v('sub-username'), reason: v('sub-reason') });
+      document.getElementById('sub-clear').onclick = () => { if (confirm('Clear the entire sublist?')) send('POST', '/kick/api/sublist/clear', {}); };
+    }
+    const unbanAdd = document.getElementById('unban-add');
+    if (unbanAdd) {
+      unbanAdd.onclick = () => v('unban-username') && send('POST', '/kick/api/unban', { username: v('unban-username') });
+      document.querySelectorAll('.unban-remove').forEach(b =>
+        b.onclick = () => send('DELETE', '/kick/api/unban', { username: b.dataset.username }));
     }
   </script>
 </body>
