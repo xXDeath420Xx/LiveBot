@@ -39,3 +39,22 @@ export async function managerCount() {
     const [[row]] = await pool.execute('SELECT COUNT(*) n FROM kbd_managers');
     return Number(row.n);
 }
+
+/**
+ * List current managers with their display name + when they were added, so the
+ * admin UI can show WHO the managers are (not just a count). Best-effort join to
+ * tokes_users for the name; falls back to the raw id.
+ */
+export async function listManagers() {
+    const [rows] = await pool.execute(`
+        SELECT m.tokes_user_id, m.created_at, u.primary_name
+        FROM kbd_managers m
+        LEFT JOIN tokes_users u ON u.id = m.tokes_user_id
+        ORDER BY m.created_at DESC
+    `);
+    return rows.map(r => ({
+        userId: Number(r.tokes_user_id),
+        name: r.primary_name || ('user #' + r.tokes_user_id),
+        addedAt: r.created_at
+    }));
+}

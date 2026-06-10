@@ -54,3 +54,46 @@ export function makeListEvents({ pool }) {
 
 // Real-wired singleton using the module's DB pool (same pool log()/channelStats() use).
 export const listEvents = makeListEvents({ pool });
+
+/**
+ * Network-wide recent events across ALL channels (admin/manager dashboards),
+ * joined to the channel name so the feed reads "channel · action · user".
+ */
+export function makeListAllEvents({ pool }) {
+    return async function listAllEvents({ limit = 50 } = {}) {
+        const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+        const [rows] = await pool.execute(
+            `SELECT e.channel_id, e.target_username, e.action, e.reason, e.success, e.created_at,
+                    c.channel_name
+             FROM kbd_enforcement_log e
+             LEFT JOIN tokes_channels c
+               ON c.platform = 'kick' AND c.channel_id = e.channel_id
+             ORDER BY e.created_at DESC
+             LIMIT ?`,
+            [lim]
+        );
+        return rows;
+    };
+}
+
+export const listAllEvents = makeListAllEvents({ pool });
+
+/**
+ * Network-wide totals across all Kick channels (one query) for the main dashboard.
+ */
+export async function networkStats() {
+    const [[r]] = await pool.execute(`
+        SELECT
+            SUM(action = 'ban'  AND success = 1) AS banned,
+            SUM(action = 'delete' AND success = 1) AS deleted,
+            SUM(action = 'detected_no_scope')     AS dormant,
+            COUNT(*)                              AS total
+        FROM kbd_enforcement_log
+    `);
+    return {
+        banned: Number(r.banned || 0),
+        deleted: Number(r.deleted || 0),
+        dormant: Number(r.dormant || 0),
+        total: Number(r.total || 0)
+    };
+}

@@ -11,7 +11,7 @@ import logger from '../../utils/logger.js';
 import { requireTokesAuth, requireKickAuth } from './auth-tokes-bot.js';
 import * as banlist from '../../services/certifried-bot/defender/banlist.js';
 import * as managers from '../../services/certifried-bot/defender/managers.js';
-import { channelStats, listEvents } from '../../services/certifried-bot/defender/enforcement-log.js';
+import { channelStats, listEvents, listAllEvents, networkStats } from '../../services/certifried-bot/defender/enforcement-log.js';
 import { size as phishingSize, isDomainBlocked } from '../../services/certifried-bot/defender/phishing-domains.js';
 import { resolveOwnedChannel } from '../../services/certifried-bot/defender/owned-channel.js';
 
@@ -435,6 +435,76 @@ router.post('/kick/api/channel-settings', requireKickAuth, async (req, res) => {
     } catch (error) {
         logger.error('[KBD Dashboard] save channel-settings error', { error: error.message });
         res.status(500).json({ error: 'Failed to save settings' });
+    }
+});
+
+// ── Network stats (any logged-in Kick user) ────────────────────────────────
+// Aggregate protection numbers across the whole defender network, for the main
+// dashboard's overview. Read-only, cheap.
+router.get('/kick/api/network-stats', requireKickAuth, async (req, res) => {
+    try {
+        const [stats, counts] = await Promise.all([networkStats(), banlist.getCounts()]);
+        res.json({
+            stats,
+            banlist: counts.banlist,
+            sublist: counts.sublist,
+            unbanlist: counts.unbanlist,
+            sites: counts.sites,
+            phishing: phishingSize()
+        });
+    } catch (error) {
+        logger.error('[KBD Dashboard] network-stats error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load network stats' });
+    }
+});
+
+// ── Network activity feed (manager+) ───────────────────────────────────────
+router.get('/kick/api/network-activity', requireKickAuth, async (req, res) => {
+    try {
+        if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
+        const events = await listAllEvents({ limit: req.query.limit || 50 });
+        res.json({ events });
+    } catch (error) {
+        logger.error('[KBD Dashboard] network-activity error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load activity' });
+    }
+});
+
+// ── Manager roster (admin) ─────────────────────────────────────────────────
+router.get('/kick/api/managers', requireKickAuth, async (req, res) => {
+    try {
+        if (!isAdminUser(req)) return res.status(403).json({ error: 'Admins only' });
+        res.json({ managers: await managers.listManagers() });
+    } catch (error) {
+        logger.error('[KBD Dashboard] manager-list error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load managers' });
+    }
+});
+
+// ── Bot health (any logged-in Kick user) ───────────────────────────────────
+// Is the live Kick bot connected, and to how many chatrooms? Plus this user's
+// channel scope/token state, so the dashboard can show operational status.
+router.get('/kick/api/bot-health', requireKickAuth, async (req, res) => {
+    try {
+        const bot = global.kickBot;
+        const connected = !!(bot && bot.isConnected);
+        const joinedChannels = bot && bot.channels && typeof bot.channels.size === 'number' ? bot.channels.size : 0;
+        // This user's enrolled Kick channels + whether each has a live join.
+        const userId = req.session.tokesUser.id;
+        const [chans] = await pool.execute(
+            "SELECT channel_id, channel_name, defender_enabled FROM tokes_channels WHERE platform = 'kick' AND owner_id = ?",
+            [userId]
+        );
+        const channels = chans.map(c => ({
+            channelId: c.channel_id,
+            channelName: c.channel_name,
+            enrolled: c.defender_enabled === 1,
+            joined: !!(bot && bot.channels && bot.channels.has(String(c.channel_id)))
+        }));
+        res.json({ connected, joinedChannels, channels });
+    } catch (error) {
+        logger.error('[KBD Dashboard] bot-health error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load bot health' });
     }
 });
 
