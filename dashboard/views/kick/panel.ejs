@@ -112,12 +112,13 @@
     document.querySelectorAll('.set-save').forEach(btn => {
       btn.addEventListener('click', async () => {
         const ch = btn.dataset.channel;
+        // ch is always a numeric Kick broadcaster id — safe inside an attribute selector.
         const q = s => document.querySelector(s + '[data-channel="' + ch + '"]');
         const banType = q('.set-bantype').value;
         const duration = q('.set-duration').value;
         const payload = {
           channelId: ch,
-          banDurationMin: banType === 'timed' ? (duration || 1) : '',
+          banDurationMin: banType === 'timed' ? (Number(duration) || 1) : '',
           phishingThreshold: q('.set-threshold').value,
           warningTemplate: q('.set-warning').value
         };
@@ -141,7 +142,7 @@
           if (!res.ok) throw new Error(j.error || 'Failed');
           if (!j.events.length) { out.textContent = 'No actions recorded yet.'; return; }
           out.innerHTML = '<table>' + j.events.map(e =>
-            '<tr><td>' + new Date(e.created_at).toISOString().slice(0,16).replace('T',' ') +
+            '<tr><td>' + (e.created_at ? new Date(e.created_at).toISOString().slice(0,16).replace('T',' ') : '—') +
             '</td><td>' + esc(e.action) + (e.success ? '' : ' (failed)') +
             '</td><td>' + esc(e.target_username) + '</td><td>' + esc(e.reason) + '</td></tr>').join('') + '</table>';
         } catch (e) { out.textContent = e.message || 'Failed to load.'; }
@@ -155,6 +156,7 @@
         const res = await fetch('/kick/api/channel-settings?channelId=' + encodeURIComponent(ch));
         const j = await res.json();
         if (res.ok && j.settings) {
+          // ch is always a numeric Kick broadcaster id — safe inside an attribute selector.
           const q = s => document.querySelector(s + '[data-channel="' + ch + '"]');
           if (j.settings.ban_duration_min != null) { q('.set-bantype').value = 'timed'; q('.set-duration').value = j.settings.ban_duration_min; }
           if (j.settings.phishing_threshold != null) q('.set-threshold').value = j.settings.phishing_threshold;
