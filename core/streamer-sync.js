@@ -18,9 +18,11 @@ import {
 
 const keyOf = (platform, username) => `${platform}:${String(username).toLowerCase()}`;
 
-// Only LIVE-stream platforms are synced as self-promo subscriptions. Feed-only
-// platforms (tiktok/instagram/facebook) are excluded — they aren't go-live.
-const LIVE_PLATFORMS = new Set(['twitch', 'kick', 'youtube', 'trovo']);
+// Only LIVE-stream platforms are synced as self-promo subscriptions. TikTok IS
+// live (utils/platforms/tiktok.js isStreamerLive via tiktok-live-connector, wired
+// into stream-manager's platformModules). Only true FEED platforms (instagram /
+// facebook) are excluded — they have no go-live concept.
+const LIVE_PLATFORMS = new Set(['twitch', 'kick', 'youtube', 'trovo', 'tiktok']);
 
 /**
  * Pure: merge platform rows from `streamers` and `community_twitch_links` into a
