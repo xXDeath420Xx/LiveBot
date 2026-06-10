@@ -142,7 +142,14 @@ export default {
     }
 
     if (sub === 'start') {
-      if (getSessionByChannel(interaction.channelId)) return interaction.reply({ content: 'A word game is already active in this channel.', ephemeral: true });
+      const occupied = getSessionByChannel(interaction.channelId);
+      if (occupied) {
+        const occLabel = Object.values(GAMES).find(g => g.type === occupied.gameType)?.label || occupied.gameType;
+        if (occupied.gameType === game.type) {
+          return interaction.reply({ content: `A **${game.label}** game is already running here. Use \`/wordgame ${group} end\` to stop it first.`, ephemeral: true });
+        }
+        return interaction.reply({ content: `This channel is already running **${occLabel}** — only one game per channel. Run **/wordgame ${group} start** in a different channel (or the dedicated ${game.label} channel).`, ephemeral: true });
+      }
       let startState;
       try { startState = game.init(); } catch { return interaction.reply({ content: '⚠️ The word list isn’t loaded yet — try again in a moment.', ephemeral: true }); }
       const startSession = await createSession({ guildId, channelId: interaction.channelId, gameType: game.type, mode: 'round', hostUserId: interaction.user.id, state: startState });
