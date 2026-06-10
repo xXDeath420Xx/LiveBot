@@ -47,7 +47,35 @@ export function generate(words, size, rng = Math.random) {
 
 export function initState({ size = 10, words = [], rng = Math.random } = {}) {
   const { grid, placed } = generate(words, size, rng);
-  return { size, grid, words: placed, found: [], boardMessageId: null };
+  return { size, grid, words: placed, found: [], bonus: [], boardMessageId: null };
+}
+
+/**
+ * True if `word` (or its reverse) can be read as a straight line in the grid in
+ * any of the 8 directions. Lets players claim ANY real word they actually spot —
+ * not just the planted targets — so legit finds aren't rejected.
+ */
+export function canTrace(grid, word) {
+  const w = String(word ?? '').toLowerCase();
+  if (w.length < 2) return false;
+  const size = grid.length;
+  const targets = [w, [...w].reverse().join('')];
+  for (const t of targets) {
+    if (t.length > size) continue;
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        for (const [dr, dc] of DIRS) {
+          let ok = true;
+          for (let i = 0; i < t.length; i++) {
+            const rr = r + dr * i, cc = c + dc * i;
+            if (rr < 0 || cc < 0 || rr >= size || cc >= size || String(grid[rr][cc] || '').toLowerCase() !== t[i]) { ok = false; break; }
+          }
+          if (ok) return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 export function findWord(state, guess) {

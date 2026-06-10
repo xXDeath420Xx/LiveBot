@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, initState, findWord, remaining, renderGrid } from '../core/games/wordseek.js';
+import { generate, initState, findWord, remaining, renderGrid, canTrace } from '../core/games/wordseek.js';
 
 const DIRS = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -94,4 +94,11 @@ test('findWord: accepts a word read in reverse (rood ↔ door)', () => {
   assert.equal(r.ok, true);
   assert.equal(r.word, 'door');
   assert.equal(findWord(s, 'zzzz').ok, false);
+});
+
+test('canTrace: finds a word readable in the grid (any direction), rejects absent', () => {
+  const s = initState({ size: 8, words: ['dragon', 'castle', 'wizard'], rng: mulberry32(5) });
+  // every planted word is traceable
+  for (const w of s.words) assert.equal(canTrace(s.grid, w), true);
+  assert.equal(canTrace(s.grid, 'zzzzzz'), false);
 });
