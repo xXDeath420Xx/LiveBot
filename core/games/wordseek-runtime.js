@@ -17,7 +17,7 @@ import { registerEngine, saveState, bumpStats, endSession } from '../word-game-m
 import logger from '../../utils/logger.js';
 
 export function freshGridState() {
-  const words = wordBank.randomWords(8, 4, 7);
+  const words = wordBank.randomCommonWords(8, 4, 7);
   if (!words.length) throw new Error('word bank not loaded — cannot generate a WordSeek grid');
   return initState({ size: 10, words });
 }
