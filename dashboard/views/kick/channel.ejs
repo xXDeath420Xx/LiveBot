@@ -1,9 +1,11 @@
-<%- include('_head', { pageTitle: channel.channel_name + ' — Settings', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: channel.channel_name + ' — Control Center', csrfToken, kickUser: user }) %>
+
+  <input id="chan" type="hidden" data-channel="<%= channel.channel_id %>" />
 
   <div class="pagehead">
     <div>
       <h1>⚙ <%= channel.channel_name %></h1>
-      <div class="sub">Per-channel bot settings · Kick channel</div>
+      <div class="sub">Full control center for this Kick channel.</div>
     </div>
     <nav class="subnav">
       <a href="/kick/channel/<%= channel.channel_id %>" class="active">Settings</a>
@@ -12,8 +14,35 @@
     </nav>
   </div>
 
+  <!-- ── Live moderation ─────────────────────────────────────── -->
   <div class="card">
-    <h2>Bot settings</h2>
+    <h2>Live moderation</h2>
+    <div class="muted" style="margin-bottom:.6rem">Take action on a viewer right now — ban, timeout, or unban.</div>
+    <div class="srow">
+      <label>Username
+        <input id="mod-user" placeholder="username" />
+      </label>
+      <label>Action
+        <select id="mod-action">
+          <option value="ban">Ban</option>
+          <option value="timeout">Timeout</option>
+          <option value="unban">Unban</option>
+        </select>
+      </label>
+      <label>Timeout (min)
+        <input id="mod-mins" type="number" min="1" value="10" style="width:6rem" />
+      </label>
+      <label>Reason
+        <input id="mod-reason" placeholder="reason (optional)" />
+      </label>
+      <button id="mod-go">Apply</button>
+    </div>
+    <div id="mod-result" class="muted" style="margin-top:.7rem"></div>
+  </div>
+
+  <!-- ── Channel settings (preserved) ────────────────────────── -->
+  <div class="card">
+    <h2>Channel settings</h2>
     <div class="srow">
       <label>Command prefix
         <input id="prefix" maxlength="5" value="<%= channel.command_prefix || '!' %>" style="width:5rem" />
@@ -29,14 +58,33 @@
     <div class="muted" style="margin-top:1.1rem;margin-bottom:.4rem">Features</div>
     <div id="feats" class="srow" data-json='<%= channel.features_enabled || "{}" %>'></div>
 
-    <button id="save" data-channel="<%= channel.channel_id %>" style="margin-top:1.25rem">Save settings</button>
+    <button id="save" style="margin-top:1.25rem">Save settings</button>
+  </div>
+
+  <!-- ── Recent activity ─────────────────────────────────────── -->
+  <div class="card">
+    <h2>Recent activity</h2>
+    <div class="muted" style="margin-bottom:.6rem">Latest enforcement actions on this channel.</div>
+    <div id="feed" class="log-out">Loading…</div>
+    <button id="feed-refresh" class="ghost" style="margin-top:.75rem">Refresh</button>
+  </div>
+
+  <!-- ── Quick links ─────────────────────────────────────────── -->
+  <div class="card">
+    <h2>Quick links</h2>
+    <ul class="clean">
+      <li><a href="/kick/channel/<%= channel.channel_id %>/commands">Manage commands →</a></li>
+      <li><a href="https://kick.com/<%= channel.channel_name %>" target="_blank" rel="noopener">View on Kick →</a></li>
+      <li><a href="/kick">All channels →</a></li>
+    </ul>
   </div>
 
 <% var pageJs = `
   <script>
-    const CHANNEL = document.getElementById('save').dataset.channel;
-    // Feature toggles rendered from the stored features_enabled JSON. The raw
-    // JSON is emitted into a data attribute and parsed (avoids EJS-in-JS quoting bugs).
+    const CHANNEL = document.querySelector('[data-channel]').dataset.channel;
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    // ── Feature toggles from stored JSON (data-attr avoids EJS-in-JS quoting bugs) ──
     const FEATURES = ['tokes','spark','sessions','trivia'];
     let feats = {};
     try { feats = JSON.parse(document.getElementById('feats').dataset.json || '{}') || {}; } catch (_) {}
@@ -44,6 +92,7 @@
       '<label style="flex-direction:row;gap:.35rem;align-items:center">' +
       '<input type="checkbox" class="feat" data-feat="' + f + '"' + (feats[f] !== false ? ' checked' : '') + '/> ' + f + '</label>').join('');
 
+    // ── Channel settings save ──
     document.getElementById('save').addEventListener('click', async (e) => {
       const btn = e.currentTarget; btn.disabled = true;
       const features = {};
@@ -59,5 +108,47 @@
       } catch (err) { alert(err.message || 'Save failed.'); }
       finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save settings'; }, 1500); }
     });
+
+    // ── Live moderation ──
+    document.getElementById('mod-go').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const out = document.getElementById('mod-result');
+      const action = document.getElementById('mod-action').value;
+      const username = document.getElementById('mod-user').value.trim();
+      const reason = document.getElementById('mod-reason').value.trim();
+      const minutes = Number(document.getElementById('mod-mins').value) || 10;
+      if (!username) { out.textContent = 'Enter a username first.'; return; }
+      btn.disabled = true; out.textContent = 'Working…';
+      const body = { action, username };
+      if (action === 'timeout') body.minutes = minutes;
+      if (reason) body.reason = reason;
+      try {
+        await KickDash.post('/kick/api/channel/' + CHANNEL + '/moderate', body);
+        const verb = action === 'ban' ? 'Banned' : action === 'timeout' ? 'Timed out' : 'Unbanned';
+        out.textContent = '✓ ' + verb + ' ' + username;
+        document.getElementById('mod-user').value = '';
+        document.getElementById('mod-reason').value = '';
+        loadFeed();
+      } catch (err) { out.textContent = err.message || 'Action failed.'; }
+      finally { btn.disabled = false; }
+    });
+
+    // ── Activity feed ──
+    async function loadFeed() {
+      const feed = document.getElementById('feed');
+      feed.textContent = 'Loading…';
+      try {
+        const res = await fetch('/kick/api/enforcement-log?channelId=' + encodeURIComponent(CHANNEL) + '&limit=30');
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Failed');
+        if (!j.events || !j.events.length) { feed.textContent = 'No actions recorded yet.'; return; }
+        feed.innerHTML = '<table>' + j.events.map(ev =>
+          '<tr><td>' + (ev.created_at ? new Date(ev.created_at).toISOString().slice(0,16).replace('T',' ') : '—') +
+          '</td><td>' + esc(ev.action) + (ev.success ? '' : ' (failed)') +
+          '</td><td>' + esc(ev.target_username) + '</td><td>' + esc(ev.reason) + '</td></tr>').join('') + '</table>';
+      } catch (err) { feed.textContent = err.message || 'Failed to load.'; }
+    }
+    document.getElementById('feed-refresh').addEventListener('click', loadFeed);
+    loadFeed();
   </script>`; %>
 <%- include('_foot', { extraJs: pageJs }) %>
