@@ -11,7 +11,7 @@
  * `/wordgame wordseek end`. Timed rounds are a future addition.
  */
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
-import { findWord, remaining, initState } from './wordseek.js';
+import { findWord, remaining, initState, canTrace } from './wordseek.js';
 import { renderGridImage } from './wordseek-image.js';
 import * as wordBank from '../word-bank.js';
 import { registerEngine, saveState, bumpStats, endSession } from '../word-game-manager.js';
@@ -36,11 +36,16 @@ export function boardMessagePayload(state, { title, color } = {}) {
     .setTitle(`🔡 ${title || 'WordSeek'}`)
     .setColor(color ?? 0x5865F2)
     .setImage('attachment://wordseek.png')
-    .setDescription('Type any word you spot — **forwards, backwards, or diagonally**.')
-    .addFields(
-      { name: `Found ${state.found.length}/${state.words.length}`, value: foundList, inline: false },
-      { name: 'Remaining word lengths', value: lengths || '—', inline: false },
-    );
+    .setDescription('Type any word you spot — forwards, backwards, or diagonally. **Any real word you can trace counts** (the listed ones + bonuses ✨).');
+  const fields = [
+    { name: `🎯 Target words ${state.found.length}/${state.words.length}`, value: foundList, inline: false },
+    { name: 'Remaining target lengths', value: lengths || '—', inline: false },
+  ];
+  const bonus = state.bonus || [];
+  if (bonus.length) {
+    fields.push({ name: `✨ Bonus words found (${bonus.length})`, value: bonus.map(w => w.toUpperCase()).join(' · ').slice(0, 1024), inline: false });
+  }
+  embed.addFields(fields);
   return { embeds: [embed], files: [file] };
 }
 
@@ -65,8 +70,22 @@ async function updateBoard(channel, state, opts) {
 async function handle(message, session) {
   const content = (message.content || '').trim();
   if (!WORD_RE.test(content)) return false; // not a lone word → let moderation/leveling run
-  const res = findWord(session.state, content);
-  if (!res.ok) return false; // wrong/duplicate guess → fall through (no swallow, no ❌ spam)
+  const word = content.toLowerCase().replace(/[^a-z]/g, '');
+  const res = findWord(session.state, word);
+  if (!res.ok) {
+    // Not a planted target — but accept ANY real dictionary word the player can
+    // actually trace in the grid (a "bonus" find), so legit words aren't rejected.
+    const already = (session.state.bonus || []).includes(word) || session.state.found.includes(word);
+    if (!already && word.length >= 4 && wordBank.isWord(word) && canTrace(session.state.grid, word)) {
+      session.state.bonus = [...(session.state.bonus || []), word];
+      try { await message.react('✨'); } catch { /* ignore */ }
+      await bumpStats(session.guildId, message.author.id, 'wordseek', { words: 1, bestScore: word.length, streak: 0 });
+      session.state.boardMessageId = await updateBoard(message.channel, session.state);
+      await saveState(session);
+      return true;
+    }
+    return false; // not a real word / not traceable in the grid → fall through
+  }
 
   session.state = res.nextState;
   try { await message.react('✅'); } catch { /* ignore */ }
