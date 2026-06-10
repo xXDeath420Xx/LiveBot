@@ -14,6 +14,7 @@ const DATA_DIR = path.join(__dirname, '..', 'data', 'words');
 let english = null;       // Set<string>
 let answers = null;       // string[]  (5-letter)
 let byLength = null;      // Map<number, string[]>
+let common = null;        // string[]  curated common words (for WordSeek grids)
 let loadError = null;
 
 function readLines(file) {
@@ -34,7 +35,8 @@ export function load() {
       byLength.get(L).push(w);
     }
     answers = readLines('coordle-answers.txt').filter(w => /^[a-z]{5}$/.test(w));
-    logger.info('[WordBank] loaded', { english: english.size, answers: answers.length });
+    try { common = readLines('wordseek-words.txt').filter(w => /^[a-z]{3,}$/.test(w)); } catch { common = []; }
+    logger.info('[WordBank] loaded', { english: english.size, answers: answers.length, common: common.length });
     return true;
   } catch (err) {
     loadError = err;
@@ -75,6 +77,22 @@ export function wordsByLength(min, max) {
 export function randomWords(count, minLen, maxLen, rng = Math.random) {
   const pool = wordsByLength(minLen, maxLen);
   if (!pool.length) return [];
+  const out = new Set();
+  for (let attempts = 0; out.size < count && attempts < count * 50; attempts++) {
+    out.add(pool[Math.floor(rng() * pool.length)]);
+  }
+  return [...out];
+}
+
+/**
+ * Up to `count` distinct COMMON, recognizable words in [minLen, maxLen] — for
+ * WordSeek grids, so players can actually find them. Falls back to the full
+ * dictionary only if the curated list is unavailable.
+ */
+export function randomCommonWords(count, minLen, maxLen, rng = Math.random) {
+  if (!english && !load()) return [];
+  const pool = (common || []).filter(w => w.length >= minLen && w.length <= maxLen);
+  if (pool.length < count) return randomWords(count, minLen, maxLen, rng);
   const out = new Set();
   for (let attempts = 0; out.size < count && attempts < count * 50; attempts++) {
     out.add(pool[Math.floor(rng() * pool.length)]);

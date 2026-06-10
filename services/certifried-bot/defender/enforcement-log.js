@@ -35,6 +35,7 @@ export function makeListEvents({ pool }) {
     return async function listEvents({ channelId, action = null, limit = 50, offset = 0 }) {
         const where = ['channel_id = ?'];
         const params = [String(channelId)];
+        // null / undefined / '' all mean "no action filter".
         if (action) { where.push('action = ?'); params.push(action); }
         const lim = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
         const off = Math.max(parseInt(offset, 10) || 0, 0);
@@ -51,4 +52,5 @@ export function makeListEvents({ pool }) {
     };
 }
 
+// Real-wired singleton using the module's DB pool (same pool log()/channelStats() use).
 export const listEvents = makeListEvents({ pool });
