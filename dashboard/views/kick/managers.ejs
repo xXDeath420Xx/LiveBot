@@ -82,20 +82,6 @@
       <% } %>
     </div>
 
-    <% if (sublist.length) { %>
-      <h2>Sublist <span class="muted">(<%= counts.sublist %>)</span></h2>
-      <div class="card">
-        <ul>
-          <% sublist.forEach(b => { %>
-            <li>
-              <span><strong><%= b.username || b.platform_user_id %></strong><% if (b.reason) { %> <span class="muted">— <%= b.reason %></span><% } %></span>
-              <button class="danger ban-remove" data-username="<%= b.username || b.platform_user_id %>">Remove</button>
-            </li>
-          <% }) %>
-        </ul>
-      </div>
-    <% } %>
-
     <h2>Phishing / scam links</h2>
     <div class="card">
       <p class="muted" style="margin-bottom:.75rem">
@@ -118,6 +104,16 @@
         <button id="sub-add">Add to sublist</button>
         <button id="sub-clear" class="danger">Clear sublist</button>
       </div>
+      <% if (sublist.length) { %>
+        <ul>
+          <% sublist.forEach(b => { %>
+            <li>
+              <span><strong><%= b.username || b.platform_user_id %></strong><% if (b.reason) { %> <span class="muted">— <%= b.reason %></span><% } %></span>
+              <button class="danger ban-remove" data-username="<%= b.username || b.platform_user_id %>">Remove</button>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
     </div>
 
     <h2>Unban / protection list <span class="muted">(<%= counts.unbanlist %>)</span></h2>
