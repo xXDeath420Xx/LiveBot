@@ -28,6 +28,25 @@
     </div>
   <% } %>
 
+  <!-- ── Manager roster ─────────────────────────────────────── -->
+  <div class="card">
+    <h2 style="margin:0 0 .8rem">Network managers</h2>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem">
+      <input id="mgr-add-user" class="search" placeholder="Kick username or user id" style="flex:1;min-width:200px" />
+      <button id="mgr-add-btn">Add manager</button>
+    </div>
+    <ul class="clean" id="mgr-list"><li class="muted">Loading…</li></ul>
+  </div>
+
+  <!-- ── Network activity feed ──────────────────────────────── -->
+  <div class="card">
+    <div class="row" style="margin-bottom:.8rem">
+      <h2 style="margin:0">Recent network activity</h2>
+      <button id="net-refresh">Refresh</button>
+    </div>
+    <div id="net-feed" class="log-out">Loading…</div>
+  </div>
+
   <input id="search" class="search" placeholder="Filter by username…" style="width:100%;margin:1.1rem 0" />
 
   <% if (!accounts.length) { %>
@@ -100,5 +119,105 @@
         });
       });
     }
+
+    var esc = function (s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+      });
+    };
+
+    var fmtTime = function (v) {
+      if (!v) return '';
+      var d = new Date(v);
+      if (isNaN(d.getTime())) return esc(v);
+      return d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+    };
+
+    async function loadManagers() {
+      var list = document.getElementById('mgr-list');
+      if (!list) return;
+      try {
+        var res = await fetch('/kick/api/managers', { headers: { 'Accept': 'application/json' } });
+        var data = await res.json();
+        var mgrs = (data && data.managers) || [];
+        if (!mgrs.length) {
+          list.innerHTML = '<li class="muted">No managers yet.</li>';
+          return;
+        }
+        list.innerHTML = mgrs.map(function (m) {
+          var added = m.addedAt ? ' <span class="muted">added ' + fmtTime(m.addedAt) + '</span>' : '';
+          return '<li><span style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:space-between">' +
+            '<span><b>' + esc(m.name || m.userId) + '</b>' + added + '</span>' +
+            '<button class="danger mgr-remove" data-user="' + esc(m.userId) + '">Remove</button>' +
+            '</span></li>';
+        }).join('');
+        list.querySelectorAll('.mgr-remove').forEach(function (btn) {
+          btn.addEventListener('click', async function () {
+            try {
+              await KickDash.post('/kick/api/managers', { user: btn.dataset.user, action: 'remove' });
+              loadManagers();
+            } catch (e) { alert('Failed to remove manager.'); }
+          });
+        });
+      } catch (e) {
+        list.innerHTML = '<li class="muted">Failed to load managers.</li>';
+      }
+    }
+
+    async function loadNetFeed() {
+      var feed = document.getElementById('net-feed');
+      if (!feed) return;
+      feed.textContent = 'Loading…';
+      try {
+        var res = await fetch('/kick/api/network-activity?limit=40', { headers: { 'Accept': 'application/json' } });
+        var data = await res.json();
+        var events = (data && data.events) || [];
+        if (!events.length) {
+          feed.innerHTML = '<div class="muted">No actions recorded yet.</div>';
+          return;
+        }
+        var rows = events.map(function (ev) {
+          var ok = ev.success ? 'ok' : 'bad';
+          return '<tr>' +
+            '<td class="muted" style="white-space:nowrap">' + fmtTime(ev.created_at) + '</td>' +
+            '<td>' + esc(ev.channel_name || ev.channel_id) + '</td>' +
+            '<td><span class="pill ' + ok + '">' + esc(ev.action) + '</span></td>' +
+            '<td>' + esc(ev.target_username) + '</td>' +
+            '<td class="muted">' + esc(ev.reason) + '</td>' +
+            '</tr>';
+        }).join('');
+        feed.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.82rem">' +
+          '<thead><tr style="text-align:left">' +
+          '<th>time</th><th>channel</th><th>action</th><th>user</th><th>reason</th>' +
+          '</tr></thead><tbody>' + rows + '</tbody></table>';
+      } catch (e) {
+        feed.innerHTML = '<div class="muted">Failed to load activity.</div>';
+      }
+    }
+
+    var mgrAddBtn = document.getElementById('mgr-add-btn');
+    if (mgrAddBtn) {
+      mgrAddBtn.addEventListener('click', async function () {
+        var inp = document.getElementById('mgr-add-user');
+        var val = inp ? inp.value.trim() : '';
+        if (!val) return;
+        mgrAddBtn.disabled = true;
+        try {
+          await KickDash.post('/kick/api/managers', { user: val, action: 'add' });
+          if (inp) inp.value = '';
+          loadManagers();
+        } catch (e) {
+          alert('Failed to add manager.');
+        } finally {
+          mgrAddBtn.disabled = false;
+        }
+      });
+    }
+
+    var netRefresh = document.getElementById('net-refresh');
+    if (netRefresh) netRefresh.addEventListener('click', loadNetFeed);
+
+    try { loadManagers(); } catch (e) {}
+    try { loadNetFeed(); } catch (e) {}
   </script>`; %>
 <%- include('_foot', { extraJs: pageJs }) %>
