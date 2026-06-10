@@ -25,6 +25,7 @@
   window.KickDash = {
     post: (url, payload) => sendJson('POST', url, payload),
     patch: (url, payload) => sendJson('PATCH', url, payload),
+    put: (url, payload) => sendJson('PUT', url, payload),
     del: (url, payload) => sendJson('DELETE', url, payload),
     csrf: CSRF
   };
