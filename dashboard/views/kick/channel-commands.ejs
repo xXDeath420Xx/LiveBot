@@ -141,7 +141,8 @@
           mod_only: document.getElementById('new-mod').checked
         });
         location.reload();
-      } catch (err) { btn.disabled = false; alert(err.message || 'Add failed.'); }
+      } catch (err) { alert(err.message || 'Add failed.'); }
+      finally { btn.disabled = false; }
     });
 
     // Delete a custom command.
