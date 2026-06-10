@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Kick Defender' %> — CertiFried Utility</title>
+  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#0a0911;--ink:#f1f0f6;--muted:#928da8;--line:rgba(255,255,255,.08);--card:rgba(255,255,255,.025);--kick:#53FC18;--kick-dim:#7dfc4f;--discord:#7c84ff;--warn:#fcd34d;--danger:#fca5a5}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+    a{color:inherit}
+    .bg{position:fixed;inset:0;z-index:0;pointer-events:none;background:
+      radial-gradient(45rem 32rem at 12% -8%,rgba(83,252,24,.10),transparent 60%),
+      radial-gradient(45rem 32rem at 90% 0%,rgba(124,132,255,.10),transparent 55%)}
+    /* ── Network top bar ─────────────────────────────────────── */
+    .netbar{position:relative;z-index:2;border-bottom:1px solid var(--line);background:rgba(10,9,17,.75);backdrop-filter:blur(8px)}
+    .netbar-in{max-width:64rem;margin:0 auto;display:flex;align-items:center;gap:1rem;padding:.7rem 1.25rem;flex-wrap:wrap}
+    .brand{display:inline-flex;align-items:center;gap:.5rem;font-weight:700;font-size:.95rem;text-decoration:none}
+    .brand img{width:26px;height:26px;border-radius:7px}
+    .netlinks{display:flex;gap:.25rem;flex-wrap:wrap;margin-left:auto;align-items:center}
+    .netlinks a{font-size:.82rem;color:var(--muted);text-decoration:none;padding:.35rem .6rem;border-radius:8px;transition:color .15s,background .15s}
+    .netlinks a:hover{color:#fff;background:rgba(255,255,255,.06)}
+    .netlinks a.cta{color:var(--kick);font-weight:600}
+    /* ── Page shell ──────────────────────────────────────────── */
+    .wrap{position:relative;z-index:1;max-width:64rem;margin:0 auto;padding:2rem 1.25rem 3rem}
+    .pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
+    .pagehead h1{font-family:'Space Grotesk',sans-serif;font-size:1.7rem;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:.5rem}
+    .pagehead .sub{color:var(--muted);font-size:.9rem;margin-top:.25rem}
+    /* sub-nav (within /kick) */
+    .subnav{display:flex;gap:.35rem;flex-wrap:wrap}
+    .subnav a{font-size:.85rem;color:var(--muted);text-decoration:none;padding:.4rem .75rem;border-radius:9px;border:1px solid transparent;transition:.15s}
+    .subnav a:hover{color:#fff;background:rgba(255,255,255,.05)}
+    .subnav a.active{color:#06140a;background:var(--kick);font-weight:700}
+    /* ── Cards / primitives ──────────────────────────────────── */
+    .card{position:relative;border:1px solid var(--line);background:var(--card);border-radius:18px;padding:1.4rem 1.5rem;margin-bottom:1.1rem}
+    .card h2{font-family:'Space Grotesk',sans-serif;font-size:1.15rem;font-weight:700;margin-bottom:.85rem}
+    .muted{color:var(--muted);font-size:.85rem}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+    /* stat grid */
+    .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.85rem;margin-bottom:1.5rem}
+    .stat{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:1.1rem 1.25rem}
+    .stat b{display:block;font-family:'Space Grotesk',sans-serif;font-size:1.85rem;font-weight:700;line-height:1}
+    .stat span{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;margin-top:.4rem}
+    .stat.kick b{color:var(--kick-dim)}
+    /* pills */
+    .pill{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:700;padding:.2rem .55rem;border-radius:999px;letter-spacing:.02em}
+    .pill.ok{background:rgba(34,197,94,.16);color:#86efac}
+    .pill.off{background:rgba(255,255,255,.07);color:var(--muted)}
+    .pill.warn{background:rgba(245,158,11,.16);color:var(--warn)}
+    .pill.bad{background:rgba(239,68,68,.18);color:var(--danger)}
+    /* forms + buttons */
+    input,select,textarea{font-family:inherit;font-size:.9rem;padding:.55rem .7rem;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#14121d;color:var(--ink)}
+    input:focus,select:focus,textarea:focus{outline:none;border-color:rgba(83,252,24,.5)}
+    button{font-family:inherit;font-weight:700;font-size:.88rem;border:none;border-radius:10px;padding:.55rem 1.05rem;cursor:pointer;background:var(--kick);color:#06140a;transition:transform .12s,filter .12s}
+    button:hover{filter:brightness(1.08)}
+    button:active{transform:translateY(1px)}
+    button:disabled{opacity:.55;cursor:default}
+    button.ghost{background:rgba(255,255,255,.08);color:var(--ink)}
+    button.danger{background:rgba(239,68,68,.85);color:#fff}
+    .srow{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+    .srow label{font-size:.78rem;color:var(--muted);display:flex;flex-direction:column;gap:.25rem}
+    .banner{margin-top:.85rem;padding:.7rem .9rem;border-radius:11px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:var(--warn);font-size:.85rem}
+    .banner a{color:#fde68a}
+    details.settings{margin-top:.85rem;border-top:1px solid var(--line);padding-top:.75rem}
+    details.settings summary{cursor:pointer;color:var(--muted);font-size:.85rem}
+    ul.clean{list-style:none}
+    ul.clean li{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.9rem}
+    .log-out{margin-top:.6rem;font-size:.8rem;color:#b9b4cf}
+    .log-out table{width:100%;border-collapse:collapse}
+    .log-out td{padding:.25rem .45rem;border-bottom:1px solid rgba(255,255,255,.05)}
+    .empty{color:var(--muted);text-align:center;padding:1.5rem}
+    <%- typeof extraCss !== 'undefined' ? extraCss : '' %>
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+
+  <!-- ── CertiFried network bar (every Kick page) ─────────────── -->
+  <div class="netbar">
+    <div class="netbar-in">
+      <a class="brand" href="/"><img src="/images/CertiFried.png" alt=""/> CertiFried Utility</a>
+      <nav class="netlinks">
+        <a href="/">Home</a>
+        <a href="/discord">Discord Bot</a>
+        <a href="/docs#kick-defender">Docs</a>
+        <a href="https://certifriedmultitool.com/discord" target="_blank" rel="noopener">Support</a>
+        <a href="/donate">Donate</a>
+        <% if (typeof kickUser !== 'undefined' && kickUser) { %>
+          <a href="/logout">Log out</a>
+        <% } %>
+      </nav>
+    </div>
+  </div>
+
+  <div class="wrap">
