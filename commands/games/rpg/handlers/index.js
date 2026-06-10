@@ -233,20 +233,27 @@ export async function handleSession(interaction, subcommand, characterManager) {
     if (subcommand === 'join') {
         await interaction.deferReply();
 
-        const characters = await characterManager.getCharacters(
+        const character = await characterManager.getCharacter(
             interaction.user.id,
             interaction.guild.id
         );
 
-        if (characters.length === 0) {
+        if (!character) {
             await interaction.editReply({
                 content: 'You need to create a character first with `/rpg character create`'
             });
             return;
         }
 
-        // Find active session in this channel
-        const session = await RPGCampaignManager.getActiveSession(interaction.channel.id);
+        // Find the active campaign running in this channel, then its active session
+        const channelCampaign = await RPGAiDungeonMaster.getActiveCampaignInChannel(
+            interaction.channel.id,
+            interaction.guild.id
+        );
+        const session = channelCampaign
+            ? await RPGCampaignManager.getActiveSession(channelCampaign.campaign_id)
+            : null;
+
         if (!session) {
             await interaction.editReply({
                 content: 'No active session in this channel. Ask the DM to start one with `/rpg session start`'
@@ -255,7 +262,6 @@ export async function handleSession(interaction, subcommand, characterManager) {
         }
 
         // Join the campaign
-        const character = characters[0];
         await RPGCampaignManager.joinCampaign(
             session.campaign_id,
             interaction.user.id,
@@ -282,28 +288,29 @@ export async function handleSession(interaction, subcommand, characterManager) {
             return;
         }
 
+        // Creates the dnd_sessions row AND generates the AI DM opening narrative
         const session = await RPGCampaignManager.startSession(
             campaign.campaign_id,
             interaction.channel.id,
             interaction.user.id
         );
 
-        // Set this channel for the reply handler
-        setRPGChannel(interaction.guild.id, interaction.channel.id);
-
-        // Get opening narrative from AI DM
-        const dm = new RPGAiDungeonMaster(campaign);
-        const opening = await dm.generateOpening(session);
+        // Designate this channel as the RPG channel so reply/@mention play works
+        await setRPGChannel(interaction.guild.id, interaction.channel.id);
 
         const embed = new EmbedBuilder()
             .setColor('#9B59B6')
             .setTitle(`Session ${session.session_number}: ${campaign.campaign_name}`)
-            .setDescription(opening || '*The adventure continues...*')
-            .setFooter({ text: 'Use /rpg play action to interact | /rpg play menu for quick actions' });
+            .setDescription(session.opening || '*The adventure continues...*')
+            .setFooter({ text: 'Use /rpg play action to interact | reply or @mention to continue' });
+
+        if (session.location && session.location !== 'Unknown Location') {
+            embed.setAuthor({ name: `📍 ${session.location}` });
+        }
 
         // Register this message for reply tracking
         const reply = await interaction.editReply({ embeds: [embed] });
-        registerRPGMessage(reply.id, campaign.campaign_id, interaction.guild.id);
+        registerRPGMessage(interaction.channel.id, reply.id, session.session_id, interaction.user.id);
     }
 
     else if (subcommand === 'end') {
@@ -321,16 +328,20 @@ export async function handleSession(interaction, subcommand, characterManager) {
 
         const session = await RPGCampaignManager.endSession(campaign.campaign_id);
 
-        const dm = new RPGAiDungeonMaster(campaign);
-        const recap = await dm.generateRecap(session);
+        if (!session) {
+            await interaction.editReply({
+                content: 'There is no active session to end. Start one with `/rpg session start`.'
+            });
+            return;
+        }
 
         const embed = new EmbedBuilder()
             .setColor('#E74C3C')
-            .setTitle('Session Ended')
-            .setDescription(recap || 'The session has ended.')
+            .setTitle(`Session ${session.session_number} Ended`)
+            .setDescription(session.summary || 'The session has ended.')
             .addFields(
-                { name: 'Duration', value: session.duration || 'Unknown', inline: true },
-                { name: 'XP Earned', value: session.xp_earned?.toString() || '0', inline: true }
+                { name: 'Messages', value: (session.messageCount ?? 0).toString(), inline: true },
+                { name: 'XP Earned', value: (session.xpGained ?? 0).toString(), inline: true }
             );
 
         await interaction.editReply({ embeds: [embed] });
@@ -349,8 +360,16 @@ export async function handleSession(interaction, subcommand, characterManager) {
             return;
         }
 
-        const dm = new RPGAiDungeonMaster(campaign);
-        const recap = await dm.getStoryRecap();
+        // Pull the most recent session's stored scene/summary for this campaign
+        const [rows] = await pool.execute(
+            `SELECT current_scene, summary, session_number
+             FROM dnd_sessions
+             WHERE campaign_id = ?
+             ORDER BY session_id DESC LIMIT 1`,
+            [campaign.campaign_id]
+        );
+
+        const recap = rows[0]?.summary || rows[0]?.current_scene || null;
 
         const embed = new EmbedBuilder()
             .setColor('#3498DB')
@@ -1021,56 +1040,88 @@ export async function handlePlay(interaction, subcommand, characterManager) {
         return;
     }
 
-    const dm = new RPGAiDungeonMaster(campaign);
+    // Resolve the active session for this campaign (shared by play actions)
+    const playSubcommands = ['action', 'say', 'examine'];
+    let activeSession = null;
+    if (playSubcommands.includes(subcommand)) {
+        activeSession = await RPGCampaignManager.getActiveSession(campaign.campaign_id);
+        if (!activeSession) {
+            const notStarted = 'There is no active session. Start one with `/rpg session start` first.';
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ content: notStarted });
+            } else {
+                await interaction.reply({ content: notStarted, ephemeral: true });
+            }
+            return;
+        }
+    }
+
+    // Build a play-response embed from a processPlayerAction() result
+    const buildPlayEmbed = (response, color) => {
+        const embed = new EmbedBuilder()
+            .setColor(response.combatInitiated || response.inCombat ? '#FF0000' : color)
+            .setDescription(
+                (response.narration || '*The Dungeon Master considers your move...*').length > 3500
+                    ? response.narration.substring(0, 3500) + '...'
+                    : (response.narration || '*The Dungeon Master considers your move...*')
+            );
+
+        if (response.location && response.location !== 'Unknown Location') {
+            embed.setAuthor({ name: `📍 ${response.location}` });
+        }
+        if (response.statusBar) {
+            embed.addFields({ name: `📊 ${character.character_name}`, value: response.statusBar, inline: false });
+        }
+        const rewards = [];
+        if (response.goldGained > 0) rewards.push(`💰 ${response.goldGained} gold`);
+        if (response.xpGained > 0) rewards.push(`✨ ${response.xpGained} XP`);
+        if (response.loot && response.loot.length > 0) {
+            rewards.push(...response.loot.map(l => `🎁 ${l.item}${l.quantity > 1 ? ` x${l.quantity}` : ''}`));
+        }
+        if (rewards.length > 0) {
+            embed.addFields({ name: '🏆 Rewards', value: rewards.join(' | '), inline: false });
+        }
+        embed.setFooter({ text: `${character.character_name} | reply or @mention to continue` });
+        return embed;
+    };
 
     if (subcommand === 'action') {
         await interaction.deferReply();
 
         const action = interaction.options.getString('action', true);
-        const response = await dm.processAction(character, action);
+        const response = await RPGAiDungeonMaster.processPlayerAction(
+            activeSession.session_id, character.character_id, action, 'action'
+        );
 
-        const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
-            .setDescription(response.narrative || response.message);
-
-        if (response.requiresRoll) {
-            embed.addFields({
-                name: 'Roll Required',
-                value: `${response.rollType}: DC ${response.dc}`,
-                inline: true
-            });
-        }
-
+        const embed = buildPlayEmbed(response, '#9B59B6');
         const reply = await interaction.editReply({ embeds: [embed] });
-        registerRPGMessage(reply.id, campaign.campaign_id, interaction.guild.id);
+        registerRPGMessage(interaction.channel.id, reply.id, activeSession.session_id, interaction.user.id);
     }
 
     else if (subcommand === 'say') {
         await interaction.deferReply();
 
         const dialogue = interaction.options.getString('dialogue', true);
-        const response = await dm.processDialogue(character, dialogue);
+        const response = await RPGAiDungeonMaster.processPlayerAction(
+            activeSession.session_id, character.character_id, dialogue, 'dialogue'
+        );
 
-        const embed = new EmbedBuilder()
-            .setColor('#3498DB')
-            .setDescription(response.narrative || response.message);
-
+        const embed = buildPlayEmbed(response, '#3498DB');
         const reply = await interaction.editReply({ embeds: [embed] });
-        registerRPGMessage(reply.id, campaign.campaign_id, interaction.guild.id);
+        registerRPGMessage(interaction.channel.id, reply.id, activeSession.session_id, interaction.user.id);
     }
 
     else if (subcommand === 'examine') {
         await interaction.deferReply();
 
         const target = interaction.options.getString('target', true);
-        const response = await dm.examine(character, target);
+        const response = await RPGAiDungeonMaster.processPlayerAction(
+            activeSession.session_id, character.character_id, `examine ${target}`, 'action'
+        );
 
-        const embed = new EmbedBuilder()
-            .setColor('#E67E22')
-            .setTitle(`Examining: ${target}`)
-            .setDescription(response.description || response.message);
-
-        await interaction.editReply({ embeds: [embed] });
+        const embed = buildPlayEmbed(response, '#E67E22').setTitle(`Examining: ${target}`);
+        const reply = await interaction.editReply({ embeds: [embed] });
+        registerRPGMessage(interaction.channel.id, reply.id, activeSession.session_id, interaction.user.id);
     }
 
     else if (subcommand === 'menu') {
@@ -1104,17 +1155,20 @@ export async function handlePlay(interaction, subcommand, characterManager) {
         const target = interaction.options.getString('target');
         const details = interaction.options.getString('details');
 
-        const response = await dm.processCombatAction(character, combatAction, target, details);
-
-        const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
-            .setDescription(response.narrative || response.message);
-
-        if (response.damage) {
-            embed.addFields({ name: 'Damage', value: response.damage.toString(), inline: true });
+        const session = await RPGCampaignManager.getActiveSession(campaign.campaign_id);
+        if (!session) {
+            await interaction.editReply({ content: 'There is no active session. Start one with `/rpg session start` first.' });
+            return;
         }
 
-        await interaction.editReply({ embeds: [embed] });
+        const actionText = `${combatAction}${target ? ` ${target}` : ''}${details ? ` (${details})` : ''}`;
+        const response = await RPGAiDungeonMaster.processPlayerAction(
+            session.session_id, character.character_id, actionText, 'action'
+        );
+
+        const embed = buildPlayEmbed(response, '#E74C3C');
+        const reply = await interaction.editReply({ embeds: [embed] });
+        registerRPGMessage(interaction.channel.id, reply.id, session.session_id, interaction.user.id);
     }
 
     else if (subcommand === 'explore') {
@@ -1123,13 +1177,19 @@ export async function handlePlay(interaction, subcommand, characterManager) {
         const exploreAction = interaction.options.getString('action', true);
         const target = interaction.options.getString('target');
 
-        const response = await dm.processExploration(character, exploreAction, target);
+        const session = await RPGCampaignManager.getActiveSession(campaign.campaign_id);
+        if (!session) {
+            await interaction.editReply({ content: 'There is no active session. Start one with `/rpg session start` first.' });
+            return;
+        }
 
-        const embed = new EmbedBuilder()
-            .setColor('#27AE60')
-            .setDescription(response.narrative || response.message);
+        const response = await RPGAiDungeonMaster.processPlayerAction(
+            session.session_id, character.character_id, `${exploreAction}${target ? ` ${target}` : ''}`, 'action'
+        );
 
-        await interaction.editReply({ embeds: [embed] });
+        const embed = buildPlayEmbed(response, '#27AE60');
+        const reply = await interaction.editReply({ embeds: [embed] });
+        registerRPGMessage(interaction.channel.id, reply.id, session.session_id, interaction.user.id);
     }
 
     else if (subcommand === 'social') {
@@ -1139,31 +1199,41 @@ export async function handlePlay(interaction, subcommand, characterManager) {
         const target = interaction.options.getString('target');
         const message = interaction.options.getString('message');
 
-        const response = await dm.processSocialAction(character, socialAction, target, message);
+        const session = await RPGCampaignManager.getActiveSession(campaign.campaign_id);
+        if (!session) {
+            await interaction.editReply({ content: 'There is no active session. Start one with `/rpg session start` first.' });
+            return;
+        }
 
-        const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
-            .setDescription(response.narrative || response.message);
+        const actionText = `${socialAction}${target ? ` ${target}` : ''}${message ? `: "${message}"` : ''}`;
+        const response = await RPGAiDungeonMaster.processPlayerAction(
+            session.session_id, character.character_id, actionText, message ? 'dialogue' : 'action'
+        );
 
-        await interaction.editReply({ embeds: [embed] });
+        const embed = buildPlayEmbed(response, '#9B59B6');
+        const reply = await interaction.editReply({ embeds: [embed] });
+        registerRPGMessage(interaction.channel.id, reply.id, session.session_id, interaction.user.id);
     }
 
     else if (subcommand === 'rest') {
         await interaction.deferReply();
 
         const restType = interaction.options.getString('type', true);
-        const response = await dm.processRest(character, restType);
 
-        const embed = new EmbedBuilder()
-            .setColor('#27AE60')
-            .setTitle(`${restType === 'long' ? 'Long' : 'Short'} Rest`)
-            .setDescription(response.narrative || response.message);
-
-        if (response.healed) {
-            embed.addFields({ name: 'HP Restored', value: response.healed.toString(), inline: true });
+        const session = await RPGCampaignManager.getActiveSession(campaign.campaign_id);
+        if (!session) {
+            await interaction.editReply({ content: 'There is no active session. Start one with `/rpg session start` first.' });
+            return;
         }
 
-        await interaction.editReply({ embeds: [embed] });
+        const response = await RPGAiDungeonMaster.processPlayerAction(
+            session.session_id, character.character_id, `take a ${restType} rest`, 'action'
+        );
+
+        const embed = buildPlayEmbed(response, '#27AE60')
+            .setTitle(`${restType === 'long' ? 'Long' : 'Short'} Rest`);
+        const reply = await interaction.editReply({ embeds: [embed] });
+        registerRPGMessage(interaction.channel.id, reply.id, session.session_id, interaction.user.id);
     }
 
     else if (subcommand === 'roll') {
