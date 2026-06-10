@@ -107,7 +107,12 @@ router.get('/kick/admin', requireKickAuth, async (req, res) => {
         return res.status(403).send('Admins only.');
     }
     try {
-        // All platform connections with their owning user.
+        // Kick connections only — this is the Kick Defender admin surface. A
+        // user's Twitch link (and its token expiry) is irrelevant here: the
+        // defender only ever uses the Kick token, so showing a stale Twitch
+        // token as an "expired account" on this page is misleading. Filtering to
+        // platform='kick' also collapses a user's linked accounts to the one
+        // that actually matters here.
         const [conns] = await pool.execute(`
             SELECT pc.id AS conn_id, pc.platform, pc.platform_id, pc.platform_name,
                    pc.platform_avatar, pc.scopes, pc.expires_at, pc.token_updated_at,
@@ -115,14 +120,17 @@ router.get('/kick/admin', requireKickAuth, async (req, res) => {
                    u.id AS user_id, u.primary_name, u.role, u.is_banned, u.last_seen
             FROM tokes_platform_connections pc
             JOIN tokes_users u ON u.id = pc.user_id
-            ORDER BY pc.platform, pc.platform_name
+            WHERE pc.platform = 'kick'
+            ORDER BY pc.platform_name
         `);
 
-        // Channels per connection (one query, grouped in JS).
+        // Channels per connection (one query, grouped in JS). Kick only — this
+        // page lists Kick connections, so a Twitch channel here would be orphaned.
         const [channels] = await pool.execute(`
             SELECT connection_id, channel_id, channel_name, platform,
                    is_enabled, defender_enabled
             FROM tokes_channels
+            WHERE platform = 'kick'
         `);
         const channelsByConn = new Map();
         for (const ch of channels) {
