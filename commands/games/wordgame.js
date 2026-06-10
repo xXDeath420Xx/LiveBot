@@ -3,7 +3,7 @@ import { initState as lastLetterInit } from '../../core/games/last-letter.js';
 import { initState as storyInit, renderStory } from '../../core/games/one-word-story.js';
 import { initState as coordleInit } from '../../core/games/coordle.js';
 import { boardEmbed as coordleBoardEmbed } from '../../core/games/coordle-runtime.js';
-import { gridEmbed as wordseekGridEmbed, freshGridState as wordseekFresh } from '../../core/games/wordseek-runtime.js';
+import { boardMessagePayload as wordseekPayload, freshGridState as wordseekFresh } from '../../core/games/wordseek-runtime.js';
 import * as wordBank from '../../core/word-bank.js';
 import {
   createSession, endSession, getSessionByChannel, bindChannel, unbindChannel,
@@ -22,7 +22,14 @@ function boardPoster(embedFor) {
   };
 }
 const startCoordleBoard = boardPoster(coordleBoardEmbed);
-const startWordseekBoard = boardPoster(wordseekGridEmbed);
+// WordSeek posts the grid in message content (wide/readable) + an info embed.
+const startWordseekBoard = async (ctx, session) => {
+  try {
+    const sent = await ctx.channel.send(wordseekPayload(session.state));
+    session.state.boardMessageId = sent.id;
+    await saveState(session);
+  } catch { /* board re-creates lazily on first find */ }
+};
 
 // Per-group game metadata. Adding a new typed game = add an entry + a subcommand group.
 const GAMES = {
