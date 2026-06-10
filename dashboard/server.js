@@ -9254,6 +9254,12 @@ function start(botClient) {
         logger.error('Failed to load Kick Defender routes:', err);
     });
 
+    import('./routes/kick-channel.js').then(({ default: kickChannelRouter }) => {
+        app.use('/', kickChannelRouter);
+    }).catch(err => {
+        logger.error('Failed to load Kick channel routes:', err);
+    });
+
     // Public leaderboard page
     import('./routes/public-leaderboard.js').then(({ default: publicLeaderboardRouter }) => {
         app.use('/', publicLeaderboardRouter);
