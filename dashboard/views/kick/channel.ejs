@@ -1,70 +1,40 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="csrf-token" content="<%= csrfToken %>" />
-  <title>Kick Defender — Your Channels</title>
-  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: radial-gradient(circle at 50% 0%, #1e1b2e 0%, #0b0a12 70%); color: #ECECEC; min-height: 100vh; padding: 2rem 1.25rem; }
-    .wrap { max-width: 56rem; margin: 0 auto; }
-    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
-    h1 { font-size: 1.6rem; font-weight: 800; }
-    .nav a { color: #9a93b3; text-decoration: none; margin-left: 1rem; font-size: .9rem; }
-    .nav a:hover { color: #fff; }
-    .card { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 16px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
-    .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-    .name { font-weight: 700; font-size: 1.1rem; }
-    .stats { color: #9a93b3; font-size: .85rem; margin-top: .5rem; }
-    .banner { margin-top: .85rem; padding: .7rem .9rem; border-radius: 10px; background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.4); color: #fcd34d; font-size: .85rem; }
-    .banner a { color: #fde68a; }
-    button { font-family: inherit; font-weight: 600; font-size: .9rem; border: none; border-radius: 10px; padding: .55rem 1rem; cursor: pointer; }
-    .on { background: #53FC18; color: #0b0a12; }
-    .off { background: rgba(255,255,255,.1); color: #ECECEC; }
-    .empty { color: #9a93b3; }
-    .settings{margin-top:.85rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.75rem}
-    .settings summary{cursor:pointer;color:#9a93b3;font-size:.85rem}
-    .srow{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-top:.6rem}
-    .srow label{font-size:.78rem;color:#9a93b3;display:flex;flex-direction:column;gap:.2rem}
-    .log-out{margin-top:.5rem;font-size:.8rem;color:#b9b4cf}
-    .log-out table{width:100%;border-collapse:collapse}.log-out td{padding:.2rem .4rem;border-bottom:1px solid rgba(255,255,255,.05)}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <header>
-      <h1>⚙ <%= channel.channel_name %></h1>
-      <nav class="nav">
-        <a href="/kick">My channels</a>
-        <a href="/kick/channel/<%= channel.channel_id %>/commands">Commands</a>
-        <a href="/logout">Log out</a>
-      </nav>
-    </header>
+<%- include('_head', { pageTitle: channel.channel_name + ' — Settings', csrfToken, kickUser: user }) %>
 
-    <div class="card">
-      <div class="srow">
-        <label>Command prefix
-          <input id="prefix" maxlength="5" value="<%= channel.command_prefix || '!' %>" style="width:5rem" />
-        </label>
-        <label>Global cooldown (s)
-          <input id="cg" type="number" min="0" max="60" value="<%= channel.cooldown_global || 0 %>" style="width:6rem" />
-        </label>
-        <label>Per-user cooldown (s)
-          <input id="cu" type="number" min="0" max="300" value="<%= channel.cooldown_user || 0 %>" style="width:6rem" />
-        </label>
-      </div>
-      <div id="feats" class="srow" style="margin-top:.75rem" data-json='<%= channel.features_enabled || "{}" %>'></div>
-      <button id="save" style="margin-top:1rem">Save settings</button>
+  <div class="pagehead">
+    <div>
+      <h1>⚙ <%= channel.channel_name %></h1>
+      <div class="sub">Per-channel bot settings · Kick channel</div>
     </div>
+    <nav class="subnav">
+      <a href="/kick/channel/<%= channel.channel_id %>" class="active">Settings</a>
+      <a href="/kick/channel/<%= channel.channel_id %>/commands">Commands</a>
+      <a href="/kick">← All channels</a>
+    </nav>
   </div>
 
-  <script src="/js/kick-dashboard.js"></script>
+  <div class="card">
+    <h2>Bot settings</h2>
+    <div class="srow">
+      <label>Command prefix
+        <input id="prefix" maxlength="5" value="<%= channel.command_prefix || '!' %>" style="width:5rem" />
+      </label>
+      <label>Global cooldown (s)
+        <input id="cg" type="number" min="0" max="60" value="<%= channel.cooldown_global || 0 %>" style="width:6rem" />
+      </label>
+      <label>Per-user cooldown (s)
+        <input id="cu" type="number" min="0" max="300" value="<%= channel.cooldown_user || 0 %>" style="width:6rem" />
+      </label>
+    </div>
+
+    <div class="muted" style="margin-top:1.1rem;margin-bottom:.4rem">Features</div>
+    <div id="feats" class="srow" data-json='<%= channel.features_enabled || "{}" %>'></div>
+
+    <button id="save" data-channel="<%= channel.channel_id %>" style="margin-top:1.25rem">Save settings</button>
+  </div>
+
+<% var pageJs = `
   <script>
-    const CHANNEL = '<%= channel.channel_id %>';
+    const CHANNEL = document.getElementById('save').dataset.channel;
     // Feature toggles rendered from the stored features_enabled JSON. The raw
     // JSON is emitted into a data attribute and parsed (avoids EJS-in-JS quoting bugs).
     const FEATURES = ['tokes','spark','sessions','trivia'];
@@ -89,6 +59,5 @@
       } catch (err) { alert(err.message || 'Save failed.'); }
       finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save settings'; }, 1500); }
     });
-  </script>
-</body>
-</html>
+  </script>`; %>
+<%- include('_foot', { extraJs: pageJs }) %>
