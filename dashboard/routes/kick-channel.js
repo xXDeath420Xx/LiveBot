@@ -9,6 +9,10 @@ import logger from '../../utils/logger.js';
 import { requireKickAuth } from './auth-tokes-bot.js';
 import { resolveOwnedChannel } from '../../services/certifried-bot/defender/owned-channel.js';
 import { invalidateChannelCache } from '../../services/certifried-bot/command-registry.js';
+import { resolveChannel } from '../../services/certifried-bot/defender/channel-tokens.js';
+import { resolveKickUser } from '../../services/certifried-bot/defender/resolve-kick-user.js';
+import { banUser, unbanUser } from '../../services/certifried-bot/defender/kick-moderation.js';
+import { log as logEnforcement } from '../../services/certifried-bot/defender/enforcement-log.js';
 import {
     validateCommandName, validateCommandResponse, validateCooldown,
     validateAliases, validateBoolean
@@ -232,6 +236,79 @@ router.delete('/kick/api/channel/:channelId/custom/:cmdId', requireKickAuth, asy
     } catch (error) {
         logger.error('[Kick Channel] custom delete error', { error: error.message });
         res.status(500).json({ error: 'Failed to delete command' });
+    }
+});
+
+// ── Live moderation: ban / unban / timeout a user by name ───────────────────
+// The streamer types a username; we resolve it to a Kick user id, use the
+// channel owner's token (resolveChannel) to call the Kick moderation API, and
+// record the action in the enforcement log so it shows in the activity feed.
+router.post('/kick/api/channel/:channelId/moderate', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+
+        const action = String(req.body.action || '');
+        const username = String(req.body.username || '').trim();
+        if (!['ban', 'unban', 'timeout'].includes(action)) {
+            return res.status(400).json({ error: 'action must be ban, unban or timeout' });
+        }
+        if (!username) return res.status(400).json({ error: 'username required' });
+
+        // The channel's own Kick id is the URL param; get a valid owner token + scopes.
+        const channelId = String(req.params.channelId);
+        const ch = await resolveChannel(channelId);
+        if (!ch || !ch.token) {
+            return res.status(409).json({ error: 'Channel is not enrolled or its Kick token is unavailable. Enable the defender and re-authorize.' });
+        }
+        if (!ch.scopes.includes('moderation:ban')) {
+            return res.status(403).json({ error: 'This channel has not granted ban permissions. Re-authorize with Kick.' });
+        }
+
+        // Username → Kick user id.
+        const target = await resolveKickUser(username);
+        if (!target) return res.status(404).json({ error: `No Kick user found for "${username}"` });
+
+        let result, reasonText;
+        if (action === 'unban') {
+            result = await unbanUser(ch.broadcasterId, target.userId, ch.token);
+            reasonText = 'manual unban (dashboard)';
+        } else {
+            // ban (permanent) or timeout (minutes from req.body.minutes, default 10)
+            const opts = { reason: req.body.reason ? String(req.body.reason).slice(0, 100) : 'Manual action via dashboard' };
+            if (action === 'timeout') {
+                const mins = Math.min(Math.max(parseInt(req.body.minutes, 10) || 10, 1), 10080); // 1 min … 1 week
+                opts.durationMin = mins;
+                reasonText = `manual timeout ${mins}m (dashboard)`;
+            } else {
+                reasonText = 'manual ban (dashboard)';
+            }
+            result = await banUser(ch.broadcasterId, target.userId, opts, ch.token);
+        }
+
+        // Audit it (best-effort) so the activity feed reflects manual actions.
+        // NB: kbd_enforcement_log.action is ENUM('ban','delete','detected_no_scope')
+        // — 'unban' is not valid, so we record manual actions as 'ban' and keep the
+        // real action in the reason text. (The feed renders the reason.)
+        try {
+            await logEnforcement({
+                channelId,
+                targetUserId: target.userId,
+                targetUsername: target.slug,
+                action: 'ban',
+                reason: reasonText,
+                success: !!result?.ok
+            });
+        } catch (_) { /* logging must never fail the action */ }
+
+        if (!result?.ok) {
+            return res.status(502).json({ error: `Kick API rejected the ${action} (status ${result?.status || '?'}).` });
+        }
+        res.json({ success: true, action, user: target.slug });
+    } catch (error) {
+        logger.error('[Kick Channel] moderate error', { error: error.message });
+        res.status(500).json({ error: 'Moderation action failed' });
     }
 });
 
