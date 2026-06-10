@@ -65,11 +65,31 @@ export async function getLinkedPlatforms(discordUserId) {
 export async function syncLinkedPlatforms(guild, discordUserId, channelId, opts = {}) {
   const linked = (await getLinkedPlatforms(discordUserId)).filter(p => LIVE_PLATFORMS.has(p.platform));
   if (linked.length <= 1) return []; // nothing else to sync
+
+  // Cross-PLATFORM, not cross-account: only add platforms the user has NO
+  // subscription on in this guild, and at most ONE account per platform.
+  // (Multiple twitch accounts under one Discord id are separate channels, not a
+  // single person's cross-platform presence — adding them pollutes curated lists.)
+  const [existing] = await pool.execute(
+    `SELECT DISTINCT st.platform FROM subscriptions s JOIN streamers st ON st.streamer_id = s.streamer_id
+     WHERE s.guild_id = ? AND st.discord_user_id = ?`,
+    [guild.id, discordUserId]
+  );
+  const havePlatform = new Set(existing.map(r => r.platform));
+  const seenPlatform = new Set();
+  const toAdd = [];
+  for (const p of linked) {
+    if (!p.platformUserId) continue;
+    if (havePlatform.has(p.platform) || seenPlatform.has(p.platform)) continue;
+    seenPlatform.add(p.platform);
+    toAdd.push(p);
+  }
+  if (!toAdd.length) return [];
+
   const teamId = await getTeamSubscriptionId(guild.id, discordUserId).catch(() => null);
   const added = [];
-  for (const p of linked) {
+  for (const p of toAdd) {
     try {
-      if (!p.platformUserId) continue; // need a canonical id to dedup/insert safely
       const { tracked } = await isStreamerAlreadyTracked(guild.id, p.platform, p.platformUserId);
       if (tracked) continue; // already subscribed in this guild — never re-route it
       const ok = await createStreamerAndSubscription(
