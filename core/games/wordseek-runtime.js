@@ -10,8 +10,9 @@
  * v1 has no auto-timeout: a round ends when all words are found or via
  * `/wordgame wordseek end`. Timed rounds are a future addition.
  */
-import { EmbedBuilder } from 'discord.js';
-import { findWord, remaining, renderGrid, initState } from './wordseek.js';
+import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { findWord, remaining, initState } from './wordseek.js';
+import { renderGridImage } from './wordseek-image.js';
 import * as wordBank from '../word-bank.js';
 import { registerEngine, saveState, bumpStats, endSession } from '../word-game-manager.js';
 import logger from '../../utils/logger.js';
@@ -24,22 +25,23 @@ export function freshGridState() {
 
 const WORD_RE = /^[A-Za-z]{2,}$/;
 
-// The grid goes in the MESSAGE CONTENT (full-width monospace, readable on mobile),
-// not an embed (which is narrow and garbles the letters). The found/remaining
-// info goes in the embed beside it.
+// The grid is rendered as a PNG IMAGE (big, legible, never wraps) attached to the
+// embed; the found/remaining info sits in the embed fields beside it.
 export function boardMessagePayload(state, { title, color } = {}) {
   const left = remaining(state);
   const lengths = left.map(w => w.length).sort((a, b) => a - b).join(', ');
   const foundList = state.found.length ? state.found.map(w => `~~${w.toUpperCase()}~~`).join(' · ') : '*none yet*';
-  const content = `## 🔡 ${title || 'WordSeek'}\n\`\`\`\n${renderGrid(state)}\n\`\`\``;
+  const file = new AttachmentBuilder(renderGridImage(state), { name: 'wordseek.png' });
   const embed = new EmbedBuilder()
+    .setTitle(`🔡 ${title || 'WordSeek'}`)
     .setColor(color ?? 0x5865F2)
+    .setImage('attachment://wordseek.png')
     .setDescription('Type any word you spot — **forwards, backwards, or diagonally**.')
     .addFields(
       { name: `Found ${state.found.length}/${state.words.length}`, value: foundList, inline: false },
       { name: 'Remaining word lengths', value: lengths || '—', inline: false },
     );
-  return { content, embeds: [embed] };
+  return { embeds: [embed], files: [file] };
 }
 
 async function updateBoard(channel, state, opts) {
@@ -47,7 +49,7 @@ async function updateBoard(channel, state, opts) {
   if (state.boardMessageId) {
     try {
       const msg = await channel.messages.fetch(state.boardMessageId);
-      await msg.edit(payload);
+      await msg.edit({ ...payload, attachments: [] }); // clear old image, attach the new one
       return state.boardMessageId;
     } catch { /* re-post below */ }
   }
