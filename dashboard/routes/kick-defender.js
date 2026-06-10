@@ -13,6 +13,7 @@ import * as banlist from '../../services/certifried-bot/defender/banlist.js';
 import * as managers from '../../services/certifried-bot/defender/managers.js';
 import { channelStats, listEvents } from '../../services/certifried-bot/defender/enforcement-log.js';
 import { size as phishingSize, isDomainBlocked } from '../../services/certifried-bot/defender/phishing-domains.js';
+import { resolveOwnedChannel } from '../../services/certifried-bot/defender/owned-channel.js';
 
 const router = express.Router();
 
@@ -35,11 +36,7 @@ async function isManagerUser(req) {
 // True if `userId` owns the given Kick channel. Centralizes the owner check
 // used by the enforcement-log and channel-settings routes.
 async function ownsChannel(userId, channelId) {
-    const [[row]] = await pool.execute(
-        "SELECT 1 FROM tokes_channels WHERE platform = 'kick' AND channel_id = ? AND owner_id = ?",
-        [String(channelId || ''), userId]
-    );
-    return !!row;
+    return !!(await resolveOwnedChannel(userId, channelId));
 }
 
 // ── Streamer panel ────────────────────────────────────────────────────────
