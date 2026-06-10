@@ -13,9 +13,11 @@
 
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { safeJsonArray } from '../utils/safeJson.js';
 import { parseStreamUrl } from '../utils/stream-url-parser.js';
 import * as twitchApi from '../utils/platforms/twitch.js';
 import * as kickApi from '../utils/platforms/kick.js';
+import { igBusinessDiscovery } from '../utils/platforms/meta.js';
 
 // Config cache per guild
 const selfPromoConfigCache = new Map();
@@ -75,6 +77,41 @@ function setCache(key, result) {
     trackingCache.set(key, { result, expiresAt: Date.now() + TRACKING_CACHE_TTL });
 }
 
+function normalizeIdentity(value) {
+    return (value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function hasCommonSubstring(a, b, minLen = 5) {
+    if (a.length < minLen || b.length < minLen) return false;
+    for (let i = 0; i + minLen <= a.length; i++) {
+        if (b.includes(a.slice(i, i + minLen))) return true;
+    }
+    return false;
+}
+
+// Soft ownership gate so users can't auto-track OTHER people's channels:
+// the platform username must look like the poster's Discord identity.
+// False negatives (real owners with unrelated Discord names) are handled by
+// a mod linking them manually via the dashboard.
+export function looksLikeOwnedChannel(member, platformUsername) {
+    const target = normalizeIdentity(platformUsername);
+    if (target.length < 4) return false;
+
+    const candidates = [
+        member.user?.username,
+        member.user?.globalName,
+        member.nickname,
+        member.displayName,
+    ].map(normalizeIdentity).filter(c => c.length >= 4);
+
+    for (const cand of candidates) {
+        if (cand === target) return true;
+        if (cand.includes(target) || target.includes(cand)) return true;
+        if (hasCommonSubstring(cand, target, 5)) return true;
+    }
+    return false;
+}
+
 /**
  * Check if a user is tracked in a specific channel.
  * @returns {boolean}
@@ -104,7 +141,7 @@ async function isTrackedInChannel(guildId, discordUserId, channelId) {
  * Validate a username with the platform API and return canonical data.
  * @returns {{ platformUserId: string, canonicalUsername: string } | null}
  */
-async function validatePlatformUser(platform, username) {
+export async function validatePlatformUser(platform, username) {
     try {
         if (platform === 'twitch') {
             const user = await twitchApi.getTwitchUser(username);
@@ -118,7 +155,19 @@ async function validatePlatformUser(platform, username) {
             return { platformUserId: String(user.user.id), canonicalUsername: user.user.username || username };
         }
 
-        // YouTube, TikTok, Trovo, Facebook, Instagram - pass through
+        if (platform === 'instagram') {
+            // Try Graph API business_discovery; soft-fall through on null so
+            // personal accounts and unconfigured deployments still work — the
+            // hard correctness gate is the URL parser, not validation.
+            const biz = await igBusinessDiscovery(username, { mediaLimit: 0 });
+            if (biz?.username) {
+                return { platformUserId: biz.id || username, canonicalUsername: biz.username };
+            }
+            logger.warn(`[SelfPromo] Instagram @${username} not discoverable; passing through unvalidated`);
+            return { platformUserId: username, canonicalUsername: username };
+        }
+
+        // YouTube, TikTok, Trovo, Facebook - pass through
         return { platformUserId: username, canonicalUsername: username };
     } catch (error) {
         logger.error(`[SelfPromo] Error validating ${platform} user "${username}"`, { error: error.message });
@@ -137,20 +186,36 @@ async function validatePlatformUser(platform, username) {
  * @param {number|null} teamSubscriptionId - team ID if the user is a team member
  * @returns {boolean} true if created successfully
  */
-async function createStreamerAndSubscription(guildId, platform, platformUserId, canonicalUsername, discordUserId, channelId, teamSubscriptionId = null) {
+export async function createStreamerAndSubscription(guildId, platform, platformUserId, canonicalUsername, discordUserId, channelId, teamSubscriptionId = null) {
     let connection;
     try {
         connection = await pool.getConnection();
 
-        // Check if streamer already exists
+        // Check if streamer already exists — match either canonical key
+        // (platform_user_id) OR canonical username, since legacy setup scripts
+        // wrote rows with placeholder platform_user_id values like
+        // "<username>_id" which collide on the unique_platform_username index
+        // when the API-resolved numeric id is later inserted.
         const [existing] = await connection.query(
-            'SELECT streamer_id FROM streamers WHERE platform = ? AND platform_user_id = ?',
-            [platform, platformUserId]
+            'SELECT streamer_id, platform_user_id FROM streamers WHERE platform = ? AND (platform_user_id = ? OR username = ?)',
+            [platform, platformUserId, canonicalUsername]
         );
 
         let streamerId;
         if (existing.length > 0) {
             streamerId = existing[0].streamer_id;
+            // Self-heal: if the existing row has a placeholder platform_user_id
+            // that differs from the canonical numeric id we just resolved, fix it.
+            if (existing[0].platform_user_id !== platformUserId) {
+                await connection.query(
+                    'UPDATE streamers SET platform_user_id = ? WHERE streamer_id = ?',
+                    [platformUserId, streamerId]
+                );
+                logger.info('[SelfPromo] healed placeholder platform_user_id', {
+                    streamerId, platform, canonicalUsername,
+                    old: existing[0].platform_user_id, new: platformUserId
+                });
+            }
             // Link discord_user_id if not already set
             await connection.query(
                 'UPDATE streamers SET discord_user_id = ? WHERE streamer_id = ? AND discord_user_id IS NULL',
@@ -223,7 +288,7 @@ async function createStreamerAndSubscription(guildId, platform, platformUserId, 
  * Look up the team_subscription_id for a Discord user in this guild.
  * @returns {number|null}
  */
-async function getTeamSubscriptionId(guildId, discordUserId) {
+export async function getTeamSubscriptionId(guildId, discordUserId) {
     try {
         const [rows] = await pool.execute(
             `SELECT sub.team_subscription_id FROM subscriptions sub
@@ -243,14 +308,14 @@ async function getTeamSubscriptionId(guildId, discordUserId) {
  * Check if a specific platform+username combo already has a subscription in this guild.
  * @returns {{ tracked: boolean, channelId: string|null }}
  */
-async function isStreamerAlreadyTracked(guildId, platform, platformUserId) {
+export async function isStreamerAlreadyTracked(guildId, platform, platformUserId) {
     try {
         const [rows] = await pool.execute(
             `SELECT COALESCE(sub.announcement_channel_id, ts.announcement_channel_id, gc.announcement_channel_id) AS channel_id
              FROM subscriptions sub
              JOIN streamers s ON sub.streamer_id = s.streamer_id
              LEFT JOIN twitch_teams ts ON sub.team_subscription_id = ts.id
-             LEFT JOIN guild_config gc ON CAST(sub.guild_id AS CHAR) = CAST(gc.guild_id AS CHAR)
+             LEFT JOIN guild_config gc ON sub.guild_id COLLATE utf8mb4_unicode_ci = gc.guild_id COLLATE utf8mb4_unicode_ci
              WHERE sub.guild_id = ? AND s.platform = ? AND s.platform_user_id = ?`,
             [guildId, platform, platformUserId]
         );
@@ -260,6 +325,65 @@ async function isStreamerAlreadyTracked(guildId, platform, platformUserId) {
         logger.error('[SelfPromo] Error checking if streamer is tracked', { error: error.message });
         return { tracked: false, channelId: null };
     }
+}
+
+/**
+ * Check whether a user is allowed to post/create threads in the self-promo
+ * announcement channel. When the announce gate is disabled or the target
+ * channel isn't the configured announcement channel, returns {allowed:true}.
+ *
+ * @param {import('discord.js').Guild} guild
+ * @param {string} userId
+ * @param {string} channelId - the channel the user tried to post in / created a thread under
+ * @returns {Promise<{allowed:boolean, reasons?:string[], deleteUnauthorized?:boolean}>}
+ */
+export async function checkAnnounceChannelGate(guild, userId, channelId) {
+    if (!guild || !userId || !channelId) return { allowed: true };
+
+    const config = await getSelfPromoConfig(guild.id);
+    if (!config || !config.announce_gate_enabled) return { allowed: true };
+    if (!config.announcement_channel_id || config.announcement_channel_id !== channelId) {
+        return { allowed: true };
+    }
+
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) return { allowed: true };
+
+    // Manage Channels bypass — admins can always post
+    try {
+        if (member.permissions?.has?.('ManageChannels')) return { allowed: true };
+    } catch { /* ignore permission-object glitches */ }
+
+    const requiredRoleIds = safeJsonArray(config.announce_required_role_ids, 'announce_required_role_ids');
+    const hasRequiredRole = requiredRoleIds.length === 0
+        || member.roles.cache.some(r => requiredRoleIds.includes(r.id));
+
+    const minLevel = Number(config.announce_min_level) || 0;
+    let userLevel = 0;
+    if (minLevel > 0) {
+        const lm = guild.client?.levelingManager;
+        if (lm?.getUserRank) {
+            const rank = await lm.getUserRank(guild.id, userId).catch(() => null);
+            userLevel = Number(rank?.level) || 0;
+        }
+    }
+    const meetsLevel = minLevel <= 0 || userLevel >= minLevel;
+
+    if (hasRequiredRole && meetsLevel) return { allowed: true };
+
+    const reasons = [];
+    if (!meetsLevel) {
+        reasons.push(`Level **${minLevel}+** required (you are level ${userLevel})`);
+    }
+    if (!hasRequiredRole) {
+        const mentions = requiredRoleIds.map(id => `<@&${id}>`).join(', ');
+        reasons.push(`One of these roles is required: ${mentions}`);
+    }
+    return {
+        allowed: false,
+        reasons,
+        deleteUnauthorized: config.announce_delete_unauthorized !== 0,
+    };
 }
 
 /**
@@ -281,8 +405,24 @@ export async function handleSelfPromoMessage(message) {
     // Only handle messages in the configured self-promo channel
     if (message.channel.id !== config.channel_id) return false;
 
+    // From here on, every exit logs — the handler is now committed to this message.
+    logger.info('[SelfPromo] entered handler for configured channel', {
+        guildId, channelId: message.channel.id, userId: message.author?.id, contentPreview: message.content.slice(0, 120)
+    });
+
     const member = message.member;
-    if (!member) return false;
+    if (!member) {
+        logger.info('[SelfPromo] skipped: no member on message', { guildId, userId: message.author?.id });
+        return false;
+    }
+
+    // Role whitelist bypass — members wearing any whitelisted role can post
+    // freely without URL validation or deletion. See migration 086.
+    const whitelistedRoles = safeJsonArray(config.whitelisted_role_ids, 'self_promo whitelisted_role_ids');
+    if (whitelistedRoles.length > 0 && member.roles.cache.some(r => whitelistedRoles.includes(r.id))) {
+        logger.info('[SelfPromo] skipped: member has whitelisted role', { guildId, userId: member.id });
+        return false;
+    }
 
     // Helper to delete the user's message
     const deleteMessage = () => message.delete().catch(err =>
@@ -293,6 +433,10 @@ export async function handleSelfPromoMessage(message) {
     const parsed = parseStreamUrl(message.content);
 
     if (!parsed) {
+        logger.info('[SelfPromo] skipped: no streamer URL parsed', {
+            guildId, userId: member.id, deleteInvalid: !!config.delete_invalid,
+            contentPreview: message.content.slice(0, 120)
+        });
         // No streaming URL found — delete if configured
         if (config.delete_invalid) {
             await deleteMessage();
@@ -300,9 +444,16 @@ export async function handleSelfPromoMessage(message) {
         return true;
     }
 
+    logger.info('[SelfPromo] URL parsed', {
+        guildId, userId: member.id, platform: parsed.platform, username: parsed.username
+    });
+
     // Check if platform is allowed
     const allowedPlatforms = config.allowed_platforms || [];
     if (allowedPlatforms.length > 0 && !allowedPlatforms.includes(parsed.platform)) {
+        logger.info('[SelfPromo] skipped: platform not in allowlist', {
+            guildId, userId: member.id, platform: parsed.platform, allowed: allowedPlatforms
+        });
         if (config.delete_invalid) {
             await deleteMessage();
         }
@@ -311,6 +462,7 @@ export async function handleSelfPromoMessage(message) {
 
     // Auto-subscribe disabled — just delete the message
     if (!config.auto_subscribe) {
+        logger.info('[SelfPromo] skipped: auto_subscribe disabled', { guildId, userId: member.id });
         if (config.delete_invalid) {
             await deleteMessage();
         }
@@ -320,9 +472,17 @@ export async function handleSelfPromoMessage(message) {
     // Validate the username with the platform API
     const validated = await validatePlatformUser(parsed.platform, parsed.username);
     if (!validated) {
+        logger.info('[SelfPromo] skipped: platform validation failed', {
+            guildId, userId: member.id, platform: parsed.platform, username: parsed.username
+        });
         await deleteMessage();
         return true;
     }
+
+    logger.info('[SelfPromo] platform validation OK', {
+        guildId, userId: member.id, platform: parsed.platform,
+        canonicalUsername: validated.canonicalUsername, platformUserId: validated.platformUserId
+    });
 
     // Check if this specific platform+user combo is already tracked
     const { tracked: alreadyTracked, channelId: trackedChannelId } = await isStreamerAlreadyTracked(guildId, parsed.platform, validated.platformUserId);
@@ -348,13 +508,42 @@ export async function handleSelfPromoMessage(message) {
         return true;
     }
 
+    // Ownership gate — self-promo is for the user's OWN channel only.
+    if (!looksLikeOwnedChannel(member, validated.canonicalUsername)) {
+        logger.info('[SelfPromo] rejected: channel does not look owned by poster', {
+            guildId, userId: member.id, platform: parsed.platform,
+            postedChannel: validated.canonicalUsername,
+            discordUsername: member.user?.username,
+            discordDisplayName: member.displayName
+        });
+        await deleteMessage();
+        try {
+            await member.send(
+                `The **${parsed.platform}** link you posted (\`${validated.canonicalUsername}\`) ` +
+                `doesn't look like your own channel — this channel is for **self**-promotion only, ` +
+                `please don't post other people's stream links here. ` +
+                `If \`${validated.canonicalUsername}\` actually IS yours, ask a moderator to link it ` +
+                `manually (your Discord name doesn't match the channel name closely enough for the ` +
+                `bot to verify automatically).`
+            );
+        } catch {
+            logger.debug('[SelfPromo] Could not DM rejection notice', { userId: member.id });
+        }
+        return true;
+    }
+
     // Determine routing: team member → team channel, non-team → self-promo channel
     const teamId = await getTeamSubscriptionId(guildId, member.id);
     const isTeamMember = teamId !== null;
 
     // Team members: announcement_channel_id = NULL (falls through to team channel)
-    // Non-team: announcement_channel_id = self-promo channel
-    const announcementChannelId = isTeamMember ? null : config.channel_id;
+    // Non-team: same_channel=1 → signup channel; otherwise the configured
+    //          announcement channel (fallback to signup channel if unset).
+    const useSeparateAnnounceChannel = !config.same_channel && config.announcement_channel_id;
+    const resolvedAnnounceChannelId = useSeparateAnnounceChannel
+        ? config.announcement_channel_id
+        : config.channel_id;
+    const announcementChannelId = isTeamMember ? null : resolvedAnnounceChannelId;
 
     // Create the streamer + subscription
     const created = await createStreamerAndSubscription(
@@ -366,6 +555,12 @@ export async function handleSelfPromoMessage(message) {
         announcementChannelId,
         isTeamMember ? teamId : null
     );
+
+    logger.info('[SelfPromo] createStreamerAndSubscription returned', {
+        guildId, userId: member.id, platform: parsed.platform,
+        canonicalUsername: validated.canonicalUsername, created, isTeamMember,
+        announcementChannelId
+    });
 
     // Always delete in self-promo channel
     await deleteMessage();
