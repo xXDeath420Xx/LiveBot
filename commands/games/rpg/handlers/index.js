@@ -1218,7 +1218,7 @@ export async function handleAutocomplete(interaction) {
 
             const [campaigns] = await pool.execute(`
                 SELECT c.campaign_id, c.campaign_name, c.dm_user_id, c.max_players,
-                       COUNT(cp.player_id) as player_count
+                       COUNT(cp.user_id) as player_count
                 FROM dnd_campaigns c
                 LEFT JOIN dnd_campaign_players cp ON c.campaign_id = cp.campaign_id
                 WHERE c.guild_id = ?
