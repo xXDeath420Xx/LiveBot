@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="<%= csrfToken %>" />
+  <title>Kick Defender — Your Channels</title>
+  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: radial-gradient(circle at 50% 0%, #1e1b2e 0%, #0b0a12 70%); color: #ECECEC; min-height: 100vh; padding: 2rem 1.25rem; }
+    .wrap { max-width: 56rem; margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
+    h1 { font-size: 1.6rem; font-weight: 800; }
+    .nav a { color: #9a93b3; text-decoration: none; margin-left: 1rem; font-size: .9rem; }
+    .nav a:hover { color: #fff; }
+    .card { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 16px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .name { font-weight: 700; font-size: 1.1rem; }
+    .stats { color: #9a93b3; font-size: .85rem; margin-top: .5rem; }
+    .banner { margin-top: .85rem; padding: .7rem .9rem; border-radius: 10px; background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.4); color: #fcd34d; font-size: .85rem; }
+    .banner a { color: #fde68a; }
+    button { font-family: inherit; font-weight: 600; font-size: .9rem; border: none; border-radius: 10px; padding: .55rem 1rem; cursor: pointer; }
+    .on { background: #53FC18; color: #0b0a12; }
+    .off { background: rgba(255,255,255,.1); color: #ECECEC; }
+    .empty { color: #9a93b3; }
+    .settings{margin-top:.85rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.75rem}
+    .settings summary{cursor:pointer;color:#9a93b3;font-size:.85rem}
+    .srow{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-top:.6rem}
+    .srow label{font-size:.78rem;color:#9a93b3;display:flex;flex-direction:column;gap:.2rem}
+    .log-out{margin-top:.5rem;font-size:.8rem;color:#b9b4cf}
+    .log-out table{width:100%;border-collapse:collapse}.log-out td{padding:.2rem .4rem;border-bottom:1px solid rgba(255,255,255,.05)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>⚙ <%= channel.channel_name %></h1>
+      <nav class="nav">
+        <a href="/kick">My channels</a>
+        <a href="/kick/channel/<%= channel.channel_id %>/commands">Commands</a>
+        <a href="/logout">Log out</a>
+      </nav>
+    </header>
+
+    <div class="card">
+      <div class="srow">
+        <label>Command prefix
+          <input id="prefix" maxlength="5" value="<%= channel.command_prefix || '!' %>" style="width:5rem" />
+        </label>
+        <label>Global cooldown (s)
+          <input id="cg" type="number" min="0" max="60" value="<%= channel.cooldown_global || 0 %>" style="width:6rem" />
+        </label>
+        <label>Per-user cooldown (s)
+          <input id="cu" type="number" min="0" max="300" value="<%= channel.cooldown_user || 0 %>" style="width:6rem" />
+        </label>
+      </div>
+      <div id="feats" class="srow" style="margin-top:.75rem" data-json='<%= channel.features_enabled || "{}" %>'></div>
+      <button id="save" style="margin-top:1rem">Save settings</button>
+    </div>
+  </div>
+
+  <script src="/js/kick-dashboard.js"></script>
+  <script>
+    const CHANNEL = '<%= channel.channel_id %>';
+    // Feature toggles rendered from the stored features_enabled JSON. The raw
+    // JSON is emitted into a data attribute and parsed (avoids EJS-in-JS quoting bugs).
+    const FEATURES = ['tokes','spark','sessions','trivia'];
+    let feats = {};
+    try { feats = JSON.parse(document.getElementById('feats').dataset.json || '{}') || {}; } catch (_) {}
+    document.getElementById('feats').innerHTML = FEATURES.map(f =>
+      '<label style="flex-direction:row;gap:.35rem;align-items:center">' +
+      '<input type="checkbox" class="feat" data-feat="' + f + '"' + (feats[f] !== false ? ' checked' : '') + '/> ' + f + '</label>').join('');
+
+    document.getElementById('save').addEventListener('click', async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      const features = {};
+      document.querySelectorAll('.feat').forEach(c => { features[c.dataset.feat] = c.checked; });
+      try {
+        await KickDash.patch('/kick/api/channel/' + CHANNEL, {
+          command_prefix: document.getElementById('prefix').value,
+          cooldown_global: document.getElementById('cg').value,
+          cooldown_user: document.getElementById('cu').value,
+          features_enabled: features
+        });
+        btn.textContent = 'Saved ✓';
+      } catch (err) { alert(err.message || 'Save failed.'); }
+      finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save settings'; }, 1500); }
+    });
+  </script>
+</body>
+</html>
