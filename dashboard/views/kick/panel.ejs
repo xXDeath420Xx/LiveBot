@@ -12,6 +12,18 @@
     </nav>
   </div>
 
+  <!-- ── Bot health strip ───────────────────────────────────── -->
+  <div class="card" id="health" style="padding:.75rem 1rem">
+    <div class="row" style="align-items:center;gap:.75rem">
+      <div style="display:flex;align-items:center;gap:.6rem">
+        <span id="health-dot" class="pill" style="width:.7rem;height:.7rem;padding:0;border-radius:50%;background:var(--muted)"></span>
+        <span id="health-status" style="font-weight:600">Defender bot: <span class="muted">checking…</span></span>
+      </div>
+      <span id="health-joined" class="muted">—</span>
+    </div>
+    <div id="health-warn" style="margin-top:.4rem"></div>
+  </div>
+
   <!-- ── Overview stats ─────────────────────────────────────── -->
   <% var totalBanned = 0, totalDeleted = 0, totalDormant = 0, enrolledCount = 0, scopeOK = 0;
      channels.forEach(function(c){ totalBanned += (c.stats.banned||0); totalDeleted += (c.stats.deleted||0); totalDormant += (c.stats.dormant||0); if(c.enabled) enrolledCount++; if(c.hasBanScope) scopeOK++; }); %>
@@ -21,6 +33,15 @@
     <div class="stat"><b><%= totalBanned.toLocaleString() %></b><span>Users banned</span></div>
     <div class="stat"><b><%= totalDeleted.toLocaleString() %></b><span>Messages removed</span></div>
     <div class="stat"><b><%= totalDormant.toLocaleString() %></b><span>Detected (no scope)</span></div>
+  </div>
+
+  <!-- ── Network protection ──────────────────────────────────── -->
+  <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.05rem;margin:1.4rem 0 .6rem">Across the network</h2>
+  <div class="statgrid">
+    <div class="stat"><b id="ns-banned">—</b><span>Users banned</span></div>
+    <div class="stat"><b id="ns-removed">—</b><span>Messages removed</span></div>
+    <div class="stat"><b id="ns-banlist">—</b><span>Banlist size</span></div>
+    <div class="stat kick"><b id="ns-phishing">—</b><span>Phishing domains</span></div>
   </div>
 
   <% if (!channels.length) { %>
@@ -135,5 +156,53 @@
         }
       } catch (_) {}
     });
+
+    // ── Bot health + network-protection stats ──────────────────
+    (function () {
+      const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+      (async function loadHealth() {
+        const dot = document.getElementById('health-dot');
+        const status = document.getElementById('health-status');
+        const joined = document.getElementById('health-joined');
+        const warn = document.getElementById('health-warn');
+        if (!status) return;
+        try {
+          const res = await fetch('/kick/api/bot-health');
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || 'Failed');
+          if (j.connected) {
+            if (dot) dot.style.background = 'var(--ok, #2ecc71)';
+            status.innerHTML = 'Defender bot: <span class="pill ok">connected</span>';
+          } else {
+            if (dot) dot.style.background = 'var(--bad, #e74c3c)';
+            status.innerHTML = 'Defender bot: <span class="pill bad">offline</span>';
+          }
+          if (joined) joined.textContent = (j.joinedChannels || 0).toLocaleString() + ' chatrooms joined';
+          const missing = (j.channels || []).filter(c => c.enrolled && !c.joined);
+          if (warn) {
+            warn.innerHTML = missing.map(c =>
+              '<div class="muted" style="color:var(--warn,#e0a800)">⚠ ' + esc(c.channelName) + ' enrolled but not joined</div>'
+            ).join('');
+          }
+        } catch (e) {
+          if (status) status.innerHTML = 'Defender bot: <span class="muted">status unavailable</span>';
+        }
+      })();
+
+      (async function loadNetworkStats() {
+        try {
+          const res = await fetch('/kick/api/network-stats');
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || 'Failed');
+          const s = j.stats || {};
+          const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.textContent = Number(v).toLocaleString(); };
+          set('ns-banned', s.banned);
+          set('ns-removed', s.deleted);
+          set('ns-banlist', Array.isArray(j.banlist) ? j.banlist.length : j.banlist);
+          set('ns-phishing', Array.isArray(j.phishing) ? j.phishing.length : j.phishing);
+        } catch (e) { /* leave placeholders */ }
+      })();
+    })();
   </script>`; %>
 <%- include('_foot', { extraJs: panelJs }) %>
