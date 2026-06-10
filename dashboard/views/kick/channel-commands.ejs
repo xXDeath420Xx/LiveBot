@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="<%= csrfToken %>" />
+  <title>Kick Defender — Commands</title>
+  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: radial-gradient(circle at 50% 0%, #1e1b2e 0%, #0b0a12 70%); color: #ECECEC; min-height: 100vh; padding: 2rem 1.25rem; }
+    .wrap { max-width: 56rem; margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
+    h1 { font-size: 1.6rem; font-weight: 800; }
+    .nav a { color: #9a93b3; text-decoration: none; margin-left: 1rem; font-size: .9rem; }
+    .nav a:hover { color: #fff; }
+    .card { border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); border-radius: 16px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .name { font-weight: 700; font-size: 1.1rem; }
+    .stats { color: #9a93b3; font-size: .85rem; margin-top: .5rem; }
+    .banner { margin-top: .85rem; padding: .7rem .9rem; border-radius: 10px; background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.4); color: #fcd34d; font-size: .85rem; }
+    .banner a { color: #fde68a; }
+    button { font-family: inherit; font-weight: 600; font-size: .9rem; border: none; border-radius: 10px; padding: .55rem 1rem; cursor: pointer; }
+    .on { background: #53FC18; color: #0b0a12; }
+    .off { background: rgba(255,255,255,.1); color: #ECECEC; }
+    .empty { color: #9a93b3; }
+    .settings{margin-top:.85rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.75rem}
+    .settings summary{cursor:pointer;color:#9a93b3;font-size:.85rem}
+    .srow{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-top:.6rem}
+    .srow label{font-size:.78rem;color:#9a93b3;display:flex;flex-direction:column;gap:.2rem}
+    .log-out{margin-top:.5rem;font-size:.8rem;color:#b9b4cf}
+    .log-out table{width:100%;border-collapse:collapse}.log-out td{padding:.2rem .4rem;border-bottom:1px solid rgba(255,255,255,.05)}
+    .muted{color:#9a93b3;font-size:.85rem}
+    button.danger{background:rgba(239,68,68,.85);color:#fff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>⌨ Commands — <%= channel.channel_name %></h1>
+      <nav class="nav">
+        <a href="/kick/channel/<%= channel.channel_id %>">Settings</a>
+        <a href="/kick">My channels</a>
+        <a href="/logout">Log out</a>
+      </nav>
+    </header>
+
+    <%
+      const ov = {};
+      channelCommands.forEach(c => { ov[c.command_key] = c; });
+    %>
+
+    <div class="card">
+      <h2 style="font-size:1.1rem;margin-bottom:.75rem">Built-in commands</h2>
+      <% commands.forEach(cmd => { const o = ov[cmd.command_key] || {}; const enabled = o.is_enabled === undefined ? true : o.is_enabled === 1; %>
+        <div class="cmd" data-key="<%= cmd.command_key %>" style="border-top:1px solid rgba(255,255,255,.06);padding:.6rem 0">
+          <div class="row">
+            <div><strong>!<%= cmd.command_key %></strong> <span class="muted">— <%= cmd.description || cmd.category %></span></div>
+            <label style="display:flex;gap:.35rem;align-items:center;font-size:.8rem">
+              <input type="checkbox" class="cmd-enabled" data-key="<%= cmd.command_key %>" <%= enabled ? 'checked' : '' %>/> enabled
+            </label>
+          </div>
+          <details class="settings">
+            <summary>Customize</summary>
+            <div class="srow">
+              <label>Aliases (comma-sep)
+                <input class="cmd-aliases" data-key="<%= cmd.command_key %>" value="<%= o.custom_aliases ? JSON.parse(o.custom_aliases).join(', ') : '' %>" />
+              </label>
+              <label>Cooldown (s)
+                <input class="cmd-cd" data-key="<%= cmd.command_key %>" type="number" min="0" max="3600" value="<%= o.cooldown_override != null ? o.cooldown_override : '' %>" style="width:6rem" />
+              </label>
+              <label style="flex-direction:row;gap:.35rem;align-items:center">
+                <input type="checkbox" class="cmd-mod" data-key="<%= cmd.command_key %>" <%= o.mod_only === 1 ? 'checked' : '' %>/> mod-only
+              </label>
+            </div>
+            <textarea class="cmd-resp" data-key="<%= cmd.command_key %>" placeholder="Custom response (optional; supports {{username}}, {{lifetime_tokes}}, …)" style="width:100%;margin-top:.5rem"><%= o.custom_response || '' %></textarea>
+            <button class="cmd-save" data-key="<%= cmd.command_key %>" style="margin-top:.5rem">Save</button>
+          </details>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="card">
+      <div class="row"><h2 style="font-size:1.1rem">Custom commands</h2></div>
+      <div class="srow" style="margin-top:.6rem">
+        <input id="new-name" placeholder="name (no !)" />
+        <input id="new-cd" type="number" min="0" max="3600" value="5" placeholder="cooldown" style="width:6rem" />
+        <label style="flex-direction:row;gap:.35rem;align-items:center"><input type="checkbox" id="new-mod"/> mod-only</label>
+        <button id="new-add">Add command</button>
+      </div>
+      <textarea id="new-resp" placeholder="Response (supports {{username}}, {{lifetime_tokes}}, {{level}}, …)" style="width:100%;margin-top:.5rem"></textarea>
+      <ul id="custom-list" style="margin-top:.75rem;list-style:none">
+        <% customCommands.forEach(cc => { %>
+          <li data-id="<%= cc.id %>" style="display:flex;justify-content:space-between;gap:.75rem;padding:.4rem 0;border-bottom:1px solid rgba(255,255,255,.05)">
+            <span><strong>!<%= cc.command_name %></strong> <span class="muted"><%= (cc.response || '').slice(0,60) %></span></span>
+            <button class="cc-del danger" data-id="<%= cc.id %>">Delete</button>
+          </li>
+        <% }) %>
+      </ul>
+    </div>
+  </div>
+
+  <script src="/js/kick-dashboard.js"></script>
+  <script>
+    const CHANNEL = '<%= channel.channel_id %>';
+
+    // Toggle a built-in command.
+    document.querySelectorAll('.cmd-enabled').forEach(cb => cb.addEventListener('change', async () => {
+      try { await KickDash.post('/kick/api/channel/' + CHANNEL + '/commands/' + cb.dataset.key + '/toggle', { enabled: cb.checked }); }
+      catch (e) { cb.checked = !cb.checked; alert(e.message || 'Toggle failed.'); }
+    }));
+
+    // Save a built-in override.
+    document.querySelectorAll('.cmd-save').forEach(btn => btn.addEventListener('click', async () => {
+      const k = btn.dataset.key;
+      const q = sel => document.querySelector(sel + '[data-key="' + k + '"]');
+      const aliases = q('.cmd-aliases').value.split(',').map(s => s.trim()).filter(Boolean);
+      btn.disabled = true;
+      try {
+        await KickDash.put('/kick/api/channel/' + CHANNEL + '/commands/' + k, {
+          custom_aliases: aliases,
+          custom_response: q('.cmd-resp').value,
+          cooldown_override: q('.cmd-cd').value || null,
+          mod_only: q('.cmd-mod').checked
+        });
+        btn.textContent = 'Saved ✓';
+      } catch (e) { alert(e.message || 'Save failed.'); }
+      finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save'; }, 1500); }
+    }));
+
+    // Add a custom command.
+    document.getElementById('new-add').addEventListener('click', async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      try {
+        await KickDash.post('/kick/api/channel/' + CHANNEL + '/custom', {
+          command_name: document.getElementById('new-name').value,
+          response: document.getElementById('new-resp').value,
+          cooldown: document.getElementById('new-cd').value,
+          mod_only: document.getElementById('new-mod').checked
+        });
+        location.reload();
+      } catch (err) { btn.disabled = false; alert(err.message || 'Add failed.'); }
+    });
+
+    // Delete a custom command.
+    document.querySelectorAll('.cc-del').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('Delete this command?')) return;
+      try { await KickDash.del('/kick/api/channel/' + CHANNEL + '/custom/' + btn.dataset.id, {}); location.reload(); }
+      catch (e) { alert(e.message || 'Delete failed.'); }
+    }));
+  </script>
+</body>
+</html>
