@@ -26,6 +26,12 @@
     .on { background: #53FC18; color: #0b0a12; }
     .off { background: rgba(255,255,255,.1); color: #ECECEC; }
     .empty { color: #9a93b3; }
+    .settings{margin-top:.85rem;border-top:1px solid rgba(255,255,255,.07);padding-top:.75rem}
+    .settings summary{cursor:pointer;color:#9a93b3;font-size:.85rem}
+    .srow{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;margin-top:.6rem}
+    .srow label{font-size:.78rem;color:#9a93b3;display:flex;flex-direction:column;gap:.2rem}
+    .log-out{margin-top:.5rem;font-size:.8rem;color:#b9b4cf}
+    .log-out table{width:100%;border-collapse:collapse}.log-out td{padding:.2rem .4rem;border-bottom:1px solid rgba(255,255,255,.05)}
   </style>
 </head>
 <body>
@@ -64,49 +70,97 @@
             <% if (!ch.hasManageScope) { %> (No moderation scopes granted at all.)<% } else { %> (Messages can be deleted, but users can't be banned.)<% } %>
           </div>
         <% } %>
+        <details class="settings">
+          <summary>Protection settings &amp; recent actions</summary>
+          <div class="srow">
+            <label>Ban type
+              <select class="set-bantype" data-channel="<%= ch.channelId %>">
+                <option value="">Permanent</option>
+                <option value="timed">Timed (minutes)</option>
+              </select>
+            </label>
+            <input class="set-duration" data-channel="<%= ch.channelId %>" type="number" min="1" placeholder="minutes" style="width:8rem" />
+            <label>Scam-link strikes before ban
+              <input class="set-threshold" data-channel="<%= ch.channelId %>" type="number" min="1" max="10" value="2" style="width:5rem" />
+            </label>
+            <button class="set-save" data-channel="<%= ch.channelId %>">Save settings</button>
+          </div>
+          <textarea class="set-warning" data-channel="<%= ch.channelId %>" placeholder="Custom scam-link warning (use {{username}})" style="width:100%;margin-top:.5rem"></textarea>
+          <div class="log" data-channel="<%= ch.channelId %>" style="margin-top:.75rem">
+            <button class="log-load" data-channel="<%= ch.channelId %>">Load recent actions</button>
+            <div class="log-out"></div>
+          </div>
+        </details>
       </div>
     <% }) %>
   </div>
 
+  <script src="/js/kick-dashboard.js"></script>
   <script>
-    // Self-contained CSRF + request helper. Reads the token straight from the
-    // meta tag and sends it BOTH as the X-CSRF-Token header AND in the JSON body
-    // (_csrf). Reverse proxies sometimes strip non-standard X- headers, which
-    // was breaking enrollment in production; the server accepts either, so
-    // sending both is belt-and-suspenders. On failure we surface the real status
-    // and server message instead of a generic "Network error".
-    const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content
-              || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-
-    async function postJson(url, payload) {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-        body: JSON.stringify({ ...payload, _csrf: CSRF })
-      });
-      let data = null;
-      try { data = await res.json(); } catch (_) { /* non-JSON response */ }
-      if (!res.ok) {
-        const msg = (data && data.error) ? data.error : `Request failed (HTTP ${res.status}).`;
-        const err = new Error(msg); err.status = res.status; throw err;
-      }
-      return data;
-    }
-
+    // Enroll toggle (reuses shared helper).
     document.querySelectorAll('.enroll').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {
-          await postJson('/kick/api/enroll', {
-            channelId: btn.dataset.channel,
-            enabled: Number(btn.dataset.enabled)
-          });
+          await KickDash.post('/kick/api/enroll', { channelId: btn.dataset.channel, enabled: Number(btn.dataset.enabled) });
           location.reload();
-        } catch (e) {
-          btn.disabled = false;
-          alert(e.message || 'Could not update enrollment. Please refresh and try again.');
-        }
+        } catch (e) { btn.disabled = false; alert(e.message || 'Could not update enrollment.'); }
       });
+    });
+
+    // Save per-channel protection settings.
+    document.querySelectorAll('.set-save').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const ch = btn.dataset.channel;
+        const q = s => document.querySelector(s + '[data-channel="' + ch + '"]');
+        const banType = q('.set-bantype').value;
+        const duration = q('.set-duration').value;
+        const payload = {
+          channelId: ch,
+          banDurationMin: banType === 'timed' ? (duration || 1) : '',
+          phishingThreshold: q('.set-threshold').value,
+          warningTemplate: q('.set-warning').value
+        };
+        btn.disabled = true;
+        try { await KickDash.post('/kick/api/channel-settings', payload); btn.textContent = 'Saved ✓'; }
+        catch (e) { alert(e.message || 'Save failed.'); }
+        finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save settings'; }, 1500); }
+      });
+    });
+
+    // Load enforcement log on demand.
+    document.querySelectorAll('.log-load').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const ch = btn.dataset.channel;
+        const out = btn.parentElement.querySelector('.log-out');
+        out.textContent = 'Loading…';
+        try {
+          const res = await fetch('/kick/api/enforcement-log?channelId=' + encodeURIComponent(ch) + '&limit=25');
+          const j = await res.json();
+          if (!res.ok) throw new Error(j.error || 'Failed');
+          if (!j.events.length) { out.textContent = 'No actions recorded yet.'; return; }
+          out.innerHTML = '<table>' + j.events.map(e =>
+            '<tr><td>' + new Date(e.created_at).toISOString().slice(0,16).replace('T',' ') +
+            '</td><td>' + esc(e.action) + (e.success ? '' : ' (failed)') +
+            '</td><td>' + esc(e.target_username) + '</td><td>' + esc(e.reason) + '</td></tr>').join('') + '</table>';
+        } catch (e) { out.textContent = e.message || 'Failed to load.'; }
+      });
+    });
+
+    // Prefill settings forms from the server for each channel.
+    document.querySelectorAll('.set-save').forEach(async btn => {
+      const ch = btn.dataset.channel;
+      try {
+        const res = await fetch('/kick/api/channel-settings?channelId=' + encodeURIComponent(ch));
+        const j = await res.json();
+        if (res.ok && j.settings) {
+          const q = s => document.querySelector(s + '[data-channel="' + ch + '"]');
+          if (j.settings.ban_duration_min != null) { q('.set-bantype').value = 'timed'; q('.set-duration').value = j.settings.ban_duration_min; }
+          if (j.settings.phishing_threshold != null) q('.set-threshold').value = j.settings.phishing_threshold;
+          if (j.settings.warning_template) q('.set-warning').value = j.settings.warning_template;
+        }
+      } catch (_) { /* defaults are fine */ }
     });
   </script>
 </body>
