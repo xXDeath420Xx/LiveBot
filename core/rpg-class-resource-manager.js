@@ -150,9 +150,9 @@ class RPGClassResourceManager {
         for (const resource of resources) {
             await pool.execute(
                 `INSERT INTO dnd_class_resources
-                 (character_id, resource_name, max_uses, current_uses, restore_on)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [characterId, resource.name, resource.max, resource.max, resource.restoreOn]
+                 (character_id, resource_type, resource_name, max_value, current_value, recharge_on)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [characterId, resource.type || 'class', resource.name, resource.max, resource.max, this._normalizeRecharge(resource.restoreOn)]
             );
         }
 
@@ -263,11 +263,24 @@ class RPGClassResourceManager {
 
         return resources.map(r => ({
             name: r.resource_name,
-            current: r.current_uses,
-            max: r.max_uses,
-            restoreOn: r.restore_on,
-            isUnlimited: r.max_uses === -1
+            current: r.current_value,
+            max: r.max_value,
+            restoreOn: r.recharge_on,
+            isUnlimited: r.max_value === -1
         }));
+    }
+
+    /**
+     * Normalize a restore keyword to the recharge_on enum
+     * @private
+     */
+    static _normalizeRecharge(value) {
+        if (!value) return 'long_rest';
+        const v = String(value).toLowerCase();
+        if (v === 'short' || v === 'short_rest') return 'short_rest';
+        if (v === 'long' || v === 'long_rest') return 'long_rest';
+        if (['dawn', 'turn', 'manual'].includes(v)) return v;
+        return 'long_rest';
     }
 
     /**
@@ -290,7 +303,7 @@ class RPGClassResourceManager {
         const resource = resources[0];
 
         // Unlimited resources
-        if (resource.max_uses === -1) {
+        if (resource.max_value === -1) {
             return {
                 used: amount,
                 remaining: 'unlimited',
@@ -298,19 +311,19 @@ class RPGClassResourceManager {
             };
         }
 
-        if (resource.current_uses < amount) {
-            throw new Error(`Not enough ${resourceName}. Have ${resource.current_uses}, need ${amount}`);
+        if (resource.current_value < amount) {
+            throw new Error(`Not enough ${resourceName}. Have ${resource.current_value}, need ${amount}`);
         }
 
         await pool.execute(
-            'UPDATE dnd_class_resources SET current_uses = current_uses - ? WHERE character_id = ? AND resource_name = ?',
+            'UPDATE dnd_class_resources SET current_value = current_value - ? WHERE character_id = ? AND resource_name = ?',
             [amount, characterId, resourceName]
         );
 
         return {
             used: amount,
-            remaining: resource.current_uses - amount,
-            max: resource.max_uses,
+            remaining: resource.current_value - amount,
+            max: resource.max_value,
             resourceName
         };
     }
@@ -326,38 +339,38 @@ class RPGClassResourceManager {
 
         if (restType === 'long') {
             // Long rest restores all resources
-            const [result] = await pool.execute(
+            await pool.execute(
                 `UPDATE dnd_class_resources
-                 SET current_uses = max_uses
-                 WHERE character_id = ? AND max_uses != -1`,
+                 SET current_value = max_value
+                 WHERE character_id = ? AND max_value != -1`,
                 [characterId]
             );
 
             const [resources] = await pool.execute(
-                'SELECT resource_name, max_uses FROM dnd_class_resources WHERE character_id = ? AND max_uses != -1',
+                'SELECT resource_name, max_value FROM dnd_class_resources WHERE character_id = ? AND max_value != -1',
                 [characterId]
             );
 
             for (const r of resources) {
-                restored.push({ name: r.resource_name, restored: r.max_uses });
+                restored.push({ name: r.resource_name, restored: r.max_value });
             }
         } else {
-            // Short rest only restores specific resources
-            const [result] = await pool.execute(
+            // Short rest only restores resources that recharge on a short rest
+            await pool.execute(
                 `UPDATE dnd_class_resources
-                 SET current_uses = max_uses
-                 WHERE character_id = ? AND restore_on = 'short' AND max_uses != -1`,
+                 SET current_value = max_value
+                 WHERE character_id = ? AND recharge_on = 'short_rest' AND max_value != -1`,
                 [characterId]
             );
 
             const [resources] = await pool.execute(
-                `SELECT resource_name, max_uses FROM dnd_class_resources
-                 WHERE character_id = ? AND restore_on = 'short' AND max_uses != -1`,
+                `SELECT resource_name, max_value FROM dnd_class_resources
+                 WHERE character_id = ? AND recharge_on = 'short_rest' AND max_value != -1`,
                 [characterId]
             );
 
             for (const r of resources) {
-                restored.push({ name: r.resource_name, restored: r.max_uses });
+                restored.push({ name: r.resource_name, restored: r.max_value });
             }
         }
 
@@ -373,7 +386,7 @@ class RPGClassResourceManager {
     static async addUses(characterId, resourceName, amount) {
         await pool.execute(
             `UPDATE dnd_class_resources
-             SET current_uses = LEAST(current_uses + ?, max_uses)
+             SET current_value = LEAST(current_value + ?, max_value)
              WHERE character_id = ? AND resource_name = ?`,
             [amount, characterId, resourceName]
         );
@@ -388,7 +401,7 @@ class RPGClassResourceManager {
     static async updateMaxUses(characterId, resourceName, newMax) {
         await pool.execute(
             `UPDATE dnd_class_resources
-             SET max_uses = ?, current_uses = LEAST(current_uses, ?)
+             SET max_value = ?, current_value = LEAST(current_value, ?)
              WHERE character_id = ? AND resource_name = ?`,
             [newMax, newMax, characterId, resourceName]
         );
@@ -412,7 +425,7 @@ class RPGClassResourceManager {
      */
     static async canUseResource(characterId, resourceName, amount = 1) {
         const [resources] = await pool.execute(
-            'SELECT current_uses, max_uses FROM dnd_class_resources WHERE character_id = ? AND resource_name = ?',
+            'SELECT current_value, max_value FROM dnd_class_resources WHERE character_id = ? AND resource_name = ?',
             [characterId, resourceName]
         );
 
@@ -421,9 +434,9 @@ class RPGClassResourceManager {
         const resource = resources[0];
 
         // Unlimited
-        if (resource.max_uses === -1) return true;
+        if (resource.max_value === -1) return true;
 
-        return resource.current_uses >= amount;
+        return resource.current_value >= amount;
     }
 }
 

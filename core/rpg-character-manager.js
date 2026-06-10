@@ -757,6 +757,31 @@ class RPGCharacterManager {
     }
 
     /**
+     * Get a user's active character (most recently created), optionally scoped to a guild.
+     * The schema has no is_active flag, so "active" = the latest character for the user.
+     * @param {string} userId - Discord user ID
+     * @param {string} [guildId] - Optional guild scope
+     * @returns {object|null} Character row or null
+     */
+    async getActiveCharacter(userId, guildId = null) {
+        try {
+            const params = [userId];
+            let sql = 'SELECT * FROM dnd_characters WHERE user_id = ?';
+            if (guildId) {
+                sql += ' AND guild_id = ?';
+                params.push(guildId);
+            }
+            sql += ' ORDER BY created_at DESC, character_id DESC LIMIT 1';
+
+            const [rows] = await pool.execute(sql, params);
+            return rows[0] || null;
+        } catch (error) {
+            logger.error(`[RPGCharacterManager] Error getting active character: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
      * Create a character from imported PDF data - Full D&D Beyond support
      */
     async createCharacterFromImport(userId, guildId, characterData) {
@@ -1235,7 +1260,7 @@ class RPGCharacterManager {
 
             // Get equipped weapons
             const [weapons] = await pool.execute(
-                `SELECT i.damage_bonus
+                `SELECT i.damage
                  FROM dnd_inventory inv
                  JOIN dnd_items i ON inv.item_id = i.item_id
                  WHERE inv.character_id = ? AND inv.equipped = TRUE AND i.item_type = 'weapon'`,
@@ -1243,7 +1268,7 @@ class RPGCharacterManager {
             );
 
             weapons.forEach(weapon => {
-                baseDamage += weapon.damage_bonus || 0;
+                baseDamage += weapon.damage || 0;
             });
 
             return baseDamage;
@@ -1261,7 +1286,7 @@ class RPGCharacterManager {
         try {
             // Get equipped armor
             const [armor] = await pool.execute(
-                `SELECT i.defense_bonus
+                `SELECT i.defense
                  FROM dnd_inventory inv
                  JOIN dnd_items i ON inv.item_id = i.item_id
                  WHERE inv.character_id = ? AND inv.equipped = TRUE AND i.item_type = 'armor'`,
@@ -1270,7 +1295,7 @@ class RPGCharacterManager {
 
             let totalDefense = 0;
             armor.forEach(piece => {
-                totalDefense += piece.defense_bonus || 0;
+                totalDefense += piece.defense || 0;
             });
 
             return totalDefense;

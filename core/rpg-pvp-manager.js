@@ -62,33 +62,32 @@ class RPGPvPManager {
      * @param {string} arena - Arena type
      * @returns {object} Match info
      */
-    static async createMatch(guildId, challengerId, challengerCharacterId, matchType = 'duel', arena = 'standard') {
-        const matchConfig = MATCH_TYPES[matchType];
-        if (!matchConfig) {
+    static async createMatch(guildId, challenger, defender, matchType = 'duel', wagerGold = 0) {
+        // challenger/defender: { userId, characterId }
+        // dnd_pvp_matches requires BOTH sides (NOT NULL), so this is a direct challenge.
+        const validTypes = ['duel', 'ranked', 'tournament'];
+        if (!validTypes.includes(matchType)) {
             throw new Error('Invalid match type');
         }
 
-        const arenaConfig = ARENA_MODIFIERS[arena];
-        if (!arenaConfig) {
-            throw new Error('Invalid arena');
+        if (challenger.characterId === defender.characterId) {
+            throw new Error('You cannot challenge yourself');
         }
 
         const [result] = await pool.execute(
             `INSERT INTO dnd_pvp_matches
-             (guild_id, match_type, arena_type, challenger_user_id, challenger_character_id, status)
-             VALUES (?, ?, ?, ?, ?, 'pending')`,
-            [guildId, matchType, arena, challengerId, challengerCharacterId]
+             (guild_id, challenger_id, defender_id, challenger_user_id, defender_user_id, match_type, wager_gold, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+            [guildId, challenger.characterId, defender.characterId, challenger.userId, defender.userId, matchType, wagerGold || 0]
         );
 
-        logger.info('[PvP] Match created', { matchId: result.insertId, matchType, arena });
+        logger.info('[PvP] Match created', { matchId: result.insertId, matchType });
 
         return {
             match_id: result.insertId,
             match_type: matchType,
-            arena: arenaConfig.name,
-            status: 'pending',
-            config: matchConfig,
-            arenaEffects: arenaConfig.effects
+            wager_gold: wagerGold || 0,
+            status: 'pending'
         };
     }
 
@@ -99,7 +98,7 @@ class RPGPvPManager {
      * @param {number} defenderCharacterId - Defender character
      * @returns {object} Updated match
      */
-    static async acceptMatch(matchId, defenderId, defenderCharacterId) {
+    static async acceptMatch(matchId, defenderUserId) {
         const [matches] = await pool.execute(
             'SELECT * FROM dnd_pvp_matches WHERE match_id = ? AND status = ?',
             [matchId, 'pending']
@@ -111,34 +110,22 @@ class RPGPvPManager {
 
         const match = matches[0];
 
-        if (match.challenger_user_id === defenderId) {
-            throw new Error('You cannot accept your own challenge');
+        if (match.defender_user_id !== defenderUserId) {
+            throw new Error('This challenge was not issued to you');
         }
 
         await pool.execute(
             `UPDATE dnd_pvp_matches
-             SET defender_user_id = ?, defender_character_id = ?, status = 'active', started_at = NOW()
+             SET status = 'active', started_at = NOW()
              WHERE match_id = ?`,
-            [defenderId, defenderCharacterId, matchId]
-        );
-
-        // Initialize combat state
-        const combatState = {
-            turn: 1,
-            currentTurn: 'challenger', // Will be determined by initiative
-            actions: []
-        };
-
-        await pool.execute(
-            'UPDATE dnd_pvp_matches SET combat_state = ? WHERE match_id = ?',
-            [JSON.stringify(combatState), matchId]
+            [matchId]
         );
 
         return {
             match_id: matchId,
             status: 'active',
-            challenger_character_id: match.challenger_character_id,
-            defender_character_id: defenderCharacterId
+            challenger_id: match.challenger_id,
+            defender_id: match.defender_id
         };
     }
 
@@ -174,18 +161,15 @@ class RPGPvPManager {
                     c1.character_name as challenger_name, c1.class as challenger_class, c1.level as challenger_level,
                     c2.character_name as defender_name, c2.class as defender_class, c2.level as defender_level
              FROM dnd_pvp_matches m
-             LEFT JOIN dnd_characters c1 ON m.challenger_character_id = c1.character_id
-             LEFT JOIN dnd_characters c2 ON m.defender_character_id = c2.character_id
+             LEFT JOIN dnd_characters c1 ON m.challenger_id = c1.character_id
+             LEFT JOIN dnd_characters c2 ON m.defender_id = c2.character_id
              WHERE m.match_id = ?`,
             [matchId]
         );
 
         if (matches.length === 0) return null;
 
-        const match = matches[0];
-        match.combat_state = typeof match.combat_state === 'string' ? JSON.parse(match.combat_state) : match.combat_state;
-
-        return match;
+        return matches[0];
     }
 
     /**
@@ -195,45 +179,54 @@ class RPGPvPManager {
      * @param {string} method - How match ended (ko, surrender, timeout)
      * @returns {object} Match result with ELO changes
      */
-    static async endMatch(matchId, winnerUserId, method = 'ko') {
+    static async endMatch(matchId, winnerCharacterId, method = 'ko') {
         const match = await this.getMatch(matchId);
         if (!match || match.status !== 'active') {
             throw new Error('Match not found or not active');
         }
 
-        const loserUserId = winnerUserId === match.challenger_user_id
-            ? match.defender_user_id
-            : match.challenger_user_id;
+        if (![match.challenger_id, match.defender_id].includes(winnerCharacterId)) {
+            throw new Error('Winner is not a participant of this match');
+        }
 
-        // Calculate ELO changes for ranked matches
+        const loserCharacterId = winnerCharacterId === match.challenger_id
+            ? match.defender_id
+            : match.challenger_id;
+
+        // ELO for ranked matches (duel + ranked are rated; tournament too)
         let winnerEloChange = 0;
         let loserEloChange = 0;
 
-        const matchConfig = MATCH_TYPES[match.match_type];
-        if (matchConfig?.ranked) {
-            const eloChanges = await this._calculateEloChange(winnerUserId, loserUserId, match.guild_id);
+        const isRanked = ['duel', 'ranked', 'tournament'].includes(match.match_type);
+        if (isRanked) {
+            const eloChanges = await this._calculateEloChange(winnerCharacterId, loserCharacterId, match.guild_id);
             winnerEloChange = eloChanges.winner;
             loserEloChange = eloChanges.loser;
 
-            // Update ELO ratings
-            await this._updateElo(winnerUserId, match.guild_id, winnerEloChange, true);
-            await this._updateElo(loserUserId, match.guild_id, loserEloChange, false);
+            await this._updateElo(winnerCharacterId, match.guild_id, winnerEloChange, true);
+            await this._updateElo(loserCharacterId, match.guild_id, loserEloChange, false);
+        }
+
+        // Handle wager transfer
+        if (match.wager_gold && match.wager_gold > 0) {
+            await pool.execute('UPDATE dnd_characters SET gold = gold + ? WHERE character_id = ?', [match.wager_gold, winnerCharacterId]);
+            await pool.execute('UPDATE dnd_characters SET gold = GREATEST(0, gold - ?) WHERE character_id = ?', [match.wager_gold, loserCharacterId]);
         }
 
         // Update match
         await pool.execute(
             `UPDATE dnd_pvp_matches
-             SET status = 'completed', winner_user_id = ?, end_method = ?, ended_at = NOW()
+             SET status = 'completed', winner_id = ?, elo_change = ?, ended_at = NOW()
              WHERE match_id = ?`,
-            [winnerUserId, method, matchId]
+            [winnerCharacterId, winnerEloChange, matchId]
         );
 
-        logger.info('[PvP] Match ended', { matchId, winner: winnerUserId, method });
+        logger.info('[PvP] Match ended', { matchId, winner: winnerCharacterId, method });
 
         return {
             match_id: matchId,
-            winner_user_id: winnerUserId,
-            loser_user_id: loserUserId,
+            winner_character_id: winnerCharacterId,
+            loser_character_id: loserCharacterId,
             method,
             elo_changes: {
                 winner: winnerEloChange,
@@ -246,15 +239,15 @@ class RPGPvPManager {
      * Calculate ELO change
      * @private
      */
-    static async _calculateEloChange(winnerId, loserId, guildId) {
+    static async _calculateEloChange(winnerCharacterId, loserCharacterId, guildId) {
         const [winnerStats] = await pool.execute(
-            'SELECT elo_rating FROM dnd_pvp_stats WHERE user_id = ? AND guild_id = ?',
-            [winnerId, guildId]
+            'SELECT elo_rating FROM dnd_pvp_stats WHERE character_id = ? AND guild_id = ?',
+            [winnerCharacterId, guildId]
         );
 
         const [loserStats] = await pool.execute(
-            'SELECT elo_rating FROM dnd_pvp_stats WHERE user_id = ? AND guild_id = ?',
-            [loserId, guildId]
+            'SELECT elo_rating FROM dnd_pvp_stats WHERE character_id = ? AND guild_id = ?',
+            [loserCharacterId, guildId]
         );
 
         const winnerElo = winnerStats[0]?.elo_rating || ELO_DEFAULT;
@@ -277,19 +270,19 @@ class RPGPvPManager {
      * Update player ELO
      * @private
      */
-    static async _updateElo(userId, guildId, change, isWin) {
+    static async _updateElo(characterId, guildId, change, isWin) {
         const [existing] = await pool.execute(
-            'SELECT * FROM dnd_pvp_stats WHERE user_id = ? AND guild_id = ?',
-            [userId, guildId]
+            'SELECT * FROM dnd_pvp_stats WHERE character_id = ? AND guild_id = ?',
+            [characterId, guildId]
         );
 
         if (existing.length === 0) {
             // Create stats record
             await pool.execute(
                 `INSERT INTO dnd_pvp_stats
-                 (user_id, guild_id, elo_rating, wins, losses, matches_played)
-                 VALUES (?, ?, ?, ?, ?, 1)`,
-                [userId, guildId, ELO_DEFAULT + change, isWin ? 1 : 0, isWin ? 0 : 1]
+                 (character_id, guild_id, elo_rating, wins, losses, win_streak, best_streak)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [characterId, guildId, ELO_DEFAULT + change, isWin ? 1 : 0, isWin ? 0 : 1, isWin ? 1 : 0, isWin ? 1 : 0]
             );
         } else {
             await pool.execute(
@@ -297,10 +290,9 @@ class RPGPvPManager {
                  SET elo_rating = GREATEST(100, elo_rating + ?),
                      wins = wins + ?,
                      losses = losses + ?,
-                     matches_played = matches_played + 1,
-                     ${isWin ? 'current_streak = current_streak + 1, best_streak = GREATEST(best_streak, current_streak + 1)' : 'current_streak = 0'}
-                 WHERE user_id = ? AND guild_id = ?`,
-                [change, isWin ? 1 : 0, isWin ? 0 : 1, userId, guildId]
+                     ${isWin ? 'win_streak = win_streak + 1, best_streak = GREATEST(best_streak, win_streak + 1)' : 'win_streak = 0'}
+                 WHERE character_id = ? AND guild_id = ?`,
+                [change, isWin ? 1 : 0, isWin ? 0 : 1, characterId, guildId]
             );
         }
     }
@@ -311,29 +303,33 @@ class RPGPvPManager {
      * @param {string} guildId - Guild ID
      * @returns {object} Stats
      */
-    static async getPlayerStats(userId, guildId) {
+    static async getPlayerStats(characterId, guildId) {
         const [stats] = await pool.execute(
-            'SELECT * FROM dnd_pvp_stats WHERE user_id = ? AND guild_id = ?',
-            [userId, guildId]
+            'SELECT * FROM dnd_pvp_stats WHERE character_id = ? AND guild_id = ?',
+            [characterId, guildId]
         );
 
         if (stats.length === 0) {
             return {
-                user_id: userId,
+                character_id: characterId,
                 elo_rating: ELO_DEFAULT,
                 wins: 0,
                 losses: 0,
+                draws: 0,
                 matches_played: 0,
-                current_streak: 0,
+                win_streak: 0,
                 best_streak: 0,
-                rank: 'Unranked'
+                rank: this._getRank(ELO_DEFAULT),
+                winRate: 0
             };
         }
 
         const playerStats = stats[0];
+        const played = (playerStats.wins || 0) + (playerStats.losses || 0) + (playerStats.draws || 0);
+        playerStats.matches_played = played;
         playerStats.rank = this._getRank(playerStats.elo_rating);
-        playerStats.winRate = playerStats.matches_played > 0
-            ? ((playerStats.wins / playerStats.matches_played) * 100).toFixed(1)
+        playerStats.winRate = played > 0
+            ? ((playerStats.wins / played) * 100).toFixed(1)
             : 0;
 
         return playerStats;
@@ -361,13 +357,13 @@ class RPGPvPManager {
      */
     static async getLeaderboard(guildId, limit = 10) {
         const [players] = await pool.execute(
-            `SELECT s.*, c.character_name
+            `SELECT s.*, c.character_name, c.user_id
              FROM dnd_pvp_stats s
-             LEFT JOIN dnd_characters c ON s.user_id = c.user_id AND c.guild_id = s.guild_id AND c.is_active = TRUE
+             JOIN dnd_characters c ON s.character_id = c.character_id
              WHERE s.guild_id = ?
              ORDER BY s.elo_rating DESC
              LIMIT ?`,
-            [guildId, limit]
+            [String(guildId), Number(limit)]
         );
 
         return players.map((p, i) => ({
@@ -387,9 +383,9 @@ class RPGPvPManager {
         const [matches] = await pool.execute(
             `SELECT m.*, c.character_name as challenger_name
              FROM dnd_pvp_matches m
-             JOIN dnd_characters c ON m.challenger_character_id = c.character_id
+             JOIN dnd_characters c ON m.challenger_id = c.character_id
              WHERE m.guild_id = ? AND m.status = 'pending'
-             AND m.challenger_user_id != ?
+             AND m.defender_user_id = ?
              ORDER BY m.created_at DESC`,
             [guildId, userId]
         );
@@ -427,18 +423,20 @@ class RPGPvPManager {
                     c1.character_name as challenger_name,
                     c2.character_name as defender_name
              FROM dnd_pvp_matches m
-             LEFT JOIN dnd_characters c1 ON m.challenger_character_id = c1.character_id
-             LEFT JOIN dnd_characters c2 ON m.defender_character_id = c2.character_id
+             LEFT JOIN dnd_characters c1 ON m.challenger_id = c1.character_id
+             LEFT JOIN dnd_characters c2 ON m.defender_id = c2.character_id
              WHERE m.guild_id = ? AND m.status = 'completed'
              AND (m.challenger_user_id = ? OR m.defender_user_id = ?)
              ORDER BY m.ended_at DESC
              LIMIT ?`,
-            [guildId, userId, userId, limit]
+            [String(guildId), userId, userId, Number(limit)]
         );
 
         return matches.map(m => ({
             ...m,
-            won: m.winner_user_id === userId,
+            isChallenger: m.challenger_user_id === userId,
+            won: (m.challenger_user_id === userId && m.winner_id === m.challenger_id) ||
+                 (m.defender_user_id === userId && m.winner_id === m.defender_id),
             opponent: m.challenger_user_id === userId ? m.defender_name : m.challenger_name
         }));
     }
@@ -454,11 +452,12 @@ class RPGPvPManager {
             throw new Error('No active match found');
         }
 
-        const winnerId = forfeitingUserId === match.challenger_user_id
-            ? match.defender_user_id
-            : match.challenger_user_id;
+        // The non-forfeiting participant wins (by character id)
+        const winnerCharacterId = forfeitingUserId === match.challenger_user_id
+            ? match.defender_id
+            : match.challenger_id;
 
-        return this.endMatch(matchId, winnerId, 'surrender');
+        return this.endMatch(matchId, winnerCharacterId, 'surrender');
     }
 }
 

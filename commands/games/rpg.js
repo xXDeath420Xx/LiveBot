@@ -23,7 +23,13 @@ import {
     handleGuideButton,
     handleGuideSelectMenu,
     handleRest,
-    handleStatroll
+    handleStatroll,
+    handleCombat,
+    handleShop,
+    handleQuest,
+    handleDungeon,
+    handleParty,
+    handlePvP
 } from './rpg/handlers/index.js';
 
 export default {
@@ -290,6 +296,90 @@ export default {
                 .addSubcommand(sub => sub.setName('roll').setDescription('Roll 4d6 drop lowest for each stat'))
                 .addSubcommand(sub => sub.setName('standard').setDescription('Use standard array (15, 14, 13, 12, 10, 8)'))
                 .addSubcommand(sub => sub.setName('pointbuy').setDescription('Point buy system guide (27 points)'))
+        )
+
+        // Combat (turn-based PvE battles)
+        .addSubcommandGroup(group =>
+            group.setName('combat').setDescription('Turn-based battles against enemies')
+                .addSubcommand(sub => sub.setName('enemies').setDescription('List enemies you can fight'))
+                .addSubcommand(sub => sub.setName('fight').setDescription('Start a battle with an enemy')
+                    .addIntegerOption(opt => opt.setName('enemy_id').setDescription('Enemy ID').setRequired(true)))
+                .addSubcommand(sub => sub.setName('attack').setDescription('Attack in your active battle'))
+                .addSubcommand(sub => sub.setName('flee').setDescription('Try to flee your active battle'))
+                .addSubcommand(sub => sub.setName('item').setDescription('Use a consumable/potion in battle')
+                    .addIntegerOption(opt => opt.setName('item_id').setDescription('Item ID').setRequired(true)))
+                .addSubcommand(sub => sub.setName('status').setDescription('View your active battle'))
+        )
+
+        // Shop
+        .addSubcommandGroup(group =>
+            group.setName('shop').setDescription('Buy and sell items')
+                .addSubcommand(sub => sub.setName('browse').setDescription('Browse items for sale in your zone'))
+                .addSubcommand(sub => sub.setName('buy').setDescription('Buy an item')
+                    .addIntegerOption(opt => opt.setName('item_id').setDescription('Item ID').setRequired(true))
+                    .addIntegerOption(opt => opt.setName('quantity').setDescription('Quantity').setRequired(false).setMinValue(1)))
+                .addSubcommand(sub => sub.setName('sell').setDescription('Sell an item from your inventory')
+                    .addIntegerOption(opt => opt.setName('item_id').setDescription('Item ID').setRequired(true))
+                    .addIntegerOption(opt => opt.setName('quantity').setDescription('Quantity').setRequired(false).setMinValue(1)))
+        )
+
+        // Quests
+        .addSubcommandGroup(group =>
+            group.setName('quest').setDescription('Quests and bounties')
+                .addSubcommand(sub => sub.setName('list').setDescription('List available quests'))
+                .addSubcommand(sub => sub.setName('start').setDescription('Accept a quest')
+                    .addIntegerOption(opt => opt.setName('quest_id').setDescription('Quest ID').setRequired(true)))
+                .addSubcommand(sub => sub.setName('active').setDescription('View your active quests'))
+                .addSubcommand(sub => sub.setName('complete').setDescription('Turn in a completed quest')
+                    .addIntegerOption(opt => opt.setName('quest_id').setDescription('Quest ID').setRequired(true)))
+                .addSubcommand(sub => sub.setName('abandon').setDescription('Abandon a quest')
+                    .addIntegerOption(opt => opt.setName('quest_id').setDescription('Quest ID').setRequired(true)))
+        )
+
+        // Dungeons
+        .addSubcommandGroup(group =>
+            group.setName('dungeon').setDescription('Dungeon crawling')
+                .addSubcommand(sub => sub.setName('list').setDescription('List available dungeons'))
+                .addSubcommand(sub => sub.setName('enter').setDescription('Enter a dungeon')
+                    .addIntegerOption(opt => opt.setName('dungeon_id').setDescription('Dungeon ID').setRequired(true))
+                    .addStringOption(opt => opt.setName('difficulty').setDescription('Difficulty').setRequired(false)
+                        .addChoices({ name: 'Easy', value: 'easy' }, { name: 'Normal', value: 'normal' },
+                            { name: 'Hard', value: 'hard' }, { name: 'Nightmare', value: 'nightmare' })))
+                .addSubcommand(sub => sub.setName('room').setDescription('View the current room'))
+                .addSubcommand(sub => sub.setName('advance').setDescription('Clear the room and move on'))
+                .addSubcommand(sub => sub.setName('status').setDescription('View your active run'))
+                .addSubcommand(sub => sub.setName('leave').setDescription('Abandon your dungeon run'))
+        )
+
+        // Party
+        .addSubcommandGroup(group =>
+            group.setName('party').setDescription('Form and manage adventuring parties')
+                .addSubcommand(sub => sub.setName('create').setDescription('Create a party')
+                    .addStringOption(opt => opt.setName('name').setDescription('Party name').setRequired(true)))
+                .addSubcommand(sub => sub.setName('invite').setDescription('Invite a player to your party')
+                    .addUserOption(opt => opt.setName('user').setDescription('Player to invite').setRequired(true)))
+                .addSubcommand(sub => sub.setName('accept').setDescription('Accept a pending party invite'))
+                .addSubcommand(sub => sub.setName('leave').setDescription('Leave your party'))
+                .addSubcommand(sub => sub.setName('info').setDescription('View your party roster'))
+                .addSubcommand(sub => sub.setName('list').setDescription('List parties in this server'))
+        )
+
+        // PvP
+        .addSubcommandGroup(group =>
+            group.setName('pvp').setDescription('Player vs player duels')
+                .addSubcommand(sub => sub.setName('challenge').setDescription('Challenge another player')
+                    .addUserOption(opt => opt.setName('user').setDescription('Opponent').setRequired(true))
+                    .addStringOption(opt => opt.setName('type').setDescription('Match type').setRequired(false)
+                        .addChoices({ name: 'Duel', value: 'duel' }, { name: 'Ranked', value: 'ranked' }, { name: 'Tournament', value: 'tournament' }))
+                    .addIntegerOption(opt => opt.setName('wager').setDescription('Gold to wager').setRequired(false).setMinValue(0)))
+                .addSubcommand(sub => sub.setName('accept').setDescription('Accept a challenge')
+                    .addIntegerOption(opt => opt.setName('match_id').setDescription('Match ID').setRequired(true)))
+                .addSubcommand(sub => sub.setName('decline').setDescription('Decline a challenge')
+                    .addIntegerOption(opt => opt.setName('match_id').setDescription('Match ID').setRequired(true)))
+                .addSubcommand(sub => sub.setName('resolve').setDescription('Resolve an active duel')
+                    .addIntegerOption(opt => opt.setName('match_id').setDescription('Match ID').setRequired(true)))
+                .addSubcommand(sub => sub.setName('stats').setDescription('View your PvP stats'))
+                .addSubcommand(sub => sub.setName('leaderboard').setDescription('View the PvP leaderboard'))
         ),
 
     async execute(interaction) {
@@ -342,7 +432,7 @@ export default {
                     await handleCondition(interaction, subcommand, characterManager);
                     break;
                 case 'stats':
-                    await handleStats(interaction, subcommand);
+                    await handleStats(interaction, subcommand, characterManager);
                     break;
                 case 'guide':
                     await handleGuide(interaction, subcommand);
@@ -352,6 +442,24 @@ export default {
                     break;
                 case 'statroll':
                     await handleStatroll(interaction, subcommand, characterManager);
+                    break;
+                case 'combat':
+                    await handleCombat(interaction, subcommand, characterManager, combatManager);
+                    break;
+                case 'shop':
+                    await handleShop(interaction, subcommand, characterManager, shopManager);
+                    break;
+                case 'quest':
+                    await handleQuest(interaction, subcommand, characterManager, questManager);
+                    break;
+                case 'dungeon':
+                    await handleDungeon(interaction, subcommand, characterManager);
+                    break;
+                case 'party':
+                    await handleParty(interaction, subcommand, characterManager);
+                    break;
+                case 'pvp':
+                    await handlePvP(interaction, subcommand, characterManager);
                     break;
                 default:
                     await interaction.reply({ content: 'Unknown command group.', ephemeral: true });

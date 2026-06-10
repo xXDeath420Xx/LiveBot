@@ -18,17 +18,32 @@ const ACHIEVEMENT_CATEGORIES = {
 };
 
 // Leaderboard types
+// Column names map to the REAL dnd_characters / dnd_pvp_stats schema.
 const LEADERBOARD_TYPES = {
     level: { name: 'Level', column: 'level', order: 'DESC' },
     gold: { name: 'Wealth', column: 'gold', order: 'DESC' },
-    monsters_killed: { name: 'Monster Slayer', column: 'monsters_killed', order: 'DESC' },
-    quests_completed: { name: 'Quest Master', column: 'quests_completed', order: 'DESC' },
-    dungeons_cleared: { name: 'Dungeon Delver', column: 'dungeons_cleared', order: 'DESC' },
-    pvp_wins: { name: 'PvP Champion', column: 'pvp_wins', order: 'DESC' },
+    monsters_killed: { name: 'Monster Slayer', column: 'total_monsters_killed', order: 'DESC' },
+    quests_completed: { name: 'Quest Master', column: 'dungeons_completed', order: 'DESC' },
+    dungeons_cleared: { name: 'Dungeon Delver', column: 'dungeons_completed', order: 'DESC' },
+    pvp_wins: { name: 'PvP Champion', table: 'dnd_pvp_stats', column: 'wins', order: 'DESC' },
     pvp_elo: { name: 'PvP Rating', table: 'dnd_pvp_stats', column: 'elo_rating', order: 'DESC' },
     total_damage: { name: 'Total Damage', column: 'total_damage_dealt', order: 'DESC' },
-    deaths: { name: 'Most Deaths', column: 'deaths', order: 'DESC' }, // Funny one
-    playtime: { name: 'Most Active', column: 'total_playtime', order: 'DESC' }
+    deaths: { name: 'Most Deaths', column: 'deaths', order: 'DESC' } // Funny one
+};
+
+// Maps an achievement requirement_type to the real dnd_characters stat column
+const REQUIREMENT_STAT_COLUMN = {
+    enemies_defeated: 'total_monsters_killed',
+    monsters_killed: 'total_monsters_killed',
+    dungeons_completed: 'dungeons_completed',
+    dungeons_cleared: 'dungeons_completed',
+    bosses_killed: 'bosses_killed',
+    deaths: 'deaths',
+    total_damage_dealt: 'total_damage_dealt',
+    total_healing_done: 'total_healing_done',
+    crits_rolled: 'crits_rolled',
+    level: 'level',
+    gold: 'gold'
 };
 
 class RPGLeaderboardManager {
@@ -40,14 +55,11 @@ class RPGLeaderboardManager {
     static async loadAchievements() {
         if (this.achievementCache) return this.achievementCache;
 
-        const [achievements] = await pool.execute('SELECT * FROM dnd_achievements');
+        const [achievements] = await pool.execute('SELECT * FROM dnd_achievements WHERE is_active = TRUE');
         this.achievementCache = new Map();
 
         for (const a of achievements) {
-            this.achievementCache.set(a.achievement_id, {
-                ...a,
-                requirements: typeof a.requirements === 'string' ? JSON.parse(a.requirements) : a.requirements
-            });
+            this.achievementCache.set(a.achievement_id, { ...a });
         }
 
         return this.achievementCache;
@@ -80,11 +92,12 @@ class RPGLeaderboardManager {
      */
     static async getCharacterAchievements(characterId) {
         const [earned] = await pool.execute(
-            `SELECT ca.*, a.achievement_name, a.description, a.category, a.icon_emoji, a.points
+            `SELECT ca.*, a.name, a.description, a.category, a.icon_emoji,
+                    a.reward_gold, a.reward_exp
              FROM dnd_character_achievements ca
              JOIN dnd_achievements a ON ca.achievement_id = a.achievement_id
-             WHERE ca.character_id = ?
-             ORDER BY ca.earned_at DESC`,
+             WHERE ca.character_id = ? AND ca.completed = TRUE
+             ORDER BY ca.completed_at DESC`,
             [characterId]
         );
 
@@ -116,13 +129,14 @@ class RPGLeaderboardManager {
         }
 
         await pool.execute(
-            'INSERT INTO dnd_character_achievements (character_id, achievement_id) VALUES (?, ?)',
-            [characterId, achievementId]
+            `INSERT INTO dnd_character_achievements (character_id, achievement_id, progress, completed, completed_at)
+             VALUES (?, ?, ?, TRUE, NOW())`,
+            [characterId, achievementId, achievement.requirement_value || 0]
         );
 
         logger.info('[Achievements] Awarded achievement', {
             characterId,
-            achievement: achievement.achievement_name
+            achievement: achievement.name
         });
 
         return achievement;
@@ -139,10 +153,7 @@ class RPGLeaderboardManager {
         const newAchievements = [];
 
         for (const [id, achievement] of this.achievementCache) {
-            if (!achievement.requirements) continue;
-
-            const earned = this._checkRequirements(achievement.requirements, stats);
-            if (earned) {
+            if (this._meetsRequirement(achievement, stats)) {
                 const awarded = await this.awardAchievement(characterId, id);
                 if (awarded) {
                     newAchievements.push(awarded);
@@ -154,20 +165,14 @@ class RPGLeaderboardManager {
     }
 
     /**
-     * Check if requirements are met
+     * Check if a single-column achievement requirement is met
      * @private
      */
-    static _checkRequirements(requirements, stats) {
-        for (const [key, value] of Object.entries(requirements)) {
-            if (typeof value === 'number') {
-                if ((stats[key] || 0) < value) return false;
-            } else if (typeof value === 'boolean') {
-                if (stats[key] !== value) return false;
-            } else if (typeof value === 'string') {
-                if (stats[key] !== value) return false;
-            }
-        }
-        return true;
+    static _meetsRequirement(achievement, stats) {
+        const statColumn = REQUIREMENT_STAT_COLUMN[achievement.requirement_type];
+        if (!statColumn) return false;
+        const required = Number(achievement.requirement_value) || 0;
+        return (Number(stats[statColumn]) || 0) >= required;
     }
 
     /**
@@ -186,9 +191,9 @@ class RPGLeaderboardManager {
         let query;
         if (config.table === 'dnd_pvp_stats') {
             query = `
-                SELECT s.user_id, s.${config.column} as value, c.character_name, c.class, c.level
+                SELECT c.user_id, s.${config.column} as value, c.character_name, c.class, c.level
                 FROM ${config.table} s
-                LEFT JOIN dnd_characters c ON s.user_id = c.user_id AND c.guild_id = s.guild_id AND c.is_active = TRUE
+                JOIN dnd_characters c ON s.character_id = c.character_id
                 WHERE s.guild_id = ?
                 ORDER BY s.${config.column} ${config.order}
                 LIMIT ?
@@ -197,13 +202,13 @@ class RPGLeaderboardManager {
             query = `
                 SELECT user_id, ${config.column} as value, character_name, class, level
                 FROM dnd_characters
-                WHERE guild_id = ? AND is_active = TRUE
+                WHERE guild_id = ?
                 ORDER BY ${config.column} ${config.order}
                 LIMIT ?
             `;
         }
 
-        const [entries] = await pool.execute(query, [guildId, limit]);
+        const [entries] = await pool.execute(query, [String(guildId), Number(limit)]);
 
         return entries.map((e, i) => ({
             position: i + 1,
@@ -244,7 +249,7 @@ class RPGLeaderboardManager {
         // Count how many are higher
         const [higherCount] = await pool.execute(
             `SELECT COUNT(*) as count FROM dnd_characters
-             WHERE guild_id = ? AND is_active = TRUE AND ${config.column} ${config.order === 'DESC' ? '>' : '<'} ?`,
+             WHERE guild_id = ? AND ${config.column} ${config.order === 'DESC' ? '>' : '<'} ?`,
             [guildId, value]
         );
 
@@ -252,7 +257,7 @@ class RPGLeaderboardManager {
 
         // Get total count
         const [totalCount] = await pool.execute(
-            'SELECT COUNT(*) as count FROM dnd_characters WHERE guild_id = ? AND is_active = TRUE',
+            'SELECT COUNT(*) as count FROM dnd_characters WHERE guild_id = ?',
             [guildId]
         );
 
@@ -277,18 +282,17 @@ class RPGLeaderboardManager {
                 AVG(level) as avg_level,
                 MAX(level) as max_level,
                 SUM(gold) as total_gold,
-                SUM(monsters_killed) as total_monsters_killed,
-                SUM(quests_completed) as total_quests,
-                SUM(dungeons_cleared) as total_dungeons,
+                SUM(total_monsters_killed) as total_monsters_killed,
+                SUM(dungeons_completed) as total_dungeons,
                 SUM(deaths) as total_deaths
             FROM dnd_characters
-            WHERE guild_id = ? AND is_active = TRUE
+            WHERE guild_id = ?
         `, [guildId]);
 
         const [pvpStats] = await pool.execute(`
             SELECT
                 COUNT(*) as pvp_players,
-                SUM(matches_played) as total_matches,
+                SUM(wins + losses + draws) as total_matches,
                 AVG(elo_rating) as avg_elo
             FROM dnd_pvp_stats
             WHERE guild_id = ?
@@ -297,7 +301,7 @@ class RPGLeaderboardManager {
         const [classDistribution] = await pool.execute(`
             SELECT class, COUNT(*) as count
             FROM dnd_characters
-            WHERE guild_id = ? AND is_active = TRUE
+            WHERE guild_id = ?
             GROUP BY class
             ORDER BY count DESC
         `, [guildId]);
@@ -317,10 +321,9 @@ class RPGLeaderboardManager {
      */
     static async incrementStat(characterId, stat, amount = 1) {
         const validStats = [
-            'monsters_killed', 'quests_completed', 'dungeons_cleared',
+            'total_monsters_killed', 'dungeons_completed', 'bosses_killed',
             'deaths', 'total_damage_dealt', 'total_healing_done',
-            'critical_hits', 'gold_earned', 'gold_spent',
-            'items_found', 'spells_cast', 'pvp_wins', 'pvp_losses'
+            'crits_rolled', 'gold', 'level'
         ];
 
         if (!validStats.includes(stat)) {
@@ -371,25 +374,18 @@ class RPGLeaderboardManager {
         for (const [id, achievement] of this.achievementCache) {
             if (earnedIds.has(id)) continue;
 
-            const req = achievement.requirements || {};
-            let currentProgress = 0;
-            let maxProgress = 0;
+            const statColumn = REQUIREMENT_STAT_COLUMN[achievement.requirement_type];
+            const required = Number(achievement.requirement_value) || 0;
+            if (!statColumn || required <= 0) continue;
 
-            for (const [key, value] of Object.entries(req)) {
-                if (typeof value === 'number') {
-                    currentProgress += Math.min(stats[key] || 0, value);
-                    maxProgress += value;
-                }
-            }
+            const current = Math.min(Number(stats[statColumn]) || 0, required);
 
-            if (maxProgress > 0) {
-                progress.push({
-                    ...achievement,
-                    current: currentProgress,
-                    required: maxProgress,
-                    percentage: Math.floor((currentProgress / maxProgress) * 100)
-                });
-            }
+            progress.push({
+                ...achievement,
+                current,
+                required,
+                percentage: Math.floor((current / required) * 100)
+            });
         }
 
         return progress.sort((a, b) => b.percentage - a.percentage);

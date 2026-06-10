@@ -103,7 +103,7 @@ class RPGQuestManager {
     async getActiveQuests(characterId) {
         try {
             const [quests] = await pool.execute(
-                `SELECT q.*, cq.progress, cq.started_at, cq.character_quest_id
+                `SELECT q.*, cq.progress, cq.started_at, cq.id AS character_quest_id
                  FROM dnd_character_quests cq
                  JOIN dnd_quests q ON cq.quest_id = q.quest_id
                  WHERE cq.character_id = ? AND cq.status = 'active'
