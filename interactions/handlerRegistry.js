@@ -5,6 +5,8 @@
 import logger from '../utils/logger.js';
 
 // Pre-load all button handlers
+import { handleSelfPromoJoin } from './buttons/selfpromo_join.js';
+import { handleSelfPromoJoinModal } from './modals/selfpromo_join_modal.js';
 import { handleTicketCreate } from './buttons/ticket_create.js';
 import { handleTicketClose } from './buttons/ticket_close.js';
 import { handleTicketFeedback, handleTicketFeedbackModal } from './buttons/ticket_feedback.js';
@@ -101,6 +103,9 @@ export const buttonHandlers = {
   // Stream signup button
   'stream_signup_add': handleStreamSignupAdd,
 
+  // Self-promo "add me" button (level-gated → opens paste-links modal)
+  'selfpromo_join': handleSelfPromoJoin,
+
   // CAH buttons
   'cah_join:': handleCahJoin,
   'cah_leave:': handleCahLeave,
@@ -158,6 +163,7 @@ export const modalHandlers = {
   'forum_suggestion_submit': handleForumSuggestionSubmit,
   'forum_bug_report_submit': handleForumBugReportSubmit,
   'stream_signup_submit': handleStreamSignupSubmit,
+  'selfpromo_join_modal': handleSelfPromoJoinModal,
   'cah_blank:': handleCahBlankSubmit,
   'cah_pwjoin:': handleCahPasswordJoin,
   'fourthwall_setup_submit': handleFourthwallSetupSubmit,

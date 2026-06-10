@@ -18,6 +18,10 @@ import {
 
 const keyOf = (platform, username) => `${platform}:${String(username).toLowerCase()}`;
 
+// Only LIVE-stream platforms are synced as self-promo subscriptions. Feed-only
+// platforms (tiktok/instagram/facebook) are excluded — they aren't go-live.
+const LIVE_PLATFORMS = new Set(['twitch', 'kick', 'youtube', 'trovo']);
+
 /**
  * Pure: merge platform rows from `streamers` and `community_twitch_links` into a
  * deduped list of {platform, username, platformUserId}. streamers wins on a tie.
@@ -59,7 +63,7 @@ export async function getLinkedPlatforms(discordUserId) {
  * that isn't already subscribed in the guild. Returns the platforms newly added.
  */
 export async function syncLinkedPlatforms(guild, discordUserId, channelId, opts = {}) {
-  const linked = await getLinkedPlatforms(discordUserId);
+  const linked = (await getLinkedPlatforms(discordUserId)).filter(p => LIVE_PLATFORMS.has(p.platform));
   if (linked.length <= 1) return []; // nothing else to sync
   const teamId = await getTeamSubscriptionId(guild.id, discordUserId).catch(() => null);
   const added = [];
