@@ -17,38 +17,42 @@ import { registerEngine, saveState, bumpStats, endSession } from '../word-game-m
 import logger from '../../utils/logger.js';
 
 export function freshGridState() {
-  const words = wordBank.randomCommonWords(8, 4, 7);
+  const words = wordBank.randomCommonWords(10, 4, 7);
   if (!words.length) throw new Error('word bank not loaded — cannot generate a WordSeek grid');
-  return initState({ size: 10, words });
+  return initState({ size: 12, words });
 }
 
 const WORD_RE = /^[A-Za-z]{2,}$/;
 
-export function gridEmbed(state, { title, color } = {}) {
+// The grid goes in the MESSAGE CONTENT (full-width monospace, readable on mobile),
+// not an embed (which is narrow and garbles the letters). The found/remaining
+// info goes in the embed beside it.
+export function boardMessagePayload(state, { title, color } = {}) {
   const left = remaining(state);
   const lengths = left.map(w => w.length).sort((a, b) => a - b).join(', ');
   const foundList = state.found.length ? state.found.map(w => `~~${w.toUpperCase()}~~`).join(' · ') : '*none yet*';
-  return new EmbedBuilder()
-    .setTitle(title || '🔡 WordSeek — find the hidden words')
+  const content = `## 🔡 ${title || 'WordSeek'}\n\`\`\`\n${renderGrid(state)}\n\`\`\``;
+  const embed = new EmbedBuilder()
     .setColor(color ?? 0x5865F2)
-    .setDescription(`\`\`\`\n${renderGrid(state)}\n\`\`\``)
+    .setDescription('Type any word you spot — **forwards, backwards, or diagonally**.')
     .addFields(
       { name: `Found ${state.found.length}/${state.words.length}`, value: foundList, inline: false },
       { name: 'Remaining word lengths', value: lengths || '—', inline: false },
     );
+  return { content, embeds: [embed] };
 }
 
 async function updateBoard(channel, state, opts) {
-  const embed = gridEmbed(state, opts);
+  const payload = boardMessagePayload(state, opts);
   if (state.boardMessageId) {
     try {
       const msg = await channel.messages.fetch(state.boardMessageId);
-      await msg.edit({ embeds: [embed] });
+      await msg.edit(payload);
       return state.boardMessageId;
     } catch { /* re-post below */ }
   }
   try {
-    const sent = await channel.send({ embeds: [embed] });
+    const sent = await channel.send(payload);
     return sent.id;
   } catch (err) {
     logger.warn('[WordSeek] failed to post board', { error: err.message });

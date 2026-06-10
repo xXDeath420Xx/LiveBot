@@ -86,3 +86,12 @@ test('remaining + renderGrid', () => {
   assert.equal(grid.split('\n').length, 8);
   assert.match(grid, /^[A-Z ]+$/m);
 });
+
+test('findWord: accepts a word read in reverse (rood ↔ door)', () => {
+  const s = { size: 5, grid: [], words: ['door', 'tiger'], found: [] };
+  assert.equal(findWord(s, 'door').ok, true);
+  const r = findWord(s, 'ROOD'); // door planted; read backwards + uppercased
+  assert.equal(r.ok, true);
+  assert.equal(r.word, 'door');
+  assert.equal(findWord(s, 'zzzz').ok, false);
+});

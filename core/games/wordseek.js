@@ -52,10 +52,15 @@ export function initState({ size = 10, words = [], rng = Math.random } = {}) {
 
 export function findWord(state, guess) {
   const w = String(guess ?? '').toLowerCase().replace(/[^a-z]/g, '');
-  if (!w || !state.words.includes(w)) return { ok: false, reason: 'not_in_grid' };
-  if (state.found.includes(w)) return { ok: false, reason: 'already_found' };
-  const found = [...state.found, w];
-  return { ok: true, word: w, points: w.length, nextState: { ...state, found }, complete: found.length >= state.words.length };
+  if (!w) return { ok: false, reason: 'not_in_grid' };
+  // Words are planted in 8 directions incl. reversed, so accept the guess read
+  // EITHER way — typing what you see backwards (rood) finds the planted word (door).
+  const rev = [...w].reverse().join('');
+  const match = state.words.includes(w) ? w : (state.words.includes(rev) ? rev : null);
+  if (!match) return { ok: false, reason: 'not_in_grid' };
+  if (state.found.includes(match)) return { ok: false, reason: 'already_found' };
+  const found = [...state.found, match];
+  return { ok: true, word: match, points: match.length, nextState: { ...state, found }, complete: found.length >= state.words.length };
 }
 
 export function remaining(state) {
