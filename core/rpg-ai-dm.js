@@ -1346,7 +1346,7 @@ Keep it to 2-3 paragraphs that could serve as a recap for next session.`;
         );
 
         // Clear session state
-        sessionStateCache.delete(sessionId);
+        RPGStateManager.clearSessionState(sessionId);
 
         return {
             summary: summary.narration,
@@ -1537,7 +1537,7 @@ Keep it to 2-3 paragraphs that could serve as a recap for next session.`;
             }
 
             // Clear session state from cache
-            sessionStateCache.delete(sessionId);
+            RPGStateManager.clearSessionState(sessionId);
         }
 
         // Add character and session status to response

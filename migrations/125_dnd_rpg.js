@@ -248,6 +248,9 @@ const DROP_ORDER = [
 
 export async function up(db) {
   for (const ddl of TABLES) await db.execute(ddl);
+  // An abandoned earlier migration created dnd_session_messages.message_type as a
+  // restrictive ENUM; widen it so any action type (player_examine/roll/system…) inserts.
+  await db.execute('ALTER TABLE dnd_session_messages MODIFY COLUMN message_type VARCHAR(32) NOT NULL').catch(() => {});
 }
 
 export async function down(db) {

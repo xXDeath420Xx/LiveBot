@@ -5,6 +5,7 @@
 
 import { pool } from '../utils/db.js';
 import logger from '../utils/logger.js';
+import RPGAiDungeonMaster from './rpg-ai-dm.js';
 
 class RPGCampaignManager {
     /**
@@ -316,6 +317,56 @@ class RPGCampaignManager {
         );
 
         return characters.length > 0 ? characters[0] : null;
+    }
+
+    /**
+     * Start a session for a campaign and generate the AI DM opening narrative.
+     * Delegates session-row creation + opening generation to RPGAiDungeonMaster.
+     * @param {number} campaignId - Campaign ID
+     * @param {string|null} channelId - Discord channel the session runs in
+     * @param {string|null} userId - User who started the session (unused, kept for handler compat)
+     * @returns {object} session row shape: { session_id, campaign_id, session_number, status, opening, location, character }
+     */
+    static async startSession(campaignId, channelId = null, userId = null) {
+        const result = await RPGAiDungeonMaster.startSession(campaignId, channelId);
+        // result = { session: {session_id, campaign_id, session_number, status}, opening, location, character }
+        return {
+            ...result.session,
+            opening: result.opening,
+            location: result.location,
+            character: result.character
+        };
+    }
+
+    /**
+     * Get the active session for a campaign (by campaign_id).
+     * @param {number} campaignId - Campaign ID
+     * @returns {object|null} Active session row or null
+     */
+    static async getActiveSession(campaignId) {
+        return RPGAiDungeonMaster.getActiveSession(campaignId);
+    }
+
+    /**
+     * End the active session for a campaign and generate a recap.
+     * @param {number} campaignId - Campaign ID
+     * @returns {object|null} { session_id, session_number, summary, messageCount, xpGained, ... } or null
+     */
+    static async endSession(campaignId) {
+        const active = await RPGAiDungeonMaster.getActiveSession(campaignId);
+        if (!active) {
+            return null;
+        }
+        const result = await RPGAiDungeonMaster.endSession(active.session_id);
+        return {
+            session_id: active.session_id,
+            session_number: result.sessionNumber,
+            summary: result.summary,
+            messageCount: result.messageCount,
+            xpGained: result.xpGained,
+            npcsEncountered: result.npcsEncountered,
+            loot: result.loot
+        };
     }
 
     /**
