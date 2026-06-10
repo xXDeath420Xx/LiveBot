@@ -10,6 +10,7 @@ import { banUser, deleteMessage } from './kick-moderation.js';
 import { log } from './enforcement-log.js';
 import { findPhishingDomain, startDomainRefresh } from './phishing-domains.js';
 import { recordOffense } from './link-offenses.js';
+import { getChannelSettings } from './channel-settings.js';
 
 // Begin loading the phishing-domain set into memory (refreshes every 4h).
 startDomainRefresh();
@@ -22,5 +23,6 @@ export const enforcer = createEnforcer({
     deleteMessage: (messageId, token) => deleteMessage(messageId, token),
     log,
     findPhishingDomain,
-    recordOffense
+    recordOffense,
+    getSettings: getChannelSettings
 });

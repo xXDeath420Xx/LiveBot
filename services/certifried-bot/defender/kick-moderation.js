@@ -20,12 +20,17 @@ async function result(response) {
     return { ok: response.ok, status: response.status, error: response.ok ? null : await safeText(response) };
 }
 
-export async function banUser(broadcasterId, userId, { duration, reason } = {}, token, fetchImpl = fetch) {
+export async function banUser(broadcasterId, userId, opts = {}, token, fetchImpl = fetch) {
+    const { duration, durationMin, reason } = opts;
+    // durationMin (from per-channel settings) takes precedence; `duration` is kept
+    // for the pre-existing direct-caller test. Both are in minutes; null => permanent.
+    const resolvedDuration = durationMin != null ? Number(durationMin)
+                           : (typeof duration === 'number' ? duration : null);
     const body = {
         broadcaster_user_id: parseInt(broadcasterId, 10),
         user_id: parseInt(userId, 10)
     };
-    if (typeof duration === 'number') body.duration = duration; // minutes; omit => permanent
+    if (resolvedDuration != null) body.duration = resolvedDuration; // omit => permanent
     if (reason != null) body.reason = String(reason).slice(0, 100);
 
     const response = await fetchImpl(`${KICK_API_BASE}/moderation/bans`, {
