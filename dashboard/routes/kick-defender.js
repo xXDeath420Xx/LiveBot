@@ -32,6 +32,16 @@ async function isManagerUser(req) {
     return isAdminUser(req) || await managers.isManager(u.id);
 }
 
+// True if `userId` owns the given Kick channel. Centralizes the owner check
+// used by the enforcement-log and channel-settings routes.
+async function ownsChannel(userId, channelId) {
+    const [[row]] = await pool.execute(
+        "SELECT 1 FROM tokes_channels WHERE platform = 'kick' AND channel_id = ? AND owner_id = ?",
+        [String(channelId || ''), userId]
+    );
+    return !!row;
+}
+
 // ── Streamer panel ────────────────────────────────────────────────────────
 router.get('/kick', requireKickAuth, async (req, res) => {
     try {
@@ -303,34 +313,54 @@ router.post('/kick/api/managers', requireTokesAuth, async (req, res) => {
 
 // ── Sublist (manager) ──────────────────────────────────────────────────────
 router.post('/kick/api/sublist', requireTokesAuth, async (req, res) => {
-    if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
-    const { username, reason } = req.body;
-    if (!username) return res.status(400).json({ error: 'username required' });
-    await banlist.addBan({ platform: 'kick', username, reason: reason || 'Bot', listType: 'sublist', addedBy: req.session.tokesUser.id });
-    res.json({ success: true });
+    try {
+        if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
+        const { username, reason } = req.body;
+        if (!username) return res.status(400).json({ error: 'username required' });
+        await banlist.addBan({ platform: 'kick', username, reason: reason || 'Bot', listType: 'sublist', addedBy: req.session.tokesUser.id });
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[KBD Dashboard] sublist add error', { error: error.message });
+        res.status(500).json({ error: 'Failed to add to sublist' });
+    }
 });
 
 router.post('/kick/api/sublist/clear', requireTokesAuth, async (req, res) => {
-    if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
-    await banlist.clearSublist();
-    res.json({ success: true });
+    try {
+        if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
+        await banlist.clearSublist();
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[KBD Dashboard] sublist clear error', { error: error.message });
+        res.status(500).json({ error: 'Failed to clear sublist' });
+    }
 });
 
 // ── Unbanlist / whitelist (manager) ────────────────────────────────────────
 router.post('/kick/api/unban', requireTokesAuth, async (req, res) => {
-    if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
-    const { username } = req.body;
-    if (!username) return res.status(400).json({ error: 'username required' });
-    await banlist.addUnban({ platform: 'kick', username, addedBy: req.session.tokesUser.id });
-    res.json({ success: true });
+    try {
+        if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
+        const { username } = req.body;
+        if (!username) return res.status(400).json({ error: 'username required' });
+        await banlist.addUnban({ platform: 'kick', username, addedBy: req.session.tokesUser.id });
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[KBD Dashboard] unban add error', { error: error.message });
+        res.status(500).json({ error: 'Failed to add to unbanlist' });
+    }
 });
 
 router.delete('/kick/api/unban', requireTokesAuth, async (req, res) => {
-    if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
-    const { username } = req.body;
-    if (!username) return res.status(400).json({ error: 'username required' });
-    await banlist.removeUnban('kick', null, username);
-    res.json({ success: true });
+    try {
+        if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
+        const { username } = req.body;
+        if (!username) return res.status(400).json({ error: 'username required' });
+        await banlist.removeUnban('kick', null, username);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[KBD Dashboard] unban remove error', { error: error.message });
+        res.status(500).json({ error: 'Failed to remove from unbanlist' });
+    }
 });
 
 // ── Enforcement log viewer (channel owner or manager) ──────────────────────
@@ -339,11 +369,7 @@ router.get('/kick/api/enforcement-log', requireKickAuth, async (req, res) => {
         const userId = req.session.tokesUser.id;
         const channelId = String(req.query.channelId || '');
         if (!channelId) return res.status(400).json({ error: 'channelId required' });
-        const [[owned]] = await pool.execute(
-            "SELECT 1 AS ok FROM tokes_channels WHERE platform = 'kick' AND channel_id = ? AND owner_id = ?",
-            [channelId, userId]
-        );
-        if (!owned && !await isManagerUser(req)) return res.status(403).json({ error: 'Not your channel' });
+        if (!await ownsChannel(userId, channelId) && !await isManagerUser(req)) return res.status(403).json({ error: 'Not your channel' });
         const rows = await listEvents({
             channelId,
             action: req.query.action || null,
@@ -362,11 +388,8 @@ router.get('/kick/api/channel-settings', requireKickAuth, async (req, res) => {
     try {
         const userId = req.session.tokesUser.id;
         const channelId = String(req.query.channelId || '');
-        const [[owned]] = await pool.execute(
-            "SELECT 1 AS ok FROM tokes_channels WHERE platform = 'kick' AND channel_id = ? AND owner_id = ?",
-            [channelId, userId]
-        );
-        if (!owned) return res.status(403).json({ error: 'Not your channel' });
+        if (!channelId) return res.status(400).json({ error: 'channelId required' });
+        if (!await ownsChannel(userId, channelId)) return res.status(403).json({ error: 'Not your channel' });
         const [[row]] = await pool.execute(
             'SELECT ban_duration_min, phishing_threshold, warning_template, safe_domains FROM kbd_channel_settings WHERE channel_id = ?',
             [channelId]
@@ -382,22 +405,26 @@ router.post('/kick/api/channel-settings', requireKickAuth, async (req, res) => {
     try {
         const userId = req.session.tokesUser.id;
         const { channelId, banDurationMin, phishingThreshold, warningTemplate, safeDomains } = req.body;
-        const [[owned]] = await pool.execute(
-            "SELECT 1 AS ok FROM tokes_channels WHERE platform = 'kick' AND channel_id = ? AND owner_id = ?",
-            [String(channelId || ''), userId]
-        );
-        if (!owned) return res.status(403).json({ error: 'Not your channel' });
-        const dur = (banDurationMin === '' || banDurationMin == null) ? null : Math.max(0, parseInt(banDurationMin, 10) || 0) || null;
+        if (!await ownsChannel(userId, channelId)) return res.status(403).json({ error: 'Not your channel' });
+        // null = permanent ban; otherwise clamp to [1, 525600] minutes (max 1 year).
+        let dur = (banDurationMin === '' || banDurationMin == null) ? null : (parseInt(banDurationMin, 10) || 0);
+        if (dur != null) dur = dur <= 0 ? null : Math.min(dur, 525600);
         const thr = Math.min(Math.max(parseInt(phishingThreshold, 10) || 2, 1), 10);
         const warn = (warningTemplate && String(warningTemplate).trim()) ? String(warningTemplate).slice(0, 400) : null;
-        const safe = Array.isArray(safeDomains) ? safeDomains.join(',') : (safeDomains ? String(safeDomains) : null);
+        let safe = null;
+        if (Array.isArray(safeDomains)) {
+            const cleaned = safeDomains.map(d => String(d).trim()).filter(Boolean).filter(d => d.length <= 253).slice(0, 50);
+            safe = cleaned.length ? cleaned.join(',') : null;
+        } else if (safeDomains) {
+            safe = String(safeDomains).slice(0, 2000);
+        }
         await pool.execute(
             `INSERT INTO kbd_channel_settings (channel_id, ban_duration_min, phishing_threshold, warning_template, safe_domains)
              VALUES (?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE ban_duration_min = VALUES(ban_duration_min),
                 phishing_threshold = VALUES(phishing_threshold),
                 warning_template = VALUES(warning_template), safe_domains = VALUES(safe_domains)`,
-            [String(channelId), dur, thr, warn, safe]
+            [String(channelId || ''), dur, thr, warn, safe]
         );
         res.json({ success: true });
     } catch (error) {
