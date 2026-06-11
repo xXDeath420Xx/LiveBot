@@ -268,6 +268,8 @@ export async function handleMessage(context) {
     // Get command from registry (handles global config, channel overrides, and custom commands)
     // Giveaway entry: if the typed command matches the channel's active
     // giveaway keyword, record the entry. Reply only on FIRST entry (no spam).
+    // Runs regardless of the commands master switch — starting a giveaway IS
+    // the opt-in.
     try {
         const entered = await tryEnterGiveaway(channel.id, commandName, userId, username);
         if (entered) {
@@ -275,6 +277,14 @@ export async function handleMessage(context) {
             return;
         }
     } catch (_) { /* giveaways must never break chat */ }
+
+    // Chat commands master switch: OPT-IN (features_enabled.commands === true).
+    // Most channels run us for protection, not games — built-in and custom
+    // commands stay silent until the owner flips this on. Defender/protection
+    // commands (dispatched above) are NOT gated: they're the core product.
+    if (channelFeats?.commands !== true) {
+        return;
+    }
 
     const command = await getCommand(channel.id, commandName);
     if (!command) {

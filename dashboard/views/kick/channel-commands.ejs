@@ -15,7 +15,20 @@
   <%
     const ov = {};
     channelCommands.forEach(c => { ov[c.command_key] = c; });
+    // Master-switch state: chat commands are opt-in (off unless explicitly true).
+    let _feats = {};
+    try { _feats = channel.features_enabled ? (typeof channel.features_enabled === 'string' ? JSON.parse(channel.features_enabled) : channel.features_enabled) : {}; } catch (e) {}
+    const commandsOn = _feats.commands === true;
   %>
+
+  <% if (!commandsOn) { %>
+    <div class="banner">
+      ⚠ Chat commands are <strong>OFF</strong> for this channel (protection-only mode, the default).
+      Everything you configure here stays silent until you turn on
+      <strong>“chat commands (master switch)”</strong> in
+      <a href="/kick/channel/<%= channel.channel_id %>">Channel settings</a>.
+    </div>
+  <% } %>
 
   <!-- ── Overview stats ─────────────────────────────────────── -->
   <div class="statgrid">
