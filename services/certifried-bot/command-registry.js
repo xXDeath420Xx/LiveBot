@@ -17,9 +17,11 @@ import { elevatedCommand } from './commands/elevated.js';
 import { tokesHelpCommand } from './commands/help.js';
 import { embersCommand } from './commands/embers.js';
 import { cfxCommand, cfxDailyCommand, cfxMarketCommand, cfxLeaderboardCommand, cfxSellCommand } from './commands/cfx.js';
+import { shoutoutCommand } from './commands/shoutout.js';
 
 // Map command keys to their handler functions
 const commandHandlers = {
+    'so': shoutoutCommand,
     'lit': litCommand,
     'spark': sparkCommand,
     'fireboard': fireboardCommand,

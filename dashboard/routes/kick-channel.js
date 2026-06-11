@@ -276,19 +276,23 @@ router.post('/kick/api/channel/:channelId/moderate', requireKickAuth, async (req
         const target = await resolveKickUser(username);
         if (!target) return res.status(404).json({ error: `No Kick user found for "${username}"` });
 
+        // Attribute the action to the dashboard user who clicked it — once
+        // managers exist, "who banned this person" matters for the audit trail.
+        const actor = String(req.session.tokesUser.name || `user#${userId}`).slice(0, 40);
+
         let result, reasonText;
         if (action === 'unban') {
             result = await unbanUser(ch.broadcasterId, target.userId, ch.token);
-            reasonText = 'manual unban (dashboard)';
+            reasonText = `manual unban by ${actor}`;
         } else {
             // ban (permanent) or timeout (minutes from req.body.minutes, default 10)
-            const opts = { reason: req.body.reason ? String(req.body.reason).slice(0, 100) : 'Manual action via dashboard' };
+            const opts = { reason: req.body.reason ? String(req.body.reason).slice(0, 100) : `Manual action by ${actor} via dashboard` };
             if (action === 'timeout') {
                 const mins = Math.min(Math.max(parseInt(req.body.minutes, 10) || 10, 1), 10080); // 1 min … 1 week
                 opts.durationMin = mins;
-                reasonText = `manual timeout ${mins}m (dashboard)`;
+                reasonText = `manual timeout ${mins}m by ${actor}`;
             } else {
-                reasonText = 'manual ban (dashboard)';
+                reasonText = `manual ban by ${actor}`;
             }
             result = await banUser(ch.broadcasterId, target.userId, opts, ch.token);
         }
