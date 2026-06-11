@@ -97,3 +97,60 @@ export async function networkStats() {
         total: Number(r.total || 0)
     };
 }
+
+/**
+ * Densify a sparse list of {date:'YYYY-MM-DD', ...counts} rows into a continuous
+ * day-by-day series ending today, back `days` days, with zero-filled gaps. Pure
+ * (no DB) so it's unit-testable. `todayIso` lets tests pin "now".
+ */
+export function fillDailySeries(rows, days, todayIso) {
+    const byDate = new Map(rows.map(r => [String(r.date), r]));
+    const end = new Date(todayIso + 'T00:00:00Z');
+    const out = [];
+    for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(end);
+        d.setUTCDate(d.getUTCDate() - i);
+        const iso = d.toISOString().slice(0, 10);
+        const row = byDate.get(iso);
+        out.push({
+            date: iso,
+            banned: Number(row?.banned || 0),
+            deleted: Number(row?.deleted || 0),
+            dormant: Number(row?.dormant || 0)
+        });
+    }
+    return out;
+}
+
+/**
+ * Daily activity counts for a time-series chart. Optionally scoped to one
+ * channel (broadcaster channel_id). Returns a continuous zero-filled series.
+ */
+export function makeDailyActivity({ pool }) {
+    return async function dailyActivity({ channelId = null, days = 14, todayIso } = {}) {
+        const n = Math.min(Math.max(parseInt(days, 10) || 14, 1), 90);
+        const params = [n - 1];
+        let scope = '';
+        if (channelId) { scope = 'AND channel_id = ?'; params.push(String(channelId)); }
+        const [rows] = await pool.execute(
+            `SELECT DATE(created_at) AS date,
+                    SUM(action = 'ban'    AND success = 1) AS banned,
+                    SUM(action = 'delete' AND success = 1) AS deleted,
+                    SUM(action = 'detected_no_scope')      AS dormant
+             FROM kbd_enforcement_log
+             WHERE created_at >= (CURDATE() - INTERVAL ? DAY) ${scope}
+             GROUP BY DATE(created_at)
+             ORDER BY date ASC`,
+            params
+        );
+        const today = todayIso || new Date().toISOString().slice(0, 10);
+        // Normalize the DATE() value (may be a Date object) to YYYY-MM-DD.
+        const norm = rows.map(r => ({
+            date: (r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10)),
+            banned: r.banned, deleted: r.deleted, dormant: r.dormant
+        }));
+        return fillDailySeries(norm, n, today);
+    };
+}
+
+export const dailyActivity = makeDailyActivity({ pool });
