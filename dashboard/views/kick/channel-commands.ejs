@@ -109,6 +109,18 @@
     <ul class="clean" id="ar-list" style="margin-top:.75rem">Loading…</ul>
   </div>
 
+  <!-- ── Timers (scheduled messages) ─────────────────────────── -->
+  <div class="card">
+    <h2>Timers (scheduled messages)</h2>
+    <div class="muted">The bot posts these to chat on a schedule while the channel is enrolled. Supports {{channel_name}}.</div>
+    <div class="srow" style="margin-top:.75rem">
+      <input id="tm-msg" placeholder="message to post" style="flex:1;min-width:16rem" />
+      <input id="tm-int" type="number" min="1" max="1440" value="30" style="width:7rem" />
+      <button id="tm-add">Add timer</button>
+    </div>
+    <ul class="clean" id="tm-list" style="margin-top:.75rem">Loading…</ul>
+  </div>
+
 <% var pageJs = `
   <script>
     const CHANNEL = ` + JSON.stringify(channel.channel_id) + `;
@@ -211,5 +223,48 @@
     });
 
     try { loadResponders(); } catch (e) {}
+
+    // ── Timers (scheduled messages) ──────────────────────────
+    async function loadTimers() {
+      const el = document.getElementById('tm-list');
+      try {
+        const r = await fetch('/kick/api/channel/' + CHANNEL + '/timers', { headers: { Accept: 'application/json' } });
+        const j = await r.json();
+        if (!r.ok) { el.textContent = 'Failed to load.'; return; }
+        if (!j.timers.length) { el.textContent = 'No timers yet.'; return; }
+        el.innerHTML = j.timers.map(t =>
+          '<li><span><strong>' + esc((t.message || '').slice(0, 50)) + '</strong> ' +
+          '<span class="muted">every ' + t.interval_min + 'm · sent ' + t.send_count + '×</span></span>' +
+          '<span><span class="pill ' + (t.is_enabled ? 'ok' : 'off') + '">' + (t.is_enabled ? 'on' : 'off') + '</span> ' +
+          '<button class="danger tm-del" data-id="' + t.id + '">Delete</button></span></li>'
+        ).join('');
+        document.querySelectorAll('.tm-del').forEach(b => b.addEventListener('click', async () => {
+          if (!confirm('Delete this timer?')) return;
+          try { await KickDash.del('/kick/api/channel/' + CHANNEL + '/timers/' + b.dataset.id, {}); loadTimers(); }
+          catch (e) { alert(e.message || 'Delete failed.'); }
+        }));
+      } catch (e) {
+        el.textContent = 'Failed to load.';
+      }
+    }
+
+    // Add a timer.
+    document.getElementById('tm-add').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const msg = document.getElementById('tm-msg').value.trim();
+      if (!msg) { alert('Message is required.'); return; }
+      btn.disabled = true;
+      try {
+        await KickDash.post('/kick/api/channel/' + CHANNEL + '/timers', {
+          message: msg,
+          interval_min: document.getElementById('tm-int').value
+        });
+        document.getElementById('tm-msg').value = '';
+        await loadTimers();
+      } catch (err) { alert(err.message || 'Add failed.'); }
+      finally { btn.disabled = false; }
+    });
+
+    try { loadTimers(); } catch (e) {}
   </script>`; %>
 <%- include('_foot', { extraJs: pageJs }) %>
