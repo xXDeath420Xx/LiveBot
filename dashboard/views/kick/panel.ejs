@@ -44,6 +44,19 @@
     <div class="stat kick"><b id="ns-phishing">—</b><span>Phishing domains</span></div>
   </div>
 
+  <!-- ── 14-day activity chart ───────────────────────────────── -->
+  <div class="card" style="margin-top:1rem">
+    <div class="row" style="align-items:baseline">
+      <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem">Activity — last 14 days</div>
+      <div style="display:flex;gap:.9rem;flex-wrap:wrap;font-size:.78rem;color:var(--muted)">
+        <span style="display:inline-flex;align-items:center;gap:.35rem"><span style="width:.7rem;height:.7rem;border-radius:2px;background:var(--kick)"></span>Banned</span>
+        <span style="display:inline-flex;align-items:center;gap:.35rem"><span style="width:.7rem;height:.7rem;border-radius:2px;background:#7c84ff"></span>Removed</span>
+        <span style="display:inline-flex;align-items:center;gap:.35rem"><span style="width:.7rem;height:.7rem;border-radius:2px;background:rgba(255,255,255,.25)"></span>Detected</span>
+      </div>
+    </div>
+    <div id="trend-chart" class="muted" style="margin-top:.75rem">Loading…</div>
+  </div>
+
   <% if (!channels.length) { %>
     <div class="card">
       <div class="empty">
@@ -202,6 +215,48 @@
           set('ns-banlist', Array.isArray(j.banlist) ? j.banlist.length : j.banlist);
           set('ns-phishing', Array.isArray(j.phishing) ? j.phishing.length : j.phishing);
         } catch (e) { /* leave placeholders */ }
+      })();
+
+      (async function loadTrend() {
+        const host = document.getElementById('trend-chart');
+        if (!host) return;
+        try {
+          const res = await fetch('/kick/api/network-trend?days=14');
+          const j = await res.json();
+          if (!res.ok) throw new Error((j && j.error) || 'Failed');
+          const series = Array.isArray(j.series) ? j.series : [];
+          const max = series.reduce((m, d) => Math.max(m, (d.banned || 0) + (d.deleted || 0) + (d.dormant || 0)), 0);
+          if (!series.length || max <= 0) { host.textContent = 'No activity in the last 14 days.'; return; }
+
+          const W = 560, H = 160, padL = 8, padR = 8, padTop = 8, axisY = 132, labelY = 150;
+          const plotW = W - padL - padR;
+          const slot = plotW / series.length;
+          const barW = Math.min(22, slot * 0.6);
+          const plotH = axisY - padTop;
+          const colors = { banned: '#53FC18', deleted: '#7c84ff', dormant: 'rgba(255,255,255,.25)' };
+          let rects = '';
+          let labels = '';
+          series.forEach((d, i) => {
+            const cx = padL + slot * i + slot / 2;
+            const x = cx - barW / 2;
+            const banned = d.banned || 0, deleted = d.deleted || 0, dormant = d.dormant || 0;
+            let y = axisY;
+            [['banned', banned], ['deleted', deleted], ['dormant', dormant]].forEach(([k, v]) => {
+              if (v > 0) {
+                const h = (v / max) * plotH;
+                y -= h;
+                rects += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="1.5" fill="' + colors[k] + '"></rect>';
+              }
+            });
+            if (i % 3 === 0 && typeof d.date === 'string' && d.date.length >= 10) {
+              const md = d.date.slice(5, 7) + '/' + d.date.slice(8, 10);
+              labels += '<text x="' + cx.toFixed(1) + '" y="' + labelY + '" font-size="9" text-anchor="middle" fill="rgba(255,255,255,.45)">' + md + '</text>';
+            }
+          });
+          const baseline = '<line x1="' + padL + '" y1="' + axisY + '" x2="' + (W - padR) + '" y2="' + axisY + '" stroke="rgba(255,255,255,.12)" stroke-width="1"></line>';
+          host.classList.remove('muted');
+          host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="14-day activity chart" style="display:block">' + baseline + rects + labels + '</svg>';
+        } catch (e) { host.textContent = 'Failed to load chart.'; }
       })();
     })();
   </script>`; %>
