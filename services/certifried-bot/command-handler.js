@@ -7,6 +7,9 @@ import logger from '../../utils/logger.js';
 import pool from '../../utils/db.js';
 import { getCommand, incrementCustomCommandUse } from './command-registry.js';
 import { processTemplate } from './template-processor.js';
+import { runAutoResponders } from './auto-responder.js';
+import { enforcer } from './defender/index.js';
+import { resolveDefenderCommand, meetsMinRole, resolvePermissionContext } from './defender/commands/index.js';
 
 // Cooldown tracking: Map<channelId-commandKey-userId, timestamp>
 const userCooldowns = new Map();
@@ -155,10 +158,22 @@ export async function handleMessage(context) {
         userId,          // Platform user ID
         username,        // User display name
         message,         // Raw message text
+        messageId,       // Platform message id (Kick chat message UUID; for delete fallback)
         isBroadcaster,   // Is user the channel owner
         isMod,           // Is user a moderator
         reply           // Function to send reply: (text) => void
     } = context;
+
+    // Kick Defender: ban-on-event. Runs BEFORE channel-config / prefix checks so
+    // banlisted users are handled even when they aren't issuing a command and even
+    // in channels with no games config. No-ops for non-kick / non-enrolled channels.
+    try {
+        const result = await enforcer.check({ platform, channelId, userId, username, messageId, content: message, isMod, isBroadcaster, reply });
+        if (result.acted) return; // user was banned / message deleted; stop processing
+    } catch (err) {
+        // Never let defender errors break normal chat handling.
+        logger.error('[KBD] enforcer.check failed', { error: err.message });
+    }
 
     // Get channel config
     const channel = await getChannelConfig(platform, channelId);
@@ -170,6 +185,11 @@ export async function handleMessage(context) {
 
     // Check if message starts with prefix
     if (!message.startsWith(prefix)) {
+        // Not a command — give keyword auto-responders a chance to reply.
+        await runAutoResponders(
+            { channelPk: channel.id, channelName, username, message, reply },
+            processTemplate
+        );
         return;
     }
 
@@ -178,6 +198,23 @@ export async function handleMessage(context) {
     const parts = withoutPrefix.split(/\s+/);
     const commandName = parts[0].toLowerCase();
     const args = parts.slice(1);
+
+    // Defender commands: self-contained in-memory dispatch with manager/admin
+    // tiers, BEFORE the DB-backed registry. Returns when handled.
+    const defCmd = resolveDefenderCommand(commandName);
+    if (defCmd) {
+        const permCtx = await resolvePermissionContext({ platform, userId, isBroadcaster });
+        if (!meetsMinRole(defCmd.minRole, permCtx)) {
+            return; // silently ignore unauthorized defender command
+        }
+        const defCtx = { platform, channelId, channelName, userId, username, args, message, reply, isBroadcaster, isMod, permCtx };
+        try {
+            await defCmd.handler(defCtx);
+        } catch (err) {
+            logger.error('[KBD] defender command failed', { command: commandName, error: err.message });
+        }
+        return; // handled; do not fall through to games/custom commands
+    }
 
     // Get command from registry (handles global config, channel overrides, and custom commands)
     const command = await getCommand(channel.id, commandName);
