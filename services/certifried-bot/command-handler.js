@@ -9,6 +9,8 @@ import { getCommand, incrementCustomCommandUse } from './command-registry.js';
 import { processTemplate } from './template-processor.js';
 import { runAutoResponders } from './auto-responder.js';
 import { checkFirstChatter } from './first-chatter.js';
+import { tryEnterGiveaway } from './giveaway.js';
+import { countMessage } from './chat-stats.js';
 import { runKickAutomod } from './kick-automod.js';
 import { resolveChannel } from './defender/channel-tokens.js';
 import { deleteMessage as kickDeleteMessage } from './defender/kick-moderation.js';
@@ -185,6 +187,9 @@ export async function handleMessage(context) {
         return; // Channel not registered or disabled
     }
 
+    // Engagement analytics: in-memory daily message counter (flushed every 60s).
+    countMessage(channel.id);
+
     // Content automod (Kick): caps/links/symbols/length filters from the
     // channel's features_enabled.automod settings. Runs on EVERY message (incl.
     // commands) so a spammy command line is also caught. Deletes via the owner's
@@ -252,6 +257,16 @@ export async function handleMessage(context) {
     }
 
     // Get command from registry (handles global config, channel overrides, and custom commands)
+    // Giveaway entry: if the typed command matches the channel's active
+    // giveaway keyword, record the entry. Reply only on FIRST entry (no spam).
+    try {
+        const entered = await tryEnterGiveaway(channel.id, commandName, userId, username);
+        if (entered) {
+            if (entered === 'entered' && typeof reply === 'function') reply(`@${username} you're entered! 🎉`);
+            return;
+        }
+    } catch (_) { /* giveaways must never break chat */ }
+
     const command = await getCommand(channel.id, commandName);
     if (!command) {
         return; // Command not found or disabled
