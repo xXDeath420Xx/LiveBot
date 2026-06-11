@@ -61,6 +61,34 @@
     <button id="save" style="margin-top:1.25rem">Save settings</button>
   </div>
 
+  <!-- ── Automod filters ─────────────────────────────────────── -->
+  <div class="card">
+    <h2>Automod filters</h2>
+    <div class="muted" style="margin-bottom:.6rem">Auto-delete messages that break these rules. Mods and the broadcaster are exempt.</div>
+    <div class="srow">
+      <label style="flex-direction:row;gap:.35rem;align-items:center">
+        <input id="am-caps" type="checkbox" /> Block excessive caps
+      </label>
+      <label>% caps
+        <input id="am-caps-pct" type="number" min="10" max="100" value="70" style="width:5rem" />
+      </label>
+    </div>
+    <div class="srow">
+      <label style="flex-direction:row;gap:.35rem;align-items:center">
+        <input id="am-links" type="checkbox" /> Block links
+      </label>
+      <label style="flex-direction:row;gap:.35rem;align-items:center">
+        <input id="am-symbols" type="checkbox" /> Block symbol spam
+      </label>
+    </div>
+    <div class="srow">
+      <label>Max message length (0 = off)
+        <input id="am-maxlen" type="number" min="0" max="500" value="0" style="width:6rem" />
+      </label>
+    </div>
+    <button id="am-save" style="margin-top:1.25rem">Save automod</button>
+  </div>
+
   <!-- ── Recent activity ─────────────────────────────────────── -->
   <div class="card">
     <h2>Recent activity</h2>
@@ -92,11 +120,46 @@
       '<label style="flex-direction:row;gap:.35rem;align-items:center">' +
       '<input type="checkbox" class="feat" data-feat="' + f + '"' + (feats[f] !== false ? ' checked' : '') + '/> ' + f + '</label>').join('');
 
+    // ── Automod filters init (reuse the same parsed features object) ──
+    const am = (feats && feats.automod) || {};
+    document.getElementById('am-caps').checked = !!am.caps;
+    document.getElementById('am-caps-pct').value = am.caps_pct || 70;
+    document.getElementById('am-links').checked = !!am.links;
+    document.getElementById('am-symbols').checked = !!am.symbols;
+    document.getElementById('am-maxlen').value = am.max_len || 0;
+
+    document.getElementById('am-save').addEventListener('click', async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      // Read current feature checkboxes so we don't clobber game toggles
+      const features = {};
+      document.querySelectorAll('.feat').forEach(c => { features[c.dataset.feat] = c.checked; });
+      features.automod = {
+        caps: document.getElementById('am-caps').checked,
+        caps_pct: Number(document.getElementById('am-caps-pct').value) || 70,
+        links: document.getElementById('am-links').checked,
+        symbols: document.getElementById('am-symbols').checked,
+        max_len: Number(document.getElementById('am-maxlen').value) || 0
+      };
+      try {
+        await KickDash.patch('/kick/api/channel/' + CHANNEL, { features_enabled: features });
+        btn.textContent = 'Saved ✓';
+      } catch (err) { alert(err.message || 'Save failed.'); }
+      finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save automod'; }, 1500); }
+    });
+
     // ── Channel settings save ──
     document.getElementById('save').addEventListener('click', async (e) => {
       const btn = e.currentTarget; btn.disabled = true;
       const features = {};
       document.querySelectorAll('.feat').forEach(c => { features[c.dataset.feat] = c.checked; });
+      // Preserve automod so saving settings doesn't wipe it
+      features.automod = {
+        caps: document.getElementById('am-caps').checked,
+        caps_pct: Number(document.getElementById('am-caps-pct').value) || 70,
+        links: document.getElementById('am-links').checked,
+        symbols: document.getElementById('am-symbols').checked,
+        max_len: Number(document.getElementById('am-maxlen').value) || 0
+      };
       try {
         await KickDash.patch('/kick/api/channel/' + CHANNEL, {
           command_prefix: document.getElementById('prefix').value,
