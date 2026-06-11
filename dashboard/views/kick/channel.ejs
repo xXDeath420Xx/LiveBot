@@ -57,6 +57,22 @@
     </div>
   </div>
 
+  <!-- ── Alerts & events ─────────────────────────────────────── -->
+  <div class="card">
+    <h2>🔔 Alerts &amp; events</h2>
+    <div class="muted" style="margin-bottom:.6rem">Thank followers and subscribers automatically in chat. Requires event subscriptions to be enabled once.</div>
+    <div class="srow">
+      <button id="ev-sub" class="ghost">Enable event subscriptions</button>
+      <span id="ev-sub-msg" class="muted"></span>
+    </div>
+    <textarea id="thank-follow" placeholder="Follow thank-you (blank = off) — supports {{username}}" style="width:100%;margin-top:.6rem"></textarea>
+    <textarea id="thank-sub" placeholder="Sub thank-you (blank = off) — supports {{username}}" style="width:100%;margin-top:.6rem"></textarea>
+    <button id="ev-save" style="margin-top:1.25rem">Save alert messages</button>
+    <div class="muted" style="margin-top:1.1rem;margin-bottom:.4rem">Recent events</div>
+    <div id="ev-feed" class="log-out">Loading…</div>
+    <button id="ev-refresh" class="ghost" style="margin-top:.75rem">Refresh</button>
+  </div>
+
   <!-- ── Channel settings (preserved) ────────────────────────── -->
   <div class="card">
     <h2>Channel settings</h2>
@@ -176,6 +192,8 @@
     document.getElementById('am-maxlen').value = am.max_len || 0;
     document.getElementById('am-words').value = am.words || '';
     document.getElementById('welcome-msg').value = feats.welcome_message || '';
+    document.getElementById('thank-follow').value = feats.thank_follow || '';
+    document.getElementById('thank-sub').value = feats.thank_sub || '';
 
     // ── Single source of truth for features_enabled: BOTH save paths round-trip
     //    game toggles + automod (incl. words) + welcome_message so neither clobbers ──
@@ -191,6 +209,8 @@
         words: document.getElementById('am-words').value
       };
       features.welcome_message = document.getElementById('welcome-msg').value;
+      features.thank_follow = document.getElementById('thank-follow').value;
+      features.thank_sub = document.getElementById('thank-sub').value;
       return features;
     }
 
@@ -406,6 +426,42 @@
       } catch (err) { host.textContent = 'Failed to load chat volume.'; }
     }
 
+    // ── Alerts & events ──
+    document.getElementById('ev-sub').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const msg = document.getElementById('ev-sub-msg');
+      btn.disabled = true; msg.textContent = 'Working…';
+      try {
+        await KickDash.post('/kick/api/channel/' + CHANNEL + '/events/subscribe', {});
+        msg.textContent = '✓ Subscribed';
+      } catch (err) { msg.textContent = err.message || 'Subscribe failed.'; }
+      finally { btn.disabled = false; }
+    });
+
+    document.getElementById('ev-save').addEventListener('click', async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      try {
+        await KickDash.patch('/kick/api/channel/' + CHANNEL, { features_enabled: buildFeatures() });
+        btn.textContent = 'Saved ✓';
+      } catch (err) { alert(err.message || 'Save failed.'); }
+      finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save alert messages'; }, 1500); }
+    });
+
+    async function loadEvents() {
+      const feed = document.getElementById('ev-feed');
+      feed.textContent = 'Loading…';
+      try {
+        const res = await fetch('/kick/api/channel/' + CHANNEL + '/events/recent');
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Failed');
+        if (!j.events || !j.events.length) { feed.textContent = 'No events received yet — enable subscriptions above.'; return; }
+        feed.innerHTML = '<table>' + j.events.map(ev =>
+          '<tr><td>' + (ev.created_at ? new Date(ev.created_at).toISOString().slice(0,16).replace('T',' ') : '—') +
+          '</td><td>' + esc(ev.event_type) + '</td><td>' + esc(ev.actor_username) + '</td></tr>').join('') + '</table>';
+      } catch (err) { feed.textContent = err.message || 'Failed to load.'; }
+    }
+    document.getElementById('ev-refresh').addEventListener('click', loadEvents);
+
     // ── Copy configuration ──
     document.getElementById('cp-go').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
@@ -444,5 +500,6 @@
     loadGiveaway();
     loadChatTrend();
     loadCopySources();
+    loadEvents();
   </script>`; %>
 <%- include('_foot', { extraJs: pageJs }) %>
