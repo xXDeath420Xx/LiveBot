@@ -409,4 +409,82 @@ router.delete('/kick/api/channel/:channelId/responders/:id', requireKickAuth, as
     }
 });
 
+// ── Timers (scheduled messages) CRUD ────────────────────────────────────────
+router.get('/kick/api/channel/:channelId/timers', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [rows] = await pool.execute(
+            `SELECT id, message, interval_min, is_enabled, send_count, last_sent_at
+             FROM tokes_timers WHERE channel_id = ? ORDER BY id DESC`,
+            [owned.id]
+        );
+        res.json({ timers: rows });
+    } catch (error) {
+        logger.error('[Kick Channel] timers list error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load timers' });
+    }
+});
+
+router.post('/kick/api/channel/:channelId/timers', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const respV = validateCommandResponse(req.body.message);
+        if (!respV.valid) return res.status(400).json({ error: respV.error });
+        // Interval in minutes: clamp to [1, 1440] (1 min … 1 day).
+        const interval = Math.min(Math.max(parseInt(req.body.interval_min, 10) || 30, 1), 1440);
+        const [result] = await pool.execute(
+            `INSERT INTO tokes_timers (channel_id, message, interval_min, created_by) VALUES (?, ?, ?, ?)`,
+            [owned.id, respV.value, interval, req.session.tokesUser.name || 'owner']
+        );
+        res.json({ success: true, id: result.insertId });
+    } catch (error) {
+        logger.error('[Kick Channel] timer create error', { error: error.message });
+        res.status(500).json({ error: 'Failed to create timer' });
+    }
+});
+
+router.put('/kick/api/channel/:channelId/timers/:id', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [[existing]] = await pool.execute(
+            'SELECT id FROM tokes_timers WHERE id = ? AND channel_id = ?', [req.params.id, owned.id]
+        );
+        if (!existing) return res.status(404).json({ error: 'Timer not found' });
+        const respV = validateCommandResponse(req.body.message);
+        if (!respV.valid) return res.status(400).json({ error: respV.error });
+        const interval = Math.min(Math.max(parseInt(req.body.interval_min, 10) || 30, 1), 1440);
+        const enV = validateBoolean(req.body.is_enabled, true);
+        await pool.execute(
+            'UPDATE tokes_timers SET message = ?, interval_min = ?, is_enabled = ? WHERE id = ?',
+            [respV.value, interval, enV.value ? 1 : 0, req.params.id]
+        );
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[Kick Channel] timer update error', { error: error.message });
+        res.status(500).json({ error: 'Failed to update timer' });
+    }
+});
+
+router.delete('/kick/api/channel/:channelId/timers/:id', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [result] = await pool.execute(
+            'DELETE FROM tokes_timers WHERE id = ? AND channel_id = ?', [req.params.id, owned.id]
+        );
+        if (!result.affectedRows) return res.status(404).json({ error: 'Timer not found' });
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[Kick Channel] timer delete error', { error: error.message });
+        res.status(500).json({ error: 'Failed to delete timer' });
+    }
+});
+
 export default router;
