@@ -1,0 +1,115 @@
+<%- include('_head', { pageTitle: 'Features', csrfToken, kickUser: user }) %>
+
+  <div class="pagehead">
+    <div>
+      <h1>✨ What CertiFried can do for your Kick channel</h1>
+      <div class="sub">Protection, moderation, chat engagement and games — all from one dashboard.</div>
+    </div>
+    <nav class="subnav">
+      <a href="/kick">My channels</a>
+      <a href="/kick/features" class="active">Features</a>
+    </nav>
+  </div>
+
+  <% if (!hasChannels) { %>
+    <!-- ── Onboarding: no channels yet ─────────────────────────── -->
+    <div class="card" style="border-color:rgba(83,252,24,.4);background:rgba(83,252,24,.05)">
+      <h2>🚀 Get started in 3 steps</h2>
+      <ol style="margin:0 0 1rem 1.1rem;line-height:1.9;color:var(--ink)">
+        <li>Click <strong>Connect your Kick channel</strong> below and authorize with Kick.</li>
+        <li>Your channel is registered and the defender turns on automatically.</li>
+        <li>Head to <a href="/kick" style="color:var(--kick-dim)">My channels</a> to customize protection, commands and more.</li>
+      </ol>
+      <a href="<%= reauthHref %>"><button>Connect your Kick channel →</button></a>
+    </div>
+  <% } else { %>
+    <div class="card" style="border-color:rgba(83,252,24,.3)">
+      <div class="row">
+        <div><strong style="font-family:'Space Grotesk',sans-serif">You're all set.</strong> <span class="muted">Jump into your dashboard to configure any of the features below.</span></div>
+        <a href="/kick"><button>Open my dashboard →</button></a>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- ── Protection ──────────────────────────────────────────── -->
+  <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.15rem;margin:1.6rem 0 .7rem">🛡 Protection</h2>
+  <div class="statgrid" style="grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))">
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Shared-banlist defender</h2>
+      <p class="muted">Known bad actors are banned across every connected channel automatically. The network grows stronger as more streamers join.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Scam-link protection</h2>
+      <p class="muted">Auto-blocks <strong><%= Number(phishingCount || 0).toLocaleString() %></strong> known phishing/scam domains — delete + warn, then ban on repeat. Threshold &amp; warning are configurable.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Content automod</h2>
+      <p class="muted">Auto-delete messages that break your rules: excessive caps, links, symbol spam, or over a length limit. Mods are exempt.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Sublist &amp; whitelist</h2>
+      <p class="muted">Mass-add raiders during an attack; whitelist trusted users so they're never actioned by false positives.</p>
+    </div>
+  </div>
+
+  <!-- ── Moderation ──────────────────────────────────────────── -->
+  <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.15rem;margin:1.6rem 0 .7rem">⚖ Moderation</h2>
+  <div class="statgrid" style="grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))">
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Live moderation</h2>
+      <p class="muted">Ban, timeout, or unban any user by name straight from your dashboard — no need to be in chat.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Activity log &amp; charts</h2>
+      <p class="muted">See every action the bot takes, with a 14-day activity chart and network-wide stats.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Managers</h2>
+      <p class="muted">Appoint trusted people to help curate the shared banlist and run the defense network.</p>
+    </div>
+  </div>
+
+  <!-- ── Chat engagement ─────────────────────────────────────── -->
+  <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.15rem;margin:1.6rem 0 .7rem">💬 Chat engagement</h2>
+  <div class="statgrid" style="grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))">
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Custom commands</h2>
+      <p class="muted">Create your own <code>!commands</code> with <code>{{username}}</code>, <code>{{lifetime_tokes}}</code> and more template variables.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Auto-responders</h2>
+      <p class="muted">When a chat message matches a keyword (contains / exact / word / starts-with), the bot replies automatically — with a cooldown.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Timers</h2>
+      <p class="muted">Post scheduled messages to chat on an interval — promote your socials, rules, or commands on autopilot.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Per-command control</h2>
+      <p class="muted">Enable/disable any built-in command, set per-command cooldowns, aliases, mod-only, and custom responses.</p>
+    </div>
+  </div>
+
+  <!-- ── Games &amp; community ─────────────────────────────────── -->
+  <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.15rem;margin:1.6rem 0 .7rem">🎮 Games &amp; community</h2>
+  <div class="statgrid" style="grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))">
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Cannabis games &amp; economy</h2>
+      <p class="muted"><code>!lit</code> tokes &amp; XP, <code>!spark</code> daily streaks, <code>!sesh</code> smoke circles, <code>!trivia</code>, leaderboards &amp; levels.</p>
+    </div>
+    <div class="card" style="margin:0">
+      <h2 style="font-size:1rem">Strain library</h2>
+      <p class="muted"><code>!strain</code> lookups and <code>!lineage</code> genetics — an in-chat encyclopedia for your community.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1.6rem;text-align:center">
+    <% if (!hasChannels) { %>
+      <a href="<%= reauthHref %>"><button>Connect your Kick channel →</button></a>
+    <% } else { %>
+      <a href="/kick"><button>Configure everything in your dashboard →</button></a>
+    <% } %>
+    <div class="muted" style="margin-top:.6rem">Questions? <a href="https://certifriedmultitool.com/discord" target="_blank" rel="noopener" style="color:var(--kick-dim)">Join the support server</a> or read the <a href="/docs#kick-defender" style="color:var(--kick-dim)">docs</a>.</div>
+  </div>
+
+<%- include('_foot') %>

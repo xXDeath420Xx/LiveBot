@@ -192,6 +192,28 @@ router.get('/kick/admin', requireKickAuth, async (req, res) => {
 });
 
 // ── Manager console ───────────────────────────────────────────────────────
+// ── Features / what-can-this-bot-do showcase (onboarding) ───────────────────
+router.get('/kick/features', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        // Does this user have any Kick channels yet? Drives onboarding vs. showcase.
+        const [[c]] = await pool.execute(
+            "SELECT COUNT(*) AS n FROM tokes_channels WHERE platform = 'kick' AND owner_id = ?",
+            [userId]
+        );
+        res.render('kick/features', {
+            user: req.session.tokesUser,
+            hasChannels: Number(c.n) > 0,
+            phishingCount: phishingSize(),
+            reauthHref: '/tokes-bot/auth/kick',
+            csrfToken: req.csrfToken ? req.csrfToken() : (res.locals.csrfToken || '')
+        });
+    } catch (error) {
+        logger.error('[KBD Dashboard] features page error', { error: error.message });
+        res.status(500).send('Failed to load features page.');
+    }
+});
+
 router.get('/kick/managers', requireKickAuth, async (req, res) => {
     if (!await isManagerUser(req)) {
         return res.status(403).send('Managers only.');
