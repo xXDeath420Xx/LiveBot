@@ -6,6 +6,7 @@
 import { pool } from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { RPGDiceEngine } from './rpg-dice-engine.js';
+import { resolveEncounter } from './rpg-auto-combat.js';
 
 // Room types and their properties
 const ROOM_TYPES = {
@@ -352,6 +353,242 @@ class RPGDungeonManager {
     }
 
     /**
+     * Mark a dungeon run as failed (e.g. the character was downed in combat).
+     * @param {number} runId - Run ID
+     */
+    static async failRun(runId) {
+        await pool.execute(
+            `UPDATE dnd_dungeon_runs
+             SET status = 'failed', ended_at = NOW()
+             WHERE run_id = ?`,
+            [runId]
+        );
+    }
+
+    /**
+     * Build concrete enemy combat-snapshots for a room.
+     *
+     * Supports BOTH on-disk `enemies` JSON shapes:
+     *   1. inline objects: [{ name, hp, ac, damage:"1d6+2", count, is_boss }]
+     *   2. name strings:   ["Bandit","Wolf"]  -> looked up in dnd_enemies
+     *
+     * Falls back to a level-appropriate seeded enemy from dnd_enemies when the
+     * room has no enemies defined but is a combat/boss room.
+     *
+     * @param {object} room - room with `.encounters` (parsed enemies JSON)
+     * @param {number} partyLevel - character/party level for fallback + scaling
+     * @param {string} difficulty - dungeon difficulty
+     * @returns {Promise<object[]>} array of enemy snapshots:
+     *   { name, hp, maxHp, ac, defense, damage, attackBonus, initiative, xp, gold, isBoss }
+     */
+    static async buildRoomEnemies(room, partyLevel = 1, difficulty = 'normal') {
+        const diffMod = DIFFICULTY_MODIFIERS[difficulty] || DIFFICULTY_MODIFIERS.normal;
+        const raw = room.encounters || [];
+        const snapshots = [];
+
+        // Resolve a damage value (number) from either a numeric or "NdM+K" string.
+        const rollAvgDamage = (dmg) => {
+            if (typeof dmg === 'number') return dmg;
+            if (typeof dmg === 'string') {
+                const r = RPGDiceEngine.roll(dmg);
+                return r.total || 1;
+            }
+            return 1;
+        };
+
+        const isBossRoom = room.room_type === 'boss';
+
+        for (const entry of raw) {
+            if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+                // Inline stat object — may carry a count.
+                const count = Math.max(1, Math.ceil((entry.count || 1) * diffMod.enemyMult));
+                for (let i = 0; i < count; i++) {
+                    const hp = Math.max(1, Math.floor((entry.hp || 20) * diffMod.enemyMult));
+                    snapshots.push({
+                        name: count > 1 ? `${entry.name} #${i + 1}` : entry.name,
+                        hp,
+                        maxHp: hp,
+                        ac: entry.ac || 12,
+                        defense: entry.defense || 0,
+                        damage: Math.max(1, Math.floor(rollAvgDamage(entry.damage) * diffMod.enemyMult)),
+                        attackBonus: entry.attackBonus || Math.max(2, Math.floor(partyLevel / 2) + 2),
+                        initiative: entry.initiative || 10,
+                        xp: Math.floor((entry.xp || (entry.is_boss ? 80 : 30)) * diffMod.xpMult),
+                        gold: Math.floor((entry.gold || (entry.is_boss ? 25 : 8)) * diffMod.goldMult),
+                        isBoss: !!entry.is_boss,
+                    });
+                }
+            } else if (typeof entry === 'string') {
+                // Name string — look up the canonical enemy from dnd_enemies.
+                const [rows] = await pool.execute(
+                    'SELECT * FROM dnd_enemies WHERE enemy_name = ? LIMIT 1',
+                    [entry]
+                );
+                const e = rows[0];
+                if (e) {
+                    const hp = Math.max(1, Math.floor(e.health * diffMod.enemyMult));
+                    snapshots.push({
+                        name: e.enemy_name,
+                        hp,
+                        maxHp: hp,
+                        ac: 10 + (e.defense || 0),
+                        defense: e.defense || 0,
+                        damage: Math.max(1, Math.floor(e.damage * diffMod.enemyMult)),
+                        attackBonus: Math.max(2, (e.level || 1) + 1),
+                        initiative: 8 + (e.level || 1),
+                        xp: Math.floor((e.exp_reward || 25) * diffMod.xpMult),
+                        gold: Math.floor((e.gold_reward || 5) * diffMod.goldMult),
+                        isBoss: isBossRoom,
+                    });
+                } else {
+                    // Unknown name — synthesize a level-appropriate stand-in.
+                    snapshots.push(this._fallbackEnemy(entry, partyLevel, diffMod, isBossRoom));
+                }
+            }
+        }
+
+        // No enemies defined on a combat/boss room — seed a level-appropriate foe.
+        if (snapshots.length === 0 && (room.room_type === 'combat' || room.room_type === 'boss')) {
+            const [rows] = await pool.execute(
+                `SELECT * FROM dnd_enemies
+                 WHERE level <= ?
+                 ORDER BY level DESC, RAND() LIMIT 1`,
+                [Math.max(1, partyLevel)]
+            );
+            const e = rows[0];
+            if (e) {
+                const mult = isBossRoom ? diffMod.enemyMult * 1.5 : diffMod.enemyMult;
+                const hp = Math.max(1, Math.floor(e.health * mult));
+                snapshots.push({
+                    name: isBossRoom ? `${e.enemy_name} (Boss)` : e.enemy_name,
+                    hp,
+                    maxHp: hp,
+                    ac: 10 + (e.defense || 0),
+                    defense: e.defense || 0,
+                    damage: Math.max(1, Math.floor(e.damage * mult)),
+                    attackBonus: Math.max(2, (e.level || 1) + 1),
+                    initiative: 8 + (e.level || 1),
+                    xp: Math.floor((e.exp_reward || 25) * diffMod.xpMult * (isBossRoom ? 2 : 1)),
+                    gold: Math.floor((e.gold_reward || 5) * diffMod.goldMult * (isBossRoom ? 2 : 1)),
+                    isBoss: isBossRoom,
+                });
+            } else {
+                snapshots.push(this._fallbackEnemy('Lurking Horror', partyLevel, diffMod, isBossRoom));
+            }
+        }
+
+        return snapshots;
+    }
+
+    /** Synthesize a level-appropriate enemy snapshot when no DB row exists. */
+    static _fallbackEnemy(name, partyLevel, diffMod, isBoss) {
+        const lvl = Math.max(1, partyLevel);
+        const bossMult = isBoss ? 1.5 : 1;
+        const hp = Math.floor((10 + lvl * 6) * diffMod.enemyMult * bossMult);
+        return {
+            name: isBoss ? `${name} (Boss)` : name,
+            hp,
+            maxHp: hp,
+            ac: 11 + Math.floor(lvl / 2),
+            defense: Math.floor(lvl / 3),
+            damage: Math.max(1, Math.floor((3 + lvl) * diffMod.enemyMult * bossMult)),
+            attackBonus: Math.max(2, lvl + 1),
+            initiative: 8 + lvl,
+            xp: Math.floor((20 + lvl * 10) * diffMod.xpMult * bossMult),
+            gold: Math.floor((5 + lvl * 3) * diffMod.goldMult * bossMult),
+            isBoss,
+        };
+    }
+
+    /**
+     * Resolve a combat/boss room as a REAL auto-fight (reuses the shared
+     * auto-combat resolver, which mirrors the verified PvE combat math).
+     *
+     * On victory: room loot + enemy xp/gold are folded into the run totals and
+     * the run advances (or completes). On the character dropping to 0 HP: the
+     * run is marked `failed` and the character's HP is persisted.
+     *
+     * @param {number} runId - active run id
+     * @param {object} character - full dnd_characters row
+     * @param {object} characterManager - instance for calculateDamage/Defense + reward apply
+     * @returns {Promise<object>} result describing the combat + outcome
+     */
+    static async resolveCombatRoom(runId, character, characterManager) {
+        const { run, room, roomType } = await this.getCurrentRoom(runId);
+        const difficulty = run.difficulty || 'normal';
+        const partyLevel = character.level || 1;
+
+        const enemies = await this.buildRoomEnemies(room, partyLevel, difficulty);
+
+        // Build the player combat snapshot from real character stats + gear.
+        const baseDamage = await characterManager.calculateDamage(character.character_id);
+        const defense = await characterManager.calculateDefense(character.character_id);
+        const dexMod = RPGDiceEngine.getModifier(character.dexterity || 10);
+        const strMod = RPGDiceEngine.getModifier(character.strength || 10);
+        const profBonus = character.proficiency_bonus || 2;
+
+        const player = {
+            name: character.character_name,
+            hp: character.health,
+            maxHp: character.max_health,
+            ac: character.armor_class || (10 + dexMod + defense),
+            defense,
+            damage: Math.max(1, baseDamage),
+            attackBonus: Math.max(strMod, dexMod) + profBonus,
+            initiative: (character.initiative || 0) + dexMod + 10,
+        };
+
+        const outcome = resolveEncounter(player, enemies, {});
+
+        if (outcome.victory) {
+            // Roll room loot (gold + items) on top of the enemy xp/gold.
+            const loot = this.generateLoot(room, difficulty);
+            const xpGained = outcome.xpEarned;
+            const goldGained = outcome.goldEarned + (loot.gold || 0);
+
+            // Persist the character's surviving HP.
+            await pool.execute(
+                'UPDATE dnd_characters SET health = ? WHERE character_id = ?',
+                [Math.max(0, outcome.playerHp), character.character_id]
+            );
+
+            // Advance the run (folds xp/gold into totals; completes on last room).
+            const advance = await this.completeRoom(runId, { xp: xpGained, gold: goldGained });
+
+            return {
+                combat: true,
+                victory: true,
+                roomType,
+                roomName: room.room_name,
+                enemies,
+                outcome,
+                loot,
+                xpGained,
+                goldGained,
+                advance,
+            };
+        }
+
+        // Defeat: character downed. Persist HP at 0, fail the run.
+        await pool.execute(
+            'UPDATE dnd_characters SET health = 0, deaths = COALESCE(deaths, 0) + 1 WHERE character_id = ?',
+            [character.character_id]
+        );
+        await this.failRun(runId);
+
+        return {
+            combat: true,
+            victory: false,
+            roomType,
+            roomName: room.room_name,
+            enemies,
+            outcome,
+            xpGained: 0,
+            goldGained: 0,
+        };
+    }
+
+    /**
      * Generate encounter for a room
      * @param {object} room - Room data
      * @param {number} partyLevel - Party's average level
@@ -432,23 +669,35 @@ class RPGDungeonManager {
             items: []
         };
 
-        // Gold
+        // Gold — supports both {min,max} object and [min,max] array shapes.
         if (lootTable.gold) {
-            const baseGold = Math.floor(
-                Math.random() * (lootTable.gold.max - lootTable.gold.min) + lootTable.gold.min
-            );
+            let gMin, gMax;
+            if (Array.isArray(lootTable.gold)) {
+                [gMin, gMax] = lootTable.gold;
+            } else {
+                gMin = lootTable.gold.min;
+                gMax = lootTable.gold.max;
+            }
+            gMin = Number(gMin) || 0;
+            gMax = Number(gMax) || gMin;
+            const baseGold = Math.floor(Math.random() * Math.max(0, gMax - gMin) + gMin);
             loot.gold = Math.floor(baseGold * diffMod.goldMult);
         }
 
-        // Items
+        // Items — supports both string entries ("Health Potion") and
+        // {name,type,value,dropChance} objects.
         if (lootTable.items && Array.isArray(lootTable.items)) {
             for (const item of lootTable.items) {
-                if (Math.random() * 100 <= (item.dropChance || 10)) {
-                    loot.items.push({
-                        name: item.name,
-                        type: item.type || 'misc',
-                        value: item.value || 0
-                    });
+                if (typeof item === 'string') {
+                    loot.items.push({ name: item, type: 'misc', value: 0 });
+                } else if (item && typeof item === 'object') {
+                    if (Math.random() * 100 <= (item.dropChance || 100)) {
+                        loot.items.push({
+                            name: item.name,
+                            type: item.type || 'misc',
+                            value: item.value || 0
+                        });
+                    }
                 }
             }
         }
