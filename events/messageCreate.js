@@ -58,6 +58,13 @@ const LIVE_PROMOTION_PATTERNS = [
   /\blive\s+at\b/i         // "Live at"
 ];
 
+// A "live" phrase on its own is almost always innocent conversation
+// ("the apartment I live at…", "I'm live and well", "going live with my new haircut").
+// Only treat it as stream self-promotion when it's paired with real broadcast context:
+// a streaming link/platform, a broadcast time, or a "come watch"/"link in bio" CTA.
+// This prevents deleting normal chat (the reported false positive: "I live at" a place).
+const STREAM_PROMO_CONTEXT = /(twitch\.tv|kick\.com|youtu\.?be|youtube\.com|trovo\.live|tiktok\.com\/@|\b[\w-]{2,}\.tv\b|\b\d{1,2}(:\d{2})?\s*(a\.?m\.?|p\.?m\.?|est|pst|cst|gmt|utc)\b|come\s+(watch|hang)|tune\s+in|link\s+in\s+bio|drop(?:ping)?\s+a?\s*follow)/i;
+
 // Channel name keywords that allow self-promotion (case-insensitive check)
 const SELF_PROMO_CHANNEL_KEYWORDS = [
   'live',
@@ -433,7 +440,8 @@ export default {
         // Moderators are allowed to post live promotions
         // Also allowed in designated self-promo channels
         if (!isModerator) {
-          const isLivePromotion = LIVE_PROMOTION_PATTERNS.some(pattern => pattern.test(message.content));
+          const isLivePromotion = LIVE_PROMOTION_PATTERNS.some(pattern => pattern.test(message.content))
+            && STREAM_PROMO_CONTEXT.test(message.content);
 
           if (isLivePromotion) {
             // Check if this is a designated self-promo channel (by name)
