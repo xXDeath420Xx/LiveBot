@@ -9,6 +9,7 @@ import logger from '../../utils/logger.js';
 import { requireKickAuth } from './auth-tokes-bot.js';
 import { resolveOwnedChannel } from '../../services/certifried-bot/defender/owned-channel.js';
 import { invalidateChannelCache } from '../../services/certifried-bot/command-registry.js';
+import { clearAutoResponderCache } from '../../services/certifried-bot/auto-responder.js';
 import { resolveChannel } from '../../services/certifried-bot/defender/channel-tokens.js';
 import { resolveKickUser } from '../../services/certifried-bot/defender/resolve-kick-user.js';
 import { banUser, unbanUser } from '../../services/certifried-bot/defender/kick-moderation.js';
@@ -309,6 +310,102 @@ router.post('/kick/api/channel/:channelId/moderate', requireKickAuth, async (req
     } catch (error) {
         logger.error('[Kick Channel] moderate error', { error: error.message });
         res.status(500).json({ error: 'Moderation action failed' });
+    }
+});
+
+// ── Auto-responders CRUD ────────────────────────────────────────────────────
+const AR_MATCH_TYPES = ['contains', 'exact', 'starts', 'word'];
+
+router.get('/kick/api/channel/:channelId/responders', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [rows] = await pool.execute(
+            `SELECT id, trigger_text, match_type, response, cooldown, is_enabled, use_count
+             FROM tokes_auto_responders WHERE channel_id = ? ORDER BY id DESC`,
+            [owned.id]
+        );
+        res.json({ responders: rows });
+    } catch (error) {
+        logger.error('[Kick Channel] responders list error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load auto-responders' });
+    }
+});
+
+router.post('/kick/api/channel/:channelId/responders', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+
+        const trigger = String(req.body.trigger_text || '').trim().slice(0, 100);
+        if (!trigger) return res.status(400).json({ error: 'trigger_text required' });
+        const matchType = AR_MATCH_TYPES.includes(req.body.match_type) ? req.body.match_type : 'contains';
+        const respV = validateCommandResponse(req.body.response);
+        if (!respV.valid) return res.status(400).json({ error: respV.error });
+        const cdV = validateCooldown(req.body.cooldown);
+        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
+
+        const [result] = await pool.execute(
+            `INSERT INTO tokes_auto_responders (channel_id, trigger_text, match_type, response, cooldown, created_by)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [owned.id, trigger, matchType, respV.value, cdV.value, req.session.tokesUser.name || 'owner']
+        );
+        clearAutoResponderCache(owned.id);
+        res.json({ success: true, id: result.insertId });
+    } catch (error) {
+        logger.error('[Kick Channel] responder create error', { error: error.message });
+        res.status(500).json({ error: 'Failed to create auto-responder' });
+    }
+});
+
+router.put('/kick/api/channel/:channelId/responders/:id', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [[existing]] = await pool.execute(
+            'SELECT id FROM tokes_auto_responders WHERE id = ? AND channel_id = ?', [req.params.id, owned.id]
+        );
+        if (!existing) return res.status(404).json({ error: 'Responder not found' });
+
+        const trigger = String(req.body.trigger_text || '').trim().slice(0, 100);
+        if (!trigger) return res.status(400).json({ error: 'trigger_text required' });
+        const matchType = AR_MATCH_TYPES.includes(req.body.match_type) ? req.body.match_type : 'contains';
+        const respV = validateCommandResponse(req.body.response);
+        if (!respV.valid) return res.status(400).json({ error: respV.error });
+        const cdV = validateCooldown(req.body.cooldown);
+        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
+        const enV = validateBoolean(req.body.is_enabled, true);
+
+        await pool.execute(
+            `UPDATE tokes_auto_responders SET trigger_text = ?, match_type = ?, response = ?, cooldown = ?, is_enabled = ?
+             WHERE id = ?`,
+            [trigger, matchType, respV.value, cdV.value, enV.value ? 1 : 0, req.params.id]
+        );
+        clearAutoResponderCache(owned.id);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[Kick Channel] responder update error', { error: error.message });
+        res.status(500).json({ error: 'Failed to update auto-responder' });
+    }
+});
+
+router.delete('/kick/api/channel/:channelId/responders/:id', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [result] = await pool.execute(
+            'DELETE FROM tokes_auto_responders WHERE id = ? AND channel_id = ?', [req.params.id, owned.id]
+        );
+        if (!result.affectedRows) return res.status(404).json({ error: 'Responder not found' });
+        clearAutoResponderCache(owned.id);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[Kick Channel] responder delete error', { error: error.message });
+        res.status(500).json({ error: 'Failed to delete auto-responder' });
     }
 });
 
