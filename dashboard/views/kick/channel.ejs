@@ -40,6 +40,23 @@
     <div id="mod-result" class="muted" style="margin-top:.7rem"></div>
   </div>
 
+  <!-- ── Giveaway ────────────────────────────────────────────── -->
+  <div class="card">
+    <h2>🎉 Giveaway</h2>
+    <div id="gw-state">Loading…</div>
+    <div id="gw-form" style="display:none">
+      <div class="srow">
+        <label>Title
+          <input id="gw-title" placeholder="prize / title" />
+        </label>
+        <label>Keyword
+          <input id="gw-keyword" value="enter" style="width:8rem" />
+        </label>
+        <button id="gw-start">Start giveaway</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Channel settings (preserved) ────────────────────────── -->
   <div class="card">
     <h2>Channel settings</h2>
@@ -93,6 +110,18 @@
     <button id="am-save" style="margin-top:1.25rem">Save automod</button>
   </div>
 
+  <!-- ── Copy configuration ──────────────────────────────────── -->
+  <div class="card" id="cp-card">
+    <h2>Copy configuration</h2>
+    <div class="muted" style="margin-bottom:.6rem">Copies commands, responders, timers, automod &amp; settings FROM another of your channels — overwriting this channel's current setup.</div>
+    <div class="srow">
+      <label>Copy from
+        <select id="cp-from"></select>
+      </label>
+      <button id="cp-go" class="danger">Copy here</button>
+    </div>
+  </div>
+
   <!-- ── Activity — last 14 days ─────────────────────────────── -->
   <div class="card">
     <h2>Activity — last 14 days</h2>
@@ -103,6 +132,8 @@
       <span><span style="display:inline-block;width:.7rem;height:.7rem;border-radius:2px;background:#7c84ff;vertical-align:middle;margin-right:.35rem"></span>Removed</span>
       <span><span style="display:inline-block;width:.7rem;height:.7rem;border-radius:2px;background:rgba(255,255,255,.25);vertical-align:middle;margin-right:.35rem"></span>Detected</span>
     </div>
+    <div id="chat-trend" class="muted" style="margin-top:.9rem">Loading chat volume…</div>
+    <div class="muted" style="margin-top:.35rem;font-size:.82rem">Messages per day</div>
   </div>
 
   <!-- ── Recent activity ─────────────────────────────────────── -->
@@ -278,7 +309,140 @@
       } catch (err) { host.textContent = 'Failed to load chart.'; }
     }
 
+    // ── Giveaway ──
+    let gwTimer = null;
+    async function loadGiveaway() {
+      const state = document.getElementById('gw-state');
+      const form = document.getElementById('gw-form');
+      if (gwTimer) { clearInterval(gwTimer); gwTimer = null; }
+      try {
+        const res = await fetch('/kick/api/channel/' + CHANNEL + '/giveaway');
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Failed');
+        const g = j.giveaway;
+        if (!g || g.status !== 'active') {
+          state.innerHTML = (g && g.status === 'drawn')
+            ? '<div class="muted" style="margin-bottom:.6rem">Last winner: @' + esc(g.winner_username) + ' (' + esc(g.title) + ')</div>'
+            : '';
+          form.style.display = '';
+          return;
+        }
+        form.style.display = 'none';
+        state.innerHTML =
+          '<div style="margin-bottom:.35rem"><strong>' + esc(g.title) + '</strong></div>' +
+          '<div class="muted" style="margin-bottom:.7rem">type !' + esc(g.keyword) + ' to enter — <span id="gw-entries">' + (Number(g.entries) || 0) + '</span> entries</div>' +
+          '<div class="srow">' +
+          '<button id="gw-draw">Draw winner 🎲</button>' +
+          '<button id="gw-close" class="ghost">Close without drawing</button>' +
+          '</div>';
+        document.getElementById('gw-draw').addEventListener('click', async (e) => {
+          const btn = e.currentTarget; btn.disabled = true;
+          document.getElementById('gw-close').disabled = true;
+          try {
+            const r = await KickDash.post('/kick/api/channel/' + CHANNEL + '/giveaway/' + g.id + '/draw', {});
+            alert('Winner: @' + (r && r.winner ? r.winner : 'unknown'));
+          } catch (err) { alert(err.message || 'Draw failed.'); }
+          loadGiveaway();
+        });
+        document.getElementById('gw-close').addEventListener('click', async (e) => {
+          if (!confirm('Close this giveaway without drawing a winner?')) return;
+          const btn = e.currentTarget; btn.disabled = true;
+          document.getElementById('gw-draw').disabled = true;
+          try {
+            await KickDash.post('/kick/api/channel/' + CHANNEL + '/giveaway/' + g.id + '/close', {});
+          } catch (err) { alert(err.message || 'Close failed.'); }
+          loadGiveaway();
+        });
+        gwTimer = setInterval(async () => {
+          try {
+            const r2 = await fetch('/kick/api/channel/' + CHANNEL + '/giveaway');
+            const j2 = await r2.json();
+            if (r2.ok && j2.giveaway && j2.giveaway.status === 'active') {
+              const el = document.getElementById('gw-entries');
+              if (el) el.textContent = Number(j2.giveaway.entries) || 0;
+            } else { loadGiveaway(); }
+          } catch (_) {}
+        }, 15000);
+      } catch (err) { state.textContent = err.message || 'Failed to load giveaway.'; }
+    }
+
+    document.getElementById('gw-start').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const title = document.getElementById('gw-title').value.trim();
+      const keyword = document.getElementById('gw-keyword').value.trim() || 'enter';
+      if (!title) { alert('Enter a prize / title first.'); return; }
+      btn.disabled = true;
+      try {
+        await KickDash.post('/kick/api/channel/' + CHANNEL + '/giveaway', { title: title, keyword: keyword });
+        document.getElementById('gw-title').value = '';
+        loadGiveaway();
+      } catch (err) { alert(err.message || 'Failed to start giveaway.'); }
+      finally { btn.disabled = false; }
+    });
+
+    // ── 14-day chat-volume chart (single-metric SVG bars) ──
+    async function loadChatTrend() {
+      const host = document.getElementById('chat-trend');
+      try {
+        const res = await fetch('/kick/api/channel/' + CHANNEL + '/chat-trend?days=14');
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Failed');
+        const series = (j && j.series) || [];
+        const max = Math.max(0, ...series.map(d => Number(d.messages) || 0));
+        if (!series.length || max === 0) { host.textContent = 'No chat recorded yet.'; return; }
+        const W = 560, H = 80, padL = 8, padR = 8, padT = 6, padB = 6;
+        const plotW = W - padL - padR, plotH = H - padT - padB;
+        const slot = plotW / series.length;
+        const barW = Math.min(14, slot * 0.55);
+        const bars = series.map((d, i) => {
+          const v = Number(d.messages) || 0;
+          if (v <= 0) return '';
+          const h = (v / max) * plotH;
+          const x = padL + i * slot + (slot - barW) / 2;
+          const y = padT + plotH - h;
+          return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="var(--kick-dim)" fill-opacity=".55" rx="1.5"/>';
+        }).join('');
+        host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="14-day chat volume chart">' + bars + '</svg>';
+      } catch (err) { host.textContent = 'Failed to load chat volume.'; }
+    }
+
+    // ── Copy configuration ──
+    document.getElementById('cp-go').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const from = document.getElementById('cp-from').value;
+      if (!from) { alert('Pick a source channel first.'); return; }
+      if (!confirm("This OVERWRITES this channel's commands, responders, timers and settings. Continue?")) return;
+      btn.disabled = true;
+      try {
+        await KickDash.post('/kick/api/channel/' + CHANNEL + '/copy-config', { from: from });
+        alert('Copied ✓');
+        location.reload();
+      } catch (err) { alert(err.message || 'Copy failed.'); btn.disabled = false; }
+    });
+
+    async function loadCopySources() {
+      const card = document.getElementById('cp-card');
+      const sel = document.getElementById('cp-from');
+      try {
+        const res = await fetch('/kick/api/my-channels');
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Failed');
+        const others = ((j && j.channels) || []).filter(c => String(c.channel_id) !== String(CHANNEL));
+        if (!others.length) {
+          card.innerHTML = '<h2>Copy configuration</h2><div class="muted">You only have one channel.</div>';
+          return;
+        }
+        sel.innerHTML = others.map(c =>
+          '<option value="' + esc(c.channel_id) + '">' + esc(c.channel_name) + '</option>').join('');
+      } catch (err) {
+        card.innerHTML = '<h2>Copy configuration</h2><div class="muted">' + esc(err.message || 'Failed to load your channels.') + '</div>';
+      }
+    }
+
     loadFeed();
     loadChTrend();
+    loadGiveaway();
+    loadChatTrend();
+    loadCopySources();
   </script>`; %>
 <%- include('_foot', { extraJs: pageJs }) %>
