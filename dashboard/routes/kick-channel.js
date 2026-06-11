@@ -11,6 +11,7 @@ import { resolveOwnedChannel } from '../../services/certifried-bot/defender/owne
 import { invalidateChannelCache } from '../../services/certifried-bot/command-registry.js';
 import { clearAutoResponderCache } from '../../services/certifried-bot/auto-responder.js';
 import { clearKickAutomodCache } from '../../services/certifried-bot/kick-automod.js';
+import { dailyActivity } from '../../services/certifried-bot/defender/enforcement-log.js';
 import { resolveChannel } from '../../services/certifried-bot/defender/channel-tokens.js';
 import { resolveKickUser } from '../../services/certifried-bot/defender/resolve-kick-user.js';
 import { banUser, unbanUser } from '../../services/certifried-bot/defender/kick-moderation.js';
@@ -410,6 +411,21 @@ router.delete('/kick/api/channel/:channelId/responders/:id', requireKickAuth, as
     } catch (error) {
         logger.error('[Kick Channel] responder delete error', { error: error.message });
         res.status(500).json({ error: 'Failed to delete auto-responder' });
+    }
+});
+
+// ── Per-channel activity trend (time-series) ────────────────────────────────
+router.get('/kick/api/channel/:channelId/trend', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        // Scope by the Kick channel_id (the URL param), which is what the log stores.
+        const series = await dailyActivity({ channelId: String(req.params.channelId), days: req.query.days || 14 });
+        res.json({ series });
+    } catch (error) {
+        logger.error('[Kick Channel] trend error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load trend' });
     }
 });
 

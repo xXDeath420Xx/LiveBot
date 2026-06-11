@@ -11,7 +11,7 @@ import logger from '../../utils/logger.js';
 import { requireTokesAuth, requireKickAuth } from './auth-tokes-bot.js';
 import * as banlist from '../../services/certifried-bot/defender/banlist.js';
 import * as managers from '../../services/certifried-bot/defender/managers.js';
-import { channelStats, listEvents, listAllEvents, networkStats } from '../../services/certifried-bot/defender/enforcement-log.js';
+import { channelStats, listEvents, listAllEvents, networkStats, dailyActivity } from '../../services/certifried-bot/defender/enforcement-log.js';
 import { size as phishingSize, isDomainBlocked } from '../../services/certifried-bot/defender/phishing-domains.js';
 import { resolveOwnedChannel } from '../../services/certifried-bot/defender/owned-channel.js';
 
@@ -455,6 +455,17 @@ router.get('/kick/api/network-stats', requireKickAuth, async (req, res) => {
     } catch (error) {
         logger.error('[KBD Dashboard] network-stats error', { error: error.message });
         res.status(500).json({ error: 'Failed to load network stats' });
+    }
+});
+
+// ── Network activity time-series (any logged-in Kick user) ──────────────────
+router.get('/kick/api/network-trend', requireKickAuth, async (req, res) => {
+    try {
+        const series = await dailyActivity({ days: req.query.days || 14 });
+        res.json({ series });
+    } catch (error) {
+        logger.error('[KBD Dashboard] network-trend error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load trend' });
     }
 });
 
