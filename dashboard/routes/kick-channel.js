@@ -10,6 +10,7 @@ import { requireKickAuth } from './auth-tokes-bot.js';
 import { resolveOwnedChannel } from '../../services/certifried-bot/defender/owned-channel.js';
 import { invalidateChannelCache } from '../../services/certifried-bot/command-registry.js';
 import { clearAutoResponderCache } from '../../services/certifried-bot/auto-responder.js';
+import { clearKickAutomodCache } from '../../services/certifried-bot/kick-automod.js';
 import { resolveChannel } from '../../services/certifried-bot/defender/channel-tokens.js';
 import { resolveKickUser } from '../../services/certifried-bot/defender/resolve-kick-user.js';
 import { banUser, unbanUser } from '../../services/certifried-bot/defender/kick-moderation.js';
@@ -66,6 +67,9 @@ router.patch('/kick/api/channel/:channelId', requireKickAuth, async (req, res) =
             [prefix, cg, cu, feats, owned.id]
         );
         invalidateChannelCache(owned.id);
+        // features_enabled holds the automod sub-config too — bust its cache so
+        // the live bot picks up filter changes on the next message.
+        if (features_enabled != null) clearKickAutomodCache(owned.id);
         res.json({ success: true });
     } catch (error) {
         logger.error('[Kick Channel] settings save error', { error: error.message });
