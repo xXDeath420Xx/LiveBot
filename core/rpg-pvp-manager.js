@@ -6,6 +6,7 @@
 import { pool } from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { RPGDiceEngine } from './rpg-dice-engine.js';
+import { resolveDuel as autoResolveDuel } from './rpg-auto-combat.js';
 
 // ELO constants
 const ELO_K_FACTOR = 32; // Standard K-factor
@@ -232,6 +233,90 @@ class RPGPvPManager {
                 winner: winnerEloChange,
                 loser: loserEloChange
             }
+        };
+    }
+
+    /**
+     * Build a combatant snapshot for an auto-duel from a character row.
+     * Reuses the same stat primitives the PvE combat engine uses
+     * (calculateDamage/calculateDefense) so PvP stays consistent.
+     * @private
+     */
+    static async _buildCombatant(characterId, characterManager) {
+        const [rows] = await pool.execute(
+            'SELECT * FROM dnd_characters WHERE character_id = ?',
+            [characterId]
+        );
+        const c = rows[0];
+        if (!c) throw new Error('Character not found for duel');
+
+        const baseDamage = await characterManager.calculateDamage(characterId);
+        const defense = await characterManager.calculateDefense(characterId);
+        const dexMod = RPGDiceEngine.getModifier(c.dexterity || 10);
+        const strMod = RPGDiceEngine.getModifier(c.strength || 10);
+        const profBonus = c.proficiency_bonus || 2;
+
+        return {
+            characterId,
+            name: c.character_name,
+            hp: c.max_health,       // duels start at FULL HP
+            maxHp: c.max_health,
+            ac: c.armor_class || (10 + dexMod + defense),
+            defense,
+            damage: Math.max(1, baseDamage),
+            attackBonus: Math.max(strMod, dexMod) + profBonus,
+            // Initiative: DEX-driven, level as a tiebreaker nudge.
+            initiative: dexMod * 2 + (c.level || 1),
+        };
+    }
+
+    /**
+     * Resolve an active match as a deterministic-enough multi-round auto-duel,
+     * then apply the SAME ELO + wager logic via endMatch().
+     *
+     * Single-interaction auto-resolution (NOT live two-player turns).
+     *
+     * @param {number} matchId - active match id
+     * @param {object} characterManager - instance for stat calc
+     * @returns {Promise<object>} {
+     *   ...endMatch result,
+     *   duel: { winner:'a'|'b'|null, rounds:[...], aHp, bHp, totalRounds },
+     *   challenger: snapshot, defender: snapshot, winnerName, loserName
+     * }
+     */
+    static async resolveMatch(matchId, characterManager) {
+        const match = await this.getMatch(matchId);
+        if (!match || match.status !== 'active') {
+            throw new Error('Match not found or not active');
+        }
+
+        const challenger = await this._buildCombatant(match.challenger_id, characterManager);
+        const defender = await this._buildCombatant(match.defender_id, characterManager);
+
+        // side 'a' = challenger, side 'b' = defender
+        const duel = autoResolveDuel(challenger, defender, { maxRounds: 30 });
+
+        // Decide winner. On a true draw (round-limit + equal HP) the challenger
+        // (initiator) loses the toss to keep results decisive for ELO/wager.
+        let winnerCharId;
+        if (duel.winner === 'a') winnerCharId = match.challenger_id;
+        else if (duel.winner === 'b') winnerCharId = match.defender_id;
+        else winnerCharId = match.defender_id; // draw -> defender holds
+
+        const result = await this.endMatch(matchId, winnerCharId, 'ko');
+
+        const winnerName = winnerCharId === match.challenger_id
+            ? match.challenger_name : match.defender_name;
+        const loserName = winnerCharId === match.challenger_id
+            ? match.defender_name : match.challenger_name;
+
+        return {
+            ...result,
+            duel,
+            challenger,
+            defender,
+            winnerName,
+            loserName,
         };
     }
 

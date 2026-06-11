@@ -1835,23 +1835,11 @@ export async function handlePvP(interaction, subcommand, characterManager) {
             return;
         }
 
-        // Resolve by comparing a simple power roll for each side (level + d20)
-        const challRoll = RPGDiceEngine.roll('1d20').total + (match.challenger_level || 1);
-        const defRoll = RPGDiceEngine.roll('1d20').total + (match.defender_level || 1);
-        const winnerCharId = challRoll >= defRoll ? match.challenger_id : match.defender_id;
-        const winnerName = challRoll >= defRoll ? match.challenger_name : match.defender_name;
-
         try {
-            const result = await RPGPvPManager.endMatch(matchId, winnerCharId, 'ko');
-            await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor('#F1C40F').setTitle('⚔️ Duel Resolved!')
-                    .setDescription(`**${winnerName}** wins the duel!`)
-                    .addFields(
-                        { name: `${match.challenger_name}`, value: `Power: ${challRoll}`, inline: true },
-                        { name: `${match.defender_name}`, value: `Power: ${defRoll}`, inline: true },
-                        { name: 'ELO Change', value: `Winner ${result.elo_changes.winner >= 0 ? '+' : ''}${result.elo_changes.winner} | Loser ${result.elo_changes.loser}`, inline: false }
-                    )]
-            });
+            // Multi-round auto-duel: both start at full HP, alternate real
+            // attack/damage vs AC/defense, initiative by DEX/level.
+            const result = await RPGPvPManager.resolveMatch(matchId, characterManager);
+            await interaction.editReply({ embeds: [buildDuelLogEmbed(result, match)] });
         } catch (err) {
             await interaction.editReply({ content: err.message });
         }
@@ -2103,7 +2091,47 @@ export async function handleDungeon(interaction, subcommand, characterManager) {
             return;
         }
 
-        // Award a simple per-room reward (scaled by character level) and advance
+        // Inspect the current room: combat/boss rooms now resolve a REAL fight.
+        const current = await RPGDungeonManager.getCurrentRoom(run.run_id);
+        const roomType = current.room.room_type;
+
+        if (roomType === 'combat' || roomType === 'boss') {
+            const result = await RPGDungeonManager.resolveCombatRoom(run.run_id, character, characterManager);
+
+            if (!result.victory) {
+                // Character was downed — run failed.
+                const embed = buildCombatLogEmbed(result, character, /*defeat*/ true);
+                await interaction.editReply({ embeds: [embed] });
+                return;
+            }
+
+            // Victory: the run was advanced/completed inside resolveCombatRoom.
+            const adv = result.advance;
+            if (adv.completed) {
+                await characterManager.addExperience(cid, adv.total_xp);
+                await characterManager.addGold(cid, adv.total_gold);
+                const embed = buildCombatLogEmbed(result, character, false);
+                embed.addFields(
+                    { name: '🏆 Dungeon Cleared!', value: `**${adv.dungeon_name}** conquered on ${adv.difficulty}!`, inline: false },
+                    { name: 'Total XP', value: `✨ ${adv.total_xp}`, inline: true },
+                    { name: 'Total Gold', value: `💰 ${adv.total_gold}`, inline: true },
+                    { name: 'Rooms Cleared', value: `${adv.rooms_cleared}`, inline: true }
+                );
+                await interaction.editReply({ embeds: [embed] });
+            } else {
+                const embed = buildCombatLogEmbed(result, character, false);
+                embed.addFields({
+                    name: '➡️ Next Room',
+                    value: `${adv.roomType.icon} ${adv.room.room_name} (Room ${adv.room.room_number})`,
+                    inline: false
+                });
+                embed.setFooter({ text: 'Advance with /rpg dungeon advance' });
+                await interaction.editReply({ embeds: [embed] });
+            }
+            return;
+        }
+
+        // Non-combat rooms keep their simple flat per-room reward behaviour.
         const roomReward = { xp: 25 + character.level * 5, gold: 10 + character.level * 2 };
         const next = await RPGDungeonManager.completeRoom(run.run_id, roomReward);
 
@@ -2135,6 +2163,134 @@ export async function handleDungeon(interaction, subcommand, characterManager) {
         await RPGDungeonManager.abandonRun(run.run_id);
         await interaction.editReply({ content: 'You left the dungeon. Progress abandoned.' });
     }
+}
+
+/**
+ * Build a combat-log embed for a resolved dungeon combat/boss room.
+ * Truncates a long round log to stay within Discord limits (field value
+ * <= 1024, total <= 6000). The per-enemy log lives in the description.
+ *
+ * @param {object} result - resolveCombatRoom() result
+ * @param {object} character - the character row
+ * @param {boolean} defeat - whether the character was downed
+ */
+function buildCombatLogEmbed(result, character, defeat) {
+    const { roomName, enemies, outcome } = result;
+    const embed = new EmbedBuilder()
+        .setColor(defeat ? '#C0392B' : '#27AE60')
+        .setTitle(defeat ? `💀 Defeated in ${roomName}` : `⚔️ Cleared ${roomName}`);
+
+    const enemyNames = enemies.map(e => e.name).join(', ');
+    const headerLines = [
+        `**${character.character_name}** vs **${enemyNames || 'the room'}**`,
+        ''
+    ];
+
+    // Render the round-by-round log, truncating from the middle if too long.
+    const lines = [];
+    for (const segment of outcome.log) {
+        lines.push(`__${segment.enemy}__`);
+        for (const r of segment.rounds) {
+            if (!r.hit) {
+                lines.push(`R${r.round}: ${r.attacker} → ${r.defender} **MISS** (roll ${r.roll})`);
+            } else {
+                lines.push(`R${r.round}: ${r.attacker} → ${r.defender} ${r.crit ? '💥CRIT ' : ''}**${r.damage}** dmg (${r.defenderHp} HP left)`);
+            }
+        }
+        lines.push(segment.defeated
+            ? `✅ ${segment.enemy} defeated (you: ${segment.playerHp} HP)`
+            : `❌ You fell to ${segment.enemy}`);
+        lines.push('');
+    }
+
+    // Keep description well under the 4096 cap (and total under 6000).
+    const MAX_DESC = 3500;
+    let body = lines.join('\n');
+    if ((headerLines.join('\n') + body).length > MAX_DESC) {
+        // Truncate from the middle, keep the start + the decisive final rounds.
+        const keepHead = Math.floor(lines.length * 0.4);
+        const keepTail = Math.floor(lines.length * 0.4);
+        const truncated = [
+            ...lines.slice(0, keepHead),
+            `… (${lines.length - keepHead - keepTail} log lines truncated) …`,
+            ...lines.slice(lines.length - keepTail)
+        ];
+        body = truncated.join('\n');
+        if ((headerLines.join('\n') + body).length > MAX_DESC) {
+            body = body.slice(0, MAX_DESC) + '\n… (truncated)';
+        }
+    }
+
+    embed.setDescription(headerLines.join('\n') + body);
+
+    embed.addFields(
+        { name: 'Result', value: defeat ? '💀 Run failed' : '🏆 Victory', inline: true },
+        { name: 'Your HP', value: `❤️ ${Math.max(0, outcome.playerHp)}/${character.max_health}`, inline: true },
+        { name: 'Foes Down', value: `${outcome.enemiesDefeated}/${enemies.length}`, inline: true }
+    );
+
+    if (!defeat) {
+        const lootItems = (result.loot?.items || []).map(i => i.name).filter(Boolean);
+        embed.addFields(
+            { name: 'XP Gained', value: `✨ ${result.xpGained}`, inline: true },
+            { name: 'Gold Gained', value: `💰 ${result.goldGained}`, inline: true },
+            { name: 'Loot', value: lootItems.length ? lootItems.join(', ') : '—', inline: true }
+        );
+    } else {
+        embed.addFields({ name: 'Tip', value: 'Rest and re-enter with `/rpg dungeon enter`.', inline: false });
+    }
+
+    return embed;
+}
+
+/**
+ * Build a round-by-round combat-log embed for a resolved PvP auto-duel.
+ * Truncates a long log to stay within Discord limits.
+ *
+ * @param {object} result - RPGPvPManager.resolveMatch() result
+ * @param {object} match - the match row (for names)
+ */
+function buildDuelLogEmbed(result, match) {
+    const { duel, challenger, defender, winnerName } = result;
+    const embed = new EmbedBuilder()
+        .setColor('#F1C40F')
+        .setTitle('⚔️ Duel Resolved!')
+        .setDescription(`**${winnerName}** wins the duel!`);
+
+    const lines = duel.rounds.map(r => {
+        if (!r.hit) {
+            return `R${r.round}: ${r.attacker} → ${r.defender} **MISS** (roll ${r.roll})`;
+        }
+        return `R${r.round}: ${r.attacker} → ${r.defender} ${r.crit ? '💥CRIT ' : ''}**${r.damage}** (${r.defenderHp} HP left)`;
+    });
+
+    // Combat log lives in a field (cap 1024).
+    let log = lines.join('\n');
+    if (log.length > 1000) {
+        const keepHead = Math.floor(lines.length * 0.4);
+        const keepTail = Math.floor(lines.length * 0.4);
+        const truncated = [
+            ...lines.slice(0, keepHead),
+            `… (${lines.length - keepHead - keepTail} rounds truncated) …`,
+            ...lines.slice(lines.length - keepTail)
+        ];
+        log = truncated.join('\n');
+        if (log.length > 1000) log = log.slice(0, 1000) + '\n…';
+    }
+
+    embed.addFields(
+        { name: 'Combat Log', value: log || 'No blows landed.', inline: false },
+        { name: match.challenger_name, value: `❤️ ${Math.max(0, duel.aHp)}/${challenger.maxHp} HP`, inline: true },
+        { name: match.defender_name, value: `❤️ ${Math.max(0, duel.bHp)}/${defender.maxHp} HP`, inline: true },
+        { name: 'Rounds', value: `${duel.totalRounds}`, inline: true },
+        {
+            name: 'ELO Change',
+            value: `Winner ${result.elo_changes.winner >= 0 ? '+' : ''}${result.elo_changes.winner} | Loser ${result.elo_changes.loser}`,
+            inline: false
+        }
+    );
+
+    return embed;
 }
 
 // Helper: find an active solo dungeon run for a character (character-scoped runs)
