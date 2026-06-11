@@ -8,6 +8,9 @@ import pool from '../../utils/db.js';
 import { getCommand, incrementCustomCommandUse } from './command-registry.js';
 import { processTemplate } from './template-processor.js';
 import { runAutoResponders } from './auto-responder.js';
+import { runKickAutomod } from './kick-automod.js';
+import { resolveChannel } from './defender/channel-tokens.js';
+import { deleteMessage as kickDeleteMessage } from './defender/kick-moderation.js';
 import { enforcer } from './defender/index.js';
 import { resolveDefenderCommand, meetsMinRole, resolvePermissionContext } from './defender/commands/index.js';
 
@@ -179,6 +182,21 @@ export async function handleMessage(context) {
     const channel = await getChannelConfig(platform, channelId);
     if (!channel) {
         return; // Channel not registered or disabled
+    }
+
+    // Content automod (Kick): caps/links/symbols/length filters from the
+    // channel's features_enabled.automod settings. Runs on EVERY message (incl.
+    // commands) so a spammy command line is also caught. Deletes via the owner's
+    // token. No-op unless the channel has automod rules enabled.
+    if (platform === 'kick') {
+        const actioned = await runKickAutomod({
+            channelPk: channel.id, messageId, message, username, isMod, isBroadcaster, reply,
+            deleteMessage: async (msgId) => {
+                const ch = await resolveChannel(channelId);
+                if (ch?.token) await kickDeleteMessage(msgId, ch.token);
+            }
+        });
+        if (actioned) return; // message removed; stop processing
     }
 
     const prefix = channel.command_prefix || '!';
