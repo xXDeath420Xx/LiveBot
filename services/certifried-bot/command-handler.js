@@ -187,8 +187,19 @@ export async function handleMessage(context) {
         return; // Channel not registered or disabled
     }
 
-    // Engagement analytics: in-memory daily message counter (flushed every 60s).
-    countMessage(channel.id);
+    // Parse the channel's feature flags ONCE — every opt-in chat feature below
+    // gates on this. Absent/unparseable = all extras off (everything is opt-in).
+    let channelFeats = null;
+    try {
+        const featsRaw = channel.features_enabled;
+        channelFeats = featsRaw ? (typeof featsRaw === 'string' ? JSON.parse(featsRaw) : featsRaw) : null;
+    } catch (_) { /* malformed JSON = features off */ }
+
+    // Engagement analytics: OPT-IN (features_enabled.analytics === true).
+    // In-memory daily message counter, flushed every 60s. Off by default.
+    if (channelFeats?.analytics === true) {
+        countMessage(channel.id);
+    }
 
     // Content automod (Kick): caps/links/symbols/length filters from the
     // channel's features_enabled.automod settings. Runs on EVERY message (incl.
@@ -209,9 +220,7 @@ export async function handleMessage(context) {
     // Fires once per user per channel (backed by tokes_channel_stats), runs for
     // commands too — a first message that's "!lit" still gets the greeting.
     try {
-        const featsRaw = channel.features_enabled;
-        const feats = featsRaw ? (typeof featsRaw === 'string' ? JSON.parse(featsRaw) : featsRaw) : null;
-        const welcome = feats?.welcome_message;
+        const welcome = channelFeats?.welcome_message;
         if (welcome && typeof reply === 'function' && !isBroadcaster) {
             if (await checkFirstChatter(channel.id, userId, username)) {
                 reply(processTemplate(String(welcome).slice(0, 500), { username, channel_name: channelName }));
