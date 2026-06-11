@@ -2131,8 +2131,10 @@ export async function handleDungeon(interaction, subcommand, characterManager) {
             return;
         }
 
-        // Non-combat rooms keep their simple flat per-room reward behaviour.
-        const roomReward = { xp: 25 + character.level * 5, gold: 10 + character.level * 2 };
+        // Non-combat rooms: flat per-room reward + grant any room loot (e.g. treasure rooms).
+        const roomLoot = RPGDungeonManager.generateLoot(current.room, run.difficulty || 'normal');
+        const lootGrant = await RPGDungeonManager.grantLoot(cid, roomLoot, characterManager);
+        const roomReward = { xp: 25 + character.level * 5, gold: 10 + character.level * 2 + (roomLoot.gold || 0) };
         const next = await RPGDungeonManager.completeRoom(run.run_id, roomReward);
 
         if (next.completed) {
@@ -2144,11 +2146,16 @@ export async function handleDungeon(interaction, subcommand, characterManager) {
                     .addFields(
                         { name: 'Total XP', value: `✨ ${next.total_xp}`, inline: true },
                         { name: 'Total Gold', value: `💰 ${next.total_gold}`, inline: true },
-                        { name: 'Rooms Cleared', value: `${next.rooms_cleared}`, inline: true }
+                        { name: 'Rooms Cleared', value: `${next.rooms_cleared}`, inline: true },
+                        { name: lootFieldName(lootGrant), value: lootFieldValue(lootGrant), inline: false }
                     )]
             });
         } else {
-            await interaction.editReply({ embeds: [roomEmbed(next, `➡️ ${next.roomType.icon} ${next.room.room_name}`)] });
+            const embed = roomEmbed(next, `➡️ ${next.roomType.icon} ${next.room.room_name}`);
+            if (lootGrant.granted.length || lootGrant.unresolved.length) {
+                embed.addFields({ name: lootFieldName(lootGrant), value: lootFieldValue(lootGrant), inline: false });
+            }
+            await interaction.editReply({ embeds: [embed] });
         }
     }
 
@@ -2174,6 +2181,19 @@ export async function handleDungeon(interaction, subcommand, characterManager) {
  * @param {object} character - the character row
  * @param {boolean} defeat - whether the character was downed
  */
+/** Format a lootGrant ({granted,unresolved}) into an embed field name. */
+function lootFieldName(grant) {
+    return (grant?.granted?.length) ? '🎁 Loot (added to bag)' : 'Loot';
+}
+/** Format a lootGrant into an embed field value (granted items + any unresolved refs). */
+function lootFieldValue(grant) {
+    const g = grant || { granted: [], unresolved: [] };
+    const bits = [];
+    if (g.granted?.length) bits.push(g.granted.join(', '));
+    if (g.unresolved?.length) bits.push(`${g.unresolved.join(', ')} (not in catalog)`);
+    return bits.join(' · ').slice(0, 1024) || '—';
+}
+
 function buildCombatLogEmbed(result, character, defeat) {
     const { roomName, enemies, outcome } = result;
     const embed = new EmbedBuilder()
@@ -2230,11 +2250,10 @@ function buildCombatLogEmbed(result, character, defeat) {
     );
 
     if (!defeat) {
-        const lootItems = (result.loot?.items || []).map(i => i.name).filter(Boolean);
         embed.addFields(
             { name: 'XP Gained', value: `✨ ${result.xpGained}`, inline: true },
             { name: 'Gold Gained', value: `💰 ${result.goldGained}`, inline: true },
-            { name: 'Loot', value: lootItems.length ? lootItems.join(', ') : '—', inline: true }
+            { name: lootFieldName(result.lootGrant), value: lootFieldValue(result.lootGrant), inline: true }
         );
     } else {
         embed.addFields({ name: 'Tip', value: 'Rest and re-enter with `/rpg dungeon enter`.', inline: false });
