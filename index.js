@@ -54,6 +54,7 @@ import { startMonthlyResetScheduler, stopMonthlyResetScheduler } from './jobs/le
 import { startUnverifiedReaper, stopUnverifiedReaper } from './jobs/unverified-reaper.js';
 import { startAffiliateRecheckScheduler, stopAffiliateRecheckScheduler } from './jobs/affiliate-recheck-scheduler.js';
 import { startKickTokenRefreshScheduler, stopKickTokenRefreshScheduler } from './jobs/kick-token-refresh-scheduler.js';
+import { startKickTimerScheduler, stopKickTimerScheduler } from './jobs/kick-timer-scheduler.js';
 import { startTimeCapsuleScheduler, stopTimeCapsuleScheduler } from './jobs/time-capsule-scheduler.js';
 import { startHabitTrackerScheduler, stopHabitTrackerScheduler } from './jobs/habit-tracker-scheduler.js';
 import { startPetStatDecayScheduler, stopPetStatDecayScheduler } from './jobs/pet-stat-decay-scheduler.js';
@@ -793,6 +794,10 @@ async function initializeSchedulersAndDashboard(client) {
   // Start Kick token-refresh scheduler (keeps defender OAuth tokens alive)
   startKickTokenRefreshScheduler();
   logger.info('[Core] Kick token-refresh scheduler initialized');
+
+  // Start Kick timer scheduler (posts scheduled chat messages)
+  startKickTimerScheduler();
+  logger.info('[Core] Kick timer scheduler initialized');
 
   // Start time capsule scheduler
   startTimeCapsuleScheduler(client);
