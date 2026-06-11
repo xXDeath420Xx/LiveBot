@@ -18,6 +18,7 @@ import { csrfProtection, csrfToken } from '../utils/csrf-protection.js';
 import { createSessionMiddleware, sessionActivityMiddleware } from './config/session.js';
 import ebookRecordRouter from './routes/ebook-record.js';
 import fourthwallWebhookRouter from './routes/webhooks/fourthwall.js';
+import kickWebhooksRouter from './routes/kick-webhooks.js';
 import streamRouter from './routes/stream.js';
 import streamInternalRouter from './routes/stream-internal.js';
 import streamConnectRouter from './routes/stream-connect.js';
@@ -219,6 +220,9 @@ function start(botClient) {
 
     // Fourthwall webhook receiver — mounted BEFORE body parser to preserve raw body for HMAC verify
     app.use('/webhooks/fourthwall', fourthwallWebhookRouter);
+
+    // Kick event webhooks — same pre-body-parser mount (RSA signature over raw bytes)
+    app.use('/kick/webhooks', kickWebhooksRouter);
 
     // Apply API rate limiter after passport so req.user is available for admin bypass
     app.use('/api', apiLimiter);
