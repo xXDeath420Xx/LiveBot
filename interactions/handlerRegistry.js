@@ -23,6 +23,7 @@ import { handleStaffIntroButton } from './buttons/staff_intro.js';
 import { handleSuggestionFormButton, handleBugReportFormButton } from './buttons/forum_submit.js';
 import { handleVerifyAccept } from './buttons/verify_accept.js';
 import { handleStreamSignupAdd } from './buttons/stream_signup_add.js';
+import { handlePvpAct } from './buttons/pvp_act.js';
 import { handleStreamSignupSubmit } from './modals/stream_signup_submit.js';
 import {
     handleCahJoin, handleCahLeave, handleCahStart, handleCahHand,
@@ -102,6 +103,9 @@ export const buttonHandlers = {
 
   // Stream signup button
   'stream_signup_add': handleStreamSignupAdd,
+
+  // Live PvP combat action buttons (pvp_act:<matchId>:attack|defend|forfeit)
+  'pvp_act:': handlePvpAct,
 
   // Self-promo "add me" button (level-gated → opens paste-links modal)
   'selfpromo_join': handleSelfPromoJoin,

@@ -27,7 +27,7 @@ const MAX_ROUNDS = 30;
  * @param {object} defender - { name, ac, defense }
  * @returns {object} { hit, roll, damage, crit }
  */
-function resolveAttack(attacker, defender) {
+export function resolveAttack(attacker, defender) {
     const d20 = RPGDiceEngine.rollD20('normal');
     const attackTotal = d20.roll + (attacker.attackBonus || 0);
     const ac = defender.ac || 10;
