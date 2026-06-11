@@ -58,6 +58,9 @@
     <div class="muted" style="margin-top:1.1rem;margin-bottom:.4rem">Features</div>
     <div id="feats" class="srow" data-json='<%= channel.features_enabled || "{}" %>'></div>
 
+    <div class="muted" style="margin-top:1.1rem;margin-bottom:.4rem">Welcome message for first-time chatters</div>
+    <textarea id="welcome-msg" placeholder="First-time chatter welcome (blank = off) — supports {{username}}" style="width:100%;margin-top:.6rem"></textarea>
+
     <button id="save" style="margin-top:1.25rem">Save settings</button>
   </div>
 
@@ -86,6 +89,7 @@
         <input id="am-maxlen" type="number" min="0" max="500" value="0" style="width:6rem" />
       </label>
     </div>
+    <textarea id="am-words" placeholder="Banned words/phrases — comma-separated; use * as a wildcard (e.g. scam*)" style="width:100%;margin-top:.6rem"></textarea>
     <button id="am-save" style="margin-top:1.25rem">Save automod</button>
   </div>
 
@@ -139,10 +143,12 @@
     document.getElementById('am-links').checked = !!am.links;
     document.getElementById('am-symbols').checked = !!am.symbols;
     document.getElementById('am-maxlen').value = am.max_len || 0;
+    document.getElementById('am-words').value = am.words || '';
+    document.getElementById('welcome-msg').value = feats.welcome_message || '';
 
-    document.getElementById('am-save').addEventListener('click', async (e) => {
-      const btn = e.currentTarget; btn.disabled = true;
-      // Read current feature checkboxes so we don't clobber game toggles
+    // ── Single source of truth for features_enabled: BOTH save paths round-trip
+    //    game toggles + automod (incl. words) + welcome_message so neither clobbers ──
+    function buildFeatures() {
       const features = {};
       document.querySelectorAll('.feat').forEach(c => { features[c.dataset.feat] = c.checked; });
       features.automod = {
@@ -150,8 +156,16 @@
         caps_pct: Number(document.getElementById('am-caps-pct').value) || 70,
         links: document.getElementById('am-links').checked,
         symbols: document.getElementById('am-symbols').checked,
-        max_len: Number(document.getElementById('am-maxlen').value) || 0
+        max_len: Number(document.getElementById('am-maxlen').value) || 0,
+        words: document.getElementById('am-words').value
       };
+      features.welcome_message = document.getElementById('welcome-msg').value;
+      return features;
+    }
+
+    document.getElementById('am-save').addEventListener('click', async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      const features = buildFeatures();
       try {
         await KickDash.patch('/kick/api/channel/' + CHANNEL, { features_enabled: features });
         btn.textContent = 'Saved ✓';
@@ -162,16 +176,7 @@
     // ── Channel settings save ──
     document.getElementById('save').addEventListener('click', async (e) => {
       const btn = e.currentTarget; btn.disabled = true;
-      const features = {};
-      document.querySelectorAll('.feat').forEach(c => { features[c.dataset.feat] = c.checked; });
-      // Preserve automod so saving settings doesn't wipe it
-      features.automod = {
-        caps: document.getElementById('am-caps').checked,
-        caps_pct: Number(document.getElementById('am-caps-pct').value) || 70,
-        links: document.getElementById('am-links').checked,
-        symbols: document.getElementById('am-symbols').checked,
-        max_len: Number(document.getElementById('am-maxlen').value) || 0
-      };
+      const features = buildFeatures();
       try {
         await KickDash.patch('/kick/api/channel/' + CHANNEL, {
           command_prefix: document.getElementById('prefix').value,
