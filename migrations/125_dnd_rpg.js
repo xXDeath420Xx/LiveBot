@@ -1,258 +1,812 @@
-/**
- * Migration 125: D&D RPG schema.
- *
- * The RPG feature (~13k lines across core/rpg-*.js + commands/games/rpg/) queries
- * 33 `dnd_*` tables that were never created. This migration creates them, with
- * the schema reverse-engineered from every SELECT/INSERT/UPDATE in the manager
- * code (the code is the source of truth). Idempotent — CREATE TABLE IF NOT EXISTS.
- */
+// AUTO-GENERATED from the live dnd_* schema (SHOW CREATE TABLE) — the ground truth
+// the RPG managers were reconciled to. Regenerate via scripts/gen-dnd-migration.mjs.
+// FK checks are disabled during create/drop so the 44 inter-referencing
+// tables don't need topological ordering. Idempotent (CREATE TABLE IF NOT EXISTS).
+
 const TABLES = [
-`CREATE TABLE IF NOT EXISTS dnd_characters (
-  character_id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id VARCHAR(20) NOT NULL, guild_id VARCHAR(20) NOT NULL,
-  character_name VARCHAR(255) NOT NULL, player_name VARCHAR(255) DEFAULT NULL,
-  class VARCHAR(32) DEFAULT NULL, multiclass VARCHAR(64) DEFAULT NULL, subclass VARCHAR(64) DEFAULT NULL,
-  species VARCHAR(64) DEFAULT 'Human', background VARCHAR(64) DEFAULT NULL, alignment VARCHAR(32) DEFAULT NULL,
-  level INT NOT NULL DEFAULT 1, experience INT NOT NULL DEFAULT 0,
-  health INT NOT NULL DEFAULT 0, max_health INT NOT NULL DEFAULT 0, temp_hp INT NOT NULL DEFAULT 0,
-  mana INT NOT NULL DEFAULT 0, max_mana INT NOT NULL DEFAULT 0,
-  strength INT NOT NULL DEFAULT 10, dexterity INT NOT NULL DEFAULT 10, constitution INT NOT NULL DEFAULT 10,
-  intelligence INT NOT NULL DEFAULT 10, wisdom INT NOT NULL DEFAULT 10, charisma INT NOT NULL DEFAULT 10,
-  armor_class INT NOT NULL DEFAULT 10, speed VARCHAR(32) DEFAULT '30 ft.', initiative INT NOT NULL DEFAULT 0,
-  proficiency_bonus INT NOT NULL DEFAULT 2, hit_dice VARCHAR(32) DEFAULT NULL,
-  saving_throws JSON DEFAULT NULL, skill_proficiencies JSON DEFAULT NULL, languages JSON DEFAULT NULL,
-  weapon_proficiencies JSON DEFAULT NULL, armor_proficiencies JSON DEFAULT NULL, tool_proficiencies JSON DEFAULT NULL,
-  features JSON DEFAULT NULL, racial_traits JSON DEFAULT NULL, class_features JSON DEFAULT NULL,
-  spellcasting_ability VARCHAR(32) DEFAULT NULL, spell_save_dc INT DEFAULT NULL, spell_attack_bonus INT DEFAULT NULL,
-  spell_slots JSON DEFAULT NULL, spells_known JSON DEFAULT NULL, cantrips JSON DEFAULT NULL,
-  class_resource VARCHAR(64) DEFAULT NULL, class_resource_max INT NOT NULL DEFAULT 0, class_resource_current INT NOT NULL DEFAULT 0,
-  personality_traits TEXT DEFAULT NULL, ideals TEXT DEFAULT NULL, bonds TEXT DEFAULT NULL, flaws TEXT DEFAULT NULL, backstory TEXT DEFAULT NULL,
-  age VARCHAR(32) DEFAULT NULL, height VARCHAR(32) DEFAULT NULL, weight VARCHAR(32) DEFAULT NULL,
-  eyes VARCHAR(32) DEFAULT NULL, skin VARCHAR(32) DEFAULT NULL, hair VARCHAR(32) DEFAULT NULL,
-  resistances JSON DEFAULT NULL, immunities JSON DEFAULT NULL, vulnerabilities JSON DEFAULT NULL, senses JSON DEFAULT NULL,
-  attacks JSON DEFAULT NULL, actions JSON DEFAULT NULL, bonus_actions JSON DEFAULT NULL, reactions JSON DEFAULT NULL,
-  equipment JSON DEFAULT NULL,
-  gold INT NOT NULL DEFAULT 0, copper INT NOT NULL DEFAULT 0, silver INT NOT NULL DEFAULT 0, electrum INT NOT NULL DEFAULT 0, platinum INT NOT NULL DEFAULT 0,
-  death_save_successes INT NOT NULL DEFAULT 0, death_save_failures INT NOT NULL DEFAULT 0, exhaustion_level INT NOT NULL DEFAULT 0, inspiration TINYINT(1) NOT NULL DEFAULT 0,
-  concentration_spell_id INT DEFAULT NULL, concentration_started TIMESTAMP NULL DEFAULT NULL,
-  current_zone VARCHAR(255) DEFAULT 'town', active_campaign_id INT DEFAULT NULL,
-  imported_from VARCHAR(32) DEFAULT NULL, import_data JSON DEFAULT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_char_user_guild (user_id, guild_id), KEY idx_char_user (user_id), KEY idx_char_guild (guild_id), KEY idx_char_active_campaign (active_campaign_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_campaigns (
-  campaign_id INT AUTO_INCREMENT PRIMARY KEY, guild_id VARCHAR(20) NOT NULL, campaign_name VARCHAR(255) NOT NULL,
-  dm_user_id VARCHAR(20) DEFAULT NULL, campaign_type VARCHAR(32) NOT NULL DEFAULT 'homebrew', module_id VARCHAR(64) DEFAULT NULL,
-  setting VARCHAR(255) DEFAULT 'Forgotten Realms', theme VARCHAR(255) DEFAULT 'classic fantasy', difficulty VARCHAR(32) DEFAULT 'normal',
-  max_players INT NOT NULL DEFAULT 4, ai_personality VARCHAR(32) DEFAULT 'classic', status VARCHAR(32) NOT NULL DEFAULT 'setup',
-  channel_id VARCHAR(20) DEFAULT NULL, session_count INT NOT NULL DEFAULT 0, last_session_at TIMESTAMP NULL DEFAULT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_camp_guild (guild_id), KEY idx_camp_status (status), KEY idx_camp_channel (channel_id), KEY idx_camp_module (module_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_campaign_players (
-  id INT AUTO_INCREMENT PRIMARY KEY, campaign_id INT NOT NULL, character_id INT NOT NULL, user_id VARCHAR(20) NOT NULL,
-  role VARCHAR(32) NOT NULL DEFAULT 'player', joined_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_campaign_user (campaign_id, user_id), KEY idx_cp_campaign (campaign_id), KEY idx_cp_character (character_id), KEY idx_cp_user (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_campaign_modules (
-  module_id VARCHAR(64) PRIMARY KEY, module_name VARCHAR(255) NOT NULL, description TEXT DEFAULT NULL, setting VARCHAR(255) DEFAULT NULL,
-  min_level INT NOT NULL DEFAULT 1, max_level INT NOT NULL DEFAULT 20, estimated_sessions INT NOT NULL DEFAULT 0, is_active TINYINT(1) NOT NULL DEFAULT 1,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, KEY idx_mod_active (is_active), KEY idx_mod_min_level (min_level)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_sessions (
-  session_id INT AUTO_INCREMENT PRIMARY KEY, campaign_id INT NOT NULL, session_number INT NOT NULL DEFAULT 1, title VARCHAR(255) DEFAULT NULL,
-  status VARCHAR(32) NOT NULL DEFAULT 'active', current_scene TEXT DEFAULT NULL, current_location VARCHAR(255) DEFAULT NULL, active_quests JSON DEFAULT NULL,
-  summary TEXT DEFAULT NULL, message_count INT NOT NULL DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, ended_at TIMESTAMP NULL DEFAULT NULL,
-  KEY idx_sess_campaign (campaign_id), KEY idx_sess_status (status), KEY idx_sess_campaign_status (campaign_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_session_messages (
-  message_id INT AUTO_INCREMENT PRIMARY KEY, session_id INT NOT NULL, message_type VARCHAR(32) NOT NULL, character_id INT DEFAULT NULL,
-  content TEXT NOT NULL, metadata JSON DEFAULT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY idx_msg_session (session_id), KEY idx_msg_session_created (session_id, created_at), KEY idx_msg_character (character_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_combat_sessions (
-  combat_id INT AUTO_INCREMENT PRIMARY KEY, guild_id VARCHAR(20) NOT NULL, campaign_id VARCHAR(36) DEFAULT NULL, session_id VARCHAR(36) DEFAULT NULL,
-  combat_name VARCHAR(255) DEFAULT 'Combat', combat_type VARCHAR(32) NOT NULL DEFAULT 'pve', environment VARCHAR(255) DEFAULT NULL, status VARCHAR(32) NOT NULL DEFAULT 'setup',
-  initiative_order JSON DEFAULT NULL, current_turn INT NOT NULL DEFAULT 0, current_round INT NOT NULL DEFAULT 1,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, ended_at TIMESTAMP NULL DEFAULT NULL,
-  INDEX idx_guild (guild_id), INDEX idx_campaign (campaign_id), INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_combat_participants (
-  participant_id INT AUTO_INCREMENT PRIMARY KEY, combat_id INT NOT NULL, participant_type VARCHAR(32) NOT NULL, character_id INT DEFAULT NULL, enemy_id INT DEFAULT NULL,
-  name VARCHAR(255) NOT NULL, current_hp INT NOT NULL DEFAULT 0, max_hp INT NOT NULL DEFAULT 0, armor_class INT NOT NULL DEFAULT 10,
-  initiative_bonus INT NOT NULL DEFAULT 0, initiative_roll INT DEFAULT NULL, turn_order INT DEFAULT NULL, conditions JSON DEFAULT NULL,
-  action_used TINYINT(1) NOT NULL DEFAULT 0, bonus_action_used TINYINT(1) NOT NULL DEFAULT 0, reaction_used TINYINT(1) NOT NULL DEFAULT 0, movement_used INT NOT NULL DEFAULT 0,
-  death_saves_success INT NOT NULL DEFAULT 0, death_saves_failure INT NOT NULL DEFAULT 0, is_active TINYINT(1) NOT NULL DEFAULT 1,
-  INDEX idx_combat (combat_id), INDEX idx_character (character_id), INDEX idx_enemy (enemy_id), INDEX idx_combat_active (combat_id, is_active)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_battles (
-  battle_id INT AUTO_INCREMENT PRIMARY KEY, character_id INT NOT NULL, enemy_id INT NOT NULL, character_health INT NOT NULL DEFAULT 0, enemy_health INT NOT NULL DEFAULT 0,
-  turn INT NOT NULL DEFAULT 1, status VARCHAR(32) NOT NULL DEFAULT 'ongoing', created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, ended_at TIMESTAMP NULL DEFAULT NULL,
-  INDEX idx_character (character_id), INDEX idx_enemy (enemy_id), INDEX idx_character_status (character_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_combat_log (
-  log_id INT AUTO_INCREMENT PRIMARY KEY, combat_id INT NOT NULL, round INT NOT NULL DEFAULT 1, turn INT NOT NULL DEFAULT 0, actor_id INT DEFAULT NULL,
-  action_type VARCHAR(32) NOT NULL, target_ids JSON DEFAULT NULL, description TEXT DEFAULT NULL, roll_data JSON DEFAULT NULL, damage_dealt INT NOT NULL DEFAULT 0,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_combat (combat_id), INDEX idx_actor (actor_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_enemies (
-  enemy_id INT AUTO_INCREMENT PRIMARY KEY, enemy_name VARCHAR(255) NOT NULL, health INT NOT NULL DEFAULT 1, damage INT NOT NULL DEFAULT 1, min_level INT NOT NULL DEFAULT 1,
-  zone VARCHAR(255) DEFAULT NULL, reward_exp INT NOT NULL DEFAULT 0, reward_gold INT NOT NULL DEFAULT 0, reward_item_id INT DEFAULT NULL,
-  INDEX idx_zone (zone), INDEX idx_min_level (min_level)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_dice_rolls (
-  roll_id INT AUTO_INCREMENT PRIMARY KEY, user_id VARCHAR(20) NOT NULL, guild_id VARCHAR(20) NOT NULL, character_id INT DEFAULT NULL,
-  roll_type VARCHAR(32) NOT NULL DEFAULT 'custom', dice_notation VARCHAR(255) NOT NULL DEFAULT '1d20', individual_rolls JSON DEFAULT NULL, modifier INT NOT NULL DEFAULT 0,
-  total_result INT NOT NULL, advantage_status VARCHAR(32) NOT NULL DEFAULT 'normal', is_critical TINYINT(1) NOT NULL DEFAULT 0, is_fumble TINYINT(1) NOT NULL DEFAULT 0,
-  dc INT DEFAULT NULL, success TINYINT(1) DEFAULT NULL, context VARCHAR(255) DEFAULT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_user_guild (user_id, guild_id), INDEX idx_character (character_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_pvp_matches (
-  match_id INT AUTO_INCREMENT PRIMARY KEY, guild_id VARCHAR(20) NOT NULL, match_type VARCHAR(32) NOT NULL DEFAULT 'duel', arena_type VARCHAR(32) NOT NULL DEFAULT 'standard',
-  challenger_user_id VARCHAR(20) NOT NULL, challenger_character_id INT NOT NULL, defender_user_id VARCHAR(20) DEFAULT NULL, defender_character_id INT DEFAULT NULL,
-  status VARCHAR(32) NOT NULL DEFAULT 'pending', combat_state JSON DEFAULT NULL, winner_user_id VARCHAR(20) DEFAULT NULL, end_method VARCHAR(32) DEFAULT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, started_at TIMESTAMP NULL DEFAULT NULL, ended_at TIMESTAMP NULL DEFAULT NULL,
-  INDEX idx_guild_status (guild_id, status), INDEX idx_challenger (challenger_user_id), INDEX idx_defender (defender_user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_pvp_stats (
-  user_id VARCHAR(20) NOT NULL, guild_id VARCHAR(20) NOT NULL, elo_rating INT NOT NULL DEFAULT 1000, wins INT NOT NULL DEFAULT 0, losses INT NOT NULL DEFAULT 0,
-  matches_played INT NOT NULL DEFAULT 0, current_streak INT NOT NULL DEFAULT 0, best_streak INT NOT NULL DEFAULT 0,
-  PRIMARY KEY (user_id, guild_id), INDEX idx_guild_elo (guild_id, elo_rating)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_items (
-  item_id INT AUTO_INCREMENT PRIMARY KEY, item_name VARCHAR(255) NOT NULL, item_type VARCHAR(32) NOT NULL, rarity VARCHAR(32) NOT NULL DEFAULT 'common', value INT NOT NULL DEFAULT 0,
-  description TEXT, damage_bonus INT NOT NULL DEFAULT 0, defense_bonus INT NOT NULL DEFAULT 0, heal_amount INT NOT NULL DEFAULT 0, mana_amount INT NOT NULL DEFAULT 0, stat_bonuses JSON DEFAULT NULL,
-  INDEX idx_items_type (item_type), INDEX idx_items_rarity (rarity), INDEX idx_items_name (item_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_inventory (
-  inventory_id INT AUTO_INCREMENT PRIMARY KEY, character_id INT NOT NULL, item_id INT NOT NULL, quantity INT NOT NULL DEFAULT 1, equipped TINYINT(1) NOT NULL DEFAULT 0,
-  UNIQUE KEY uniq_inv_char_item (character_id, item_id), INDEX idx_inv_character (character_id), INDEX idx_inv_item (item_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_shops (
-  shop_id INT AUTO_INCREMENT PRIMARY KEY, zone VARCHAR(64) NOT NULL, item_id INT NOT NULL, price INT NOT NULL DEFAULT 0, stock INT NOT NULL DEFAULT -1,
-  UNIQUE KEY uniq_shop_zone_item (zone, item_id), INDEX idx_shop_zone (zone), INDEX idx_shop_item (item_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_spells (
-  spell_id INT AUTO_INCREMENT PRIMARY KEY, spell_name VARCHAR(255) NOT NULL, spell_level INT NOT NULL DEFAULT 0, school VARCHAR(32) NOT NULL, description TEXT,
-  components JSON DEFAULT NULL, concentration TINYINT(1) NOT NULL DEFAULT 0, damage_dice JSON DEFAULT NULL, damage_type VARCHAR(32) DEFAULT NULL, healing_dice JSON DEFAULT NULL,
-  attack_type VARCHAR(32) DEFAULT NULL, save_type VARCHAR(32) DEFAULT NULL,
-  UNIQUE KEY uniq_spell_name (spell_name), INDEX idx_spells_level (spell_level), INDEX idx_spells_school (school)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_character_spells (
-  id INT AUTO_INCREMENT PRIMARY KEY, character_id INT NOT NULL, spell_id INT NOT NULL, source VARCHAR(32) NOT NULL DEFAULT 'class', prepared TINYINT(1) NOT NULL DEFAULT 0,
-  UNIQUE KEY uniq_char_spell (character_id, spell_id), INDEX idx_cs_character (character_id), INDEX idx_cs_spell (spell_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_spell_slots (
-  id INT AUTO_INCREMENT PRIMARY KEY, character_id INT NOT NULL, slot_level INT NOT NULL, total_slots INT NOT NULL DEFAULT 0, used_slots INT NOT NULL DEFAULT 0,
-  UNIQUE KEY uniq_slot_char_level (character_id, slot_level), INDEX idx_slots_character (character_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_conditions (
-  condition_id INT AUTO_INCREMENT PRIMARY KEY, condition_name VARCHAR(255) NOT NULL, description TEXT, mechanical_effects JSON DEFAULT NULL, icon_emoji VARCHAR(64) DEFAULT NULL,
-  UNIQUE KEY uniq_condition_name (condition_name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_active_conditions (
-  id INT AUTO_INCREMENT PRIMARY KEY, character_id INT NOT NULL, condition_id INT NOT NULL, combat_id INT DEFAULT NULL, source VARCHAR(255) DEFAULT NULL,
-  duration_rounds INT DEFAULT NULL, save_dc INT DEFAULT NULL, save_type VARCHAR(32) DEFAULT NULL, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_ac_character (character_id), INDEX idx_ac_condition (condition_id), INDEX idx_ac_combat (combat_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_class_resources (
-  id INT AUTO_INCREMENT PRIMARY KEY, character_id INT NOT NULL, resource_name VARCHAR(64) NOT NULL, max_uses INT NOT NULL DEFAULT 0, current_uses INT NOT NULL DEFAULT 0, restore_on VARCHAR(16) NOT NULL DEFAULT 'long',
-  UNIQUE KEY uniq_char_resource (character_id, resource_name), INDEX idx_cr_character (character_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_quests (
-  quest_id INT AUTO_INCREMENT PRIMARY KEY, quest_name VARCHAR(255) NOT NULL, description TEXT, quest_type VARCHAR(32) DEFAULT 'misc', required_level INT NOT NULL DEFAULT 1,
-  requirement_count INT NOT NULL DEFAULT 1, reward_exp INT NOT NULL DEFAULT 0, reward_gold INT NOT NULL DEFAULT 0, reward_item_id INT DEFAULT NULL, prerequisite_quest_id INT DEFAULT NULL,
-  repeatable TINYINT(1) NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_required_level (required_level), INDEX idx_quest_type (quest_type), INDEX idx_prerequisite (prerequisite_quest_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_character_quests (
-  character_quest_id INT AUTO_INCREMENT PRIMARY KEY, character_id INT NOT NULL, quest_id INT NOT NULL, status VARCHAR(32) NOT NULL DEFAULT 'active', progress INT NOT NULL DEFAULT 0,
-  started_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMP NULL DEFAULT NULL,
-  INDEX idx_character (character_id), INDEX idx_quest (quest_id), INDEX idx_character_status (character_id, status), INDEX idx_character_quest_status (character_id, quest_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_dungeons (
-  dungeon_id INT AUTO_INCREMENT PRIMARY KEY, dungeon_name VARCHAR(255) NOT NULL, description TEXT, min_level INT NOT NULL DEFAULT 1, total_rooms INT NOT NULL DEFAULT 0,
-  rewards JSON, times_completed INT NOT NULL DEFAULT 0, is_active TINYINT(1) NOT NULL DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_active_level (is_active, min_level)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_dungeon_rooms (
-  room_id INT AUTO_INCREMENT PRIMARY KEY, dungeon_id INT NOT NULL, room_order INT NOT NULL, room_type VARCHAR(32) NOT NULL DEFAULT 'event', encounters JSON, loot_table JSON,
-  INDEX idx_dungeon (dungeon_id), INDEX idx_dungeon_order (dungeon_id, room_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_dungeon_runs (
-  run_id INT AUTO_INCREMENT PRIMARY KEY, party_id INT NOT NULL, dungeon_id INT NOT NULL, difficulty VARCHAR(32) NOT NULL DEFAULT 'normal', current_room INT NOT NULL DEFAULT 1,
-  status VARCHAR(32) NOT NULL DEFAULT 'in_progress', total_xp INT NOT NULL DEFAULT 0, total_gold INT NOT NULL DEFAULT 0, enemies_defeated INT NOT NULL DEFAULT 0, rooms_cleared INT NOT NULL DEFAULT 0,
-  started_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMP NULL DEFAULT NULL, INDEX idx_dungeon (dungeon_id), INDEX idx_party_status (party_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_parties (
-  party_id INT AUTO_INCREMENT PRIMARY KEY, guild_id VARCHAR(20) NOT NULL, party_name VARCHAR(255) NOT NULL, leader_user_id VARCHAR(20) NOT NULL, status VARCHAR(32) NOT NULL DEFAULT 'forming',
-  max_members INT NOT NULL DEFAULT 6, shared_gold INT NOT NULL DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_guild_status (guild_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_party_members (
-  party_member_id INT AUTO_INCREMENT PRIMARY KEY, party_id INT NOT NULL, character_id INT NOT NULL, user_id VARCHAR(20) NOT NULL, role VARCHAR(32) NOT NULL DEFAULT 'member', joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_character (character_id), INDEX idx_party (party_id), INDEX idx_party_role_joined (party_id, role, joined_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_party_invites (
-  invite_id INT AUTO_INCREMENT PRIMARY KEY, party_id INT NOT NULL, invited_user_id VARCHAR(20) NOT NULL, invited_by_user_id VARCHAR(20) NOT NULL, status VARCHAR(32) NOT NULL DEFAULT 'pending',
-  expires_at TIMESTAMP NULL DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_party (party_id), INDEX idx_invited_status (invited_user_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_achievements (
-  achievement_id INT AUTO_INCREMENT PRIMARY KEY, achievement_name VARCHAR(255) NOT NULL, description TEXT, category VARCHAR(32) NOT NULL DEFAULT 'special', icon_emoji VARCHAR(50),
-  points INT NOT NULL DEFAULT 0, requirements JSON, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_category (category)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
-
-`CREATE TABLE IF NOT EXISTS dnd_character_achievements (
-  id INT AUTO_INCREMENT PRIMARY KEY, character_id INT NOT NULL, achievement_id INT NOT NULL, earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_character_achievement (character_id, achievement_id), INDEX idx_character (character_id), INDEX idx_achievement (achievement_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_achievements\` (
+  \`achievement_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`achievement_key\` varchar(100) NOT NULL,
+  \`name\` varchar(100) NOT NULL,
+  \`description\` text DEFAULT NULL,
+  \`category\` enum('combat','exploration','social','collection','pvp','dungeon','class','general') NOT NULL,
+  \`tier\` enum('bronze','silver','gold','platinum','legendary') DEFAULT 'bronze',
+  \`requirement_type\` varchar(50) NOT NULL,
+  \`requirement_value\` int(11) NOT NULL,
+  \`reward_gold\` int(11) DEFAULT 0,
+  \`reward_exp\` int(11) DEFAULT 0,
+  \`reward_title\` varchar(100) DEFAULT NULL,
+  \`icon_emoji\` varchar(50) DEFAULT NULL,
+  \`is_hidden\` tinyint(1) DEFAULT 0,
+  \`is_active\` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (\`achievement_id\`),
+  UNIQUE KEY \`achievement_key\` (\`achievement_key\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_active_conditions\` (
+  \`id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) DEFAULT NULL,
+  \`participant_id\` bigint(20) DEFAULT NULL,
+  \`condition_id\` int(11) NOT NULL,
+  \`combat_id\` bigint(20) DEFAULT NULL,
+  \`source\` varchar(255) DEFAULT NULL,
+  \`stacks\` int(11) DEFAULT 1,
+  \`duration_rounds\` int(11) DEFAULT NULL,
+  \`duration_minutes\` int(11) DEFAULT NULL,
+  \`save_dc\` int(11) DEFAULT NULL,
+  \`save_type\` varchar(20) DEFAULT NULL,
+  \`applied_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`expires_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`id\`),
+  KEY \`idx_character\` (\`character_id\`),
+  KEY \`idx_participant\` (\`participant_id\`),
+  KEY \`idx_combat\` (\`combat_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_battles\` (
+  \`battle_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) NOT NULL,
+  \`enemy_id\` int(11) NOT NULL,
+  \`character_health\` int(11) NOT NULL,
+  \`enemy_health\` int(11) NOT NULL,
+  \`turn\` int(11) DEFAULT 1,
+  \`status\` enum('ongoing','won','lost','fled') DEFAULT 'ongoing',
+  \`started_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`ended_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`battle_id\`),
+  KEY \`idx_status\` (\`status\`),
+  KEY \`idx_character\` (\`character_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_campaigns\` (
+  \`campaign_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`guild_id\` varchar(20) NOT NULL,
+  \`channel_id\` varchar(20) DEFAULT NULL,
+  \`campaign_name\` varchar(100) NOT NULL,
+  \`dm_user_id\` varchar(20) DEFAULT NULL,
+  \`campaign_type\` enum('homebrew','official','hybrid') DEFAULT 'homebrew',
+  \`module_id\` varchar(100) DEFAULT NULL,
+  \`setting\` varchar(255) DEFAULT 'Forgotten Realms',
+  \`theme\` varchar(255) DEFAULT 'classic fantasy',
+  \`difficulty\` enum('easy','normal','hard','deadly') DEFAULT 'normal',
+  \`current_chapter\` int(11) DEFAULT 1,
+  \`session_count\` int(11) DEFAULT 0,
+  \`status\` enum('setup','active','paused','completed','abandoned') DEFAULT 'setup',
+  \`max_players\` int(11) DEFAULT 4,
+  \`world_seed\` text DEFAULT NULL,
+  \`ai_personality\` text DEFAULT NULL,
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`last_session_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`campaign_id\`),
+  KEY \`idx_guild\` (\`guild_id\`),
+  KEY \`idx_status\` (\`status\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_campaign_locations\` (
+  \`location_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`campaign_id\` int(11) NOT NULL,
+  \`location_name\` varchar(255) NOT NULL,
+  \`location_type\` enum('city','town','village','dungeon','wilderness','building','room','landmark') DEFAULT 'town',
+  \`parent_location_id\` int(11) DEFAULT NULL,
+  \`description\` text DEFAULT NULL,
+  \`atmosphere\` text DEFAULT NULL,
+  \`notable_features\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`notable_features\`)),
+  \`npcs_present\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`npcs_present\`)),
+  \`connections\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`connections\`)),
+  \`is_discovered\` tinyint(1) DEFAULT 0,
+  \`is_safe\` tinyint(1) DEFAULT 1,
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (\`location_id\`),
+  KEY \`idx_campaign\` (\`campaign_id\`),
+  KEY \`idx_parent\` (\`parent_location_id\`),
+  KEY \`idx_type\` (\`location_type\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_campaign_modules\` (
+  \`module_id\` varchar(100) NOT NULL,
+  \`module_name\` varchar(255) NOT NULL,
+  \`description\` text DEFAULT NULL,
+  \`min_level\` int(11) DEFAULT 1,
+  \`max_level\` int(11) DEFAULT 5,
+  \`estimated_sessions\` int(11) DEFAULT 10,
+  \`setting\` varchar(100) DEFAULT 'Forgotten Realms',
+  \`content\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`content\`)),
+  \`is_active\` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (\`module_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_campaign_npcs\` (
+  \`npc_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`campaign_id\` int(11) NOT NULL,
+  \`npc_name\` varchar(100) NOT NULL,
+  \`npc_type\` enum('ally','neutral','hostile','merchant','quest_giver','boss','companion') DEFAULT 'neutral',
+  \`race\` varchar(50) DEFAULT NULL,
+  \`occupation\` varchar(100) DEFAULT NULL,
+  \`personality\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`personality\`)),
+  \`appearance\` text DEFAULT NULL,
+  \`backstory\` text DEFAULT NULL,
+  \`stats\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`stats\`)),
+  \`location\` varchar(255) DEFAULT NULL,
+  \`relationship_scores\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`relationship_scores\`)),
+  \`knowledge\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`knowledge\`)),
+  \`is_alive\` tinyint(1) DEFAULT 1,
+  \`is_active\` tinyint(1) DEFAULT 1,
+  \`dialogue_history\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`dialogue_history\`)),
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (\`npc_id\`),
+  KEY \`idx_campaign\` (\`campaign_id\`),
+  KEY \`idx_type\` (\`npc_type\`),
+  KEY \`idx_location\` (\`location\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_campaign_players\` (
+  \`id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`campaign_id\` int(11) NOT NULL,
+  \`character_id\` int(11) NOT NULL,
+  \`user_id\` varchar(20) NOT NULL,
+  \`role\` enum('player','co_dm') DEFAULT 'player',
+  \`joined_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`last_active\` timestamp NULL DEFAULT current_timestamp(),
+  \`story_notes\` text DEFAULT NULL,
+  \`personal_quests\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`personal_quests\`)),
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`uk_campaign_character\` (\`campaign_id\`,\`character_id\`),
+  KEY \`idx_campaign\` (\`campaign_id\`),
+  KEY \`idx_character\` (\`character_id\`),
+  KEY \`idx_user\` (\`user_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_campaign_quests\` (
+  \`quest_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`campaign_id\` int(11) NOT NULL,
+  \`quest_name\` varchar(255) NOT NULL,
+  \`quest_type\` enum('main','side','personal','hidden','faction') DEFAULT 'main',
+  \`description\` text DEFAULT NULL,
+  \`objectives\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`objectives\`)),
+  \`rewards\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`rewards\`)),
+  \`giver_npc_id\` int(11) DEFAULT NULL,
+  \`location\` varchar(255) DEFAULT NULL,
+  \`difficulty\` enum('easy','medium','hard','deadly') DEFAULT 'medium',
+  \`status\` enum('unknown','available','active','completed','failed','abandoned') DEFAULT 'unknown',
+  \`progress\` int(11) DEFAULT 0,
+  \`notes\` text DEFAULT NULL,
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`completed_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`quest_id\`),
+  KEY \`idx_campaign\` (\`campaign_id\`),
+  KEY \`idx_status\` (\`status\`),
+  KEY \`idx_type\` (\`quest_type\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_characters\` (
+  \`character_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`user_id\` varchar(20) NOT NULL,
+  \`guild_id\` varchar(20) NOT NULL,
+  \`character_name\` varchar(100) NOT NULL,
+  \`player_name\` varchar(100) DEFAULT NULL,
+  \`class\` varchar(50) NOT NULL,
+  \`multiclass\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`multiclass\`)),
+  \`subclass\` varchar(100) DEFAULT NULL,
+  \`species\` varchar(50) DEFAULT NULL,
+  \`background\` varchar(100) DEFAULT NULL,
+  \`alignment\` varchar(50) DEFAULT NULL,
+  \`level\` int(11) DEFAULT 1,
+  \`experience\` int(11) DEFAULT 0,
+  \`health\` int(11) DEFAULT 100,
+  \`max_health\` int(11) DEFAULT 100,
+  \`temp_hp\` int(11) DEFAULT 0,
+  \`mana\` int(11) DEFAULT 50,
+  \`max_mana\` int(11) DEFAULT 50,
+  \`strength\` int(11) DEFAULT 10,
+  \`dexterity\` int(11) DEFAULT 10,
+  \`constitution\` int(11) DEFAULT 10,
+  \`intelligence\` int(11) DEFAULT 10,
+  \`wisdom\` int(11) DEFAULT 10,
+  \`charisma\` int(11) DEFAULT 10,
+  \`armor_class\` int(11) DEFAULT 10,
+  \`speed\` varchar(100) DEFAULT '30 ft.',
+  \`initiative\` int(11) DEFAULT 0,
+  \`proficiency_bonus\` int(11) DEFAULT 2,
+  \`hit_dice\` varchar(50) DEFAULT NULL,
+  \`saving_throws\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`saving_throws\`)),
+  \`skill_proficiencies\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`skill_proficiencies\`)),
+  \`languages\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`languages\`)),
+  \`weapon_proficiencies\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`weapon_proficiencies\`)),
+  \`armor_proficiencies\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`armor_proficiencies\`)),
+  \`tool_proficiencies\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`tool_proficiencies\`)),
+  \`features\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`features\`)),
+  \`racial_traits\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`racial_traits\`)),
+  \`class_features\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`class_features\`)),
+  \`spellcasting_ability\` varchar(20) DEFAULT NULL,
+  \`spell_save_dc\` int(11) DEFAULT NULL,
+  \`spell_attack_bonus\` int(11) DEFAULT NULL,
+  \`spell_slots\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`spell_slots\`)),
+  \`spells_known\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`spells_known\`)),
+  \`cantrips\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`cantrips\`)),
+  \`class_resource\` varchar(50) DEFAULT NULL,
+  \`class_resource_max\` int(11) DEFAULT 0,
+  \`class_resource_current\` int(11) DEFAULT 0,
+  \`personality_traits\` text DEFAULT NULL,
+  \`ideals\` text DEFAULT NULL,
+  \`bonds\` text DEFAULT NULL,
+  \`flaws\` text DEFAULT NULL,
+  \`backstory\` text DEFAULT NULL,
+  \`age\` varchar(50) DEFAULT NULL,
+  \`height\` varchar(50) DEFAULT NULL,
+  \`weight\` varchar(50) DEFAULT NULL,
+  \`eyes\` varchar(50) DEFAULT NULL,
+  \`skin\` varchar(50) DEFAULT NULL,
+  \`hair\` varchar(50) DEFAULT NULL,
+  \`resistances\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`resistances\`)),
+  \`immunities\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`immunities\`)),
+  \`vulnerabilities\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`vulnerabilities\`)),
+  \`senses\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`senses\`)),
+  \`passive_perception\` int(11) DEFAULT 10,
+  \`passive_insight\` int(11) DEFAULT 10,
+  \`passive_investigation\` int(11) DEFAULT 10,
+  \`attacks\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`attacks\`)),
+  \`actions\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`actions\`)),
+  \`bonus_actions\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`bonus_actions\`)),
+  \`reactions\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`reactions\`)),
+  \`equipment\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`equipment\`)),
+  \`gold\` int(11) DEFAULT 0,
+  \`copper\` int(11) DEFAULT 0,
+  \`silver\` int(11) DEFAULT 0,
+  \`electrum\` int(11) DEFAULT 0,
+  \`platinum\` int(11) DEFAULT 0,
+  \`death_save_successes\` int(11) DEFAULT 0,
+  \`death_save_failures\` int(11) DEFAULT 0,
+  \`inspiration\` tinyint(1) DEFAULT 0,
+  \`current_zone\` varchar(50) DEFAULT 'town',
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`imported_from\` varchar(50) DEFAULT NULL,
+  \`import_data\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`import_data\`)),
+  \`active_campaign_id\` int(11) DEFAULT NULL,
+  \`concentration_spell_id\` int(11) DEFAULT NULL,
+  \`last_short_rest\` timestamp NULL DEFAULT NULL,
+  \`last_long_rest\` timestamp NULL DEFAULT NULL,
+  \`party_id\` int(11) DEFAULT NULL,
+  \`total_monsters_killed\` int(11) DEFAULT 0,
+  \`total_damage_dealt\` bigint(20) DEFAULT 0,
+  \`total_healing_done\` bigint(20) DEFAULT 0,
+  \`dungeons_completed\` int(11) DEFAULT 0,
+  \`bosses_killed\` int(11) DEFAULT 0,
+  \`deaths\` int(11) DEFAULT 0,
+  \`crits_rolled\` int(11) DEFAULT 0,
+  \`active_title\` varchar(100) DEFAULT NULL,
+  \`exhaustion_level\` int(11) DEFAULT 0,
+  PRIMARY KEY (\`character_id\`),
+  UNIQUE KEY \`unique_user_guild\` (\`user_id\`,\`guild_id\`),
+  KEY \`idx_user\` (\`user_id\`),
+  KEY \`idx_guild\` (\`guild_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_character_achievements\` (
+  \`id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) NOT NULL,
+  \`achievement_id\` int(11) NOT NULL,
+  \`progress\` int(11) DEFAULT 0,
+  \`completed\` tinyint(1) DEFAULT 0,
+  \`completed_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`uk_char_achievement\` (\`character_id\`,\`achievement_id\`),
+  KEY \`idx_character\` (\`character_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_character_quests\` (
+  \`id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) NOT NULL,
+  \`quest_id\` int(11) NOT NULL,
+  \`status\` enum('active','completed','failed') DEFAULT 'active',
+  \`progress\` int(11) DEFAULT 0,
+  \`started_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`completed_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`unique_character_quest\` (\`character_id\`,\`quest_id\`),
+  KEY \`idx_status\` (\`status\`),
+  KEY \`idx_character\` (\`character_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_character_skills\` (
+  \`character_id\` int(11) NOT NULL,
+  \`skill_id\` int(11) NOT NULL,
+  \`unlocked\` tinyint(1) DEFAULT 0,
+  \`last_used\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`character_id\`,\`skill_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_character_spells\` (
+  \`id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) NOT NULL,
+  \`spell_id\` int(11) NOT NULL,
+  \`spell_source\` enum('class','race','feat','item','other') DEFAULT 'class',
+  \`is_prepared\` tinyint(1) DEFAULT 0,
+  \`is_always_prepared\` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`uk_char_spell\` (\`character_id\`,\`spell_id\`),
+  KEY \`idx_character\` (\`character_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_class_features\` (
+  \`feature_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`class_name\` varchar(50) NOT NULL,
+  \`subclass_name\` varchar(100) DEFAULT NULL,
+  \`feature_name\` varchar(100) NOT NULL,
+  \`level_required\` int(11) NOT NULL DEFAULT 1,
+  \`description\` text DEFAULT NULL,
+  \`mechanics\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`mechanics\`)),
+  \`resource_type\` varchar(50) DEFAULT NULL,
+  \`is_passive\` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (\`feature_id\`),
+  KEY \`idx_class\` (\`class_name\`),
+  KEY \`idx_level\` (\`level_required\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_class_resources\` (
+  \`id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) NOT NULL,
+  \`resource_type\` varchar(50) NOT NULL,
+  \`resource_name\` varchar(100) NOT NULL,
+  \`current_value\` int(11) DEFAULT 0,
+  \`max_value\` int(11) NOT NULL,
+  \`temp_bonus\` int(11) DEFAULT 0,
+  \`recharge_on\` enum('short_rest','long_rest','dawn','turn','manual') DEFAULT 'long_rest',
+  \`dice_type\` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`uk_char_resource\` (\`character_id\`,\`resource_type\`),
+  KEY \`idx_character\` (\`character_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_combat_log\` (
+  \`log_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`combat_id\` bigint(20) NOT NULL,
+  \`round\` int(11) NOT NULL,
+  \`turn\` int(11) NOT NULL,
+  \`actor_id\` bigint(20) NOT NULL,
+  \`action_type\` enum('attack','spell','ability','item','move','dodge','dash','disengage','help','hide','ready','other') NOT NULL,
+  \`target_ids\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`target_ids\`)),
+  \`description\` text DEFAULT NULL,
+  \`roll_data\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`roll_data\`)),
+  \`damage_dealt\` int(11) DEFAULT 0,
+  \`healing_done\` int(11) DEFAULT 0,
+  \`conditions_applied\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`conditions_applied\`)),
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (\`log_id\`),
+  KEY \`idx_combat\` (\`combat_id\`),
+  KEY \`idx_round\` (\`combat_id\`,\`round\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_combat_participants\` (
+  \`participant_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`combat_id\` bigint(20) NOT NULL,
+  \`participant_type\` enum('player','enemy','ally','npc') NOT NULL,
+  \`character_id\` int(11) DEFAULT NULL,
+  \`enemy_id\` int(11) DEFAULT NULL,
+  \`name\` varchar(100) NOT NULL,
+  \`initiative_roll\` int(11) DEFAULT 0,
+  \`initiative_bonus\` int(11) DEFAULT 0,
+  \`current_hp\` int(11) NOT NULL,
+  \`max_hp\` int(11) NOT NULL,
+  \`temp_hp\` int(11) DEFAULT 0,
+  \`armor_class\` int(11) DEFAULT 10,
+  \`turn_order\` int(11) DEFAULT 0,
+  \`is_active\` tinyint(1) DEFAULT 1,
+  \`conditions\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`conditions\`)),
+  \`action_used\` tinyint(1) DEFAULT 0,
+  \`bonus_action_used\` tinyint(1) DEFAULT 0,
+  \`reaction_used\` tinyint(1) DEFAULT 0,
+  \`movement_used\` int(11) DEFAULT 0,
+  \`concentration_spell_id\` int(11) DEFAULT NULL,
+  \`death_saves_success\` int(11) DEFAULT 0,
+  \`death_saves_failure\` int(11) DEFAULT 0,
+  PRIMARY KEY (\`participant_id\`),
+  KEY \`idx_combat\` (\`combat_id\`),
+  KEY \`idx_character\` (\`character_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_combat_sessions\` (
+  \`combat_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`guild_id\` varchar(20) NOT NULL,
+  \`campaign_id\` int(11) DEFAULT NULL,
+  \`session_id\` bigint(20) DEFAULT NULL,
+  \`combat_name\` varchar(255) DEFAULT NULL,
+  \`combat_type\` enum('pve','pvp','dungeon','boss') DEFAULT 'pve',
+  \`initiative_order\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`initiative_order\`)),
+  \`current_turn\` int(11) DEFAULT 0,
+  \`current_round\` int(11) DEFAULT 1,
+  \`status\` enum('setup','active','victory','defeat','fled','ended') DEFAULT 'setup',
+  \`environment\` text DEFAULT NULL,
+  \`started_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`ended_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`combat_id\`),
+  KEY \`idx_guild\` (\`guild_id\`),
+  KEY \`idx_campaign\` (\`campaign_id\`),
+  KEY \`idx_status\` (\`status\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_conditions\` (
+  \`condition_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`condition_name\` varchar(50) NOT NULL,
+  \`description\` text DEFAULT NULL,
+  \`mechanical_effects\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`mechanical_effects\`)),
+  \`icon_emoji\` varchar(50) DEFAULT NULL,
+  \`is_custom\` tinyint(1) DEFAULT 0,
+  PRIMARY KEY (\`condition_id\`),
+  UNIQUE KEY \`condition_name\` (\`condition_name\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_dice_rolls\` (
+  \`roll_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) DEFAULT NULL,
+  \`user_id\` varchar(20) NOT NULL,
+  \`guild_id\` varchar(20) NOT NULL,
+  \`roll_type\` enum('attack','damage','saving_throw','skill_check','initiative','spell','ability','custom') NOT NULL DEFAULT 'custom',
+  \`dice_notation\` varchar(50) NOT NULL,
+  \`individual_rolls\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(\`individual_rolls\`)),
+  \`modifier\` int(11) DEFAULT 0,
+  \`total_result\` int(11) NOT NULL,
+  \`advantage_status\` enum('normal','advantage','disadvantage') DEFAULT 'normal',
+  \`is_critical\` tinyint(1) DEFAULT 0,
+  \`is_fumble\` tinyint(1) DEFAULT 0,
+  \`dc\` int(11) DEFAULT NULL,
+  \`success\` tinyint(1) DEFAULT NULL,
+  \`context\` varchar(255) DEFAULT NULL,
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (\`roll_id\`),
+  KEY \`idx_character\` (\`character_id\`),
+  KEY \`idx_user\` (\`user_id\`),
+  KEY \`idx_guild\` (\`guild_id\`),
+  KEY \`idx_type\` (\`roll_type\`),
+  KEY \`idx_created\` (\`created_at\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_dm_encounters\` (
+  \`encounter_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`session_id\` bigint(20) NOT NULL,
+  \`campaign_id\` int(11) NOT NULL,
+  \`encounter_name\` varchar(255) DEFAULT NULL,
+  \`encounter_type\` enum('combat','social','exploration','puzzle','trap','boss') DEFAULT 'combat',
+  \`enemies\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`enemies\`)),
+  \`allies\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`allies\`)),
+  \`environment\` text DEFAULT NULL,
+  \`initiative_order\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`initiative_order\`)),
+  \`current_round\` int(11) DEFAULT 0,
+  \`current_turn\` int(11) DEFAULT 0,
+  \`status\` enum('setup','active','victory','defeat','fled','resolved') DEFAULT 'setup',
+  \`loot\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`loot\`)),
+  \`exp_reward\` int(11) DEFAULT 0,
+  \`started_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`ended_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`encounter_id\`),
+  KEY \`idx_session\` (\`session_id\`),
+  KEY \`idx_campaign\` (\`campaign_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_dungeons\` (
+  \`dungeon_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`dungeon_name\` varchar(100) NOT NULL,
+  \`description\` text DEFAULT NULL,
+  \`min_level\` int(11) DEFAULT 1,
+  \`max_level\` int(11) DEFAULT 20,
+  \`recommended_party_size\` int(11) DEFAULT 4,
+  \`total_rooms\` int(11) NOT NULL,
+  \`difficulty\` enum('easy','medium','hard','deadly') DEFAULT 'medium',
+  \`theme\` varchar(100) DEFAULT NULL,
+  \`reward_exp_base\` int(11) DEFAULT 100,
+  \`reward_gold_base\` int(11) DEFAULT 50,
+  \`cooldown_hours\` int(11) DEFAULT 24,
+  \`is_active\` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (\`dungeon_id\`),
+  KEY \`idx_level\` (\`min_level\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_dungeon_rooms\` (
+  \`room_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`dungeon_id\` int(11) NOT NULL,
+  \`room_number\` int(11) NOT NULL,
+  \`room_name\` varchar(100) DEFAULT NULL,
+  \`room_type\` enum('entrance','combat','puzzle','trap','treasure','rest','boss','exit') NOT NULL,
+  \`description\` text DEFAULT NULL,
+  \`enemies\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`enemies\`)),
+  \`puzzle_data\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`puzzle_data\`)),
+  \`trap_data\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`trap_data\`)),
+  \`loot_table\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`loot_table\`)),
+  \`skill_checks\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`skill_checks\`)),
+  PRIMARY KEY (\`room_id\`),
+  UNIQUE KEY \`uk_dungeon_room\` (\`dungeon_id\`,\`room_number\`),
+  KEY \`idx_dungeon\` (\`dungeon_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_dungeon_runs\` (
+  \`run_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`dungeon_id\` int(11) NOT NULL,
+  \`party_id\` int(11) DEFAULT NULL,
+  \`character_id\` int(11) DEFAULT NULL,
+  \`guild_id\` varchar(20) NOT NULL,
+  \`current_room\` int(11) DEFAULT 1,
+  \`rooms_cleared\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`rooms_cleared\`)),
+  \`status\` enum('active','completed','failed','abandoned') DEFAULT 'active',
+  \`total_exp\` int(11) DEFAULT 0,
+  \`total_gold\` int(11) DEFAULT 0,
+  \`loot_collected\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`loot_collected\`)),
+  \`deaths\` int(11) DEFAULT 0,
+  \`started_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`ended_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`run_id\`),
+  KEY \`idx_dungeon\` (\`dungeon_id\`),
+  KEY \`idx_party\` (\`party_id\`),
+  KEY \`idx_character\` (\`character_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_enemies\` (
+  \`enemy_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`enemy_name\` varchar(100) NOT NULL,
+  \`health\` int(11) NOT NULL,
+  \`damage\` int(11) NOT NULL,
+  \`defense\` int(11) DEFAULT 0,
+  \`exp_reward\` int(11) DEFAULT 0,
+  \`gold_reward\` int(11) DEFAULT 0,
+  \`zone\` varchar(50) DEFAULT NULL,
+  \`level\` int(11) DEFAULT 1,
+  PRIMARY KEY (\`enemy_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_inventory\` (
+  \`inventory_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) NOT NULL,
+  \`item_id\` int(11) NOT NULL,
+  \`quantity\` int(11) DEFAULT 1,
+  \`equipped\` tinyint(1) DEFAULT 0,
+  \`acquired_at\` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (\`inventory_id\`),
+  KEY \`idx_character\` (\`character_id\`),
+  KEY \`idx_item\` (\`item_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_items\` (
+  \`item_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`item_name\` varchar(100) NOT NULL,
+  \`item_type\` enum('weapon','armor','potion','material','quest','misc') NOT NULL,
+  \`description\` text DEFAULT NULL,
+  \`value\` int(11) DEFAULT 0,
+  \`rarity\` enum('common','uncommon','rare','epic','legendary') DEFAULT 'common',
+  \`damage\` int(11) DEFAULT 0,
+  \`defense\` int(11) DEFAULT 0,
+  \`healing\` int(11) DEFAULT 0,
+  \`mana_restore\` int(11) DEFAULT 0,
+  \`required_level\` int(11) DEFAULT 1,
+  PRIMARY KEY (\`item_id\`),
+  UNIQUE KEY \`item_name\` (\`item_name\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_leaderboards\` (
+  \`id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`guild_id\` varchar(20) NOT NULL,
+  \`character_id\` int(11) NOT NULL,
+  \`leaderboard_type\` enum('total_exp','total_gold','monsters_killed','dungeons_cleared','pvp_wins','pvp_elo','quests_completed','bosses_killed','deaths','damage_dealt','healing_done','crits_rolled') NOT NULL,
+  \`score\` bigint(20) DEFAULT 0,
+  \`last_updated\` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`uk_guild_char_type\` (\`guild_id\`,\`character_id\`,\`leaderboard_type\`),
+  KEY \`idx_leaderboard\` (\`guild_id\`,\`leaderboard_type\`,\`score\` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_parties\` (
+  \`party_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`guild_id\` varchar(20) NOT NULL,
+  \`party_name\` varchar(100) NOT NULL,
+  \`leader_user_id\` varchar(20) NOT NULL,
+  \`max_members\` int(11) DEFAULT 6,
+  \`status\` enum('forming','active','in_combat','in_dungeon','disbanded') DEFAULT 'forming',
+  \`shared_gold\` int(11) DEFAULT 0,
+  \`current_activity\` varchar(255) DEFAULT NULL,
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (\`party_id\`),
+  KEY \`idx_guild\` (\`guild_id\`),
+  KEY \`idx_leader\` (\`leader_user_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_party_invites\` (
+  \`invite_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`party_id\` int(11) NOT NULL,
+  \`invited_user_id\` varchar(20) NOT NULL,
+  \`invited_by_user_id\` varchar(20) NOT NULL,
+  \`status\` enum('pending','accepted','declined','expired') DEFAULT 'pending',
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`expires_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`invite_id\`),
+  KEY \`idx_party\` (\`party_id\`),
+  KEY \`idx_invited\` (\`invited_user_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_party_members\` (
+  \`id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`party_id\` int(11) NOT NULL,
+  \`character_id\` int(11) NOT NULL,
+  \`user_id\` varchar(20) NOT NULL,
+  \`role\` enum('leader','member') DEFAULT 'member',
+  \`joined_at\` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`uk_party_char\` (\`party_id\`,\`character_id\`),
+  KEY \`idx_party\` (\`party_id\`),
+  KEY \`idx_user\` (\`user_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_pvp_matches\` (
+  \`match_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`guild_id\` varchar(20) NOT NULL,
+  \`challenger_id\` int(11) NOT NULL,
+  \`defender_id\` int(11) NOT NULL,
+  \`challenger_user_id\` varchar(20) NOT NULL,
+  \`defender_user_id\` varchar(20) NOT NULL,
+  \`match_type\` enum('duel','ranked','tournament') DEFAULT 'duel',
+  \`wager_gold\` int(11) DEFAULT 0,
+  \`status\` enum('pending','accepted','declined','active','completed','cancelled') DEFAULT 'pending',
+  \`winner_id\` int(11) DEFAULT NULL,
+  \`combat_id\` bigint(20) DEFAULT NULL,
+  \`elo_change\` int(11) DEFAULT 0,
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`started_at\` timestamp NULL DEFAULT NULL,
+  \`ended_at\` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (\`match_id\`),
+  KEY \`idx_guild\` (\`guild_id\`),
+  KEY \`idx_challenger\` (\`challenger_id\`),
+  KEY \`idx_defender\` (\`defender_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_pvp_stats\` (
+  \`id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) NOT NULL,
+  \`guild_id\` varchar(20) NOT NULL,
+  \`elo_rating\` int(11) DEFAULT 1000,
+  \`wins\` int(11) DEFAULT 0,
+  \`losses\` int(11) DEFAULT 0,
+  \`draws\` int(11) DEFAULT 0,
+  \`win_streak\` int(11) DEFAULT 0,
+  \`best_streak\` int(11) DEFAULT 0,
+  \`total_damage_dealt\` bigint(20) DEFAULT 0,
+  \`total_damage_taken\` bigint(20) DEFAULT 0,
+  \`total_gold_won\` int(11) DEFAULT 0,
+  \`total_gold_lost\` int(11) DEFAULT 0,
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`uk_char_guild\` (\`character_id\`,\`guild_id\`),
+  KEY \`idx_elo\` (\`guild_id\`,\`elo_rating\` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_quests\` (
+  \`quest_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`quest_name\` varchar(150) NOT NULL,
+  \`description\` text DEFAULT NULL,
+  \`required_level\` int(11) DEFAULT 1,
+  \`reward_exp\` int(11) DEFAULT 0,
+  \`reward_gold\` int(11) DEFAULT 0,
+  \`reward_item_id\` int(11) DEFAULT NULL,
+  \`zone\` varchar(50) DEFAULT 'town',
+  \`difficulty\` enum('easy','medium','hard','legendary') DEFAULT 'easy',
+  PRIMARY KEY (\`quest_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_sessions\` (
+  \`session_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`campaign_id\` int(11) NOT NULL,
+  \`session_number\` int(11) NOT NULL,
+  \`title\` varchar(255) DEFAULT NULL,
+  \`summary\` text DEFAULT NULL,
+  \`story_context\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`story_context\`)),
+  \`current_location\` varchar(255) DEFAULT NULL,
+  \`current_scene\` text DEFAULT NULL,
+  \`active_quests\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`active_quests\`)),
+  \`combat_state\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`combat_state\`)),
+  \`environment\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`environment\`)),
+  \`status\` enum('active','paused','ended') DEFAULT 'active',
+  \`started_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`ended_at\` timestamp NULL DEFAULT NULL,
+  \`message_count\` int(11) DEFAULT 0,
+  PRIMARY KEY (\`session_id\`),
+  KEY \`idx_campaign\` (\`campaign_id\`),
+  KEY \`idx_status\` (\`status\`),
+  KEY \`idx_campaign_session\` (\`campaign_id\`,\`session_number\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_session_messages\` (
+  \`message_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`session_id\` bigint(20) NOT NULL,
+  \`message_type\` varchar(32) NOT NULL,
+  \`character_id\` int(11) DEFAULT NULL,
+  \`user_id\` varchar(20) DEFAULT NULL,
+  \`content\` text NOT NULL,
+  \`metadata\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`metadata\`)),
+  \`is_important\` tinyint(1) DEFAULT 0,
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (\`message_id\`),
+  KEY \`idx_session\` (\`session_id\`),
+  KEY \`idx_type\` (\`message_type\`),
+  KEY \`idx_session_time\` (\`session_id\`,\`created_at\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_shops\` (
+  \`shop_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`shop_name\` varchar(100) NOT NULL,
+  \`zone\` varchar(50) NOT NULL,
+  \`item_id\` int(11) NOT NULL,
+  \`price\` int(11) NOT NULL,
+  \`stock\` int(11) DEFAULT -1,
+  PRIMARY KEY (\`shop_id\`),
+  KEY \`idx_zone\` (\`zone\`),
+  KEY \`idx_item\` (\`item_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_skills\` (
+  \`skill_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`skill_name\` varchar(100) NOT NULL,
+  \`class\` varchar(50) NOT NULL,
+  \`description\` text DEFAULT NULL,
+  \`mana_cost\` int(11) DEFAULT 0,
+  \`damage\` int(11) DEFAULT 0,
+  \`healing\` int(11) DEFAULT 0,
+  \`cooldown\` int(11) DEFAULT 0,
+  \`required_level\` int(11) DEFAULT 1,
+  PRIMARY KEY (\`skill_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_spells\` (
+  \`spell_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`spell_name\` varchar(100) NOT NULL,
+  \`spell_level\` int(11) NOT NULL DEFAULT 0,
+  \`school\` enum('abjuration','conjuration','divination','enchantment','evocation','illusion','necromancy','transmutation') NOT NULL,
+  \`casting_time\` varchar(50) NOT NULL,
+  \`range_type\` enum('self','touch','ranged','sight','unlimited') DEFAULT 'ranged',
+  \`range_distance\` int(11) DEFAULT NULL,
+  \`components\` varchar(20) DEFAULT NULL,
+  \`material_components\` text DEFAULT NULL,
+  \`duration\` varchar(100) DEFAULT NULL,
+  \`concentration\` tinyint(1) DEFAULT 0,
+  \`ritual\` tinyint(1) DEFAULT 0,
+  \`description\` text DEFAULT NULL,
+  \`higher_levels\` text DEFAULT NULL,
+  \`damage_dice\` varchar(50) DEFAULT NULL,
+  \`damage_type\` varchar(50) DEFAULT NULL,
+  \`healing_dice\` varchar(50) DEFAULT NULL,
+  \`save_type\` enum('str','dex','con','int','wis','cha') DEFAULT NULL,
+  \`save_effect\` varchar(100) DEFAULT NULL,
+  \`attack_type\` enum('melee','ranged') DEFAULT NULL,
+  \`conditions_applied\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`conditions_applied\`)),
+  \`area_type\` enum('cone','cube','cylinder','line','sphere','square') DEFAULT NULL,
+  \`area_size\` int(11) DEFAULT NULL,
+  \`class_list\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(\`class_list\`)),
+  \`is_srd\` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (\`spell_id\`),
+  UNIQUE KEY \`spell_name\` (\`spell_name\`),
+  KEY \`idx_level\` (\`spell_level\`),
+  KEY \`idx_school\` (\`school\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_spell_slots\` (
+  \`id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) NOT NULL,
+  \`slot_level\` int(11) NOT NULL,
+  \`total_slots\` int(11) NOT NULL DEFAULT 0,
+  \`used_slots\` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (\`id\`),
+  UNIQUE KEY \`uk_char_level\` (\`character_id\`,\`slot_level\`),
+  KEY \`idx_character\` (\`character_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_world_state\` (
+  \`state_id\` bigint(20) NOT NULL AUTO_INCREMENT,
+  \`campaign_id\` int(11) NOT NULL,
+  \`state_key\` varchar(100) NOT NULL,
+  \`state_value\` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(\`state_value\`)),
+  \`state_type\` enum('location','npc','faction','quest','event','item','secret','custom') NOT NULL,
+  \`is_revealed\` tinyint(1) DEFAULT 0,
+  \`importance\` enum('minor','moderate','major','critical') DEFAULT 'moderate',
+  \`created_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`updated_at\` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (\`state_id\`),
+  UNIQUE KEY \`uk_campaign_key\` (\`campaign_id\`,\`state_key\`),
+  KEY \`idx_campaign\` (\`campaign_id\`),
+  KEY \`idx_type\` (\`state_type\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_zones\` (
+  \`zone_id\` varchar(50) NOT NULL,
+  \`zone_name\` varchar(100) NOT NULL,
+  \`description\` text DEFAULT NULL,
+  \`min_level\` int(11) DEFAULT 1,
+  \`danger_level\` int(11) DEFAULT 1,
+  \`connected_zones\` text DEFAULT NULL,
+  PRIMARY KEY (\`zone_id\`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`,
+  `CREATE TABLE IF NOT EXISTS \`dnd_zone_discoveries\` (
+  \`discovery_id\` int(11) NOT NULL AUTO_INCREMENT,
+  \`character_id\` int(11) NOT NULL,
+  \`zone_id\` varchar(50) NOT NULL,
+  \`discovered_at\` timestamp NULL DEFAULT current_timestamp(),
+  \`times_visited\` int(11) DEFAULT 1,
+  PRIMARY KEY (\`discovery_id\`),
+  UNIQUE KEY \`unique_discovery\` (\`character_id\`,\`zone_id\`),
+  KEY \`idx_zone\` (\`zone_id\`),
+  CONSTRAINT \`dnd_zone_discoveries_ibfk_1\` FOREIGN KEY (\`character_id\`) REFERENCES \`dnd_characters\` (\`character_id\`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci`
 ];
 
-const DROP_ORDER = [
-  'dnd_character_achievements','dnd_achievements','dnd_party_invites','dnd_party_members','dnd_parties',
-  'dnd_dungeon_runs','dnd_dungeon_rooms','dnd_dungeons','dnd_character_quests','dnd_quests',
-  'dnd_class_resources','dnd_active_conditions','dnd_conditions','dnd_spell_slots','dnd_character_spells','dnd_spells',
-  'dnd_shops','dnd_inventory','dnd_items','dnd_pvp_stats','dnd_pvp_matches','dnd_dice_rolls','dnd_enemies',
-  'dnd_combat_log','dnd_battles','dnd_combat_participants','dnd_combat_sessions',
-  'dnd_session_messages','dnd_sessions','dnd_campaign_modules','dnd_campaign_players','dnd_campaigns','dnd_characters',
-];
+const NAMES = ["dnd_achievements","dnd_active_conditions","dnd_battles","dnd_campaigns","dnd_campaign_locations","dnd_campaign_modules","dnd_campaign_npcs","dnd_campaign_players","dnd_campaign_quests","dnd_characters","dnd_character_achievements","dnd_character_quests","dnd_character_skills","dnd_character_spells","dnd_class_features","dnd_class_resources","dnd_combat_log","dnd_combat_participants","dnd_combat_sessions","dnd_conditions","dnd_dice_rolls","dnd_dm_encounters","dnd_dungeons","dnd_dungeon_rooms","dnd_dungeon_runs","dnd_enemies","dnd_inventory","dnd_items","dnd_leaderboards","dnd_parties","dnd_party_invites","dnd_party_members","dnd_pvp_matches","dnd_pvp_stats","dnd_quests","dnd_sessions","dnd_session_messages","dnd_shops","dnd_skills","dnd_spells","dnd_spell_slots","dnd_world_state","dnd_zones","dnd_zone_discoveries"];
 
 export async function up(db) {
-  for (const ddl of TABLES) await db.execute(ddl);
-  // An abandoned earlier migration created dnd_session_messages.message_type as a
-  // restrictive ENUM; widen it so any action type (player_examine/roll/system…) inserts.
-  await db.execute('ALTER TABLE dnd_session_messages MODIFY COLUMN message_type VARCHAR(32) NOT NULL').catch(() => {});
+  await db.execute('SET FOREIGN_KEY_CHECKS=0');
+  try {
+    for (const ddl of TABLES) await db.execute(ddl);
+    // An abandoned earlier migration created dnd_session_messages.message_type as a
+    // restrictive ENUM; widen it so any action type (player_examine/roll/system…) inserts.
+    await db.execute('ALTER TABLE dnd_session_messages MODIFY COLUMN message_type VARCHAR(32) NOT NULL').catch(() => {});
+  } finally {
+    await db.execute('SET FOREIGN_KEY_CHECKS=1');
+  }
 }
 
 export async function down(db) {
-  for (const t of DROP_ORDER) await db.execute(`DROP TABLE IF EXISTS ${t}`);
+  await db.execute('SET FOREIGN_KEY_CHECKS=0');
+  try {
+    for (const name of [...NAMES].reverse()) await db.execute('DROP TABLE IF EXISTS `' + name + '`');
+  } finally {
+    await db.execute('SET FOREIGN_KEY_CHECKS=1');
+  }
 }
