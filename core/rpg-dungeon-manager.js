@@ -552,6 +552,9 @@ class RPGDungeonManager {
                 [Math.max(0, outcome.playerHp), character.character_id]
             );
 
+            // Grant the rolled loot items into the character's inventory.
+            const lootGrant = await this.grantLoot(character.character_id, loot, characterManager);
+
             // Advance the run (folds xp/gold into totals; completes on last room).
             const advance = await this.completeRoom(runId, { xp: xpGained, gold: goldGained });
 
@@ -563,6 +566,7 @@ class RPGDungeonManager {
                 enemies,
                 outcome,
                 loot,
+                lootGrant,
                 xpGained,
                 goldGained,
                 advance,
@@ -703,6 +707,44 @@ class RPGDungeonManager {
         }
 
         return loot;
+    }
+
+    /**
+     * Grant a loot object's items into a character's inventory, resolving each
+     * loot reference to a real dnd_items row. Loot refs are authored data and are
+     * messy: most are exact item names ("Iron Sword"), some are slugs
+     * ("shortsword_1", "potion_healing"). We match on a normalized name (alnum,
+     * trailing digits stripped) plus a small alias map for semantic slugs.
+     * Resolved items are added via characterManager.addItem (same path the shop
+     * uses); unresolved refs are reported (shown in the embed) but not granted.
+     * @returns {Promise<{granted:string[], unresolved:string[]}>}
+     */
+    static async grantLoot(characterId, loot, characterManager) {
+        const out = { granted: [], unresolved: [] };
+        const items = (loot && loot.items) || [];
+        if (!items.length || !characterManager?.addItem) return out;
+
+        const [catalog] = await pool.execute('SELECT item_id, item_name FROM dnd_items');
+        const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '').replace(/\d+$/, '');
+        const byNorm = new Map();
+        for (const it of catalog) byNorm.set(norm(it.item_name), it);
+        const ALIASES = { potionhealing: 'healthpotion', healingpotion: 'healthpotion', potionmana: 'manapotion', manapotionref: 'manapotion' };
+
+        for (const entry of items) {
+            const name = typeof entry === 'string' ? entry : (entry && entry.name);
+            if (!name) continue;
+            let key = norm(name);
+            if (ALIASES[key]) key = ALIASES[key];
+            const hit = byNorm.get(key);
+            if (!hit) { out.unresolved.push(name); continue; }
+            try {
+                await characterManager.addItem(characterId, hit.item_id, 1);
+                out.granted.push(hit.item_name);
+            } catch {
+                out.unresolved.push(name);
+            }
+        }
+        return out;
     }
 
     /**
