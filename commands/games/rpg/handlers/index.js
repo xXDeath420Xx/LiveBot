@@ -50,17 +50,32 @@ export async function handleCampaign(interaction, subcommand, characterManager) 
         const theme = interaction.options.getString('theme') || 'classic fantasy';
         const difficulty = interaction.options.getString('difficulty') || 'normal';
 
-        const campaign = await RPGCampaignManager.createCampaign(
-            interaction.guild.id,
-            interaction.user.id,
-            { name, type, setting, theme, difficulty }
-        );
+        let campaign;
+        try {
+            campaign = await RPGCampaignManager.createCampaign(
+                interaction.guild.id,
+                interaction.user.id,
+                { name, type, setting, theme, difficulty }
+            );
+        } catch (err) {
+            await interaction.editReply({ content: `Could not create campaign: ${err.message}` });
+            return;
+        }
 
-        await RPGCampaignManager.joinCampaign(
-            campaign.campaign_id,
-            interaction.user.id,
-            character.character_id
-        );
+        // Auto-join the creator's character; a failure here (e.g. character already in
+        // another campaign) should surface a helpful message, not the generic catch-all.
+        try {
+            await RPGCampaignManager.joinCampaign(
+                campaign.campaign_id,
+                interaction.user.id,
+                character.character_id
+            );
+        } catch (err) {
+            await interaction.editReply({
+                content: `Campaign **${campaign.campaign_name}** (ID: #${campaign.campaign_id}) was created, but your character could not auto-join it: ${err.message}`
+            });
+            return;
+        }
 
         const embed = new EmbedBuilder()
             .setColor('#9B59B6')
@@ -131,11 +146,17 @@ export async function handleCampaign(interaction, subcommand, characterManager) 
             return;
         }
 
-        const result = await RPGCampaignManager.joinCampaign(
-            campaignId,
-            interaction.user.id,
-            character.character_id
-        );
+        let result;
+        try {
+            result = await RPGCampaignManager.joinCampaign(
+                campaignId,
+                interaction.user.id,
+                character.character_id
+            );
+        } catch (err) {
+            await interaction.editReply({ content: `Could not join campaign: ${err.message}` });
+            return;
+        }
 
         const embed = new EmbedBuilder()
             .setColor('#00FF00')
@@ -261,12 +282,18 @@ export async function handleSession(interaction, subcommand, characterManager) {
             return;
         }
 
-        // Join the campaign
-        await RPGCampaignManager.joinCampaign(
-            session.campaign_id,
-            interaction.user.id,
-            character.character_id
-        );
+        // Join the campaign. A throw here (e.g. already a member) should surface a
+        // helpful message rather than the generic top-level error catch.
+        try {
+            await RPGCampaignManager.joinCampaign(
+                session.campaign_id,
+                interaction.user.id,
+                character.character_id
+            );
+        } catch (err) {
+            await interaction.editReply({ content: `Could not join the session: ${err.message}` });
+            return;
+        }
 
         await interaction.editReply({
             content: `**${character.character_name}** has joined the adventure!`
@@ -1107,8 +1134,11 @@ export async function handlePlay(interaction, subcommand, characterManager) {
         }
     }
 
-    // Build a play-response embed from a processPlayerAction() result
+    // Build a play-response embed from a processPlayerAction() result.
+    // Null-guard the response so a failed/empty AI DM result still yields a valid embed
+    // instead of throwing (which would surface as the generic top-level error).
     const buildPlayEmbed = (response, color) => {
+        response = response || {};
         const embed = new EmbedBuilder()
             .setColor(response.combatInitiated || response.inCombat ? '#FF0000' : color)
             .setDescription(
