@@ -54,3 +54,13 @@ test('analytics gate: only an explicit true enables counting', () => {
     assert.equal(gate({ analytics: 1 }), false, 'truthy-but-not-true = off');
     assert.equal(gate({ analytics: true }), true, 'explicit opt-in = on');
 });
+
+test('commands master switch: only an explicit true enables chat commands', () => {
+    // Mirrors the handleMessage gate: channelFeats?.commands === true
+    const gate = (feats) => feats?.commands === true;
+    assert.equal(gate(null), false, 'no config = protection-only');
+    assert.equal(gate({}), false, 'empty config = protection-only');
+    assert.equal(gate({ tokes: true }), false, 'legacy game flags alone do NOT enable commands');
+    assert.equal(gate({ commands: 1 }), false, 'truthy-but-not-true = off');
+    assert.equal(gate({ commands: true }), true, 'explicit opt-in = on');
+});
