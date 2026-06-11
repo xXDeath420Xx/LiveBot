@@ -90,6 +90,25 @@
     </ul>
   </div>
 
+  <!-- ── Auto-responders ────────────────────────────────────── -->
+  <div class="card">
+    <h2>Auto-responders</h2>
+    <div class="muted">When a chat message matches a trigger, the bot replies automatically. Supports {{username}} and {{channel_name}}.</div>
+    <div class="srow" style="margin-top:.75rem">
+      <input id="ar-trigger" placeholder="trigger (e.g. discord)" />
+      <select id="ar-match">
+        <option value="contains">Contains</option>
+        <option value="exact">Exact</option>
+        <option value="starts">Starts with</option>
+        <option value="word">Whole word</option>
+      </select>
+      <input id="ar-cd" type="number" min="0" max="3600" value="10" style="width:6rem" />
+      <button id="ar-add">Add</button>
+    </div>
+    <textarea id="ar-resp" placeholder="Response (supports {{username}})" style="width:100%;margin-top:.5rem"></textarea>
+    <ul class="clean" id="ar-list" style="margin-top:.75rem">Loading…</ul>
+  </div>
+
 <% var pageJs = `
   <script>
     const CHANNEL = ` + JSON.stringify(channel.channel_id) + `;
@@ -139,5 +158,58 @@
       try { await KickDash.del('/kick/api/channel/' + CHANNEL + '/custom/' + btn.dataset.id, {}); location.reload(); }
       catch (e) { alert(e.message || 'Delete failed.'); }
     }));
+
+    // ── Auto-responders ──────────────────────────────────────
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    async function loadResponders() {
+      const list = document.getElementById('ar-list');
+      try {
+        const res = await fetch('/kick/api/channel/' + CHANNEL + '/responders', { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        const rows = (data && data.responders) || [];
+        if (!rows.length) { list.innerHTML = '<li class="muted">No auto-responders yet.</li>'; return; }
+        list.innerHTML = rows.map(r => {
+          const resp = (r.response || '');
+          const short = resp.length > 50 ? resp.slice(0, 50) + '…' : resp;
+          return '<li data-id="' + r.id + '">' +
+            '<span>' +
+              '<strong>' + esc(r.trigger_text) + '</strong> ' +
+              '<span class="pill">' + esc(r.match_type) + '</span> ' +
+              '<span class="muted">· used ' + (r.use_count || 0) + '×</span> ' +
+              '<span class="muted">' + esc(short) + '</span>' +
+            '</span>' +
+            '<button class="ar-del danger" data-id="' + r.id + '">Delete</button>' +
+          '</li>';
+        }).join('');
+        list.querySelectorAll('.ar-del').forEach(btn => btn.addEventListener('click', async () => {
+          if (!confirm('Delete this auto-responder?')) return;
+          try { await KickDash.del('/kick/api/channel/' + CHANNEL + '/responders/' + btn.dataset.id, {}); await loadResponders(); }
+          catch (e) { alert(e.message || 'Delete failed.'); }
+        }));
+      } catch (e) {
+        list.innerHTML = '<li class="muted">Failed to load auto-responders.</li>';
+      }
+    }
+
+    // Add an auto-responder.
+    document.getElementById('ar-add').addEventListener('click', async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      try {
+        await KickDash.post('/kick/api/channel/' + CHANNEL + '/responders', {
+          trigger_text: document.getElementById('ar-trigger').value,
+          match_type: document.getElementById('ar-match').value,
+          response: document.getElementById('ar-resp').value,
+          cooldown: document.getElementById('ar-cd').value
+        });
+        document.getElementById('ar-trigger').value = '';
+        document.getElementById('ar-resp').value = '';
+        document.getElementById('ar-cd').value = '10';
+        await loadResponders();
+      } catch (err) { alert(err.message || 'Add failed.'); }
+      finally { btn.disabled = false; }
+    });
+
+    try { loadResponders(); } catch (e) {}
   </script>`; %>
 <%- include('_foot', { extraJs: pageJs }) %>
