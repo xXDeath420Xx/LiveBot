@@ -12,6 +12,9 @@ import { invalidateChannelCache } from '../../services/certifried-bot/command-re
 import { clearAutoResponderCache } from '../../services/certifried-bot/auto-responder.js';
 import { clearKickAutomodCache } from '../../services/certifried-bot/kick-automod.js';
 import { dailyActivity } from '../../services/certifried-bot/defender/enforcement-log.js';
+import { clearGiveawayCache } from '../../services/certifried-bot/giveaway.js';
+import { chatTrend } from '../../services/certifried-bot/chat-stats.js';
+import { sendChannelMessage } from '../../jobs/kick-timer-scheduler.js';
 import { resolveChannel } from '../../services/certifried-bot/defender/channel-tokens.js';
 import { resolveKickUser } from '../../services/certifried-bot/defender/resolve-kick-user.js';
 import { banUser, unbanUser } from '../../services/certifried-bot/defender/kick-moderation.js';
@@ -508,6 +511,204 @@ router.delete('/kick/api/channel/:channelId/timers/:id', requireKickAuth, async 
     } catch (error) {
         logger.error('[Kick Channel] timer delete error', { error: error.message });
         res.status(500).json({ error: 'Failed to delete timer' });
+    }
+});
+
+// ── Chat-volume trend (messages/day) ────────────────────────────────────────
+router.get('/kick/api/channel/:channelId/chat-trend', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        res.json({ series: await chatTrend(owned.id, req.query.days || 14) });
+    } catch (error) {
+        logger.error('[Kick Channel] chat-trend error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load chat trend' });
+    }
+});
+
+// ── My channels (for copy-config pickers etc.) ──────────────────────────────
+router.get('/kick/api/my-channels', requireKickAuth, async (req, res) => {
+    try {
+        const [rows] = await pool.execute(
+            "SELECT channel_id, channel_name FROM tokes_channels WHERE platform = 'kick' AND owner_id = ? ORDER BY channel_name",
+            [req.session.tokesUser.id]
+        );
+        res.json({ channels: rows });
+    } catch (error) {
+        logger.error('[Kick Channel] my-channels error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load channels' });
+    }
+});
+
+// ── Copy config from another owned channel ──────────────────────────────────
+// Copies command overrides, custom commands, auto-responders, timers,
+// channel settings (prefix/cooldowns/features incl. automod+welcome) and
+// kbd_channel_settings from `from` into :channelId. REPLACES the target's
+// existing rows in those tables — the UI warns before calling.
+router.post('/kick/api/channel/:channelId/copy-config', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const target = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!target) return res.status(404).json({ error: 'Channel not found' });
+        const source = await resolveOwnedChannel(userId, req.body.from);
+        if (!source) return res.status(404).json({ error: 'Source channel not found (must be yours)' });
+        if (source.id === target.id) return res.status(400).json({ error: 'Source and target are the same channel' });
+
+        // Channel-level settings.
+        await pool.execute(
+            `UPDATE tokes_channels t
+             JOIN tokes_channels s ON s.id = ?
+             SET t.command_prefix = s.command_prefix,
+                 t.cooldown_global = s.cooldown_global,
+                 t.cooldown_user = s.cooldown_user,
+                 t.features_enabled = s.features_enabled
+             WHERE t.id = ?`,
+            [source.id, target.id]
+        );
+        // Replace per-channel rows table by table.
+        await pool.execute('DELETE FROM tokes_channel_commands WHERE channel_id = ?', [target.id]);
+        await pool.execute(
+            `INSERT INTO tokes_channel_commands (channel_id, command_key, is_enabled, custom_aliases, custom_response, cooldown_override, mod_only)
+             SELECT ?, command_key, is_enabled, custom_aliases, custom_response, cooldown_override, mod_only
+             FROM tokes_channel_commands WHERE channel_id = ?`,
+            [target.id, source.id]
+        );
+        await pool.execute('DELETE FROM tokes_custom_commands WHERE channel_id = ?', [target.id]);
+        await pool.execute(
+            `INSERT INTO tokes_custom_commands (channel_id, command_name, response, cooldown, mod_only, is_enabled, created_by)
+             SELECT ?, command_name, response, cooldown, mod_only, is_enabled, created_by
+             FROM tokes_custom_commands WHERE channel_id = ?`,
+            [target.id, source.id]
+        );
+        await pool.execute('DELETE FROM tokes_auto_responders WHERE channel_id = ?', [target.id]);
+        await pool.execute(
+            `INSERT INTO tokes_auto_responders (channel_id, trigger_text, match_type, response, cooldown, is_enabled, created_by)
+             SELECT ?, trigger_text, match_type, response, cooldown, is_enabled, created_by
+             FROM tokes_auto_responders WHERE channel_id = ?`,
+            [target.id, source.id]
+        );
+        await pool.execute('DELETE FROM tokes_timers WHERE channel_id = ?', [target.id]);
+        await pool.execute(
+            `INSERT INTO tokes_timers (channel_id, message, interval_min, is_enabled, created_by)
+             SELECT ?, message, interval_min, is_enabled, created_by
+             FROM tokes_timers WHERE channel_id = ?`,
+            [target.id, source.id]
+        );
+        // Defender per-channel settings are keyed by the KICK channel_id, not the PK.
+        await pool.execute(
+            `INSERT INTO kbd_channel_settings (channel_id, ban_duration_min, phishing_threshold, warning_template, safe_domains)
+             SELECT ?, ban_duration_min, phishing_threshold, warning_template, safe_domains
+             FROM kbd_channel_settings WHERE channel_id = ?
+             ON DUPLICATE KEY UPDATE ban_duration_min = VALUES(ban_duration_min),
+                phishing_threshold = VALUES(phishing_threshold),
+                warning_template = VALUES(warning_template), safe_domains = VALUES(safe_domains)`,
+            [String(req.params.channelId), String(req.body.from)]
+        );
+
+        // Bust every relevant cache so the live bot picks the new config up.
+        invalidateChannelCache(target.id);
+        clearAutoResponderCache(target.id);
+        clearKickAutomodCache(target.id);
+        clearGiveawayCache(target.id);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[Kick Channel] copy-config error', { error: error.message });
+        res.status(500).json({ error: 'Failed to copy configuration' });
+    }
+});
+
+// ── Giveaways ───────────────────────────────────────────────────────────────
+router.get('/kick/api/channel/:channelId/giveaway', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [[g]] = await pool.execute(
+            `SELECT id, title, keyword, status, winner_username, created_at
+             FROM tokes_giveaways WHERE channel_id = ? ORDER BY id DESC LIMIT 1`,
+            [owned.id]
+        );
+        if (!g) return res.json({ giveaway: null });
+        const [[cnt]] = await pool.execute(
+            'SELECT COUNT(*) AS n FROM tokes_giveaway_entries WHERE giveaway_id = ?', [g.id]
+        );
+        res.json({ giveaway: { ...g, entries: Number(cnt.n) } });
+    } catch (error) {
+        logger.error('[Kick Channel] giveaway get error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load giveaway' });
+    }
+});
+
+router.post('/kick/api/channel/:channelId/giveaway', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const title = String(req.body.title || '').trim().slice(0, 200);
+        if (!title) return res.status(400).json({ error: 'title required' });
+        const keyword = (String(req.body.keyword || 'enter').trim().toLowerCase().replace(/^!/, '') || 'enter').slice(0, 50);
+        if (!/^[a-z0-9_-]+$/.test(keyword)) return res.status(400).json({ error: 'keyword must be alphanumeric' });
+        const [[active]] = await pool.execute(
+            "SELECT id FROM tokes_giveaways WHERE channel_id = ? AND status = 'active'", [owned.id]
+        );
+        if (active) return res.status(409).json({ error: 'A giveaway is already running — close it first.' });
+        const [r] = await pool.execute(
+            'INSERT INTO tokes_giveaways (channel_id, title, keyword, created_by) VALUES (?, ?, ?, ?)',
+            [owned.id, title, keyword, req.session.tokesUser.name || 'owner']
+        );
+        clearGiveawayCache(owned.id);
+        // Announce in chat (best-effort).
+        sendChannelMessage(String(req.params.channelId), `🎉 GIVEAWAY: ${title} — type !${keyword} to enter!`).catch(() => {});
+        res.json({ success: true, id: r.insertId, keyword });
+    } catch (error) {
+        logger.error('[Kick Channel] giveaway create error', { error: error.message });
+        res.status(500).json({ error: 'Failed to start giveaway' });
+    }
+});
+
+router.post('/kick/api/channel/:channelId/giveaway/:id/draw', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [[g]] = await pool.execute(
+            "SELECT id, title, status FROM tokes_giveaways WHERE id = ? AND channel_id = ?",
+            [req.params.id, owned.id]
+        );
+        if (!g) return res.status(404).json({ error: 'Giveaway not found' });
+        const [[winner]] = await pool.execute(
+            'SELECT username FROM tokes_giveaway_entries WHERE giveaway_id = ? ORDER BY RAND() LIMIT 1', [g.id]
+        );
+        if (!winner) return res.status(409).json({ error: 'No entries yet — nobody to draw.' });
+        await pool.execute(
+            "UPDATE tokes_giveaways SET status = 'drawn', winner_username = ?, closed_at = NOW() WHERE id = ?",
+            [winner.username, g.id]
+        );
+        clearGiveawayCache(owned.id);
+        sendChannelMessage(String(req.params.channelId), `🏆 GIVEAWAY WINNER: @${winner.username} — congrats! (${g.title})`).catch(() => {});
+        res.json({ success: true, winner: winner.username });
+    } catch (error) {
+        logger.error('[Kick Channel] giveaway draw error', { error: error.message });
+        res.status(500).json({ error: 'Failed to draw winner' });
+    }
+});
+
+router.post('/kick/api/channel/:channelId/giveaway/:id/close', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [r] = await pool.execute(
+            "UPDATE tokes_giveaways SET status = 'closed', closed_at = NOW() WHERE id = ? AND channel_id = ? AND status = 'active'",
+            [req.params.id, owned.id]
+        );
+        if (!r.affectedRows) return res.status(404).json({ error: 'No active giveaway with that id' });
+        clearGiveawayCache(owned.id);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[Kick Channel] giveaway close error', { error: error.message });
+        res.status(500).json({ error: 'Failed to close giveaway' });
     }
 });
 
