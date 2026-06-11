@@ -712,4 +712,61 @@ router.post('/kick/api/channel/:channelId/giveaway/:id/close', requireKickAuth, 
     }
 });
 
+// ── Kick event subscriptions (webhooks: follows, subs, stream status) ───────
+const KICK_EVENT_TYPES = [
+    { name: 'channel.followed', version: 1 },
+    { name: 'channel.subscription.new', version: 1 },
+    { name: 'channel.subscription.renewal', version: 1 },
+    { name: 'channel.subscription.gifts', version: 1 },
+    { name: 'livestream.status.updated', version: 1 }
+];
+
+router.post('/kick/api/channel/:channelId/events/subscribe', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const ch = await resolveChannel(String(req.params.channelId));
+        if (!ch || !ch.token) return res.status(409).json({ error: 'Channel not enrolled or token unavailable.' });
+        if (!ch.scopes.includes('events:subscribe')) {
+            return res.status(403).json({ error: 'Re-authorize with Kick to grant event permissions.' });
+        }
+        const r = await fetch('https://api.kick.com/public/v1/events/subscriptions', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${ch.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                broadcaster_user_id: parseInt(req.params.channelId, 10),
+                events: KICK_EVENT_TYPES,
+                method: 'webhook'
+            })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+            logger.warn('[Kick Channel] event subscribe rejected', { status: r.status, body: JSON.stringify(j).slice(0, 300) });
+            return res.status(502).json({ error: `Kick rejected the subscription (status ${r.status}).` });
+        }
+        res.json({ success: true, results: j.data || j });
+    } catch (error) {
+        logger.error('[Kick Channel] event subscribe error', { error: error.message });
+        res.status(500).json({ error: 'Failed to subscribe to events' });
+    }
+});
+
+router.get('/kick/api/channel/:channelId/events/recent', requireKickAuth, async (req, res) => {
+    try {
+        const userId = req.session.tokesUser.id;
+        const owned = await resolveOwnedChannel(userId, req.params.channelId);
+        if (!owned) return res.status(404).json({ error: 'Channel not found' });
+        const [rows] = await pool.execute(
+            `SELECT event_type, actor_username, created_at FROM tokes_kick_events
+             WHERE channel_id = ? ORDER BY created_at DESC LIMIT 30`,
+            [String(req.params.channelId)]
+        );
+        res.json({ events: rows });
+    } catch (error) {
+        logger.error('[Kick Channel] events recent error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load events' });
+    }
+});
+
 export default router;
