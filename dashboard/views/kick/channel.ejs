@@ -181,7 +181,11 @@
     try { feats = JSON.parse(document.getElementById('feats').dataset.json || '{}') || {}; } catch (_) {}
     document.getElementById('feats').innerHTML = FEATURES.map(f =>
       '<label style="flex-direction:row;gap:.35rem;align-items:center">' +
-      '<input type="checkbox" class="feat" data-feat="' + f + '"' + (feats[f] !== false ? ' checked' : '') + '/> ' + f + '</label>').join('');
+      '<input type="checkbox" class="feat" data-feat="' + f + '"' + (feats[f] !== false ? ' checked' : '') + '/> ' + f + '</label>').join('')
+      // Chat analytics is OPT-IN (off unless explicitly true) — it counts
+      // message volume for the messages/day chart, so it only runs when asked.
+      + '<label style="flex-direction:row;gap:.35rem;align-items:center">' +
+      '<input type="checkbox" id="feat-analytics"' + (feats.analytics === true ? ' checked' : '') + '/> chat analytics</label>';
 
     // ── Automod filters init (reuse the same parsed features object) ──
     const am = (feats && feats.automod) || {};
@@ -211,6 +215,7 @@
       features.welcome_message = document.getElementById('welcome-msg').value;
       features.thank_follow = document.getElementById('thank-follow').value;
       features.thank_sub = document.getElementById('thank-sub').value;
+      features.analytics = document.getElementById('feat-analytics').checked;
       return features;
     }
 
@@ -409,7 +414,7 @@
         if (!res.ok) throw new Error(j.error || 'Failed');
         const series = (j && j.series) || [];
         const max = Math.max(0, ...series.map(d => Number(d.messages) || 0));
-        if (!series.length || max === 0) { host.textContent = 'No chat recorded yet.'; return; }
+        if (!series.length || max === 0) { host.textContent = 'No chat recorded yet — turn on "chat analytics" in Channel settings to start counting.'; return; }
         const W = 560, H = 80, padL = 8, padR = 8, padT = 6, padB = 6;
         const plotW = W - padL - padR, plotH = H - padT - padB;
         const slot = plotW / series.length;
