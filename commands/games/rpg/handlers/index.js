@@ -23,6 +23,7 @@ import RPGClassResourceManager from '../../../../core/rpg-class-resource-manager
 import RPGPartyManager from '../../../../core/rpg-party-manager.js';
 import RPGDungeonManager from '../../../../core/rpg-dungeon-manager.js';
 import RPGPvPManager from '../../../../core/rpg-pvp-manager.js';
+import { buildPvpBoardEmbed, buildPvpActionRow } from './pvpBoard.js';
 import RPGLeaderboardManager from '../../../../core/rpg-leaderboard-manager.js';
 import { registerRPGMessage, setRPGChannel, getRPGChannel } from '../../../../core/rpg-reply-handler.js';
 import { createProgressBar } from '../utils.js';
@@ -1798,12 +1799,89 @@ export async function handlePvP(interaction, subcommand, characterManager) {
     }
 
     else if (subcommand === 'accept') {
-        await interaction.deferReply();
+        // Ephemeral confirm to the accepter; the live board is posted to the channel.
+        await interaction.deferReply({ ephemeral: true });
 
         const matchId = interaction.options.getInteger('match_id', true);
         try {
             await RPGPvPManager.acceptMatch(matchId, interaction.user.id);
-            await interaction.editReply({ content: `Match #${matchId} accepted! The duel is now active. Resolve it with \`/rpg pvp resolve\`.` });
+            // Kick off the live turn-by-turn match.
+            const state = await RPGPvPManager.startLiveMatch(matchId, characterManager);
+
+            // Post the combat board to the channel and remember its location so
+            // every turn (button or slash) edits the SAME message in place.
+            const board = await interaction.channel.send({
+                embeds: [buildPvpBoardEmbed(state)],
+                components: [buildPvpActionRow(matchId)],
+            });
+            await pool.execute(
+                'UPDATE dnd_pvp_matches SET board_channel_id = ?, board_message_id = ? WHERE match_id = ?',
+                [board.channelId, board.id, matchId]
+            );
+
+            const turnName = Number(state.whoseTurn) === Number(state.challenger.characterId)
+                ? state.challenger.name : state.defender.name;
+            await interaction.editReply({ content: `Challenge accepted — the duel is live! It's **${turnName}'s** turn. Use the buttons on the board (or \`/rpg pvp action\`).` });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'status') {
+        await interaction.deferReply({ ephemeral: true });
+
+        const active = await RPGPvPManager.getActiveMatch(interaction.user.id, guildId);
+        if (!active) {
+            await interaction.editReply({ content: 'You have no active live duel.' });
+            return;
+        }
+        try {
+            const state = await RPGPvPManager.getLiveState(active.match_id, characterManager);
+            await interaction.editReply({
+                embeds: [buildPvpBoardEmbed(state)],
+                components: [buildPvpActionRow(active.match_id)],
+            });
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'action') {
+        // Slash fallback for the Attack/Defend buttons.
+        await interaction.deferReply({ ephemeral: true });
+
+        const action = interaction.options.getString('action', true); // attack | defend
+        const active = await RPGPvPManager.getActiveMatch(interaction.user.id, guildId);
+        if (!active) {
+            await interaction.editReply({ content: 'You have no active live duel.' });
+            return;
+        }
+
+        try {
+            const res = await RPGPvPManager.applyAction(active.match_id, cid, action, characterManager);
+            await syncPvpBoard(interaction, active.match_id, res, characterManager);
+            if (res.ended) {
+                await interaction.editReply({ content: `The duel is over — **${res.winnerName}** wins!` });
+            } else {
+                await interaction.editReply({ content: `You ${action === 'attack' ? 'attacked' : 'braced for defense'}. Waiting on your opponent.` });
+            }
+        } catch (err) {
+            await interaction.editReply({ content: err.message });
+        }
+    }
+
+    else if (subcommand === 'forfeit') {
+        await interaction.deferReply({ ephemeral: true });
+
+        const active = await RPGPvPManager.getActiveMatch(interaction.user.id, guildId);
+        if (!active) {
+            await interaction.editReply({ content: 'You have no active live duel to forfeit.' });
+            return;
+        }
+        try {
+            const result = await RPGPvPManager.forfeit(active.match_id, cid);
+            await syncPvpBoard(interaction, active.match_id, { ended: true, result }, characterManager);
+            await interaction.editReply({ content: 'You forfeited the duel.' });
         } catch (err) {
             await interaction.editReply({ content: err.message });
         }
@@ -1836,10 +1914,25 @@ export async function handlePvP(interaction, subcommand, characterManager) {
         }
 
         try {
-            // Multi-round auto-duel: both start at full HP, alternate real
-            // attack/damage vs AC/defense, initiative by DEX/level.
+            // "Instantly auto-resolve the REST of the active live match": if the
+            // match has live HP state, continue the auto-duel from current HP so
+            // damage already dealt this duel still counts. Otherwise fall back to
+            // a fresh full-HP auto-resolution. ELO/wager still flow via endMatch.
             const result = await RPGPvPManager.resolveMatch(matchId, characterManager);
             await interaction.editReply({ embeds: [buildDuelLogEmbed(result, match)] });
+
+            // If a live board exists, lock it down to reflect the auto-resolution.
+            if (match.board_channel_id && match.board_message_id) {
+                try {
+                    const finalState = await RPGPvPManager.getLiveState(matchId, characterManager);
+                    const ch = await interaction.client.channels.fetch(match.board_channel_id);
+                    const msg = await ch.messages.fetch(match.board_message_id);
+                    await msg.edit({
+                        embeds: [buildPvpBoardEmbed(finalState, { ended: true, result, headline: `${result.winnerName} wins (auto-resolved)!` })],
+                        components: [buildPvpActionRow(matchId, { disabled: true })],
+                    });
+                } catch { /* board edit is best-effort */ }
+            }
         } catch (err) {
             await interaction.editReply({ content: err.message });
         }
@@ -2269,6 +2362,41 @@ function buildCombatLogEmbed(result, character, defeat) {
  * @param {object} result - RPGPvPManager.resolveMatch() result
  * @param {object} match - the match row (for names)
  */
+/**
+ * Edit the persisted live PvP board message in place after a slash-driven
+ * action/forfeit so the channel board stays in sync with the buttons.
+ *
+ * @param {object} interaction
+ * @param {number} matchId
+ * @param {object} res - applyAction result {ended, state, result?} OR {ended, result}
+ * @param {object} characterManager
+ */
+async function syncPvpBoard(interaction, matchId, res, characterManager) {
+    try {
+        const state = res.state || await RPGPvPManager.getLiveState(matchId, characterManager);
+        if (!state.match.board_channel_id || !state.match.board_message_id) return;
+
+        const channel = await interaction.client.channels.fetch(state.match.board_channel_id);
+        const message = await channel.messages.fetch(state.match.board_message_id);
+
+        if (res.ended) {
+            const winnerName = res.winnerName
+                || (res.result?.winner_character_id === state.challenger.characterId ? state.challenger.name : state.defender.name);
+            await message.edit({
+                embeds: [buildPvpBoardEmbed(state, { ended: true, result: res.result, headline: `${winnerName} wins!` })],
+                components: [buildPvpActionRow(matchId, { disabled: true })],
+            });
+        } else {
+            await message.edit({
+                embeds: [buildPvpBoardEmbed(state)],
+                components: [buildPvpActionRow(matchId)],
+            });
+        }
+    } catch (err) {
+        logger.warn('[PvP] syncPvpBoard failed', { err: err.message, matchId });
+    }
+}
+
 function buildDuelLogEmbed(result, match) {
     const { duel, challenger, defender, winnerName } = result;
     const embed = new EmbedBuilder()

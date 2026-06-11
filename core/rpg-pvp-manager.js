@@ -6,7 +6,7 @@
 import { pool } from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { RPGDiceEngine } from './rpg-dice-engine.js';
-import { resolveDuel as autoResolveDuel } from './rpg-auto-combat.js';
+import { resolveDuel as autoResolveDuel, resolveAttack } from './rpg-auto-combat.js';
 
 // ELO constants
 const ELO_K_FACTOR = 32; // Standard K-factor
@@ -293,6 +293,12 @@ class RPGPvPManager {
         const challenger = await this._buildCombatant(match.challenger_id, characterManager);
         const defender = await this._buildCombatant(match.defender_id, characterManager);
 
+        // If this match has live turn-by-turn state, resume the auto-duel from the
+        // CURRENT HP (so damage already traded in the live duel still counts).
+        // Otherwise both start at full HP (classic single-shot auto-resolve).
+        if (match.challenger_hp != null) challenger.hp = match.challenger_hp;
+        if (match.defender_hp != null) defender.hp = match.defender_hp;
+
         // side 'a' = challenger, side 'b' = defender
         const duel = autoResolveDuel(challenger, defender, { maxRounds: 30 });
 
@@ -526,23 +532,365 @@ class RPGPvPManager {
         }));
     }
 
+    // ====================================================================
+    // LIVE turn-by-turn combat (two players act across separate interactions)
+    // State persisted on dnd_pvp_matches via migration 126.
+    // ====================================================================
+
     /**
-     * Forfeit an active match
-     * @param {number} matchId - Match ID
-     * @param {string} forfeitingUserId - User forfeiting
+     * Build a live combatant snapshot keyed by side, mirroring _buildCombatant
+     * but tagging which side (challenger/defender) + the owning user id so the
+     * live engine can identify whose turn it is and apply ELO/wager correctly.
+     * @private
      */
-    static async forfeit(matchId, forfeitingUserId) {
+    static async _buildLiveCombatant(side, characterId, userId, characterManager) {
+        const snap = await this._buildCombatant(characterId, characterManager);
+        return { ...snap, side, userId };
+    }
+
+    /**
+     * Start a live, turn-by-turn match from an already-active match.
+     * Both sides start at FULL HP; first turn goes to the higher DEX
+     * (tiebreak: challenger). Persists initial HP/turn/round state.
+     *
+     * @param {number} matchId
+     * @param {object} characterManager
+     * @returns {Promise<object>} live state (see getLiveState shape)
+     */
+    static async startLiveMatch(matchId, characterManager) {
+        const match = await this.getMatch(matchId);
+        if (!match || match.status !== 'active') {
+            throw new Error('Match not found or not active');
+        }
+
+        const [challengerRow] = await pool.execute(
+            'SELECT character_name, max_health, dexterity FROM dnd_characters WHERE character_id = ?',
+            [match.challenger_id]
+        );
+        const [defenderRow] = await pool.execute(
+            'SELECT character_name, max_health, dexterity FROM dnd_characters WHERE character_id = ?',
+            [match.defender_id]
+        );
+        if (!challengerRow[0] || !defenderRow[0]) {
+            throw new Error('One or both characters no longer exist');
+        }
+
+        const cMax = challengerRow[0].max_health;
+        const dMax = defenderRow[0].max_health;
+        const cDex = challengerRow[0].dexterity || 10;
+        const dDex = defenderRow[0].dexterity || 10;
+
+        // Higher DEX acts first; tie -> challenger.
+        const firstTurnCharId = dDex > cDex ? match.defender_id : match.challenger_id;
+
+        await pool.execute(
+            `UPDATE dnd_pvp_matches
+             SET challenger_hp = ?, defender_hp = ?,
+                 challenger_max_hp = ?, defender_max_hp = ?,
+                 active_turn = ?, round_number = 1,
+                 combat_log = NULL, defending = NULL,
+                 turn_started_at = NOW()
+             WHERE match_id = ?`,
+            [cMax, dMax, cMax, dMax, String(firstTurnCharId), matchId]
+        );
+
+        logger.info('[PvP] Live match started', { matchId, firstTurn: firstTurnCharId });
+
+        return this.getLiveState(matchId);
+    }
+
+    /**
+     * Read the full live state of a match: the row + both combatant snapshots
+     * (stat-derived) merged with the persisted live HP, whose turn it is, the
+     * round number and the parsed combat log lines.
+     *
+     * @param {number} matchId
+     * @returns {Promise<object>}
+     */
+    static async getLiveState(matchId, characterManager = null) {
+        const match = await this.getMatch(matchId);
+        if (!match) throw new Error('Match not found');
+
+        // Derive AC/damage from stats only if a characterManager is supplied;
+        // otherwise fall back to stored AC columns (avoids a hard dependency for
+        // pure render/status paths).
+        const buildSide = async (side) => {
+            const charId = side === 'a' ? match.challenger_id : match.defender_id;
+            const userId = side === 'a' ? match.challenger_user_id : match.defender_user_id;
+            const name = side === 'a' ? match.challenger_name : match.defender_name;
+            const hp = side === 'a' ? match.challenger_hp : match.defender_hp;
+            const maxHp = side === 'a' ? match.challenger_max_hp : match.defender_max_hp;
+
+            let snap = null;
+            if (characterManager) {
+                snap = await this._buildLiveCombatant(side, charId, userId, characterManager);
+            }
+            return {
+                side,
+                characterId: charId,
+                userId,
+                name,
+                hp: hp == null ? (snap?.maxHp ?? 0) : hp,
+                maxHp: maxHp == null ? (snap?.maxHp ?? 0) : maxHp,
+                ac: snap?.ac ?? null,
+                damage: snap?.damage ?? null,
+                defense: snap?.defense ?? 0,
+                attackBonus: snap?.attackBonus ?? 0,
+            };
+        };
+
+        const challenger = await buildSide('a');
+        const defender = await buildSide('b');
+        const log = match.combat_log ? match.combat_log.split('\n').filter(Boolean) : [];
+
+        return {
+            match,
+            matchId: match.match_id,
+            status: match.status,
+            challenger,
+            defender,
+            whoseTurn: match.active_turn ? Number(match.active_turn) : null,
+            defending: match.defending ? Number(match.defending) : null,
+            round: match.round_number || 1,
+            log,
+        };
+    }
+
+    /**
+     * Apply a single live action (attack | defend) for the side whose turn it is.
+     * Validates the match is active and it's actorCharacterId's turn.
+     *
+     * attack: one resolveAttack exchange (with a Defend bonus applied to the
+     *   opponent's AC if the opponent defended last turn), subtract opponent HP,
+     *   log it. KO -> endMatch (ELO + wager) and return {ended:true, winner, state}.
+     * defend: flag the actor's side as defending (buffs their defense until they
+     *   are next attacked), log it.
+     *
+     * @param {number} matchId
+     * @param {number} actorCharacterId
+     * @param {'attack'|'defend'} action
+     * @param {object} characterManager
+     * @returns {Promise<object>} { ended, state, winner? , result? }
+     */
+    static async applyAction(matchId, actorCharacterId, action, characterManager) {
+        if (!['attack', 'defend'].includes(action)) {
+            throw new Error('Invalid action — must be attack or defend');
+        }
+
+        const match = await this.getMatch(matchId);
+        if (!match || match.status !== 'active') {
+            throw new Error('No active live match found');
+        }
+        if (Number(match.active_turn) !== Number(actorCharacterId)) {
+            throw new Error("It is not your turn");
+        }
+
+        const actorIsChallenger = Number(actorCharacterId) === Number(match.challenger_id);
+        const opponentCharacterId = actorIsChallenger ? match.defender_id : match.challenger_id;
+
+        // Build live snapshots for the math.
+        const actorSnap = await this._buildLiveCombatant(
+            actorIsChallenger ? 'a' : 'b', actorCharacterId,
+            actorIsChallenger ? match.challenger_user_id : match.defender_user_id, characterManager);
+        const opponentSnap = await this._buildLiveCombatant(
+            actorIsChallenger ? 'b' : 'a', opponentCharacterId,
+            actorIsChallenger ? match.defender_user_id : match.challenger_user_id, characterManager);
+
+        let actorHp = actorIsChallenger ? match.challenger_hp : match.defender_hp;
+        let opponentHp = actorIsChallenger ? match.defender_hp : match.challenger_hp;
+
+        const log = match.combat_log ? match.combat_log.split('\n').filter(Boolean) : [];
+        // Whether the OPPONENT used Defend (their flag is set to their character id).
+        const opponentDefended = match.defending != null &&
+            Number(match.defending) === Number(opponentCharacterId);
+
+        let ended = false;
+        let endResult = null;
+        let nextDefending = match.defending; // carry unless we change it
+
+        if (action === 'attack') {
+            // Apply Defend damage-reduction: +2 AC AND halve incoming damage
+            // if the opponent defended on their last turn.
+            const defendedOpponent = opponentDefended
+                ? { ...opponentSnap, ac: (opponentSnap.ac || 10) + 2 }
+                : opponentSnap;
+
+            const swing = resolveAttack(actorSnap, defendedOpponent);
+            let dmg = swing.damage;
+            if (opponentDefended && dmg > 0) dmg = Math.max(1, Math.floor(dmg / 2));
+
+            opponentHp = Math.max(0, opponentHp - dmg);
+
+            if (!swing.hit) {
+                log.push(`R${match.round_number}: ${actorSnap.name} → ${opponentSnap.name} **MISS** (roll ${swing.roll})`);
+            } else {
+                log.push(`R${match.round_number}: ${actorSnap.name} → ${opponentSnap.name} ${swing.crit ? '💥CRIT ' : ''}${opponentDefended ? '🛡️ ' : ''}**${dmg}** dmg (${opponentHp} HP left)`);
+            }
+
+            // Consuming the opponent's Defend (it only protects against this incoming attack).
+            if (opponentDefended) nextDefending = null;
+
+            // Persist HP before a possible endMatch (endMatch reads its own row).
+            await pool.execute(
+                `UPDATE dnd_pvp_matches
+                 SET challenger_hp = ?, defender_hp = ?, combat_log = ?
+                 WHERE match_id = ?`,
+                [
+                    actorIsChallenger ? actorHp : opponentHp,
+                    actorIsChallenger ? opponentHp : actorHp,
+                    log.join('\n').slice(0, 60000),
+                    matchId,
+                ]
+            );
+
+            if (opponentHp <= 0) {
+                log.push(`☠️ ${opponentSnap.name} is defeated! ${actorSnap.name} wins!`);
+                await pool.execute(
+                    'UPDATE dnd_pvp_matches SET combat_log = ? WHERE match_id = ?',
+                    [log.join('\n').slice(0, 60000), matchId]
+                );
+                endResult = await this.endMatch(matchId, actorCharacterId, 'ko');
+                ended = true;
+            }
+        } else { // defend
+            nextDefending = String(actorCharacterId);
+            log.push(`R${match.round_number}: 🛡️ ${actorSnap.name} takes a defensive stance.`);
+        }
+
+        if (!ended) {
+            // Flip the turn. Bump the round when both sides have acted this round:
+            // the round bumps when the side that acted SECOND in the round finishes.
+            // Track via "first-actor" heuristic: we bump when control returns to the
+            // side that started the round. Simpler + robust: bump every time the turn
+            // passes back to the side that has the lower-or-equal acted count. We
+            // approximate "both acted" by bumping after the non-opener acts. Since we
+            // don't store an opener, bump on every full swap by parity of total turns.
+            // To stay correct without an extra column, bump round when the turn passes
+            // to the challenger (challenger always opens a round in our flip order is
+            // NOT guaranteed). Use a deterministic rule: increment round when the new
+            // active side equals the side whose turn it was at round start. We store
+            // that implicitly by bumping whenever active flips back toward the FIRST
+            // mover of the match. Practical compromise (matches spec intent): bump
+            // round_number every time BOTH sides have taken a turn — counted by log
+            // length of action lines.
+            const nextTurn = opponentCharacterId;
+
+            // Count action turns taken so far (lines beginning with "R<digits>:").
+            const turnsTaken = log.filter(l => /^R\d+:/.test(l)).length;
+            const newRound = Math.floor(turnsTaken / 2) + 1;
+
+            await pool.execute(
+                `UPDATE dnd_pvp_matches
+                 SET active_turn = ?, round_number = ?, combat_log = ?,
+                     defending = ?, turn_started_at = NOW()
+                 WHERE match_id = ?`,
+                [
+                    String(nextTurn),
+                    newRound,
+                    log.join('\n').slice(0, 60000),
+                    nextDefending,
+                    matchId,
+                ]
+            );
+        }
+
+        const state = await this.getLiveState(matchId, characterManager);
+        if (ended) {
+            return {
+                ended: true,
+                winner: actorCharacterId,
+                winnerName: actorSnap.name,
+                loserName: opponentSnap.name,
+                result: endResult,
+                state,
+            };
+        }
+        return { ended: false, state };
+    }
+
+    /**
+     * Forfeit an active match — the OPPONENT of actorCharacterId wins via endMatch.
+     * @param {number} matchId
+     * @param {number} actorCharacterId - the character giving up
+     * @returns {Promise<object>} endMatch result
+     */
+    static async forfeit(matchId, actorCharacterId) {
         const match = await this.getMatch(matchId);
         if (!match || match.status !== 'active') {
             throw new Error('No active match found');
         }
+        if (![Number(match.challenger_id), Number(match.defender_id)].includes(Number(actorCharacterId))) {
+            throw new Error('You are not a participant of this match');
+        }
 
-        // The non-forfeiting participant wins (by character id)
-        const winnerCharacterId = forfeitingUserId === match.challenger_user_id
+        const winnerCharacterId = Number(actorCharacterId) === Number(match.challenger_id)
             ? match.defender_id
             : match.challenger_id;
 
         return this.endMatch(matchId, winnerCharacterId, 'surrender');
+    }
+
+    /**
+     * Sweep abandoned live matches: any `active` match whose current turn has been
+     * idle longer than the timeout is auto-forfeited by the player on the clock
+     * (active_turn holds that character's id), so the opponent wins and the match
+     * can't sit `active` forever when BOTH players walk away (the claim-based
+     * timeout only covers the case where the waiting player comes back).
+     * @param {number} [timeoutMinutes=10]
+     * @returns {Promise<Array<{matchId:number, winner:number|null}>>}
+     */
+    static async sweepStaleMatches(timeoutMinutes = 10) {
+        const [rows] = await pool.execute(
+            `SELECT match_id, active_turn FROM dnd_pvp_matches
+             WHERE status = 'active' AND turn_started_at IS NOT NULL
+               AND turn_started_at < (NOW() - INTERVAL ? MINUTE)`,
+            [timeoutMinutes]
+        );
+        const ended = [];
+        for (const m of rows) {
+            if (m.active_turn == null) continue;
+            try {
+                const res = await this.forfeit(m.match_id, m.active_turn); // player on the clock loses
+                ended.push({ matchId: m.match_id, winner: res?.winnerCharacterId ?? res?.winner ?? null });
+            } catch { /* match changed under us — skip */ }
+        }
+        return ended;
+    }
+
+    /**
+     * Claim a win because the opponent ran out their turn timer.
+     * Only valid when it is NOT the claimant's turn and the active side's
+     * turn_started_at is older than timeoutMs.
+     *
+     * @param {number} matchId
+     * @param {number} claimantCharacterId
+     * @param {number} [timeoutMs=600000] - 10 minutes default
+     * @returns {Promise<object>} endMatch result
+     */
+    static async claimTimeout(matchId, claimantCharacterId, timeoutMs = 600000) {
+        const match = await this.getMatch(matchId);
+        if (!match || match.status !== 'active') {
+            throw new Error('No active match found');
+        }
+        if (![Number(match.challenger_id), Number(match.defender_id)].includes(Number(claimantCharacterId))) {
+            throw new Error('You are not a participant of this match');
+        }
+        if (Number(match.active_turn) === Number(claimantCharacterId)) {
+            throw new Error("It is your own turn — you cannot claim a timeout");
+        }
+
+        // How long has the active side had the turn?
+        const startedAt = match.turn_started_at ? new Date(match.turn_started_at).getTime() : null;
+        if (startedAt == null) {
+            throw new Error('Turn timer not initialized');
+        }
+        const elapsed = Date.now() - startedAt;
+        if (elapsed < timeoutMs) {
+            throw new Error('Opponent still has time');
+        }
+
+        // Claimant wins (the timed-out active side loses).
+        return this.endMatch(matchId, claimantCharacterId, 'timeout');
     }
 }
 
