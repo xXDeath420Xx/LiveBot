@@ -89,6 +89,18 @@
     <button id="am-save" style="margin-top:1.25rem">Save automod</button>
   </div>
 
+  <!-- ── Activity — last 14 days ─────────────────────────────── -->
+  <div class="card">
+    <h2>Activity — last 14 days</h2>
+    <div class="muted" style="margin-bottom:.6rem">Daily enforcement volume on this channel.</div>
+    <div id="ch-trend">Loading…</div>
+    <div class="muted" style="margin-top:.7rem;display:flex;gap:1.1rem;flex-wrap:wrap;font-size:.82rem">
+      <span><span style="display:inline-block;width:.7rem;height:.7rem;border-radius:2px;background:#53FC18;vertical-align:middle;margin-right:.35rem"></span>Banned</span>
+      <span><span style="display:inline-block;width:.7rem;height:.7rem;border-radius:2px;background:#7c84ff;vertical-align:middle;margin-right:.35rem"></span>Removed</span>
+      <span><span style="display:inline-block;width:.7rem;height:.7rem;border-radius:2px;background:rgba(255,255,255,.25);vertical-align:middle;margin-right:.35rem"></span>Detected</span>
+    </div>
+  </div>
+
   <!-- ── Recent activity ─────────────────────────────────────── -->
   <div class="card">
     <h2>Recent activity</h2>
@@ -212,6 +224,56 @@
       } catch (err) { feed.textContent = err.message || 'Failed to load.'; }
     }
     document.getElementById('feed-refresh').addEventListener('click', loadFeed);
+
+    // ── 14-day activity chart (self-contained SVG stacked bars) ──
+    async function loadChTrend() {
+      const host = document.getElementById('ch-trend');
+      try {
+        const res = await fetch('/kick/api/channel/' + CHANNEL + '/trend?days=14');
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Failed');
+        const series = (j && j.series) || [];
+        const totals = series.map(d => (Number(d.banned)||0) + (Number(d.deleted)||0) + (Number(d.dormant)||0));
+        const max = Math.max(0, ...totals);
+        if (!series.length || max === 0) { host.textContent = 'No activity in the last 14 days.'; return; }
+
+        const W = 560, H = 160, padL = 8, padR = 8, padT = 12, padB = 22;
+        const plotW = W - padL - padR, plotH = H - padT - padB;
+        const n = series.length;
+        const slot = plotW / n;
+        const barW = Math.min(22, slot * 0.62);
+
+        const bars = series.map((d, i) => {
+          const banned = Number(d.banned) || 0;
+          const deleted = Number(d.deleted) || 0;
+          const dormant = Number(d.dormant) || 0;
+          const total = banned + deleted + dormant;
+          const x = padL + i * slot + (slot - barW) / 2;
+          const baseY = padT + plotH;
+          const px = v => (v / max) * plotH;
+          let y = baseY;
+          const segs = [];
+          // stack bottom-up: banned, then deleted, then dormant
+          [['dormant', dormant, 'rgba(255,255,255,.25)'], ['deleted', deleted, '#7c84ff'], ['banned', banned, '#53FC18']].forEach(s => {
+            const h = px(s[1]);
+            if (h > 0) { y -= h; segs.push('<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + s[2] + '" rx="1.5"/>'); }
+          });
+          let lbl = '';
+          if (i % 3 === 0 && d.date) {
+            const parts = String(d.date).split('-');
+            const md = (parts[1] || '') + '/' + (parts[2] || '');
+            const cx = x + barW / 2;
+            lbl = '<text x="' + cx.toFixed(1) + '" y="' + (H - 7) + '" fill="var(--muted)" font-size="9" text-anchor="middle">' + md + '</text>';
+          }
+          return segs.join('') + lbl;
+        }).join('');
+
+        const baseline = '<line x1="' + padL + '" y1="' + (padT + plotH) + '" x2="' + (W - padR) + '" y2="' + (padT + plotH) + '" stroke="var(--line)" stroke-width="1"/>';
+        host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="14-day activity chart">' + baseline + bars + '</svg>';
+      } catch (err) { host.textContent = 'Failed to load chart.'; }
+    }
+
     loadFeed();
+    loadChTrend();
   </script>`; %>
 <%- include('_foot', { extraJs: pageJs }) %>
