@@ -55,3 +55,26 @@ test('loadAutomod returns null when there is no automod key', async () => {
     const load = makeLoadAutomod({ pool });
     assert.equal(await load(1), null);
 });
+
+test('words rule: whole-word match, not substrings', () => {
+    const s = { words: 'slur1, badword' };
+    assert.equal(evaluateMessage('you are a badword friend', s)?.rule, 'words');
+    assert.equal(evaluateMessage('BADWORD!!', s)?.rule, 'words', 'case-insensitive + punctuation boundary');
+    assert.equal(evaluateMessage('badwording along', s), null, 'substring of a longer word does not match');
+});
+
+test('words rule: wildcard terms match variants', () => {
+    const s = { words: ['scam*'] };
+    assert.equal(evaluateMessage('total scammer alert', s)?.rule, 'words');
+    assert.equal(evaluateMessage('nothing here', s), null);
+});
+
+test('words rule: accepts array or comma string; empty terms ignored', () => {
+    assert.equal(evaluateMessage('hello', { words: ' , ,' }), null);
+    assert.equal(evaluateMessage('say grift now', { words: ['grift'] })?.rule, 'words');
+});
+
+test('words checked before links (most explicit rule wins)', () => {
+    const hit = evaluateMessage('badsite.com is a grift', { words: 'grift', links: true });
+    assert.equal(hit.rule, 'words');
+});

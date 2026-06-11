@@ -22,6 +22,31 @@ export function evaluateMessage(text, settings = {}) {
     const msg = String(text || '');
     if (!msg.trim()) return null;
 
+    // Banned words/phrases — checked FIRST (most explicit rule). `words` is an
+    // array or comma-separated string of terms; a term containing '*' matches as
+    // a wildcard prefix/suffix/infix, otherwise it matches on word boundaries
+    // (so "ass" doesn't hit "class"). Case-insensitive.
+    if (settings.words) {
+        const lower = msg.toLowerCase();
+        const terms = (Array.isArray(settings.words) ? settings.words : String(settings.words).split(','))
+            .map(t => String(t).trim().toLowerCase()).filter(Boolean);
+        for (const term of terms) {
+            if (term.includes('*')) {
+                // Wildcard: escape regex chars, * → .*
+                const pat = term.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+                if (new RegExp(pat, 'i').test(lower)) {
+                    return { rule: 'words', reason: 'that word is not allowed here' };
+                }
+            } else {
+                // Whole-word match (unicode-aware boundaries via non-letter lookaround).
+                const pat = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                if (new RegExp(`(^|[^\\p{L}\\p{N}])${pat}([^\\p{L}\\p{N}]|$)`, 'iu').test(lower)) {
+                    return { rule: 'words', reason: 'that word is not allowed here' };
+                }
+            }
+        }
+    }
+
     // Links — block any URL-like token.
     if (settings.links && URL_RE.test(msg)) {
         return { rule: 'links', reason: 'links are not allowed' };

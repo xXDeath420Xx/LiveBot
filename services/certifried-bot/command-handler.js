@@ -8,6 +8,7 @@ import pool from '../../utils/db.js';
 import { getCommand, incrementCustomCommandUse } from './command-registry.js';
 import { processTemplate } from './template-processor.js';
 import { runAutoResponders } from './auto-responder.js';
+import { checkFirstChatter } from './first-chatter.js';
 import { runKickAutomod } from './kick-automod.js';
 import { resolveChannel } from './defender/channel-tokens.js';
 import { deleteMessage as kickDeleteMessage } from './defender/kick-moderation.js';
@@ -197,6 +198,22 @@ export async function handleMessage(context) {
             }
         });
         if (actioned) return; // message removed; stop processing
+    }
+
+    // First-time chatter welcome: configurable via features_enabled.welcome_message.
+    // Fires once per user per channel (backed by tokes_channel_stats), runs for
+    // commands too — a first message that's "!lit" still gets the greeting.
+    try {
+        const featsRaw = channel.features_enabled;
+        const feats = featsRaw ? (typeof featsRaw === 'string' ? JSON.parse(featsRaw) : featsRaw) : null;
+        const welcome = feats?.welcome_message;
+        if (welcome && typeof reply === 'function' && !isBroadcaster) {
+            if (await checkFirstChatter(channel.id, userId, username)) {
+                reply(processTemplate(String(welcome).slice(0, 500), { username, channel_name: channelName }));
+            }
+        }
+    } catch (err) {
+        logger.warn('[Welcome] first-chatter check failed', { error: err.message });
     }
 
     const prefix = channel.command_prefix || '!';
