@@ -12,6 +12,7 @@ const DIRS = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -
 export function generate(words, size, rng = Math.random) {
   const grid = Array.from({ length: size }, () => Array(size).fill(null));
   const placed = [];
+  const placements = {}; // word -> [[r,c],...] path, so found words can be struck through on the image
   const pick = (n) => Math.floor(rng() * n);
   for (const raw of words) {
     const word = String(raw).toLowerCase().replace(/[^a-z]/g, '');
@@ -32,8 +33,14 @@ export function generate(words, size, rng = Math.random) {
         if (cell !== null && cell !== word[i]) { ok = false; break; }
       }
       if (!ok) continue;
-      for (let i = 0; i < word.length; i++) grid[r0 + dr * i][c0 + dc * i] = word[i];
+      const cells = [];
+      for (let i = 0; i < word.length; i++) {
+        const rr = r0 + dr * i, cc = c0 + dc * i;
+        grid[rr][cc] = word[i];
+        cells.push([rr, cc]);
+      }
       placed.push(word);
+      if (!placements[word]) placements[word] = cells;
       done = true;
     }
   }
@@ -42,22 +49,22 @@ export function generate(words, size, rng = Math.random) {
       if (grid[r][c] === null) grid[r][c] = String.fromCharCode(97 + pick(26));
     }
   }
-  return { grid, placed: [...new Set(placed)], size };
+  return { grid, placed: [...new Set(placed)], size, placements };
 }
 
 export function initState({ size = 10, words = [], rng = Math.random } = {}) {
-  const { grid, placed } = generate(words, size, rng);
-  return { size, grid, words: placed, found: [], bonus: [], boardMessageId: null };
+  const { grid, placed, placements } = generate(words, size, rng);
+  return { size, grid, words: placed, found: [], bonus: [], lines: [], placements, boardMessageId: null };
 }
 
 /**
- * True if `word` (or its reverse) can be read as a straight line in the grid in
- * any of the 8 directions. Lets players claim ANY real word they actually spot —
- * not just the planted targets — so legit finds aren't rejected.
+ * If `word` (or its reverse) can be read as a straight line in the grid in any of
+ * the 8 directions, return its path `{ cells: [[r,c],...] }`; otherwise null. Used
+ * both to validate a guess and to strike the found word through on the image.
  */
-export function canTrace(grid, word) {
+export function traceWord(grid, word) {
   const w = String(word ?? '').toLowerCase();
-  if (w.length < 2) return false;
+  if (w.length < 2) return null;
   const size = grid.length;
   const targets = [w, [...w].reverse().join('')];
   for (const t of targets) {
@@ -66,16 +73,26 @@ export function canTrace(grid, word) {
       for (let c = 0; c < size; c++) {
         for (const [dr, dc] of DIRS) {
           let ok = true;
+          const cells = [];
           for (let i = 0; i < t.length; i++) {
             const rr = r + dr * i, cc = c + dc * i;
             if (rr < 0 || cc < 0 || rr >= size || cc >= size || String(grid[rr][cc] || '').toLowerCase() !== t[i]) { ok = false; break; }
+            cells.push([rr, cc]);
           }
-          if (ok) return true;
+          if (ok) return { cells };
         }
       }
     }
   }
-  return false;
+  return null;
+}
+
+/**
+ * True if `word` (or its reverse) can be read in the grid. Lets players claim ANY
+ * real word they actually spot — not just the planted targets.
+ */
+export function canTrace(grid, word) {
+  return traceWord(grid, word) !== null;
 }
 
 export function findWord(state, guess) {
@@ -88,7 +105,10 @@ export function findWord(state, guess) {
   if (!match) return { ok: false, reason: 'not_in_grid' };
   if (state.found.includes(match)) return { ok: false, reason: 'already_found' };
   const found = [...state.found, match];
-  return { ok: true, word: match, points: match.length, nextState: { ...state, found }, complete: found.length >= state.words.length };
+  // Record the word's grid path so the image can strike it through.
+  const cells = state.placements?.[match] || traceWord(state.grid, match)?.cells;
+  const lines = cells ? [...(state.lines || []), { word: match, cells }] : (state.lines || []);
+  return { ok: true, word: match, points: match.length, nextState: { ...state, found, lines }, complete: found.length >= state.words.length };
 }
 
 export function remaining(state) {

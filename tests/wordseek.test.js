@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { generate, initState, findWord, remaining, renderGrid, canTrace } from '../core/games/wordseek.js';
+import { generate, initState, findWord, remaining, renderGrid, canTrace, traceWord } from '../core/games/wordseek.js';
 
 const DIRS = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -101,4 +101,22 @@ test('canTrace: finds a word readable in the grid (any direction), rejects absen
   // every planted word is traceable
   for (const w of s.words) assert.equal(canTrace(s.grid, w), true);
   assert.equal(canTrace(s.grid, 'zzzzzz'), false);
+});
+
+test('traceWord: returns the cell path of a planted word (len matches)', () => {
+  const s = initState({ size: 8, words: ['dragon', 'castle'], rng: mulberry32(5) });
+  for (const w of s.words) {
+    const t = traceWord(s.grid, w);
+    assert.ok(t && Array.isArray(t.cells), `expected a path for ${w}`);
+    assert.equal(t.cells.length, w.length);
+  }
+  assert.equal(traceWord(s.grid, 'zzzzzz'), null);
+});
+
+test('findWord: records a strike line for the matched word', () => {
+  const s = initState({ size: 8, words: ['dragon', 'castle'], rng: mulberry32(5) });
+  const r = findWord(s, s.words[0]);
+  assert.equal(r.ok, true);
+  assert.equal(r.nextState.lines.length, 1);
+  assert.equal(r.nextState.lines[0].cells.length, s.words[0].length);
 });
