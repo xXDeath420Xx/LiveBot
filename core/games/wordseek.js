@@ -12,7 +12,6 @@ const DIRS = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -
 export function generate(words, size, rng = Math.random) {
   const grid = Array.from({ length: size }, () => Array(size).fill(null));
   const placed = [];
-  const placements = {}; // word -> [[r,c],...] path, so found words can be struck through on the image
   const pick = (n) => Math.floor(rng() * n);
   for (const raw of words) {
     const word = String(raw).toLowerCase().replace(/[^a-z]/g, '');
@@ -33,14 +32,8 @@ export function generate(words, size, rng = Math.random) {
         if (cell !== null && cell !== word[i]) { ok = false; break; }
       }
       if (!ok) continue;
-      const cells = [];
-      for (let i = 0; i < word.length; i++) {
-        const rr = r0 + dr * i, cc = c0 + dc * i;
-        grid[rr][cc] = word[i];
-        cells.push([rr, cc]);
-      }
+      for (let i = 0; i < word.length; i++) grid[r0 + dr * i][c0 + dc * i] = word[i];
       placed.push(word);
-      if (!placements[word]) placements[word] = cells;
       done = true;
     }
   }
@@ -49,12 +42,12 @@ export function generate(words, size, rng = Math.random) {
       if (grid[r][c] === null) grid[r][c] = String.fromCharCode(97 + pick(26));
     }
   }
-  return { grid, placed: [...new Set(placed)], size, placements };
+  return { grid, placed: [...new Set(placed)], size };
 }
 
 export function initState({ size = 10, words = [], rng = Math.random } = {}) {
-  const { grid, placed, placements } = generate(words, size, rng);
-  return { size, grid, words: placed, found: [], bonus: [], lines: [], placements, boardMessageId: null };
+  const { grid, placed } = generate(words, size, rng);
+  return { size, grid, words: placed, found: [], bonus: [], boardMessageId: null };
 }
 
 /**
@@ -105,10 +98,7 @@ export function findWord(state, guess) {
   if (!match) return { ok: false, reason: 'not_in_grid' };
   if (state.found.includes(match)) return { ok: false, reason: 'already_found' };
   const found = [...state.found, match];
-  // Record the word's grid path so the image can strike it through.
-  const cells = state.placements?.[match] || traceWord(state.grid, match)?.cells;
-  const lines = cells ? [...(state.lines || []), { word: match, cells }] : (state.lines || []);
-  return { ok: true, word: match, points: match.length, nextState: { ...state, found, lines }, complete: found.length >= state.words.length };
+  return { ok: true, word: match, points: match.length, nextState: { ...state, found }, complete: found.length >= state.words.length };
 }
 
 export function remaining(state) {
