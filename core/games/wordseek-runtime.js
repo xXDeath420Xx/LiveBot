@@ -11,10 +11,10 @@
  * `/wordgame wordseek end`. Timed rounds are a future addition.
  */
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
-import { findWord, remaining, initState, canTrace } from './wordseek.js';
+import { findWord, remaining, initState, canTrace, traceWord } from './wordseek.js';
 import { renderGridImage } from './wordseek-image.js';
 import * as wordBank from '../word-bank.js';
-import { registerEngine, saveState, bumpStats, endSession } from '../word-game-manager.js';
+import { registerEngine, saveState, bumpStats } from '../word-game-manager.js';
 import logger from '../../utils/logger.js';
 
 export function freshGridState() {
@@ -76,8 +76,11 @@ async function handle(message, session) {
     // Not a planted target — but accept ANY real dictionary word the player can
     // actually trace in the grid (a "bonus" find), so legit words aren't rejected.
     const already = (session.state.bonus || []).includes(word) || session.state.found.includes(word);
-    if (!already && word.length >= 4 && wordBank.isWord(word) && canTrace(session.state.grid, word)) {
+    const trace = (!already && word.length >= 3 && wordBank.isWord(word)) ? traceWord(session.state.grid, word) : null;
+    if (trace) {
       session.state.bonus = [...(session.state.bonus || []), word];
+      // strike the bonus word through on the image too
+      session.state.lines = [...(session.state.lines || []), { word, cells: trace.cells }];
       try { await message.react('✨'); } catch { /* ignore */ }
       await bumpStats(session.guildId, message.author.id, 'wordseek', { words: 1, bestScore: word.length, streak: 0 });
       session.state.boardMessageId = await updateBoard(message.channel, session.state);
@@ -99,15 +102,11 @@ async function handle(message, session) {
 
   await updateBoard(message.channel, session.state, { title: '🎉 WordSeek — all words found!', color: 0x57F287 });
   await message.channel.send(`🎉 All ${session.state.words.length} words found! (${session.state.words.map(w => w.toUpperCase()).join(', ')})`).catch(() => {});
-  if (session.mode === 'persistent') {
-    // auto-roll a fresh grid so a bound channel stays playable
-    const fresh = freshGridState();
-    fresh.boardMessageId = await updateBoard(message.channel, fresh, { title: '🔡 WordSeek — new grid!' });
-    session.state = fresh;
-    await saveState(session);
-  } else {
-    await endSession(session, 'ended');
-  }
+  // Auto-roll a fresh grid so the game continues until someone runs `/wordgame wordseek end`.
+  const fresh = freshGridState();
+  fresh.boardMessageId = await updateBoard(message.channel, fresh, { title: '🔡 WordSeek — new grid!' });
+  session.state = fresh;
+  await saveState(session);
   return true;
 }
 
