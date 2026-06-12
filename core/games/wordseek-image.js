@@ -6,6 +6,7 @@
  * (state.lines) so the board reads like a real word-search as it's solved.
  */
 import { createCanvas } from 'canvas';
+import { traceWord } from './wordseek.js';
 
 export function renderGridImage(state) {
   const n = state.size;
@@ -33,7 +34,10 @@ export function renderGridImage(state) {
   // cell of each found word, drawn UNDER the letters so they stay crisp on top.
   const center = (r, c) => [pad + c * cell + cell / 2, pad + r * cell + cell / 2];
   const palette = ['#57F287', '#FEE75C', '#EB459E', '#5865F2', '#ED4245', '#1ABC9E', '#E67E22', '#9B59B6'];
-  const lines = state.lines || [];
+  // Strikes are derived from the authoritative found+bonus lists (a strike is just
+  // the grid path of a found word), so any in-progress board renders correctly.
+  const words = [...(state.found || []), ...(state.bonus || [])];
+  const lines = words.map(w => traceWord(state.grid, w)).filter(t => t && t.cells.length);
   ctx.lineCap = 'round';
   ctx.lineWidth = cell * 0.62;
   lines.forEach((ln, idx) => {

@@ -113,10 +113,3 @@ test('traceWord: returns the cell path of a planted word (len matches)', () => {
   assert.equal(traceWord(s.grid, 'zzzzzz'), null);
 });
 
-test('findWord: records a strike line for the matched word', () => {
-  const s = initState({ size: 8, words: ['dragon', 'castle'], rng: mulberry32(5) });
-  const r = findWord(s, s.words[0]);
-  assert.equal(r.ok, true);
-  assert.equal(r.nextState.lines.length, 1);
-  assert.equal(r.nextState.lines[0].cells.length, s.words[0].length);
-});

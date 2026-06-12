@@ -11,7 +11,7 @@
  * `/wordgame wordseek end`. Timed rounds are a future addition.
  */
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
-import { findWord, remaining, initState, canTrace, traceWord } from './wordseek.js';
+import { findWord, remaining, initState, canTrace } from './wordseek.js';
 import { renderGridImage } from './wordseek-image.js';
 import * as wordBank from '../word-bank.js';
 import { registerEngine, saveState, bumpStats } from '../word-game-manager.js';
@@ -76,11 +76,9 @@ async function handle(message, session) {
     // Not a planted target — but accept ANY real dictionary word the player can
     // actually trace in the grid (a "bonus" find), so legit words aren't rejected.
     const already = (session.state.bonus || []).includes(word) || session.state.found.includes(word);
-    const trace = (!already && word.length >= 3 && wordBank.isWord(word)) ? traceWord(session.state.grid, word) : null;
-    if (trace) {
+    const accepts = !already && word.length >= 3 && wordBank.isWord(word) && canTrace(session.state.grid, word);
+    if (accepts) {
       session.state.bonus = [...(session.state.bonus || []), word];
-      // strike the bonus word through on the image too
-      session.state.lines = [...(session.state.lines || []), { word, cells: trace.cells }];
       try { await message.react('✨'); } catch { /* ignore */ }
       await bumpStats(session.guildId, message.author.id, 'wordseek', { words: 1, bestScore: word.length, streak: 0 });
       session.state.boardMessageId = await updateBoard(message.channel, session.state);
