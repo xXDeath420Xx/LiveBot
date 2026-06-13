@@ -44,7 +44,7 @@ const GAMES = {
   story: {
     type: 'one_word_story', label: 'One Word Story', emoji: '📖',
     init: () => storyInit(),
-    startBlurb: 'Add **one word** at a time to build a story together — you can’t go twice in a row.',
+    startBlurb: 'Add **one word** at a time to build a story together — you can’t go twice in a row.\n• End a sentence with punctuation: `Demon.` or a lone `.` `!` `?` (new sentence starts on its own line)\n• Post `---` for a new paragraph\n• **Delete your word** to take it back, then post a new one',
     statLines: (st) => `Words contributed: **${st.words_contributed}**\nLongest story: **${st.best_score}**`,
     lbLine: (r, i) => `**${i + 1}.** <@${r.user_id}> — ${r.words_contributed} words`,
     endLine: (s) => `🏁 Story ended with **${s.state.words.length}** words.`,

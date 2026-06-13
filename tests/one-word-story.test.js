@@ -65,3 +65,39 @@ test('different authors consecutively is fine', () => {
 test('empty/whitespace is rejected as empty', () => {
   assert.equal(validateMove('   ', initState(), { authorId: 'a' }).reason, 'empty');
 });
+
+import { removeEntryByMessage } from '../core/games/one-word-story.js';
+
+test('deleting a word removes it and reverts lastAuthor so a correction is allowed', () => {
+  let s = initState();
+  s = validateMove('A', s, { authorId: 'uA', messageId: 'x1' }).nextState;
+  s = validateMove('There', s, { authorId: 'uB', messageId: 'x2' }).nextState;
+  // before deletion, uB is blocked from correcting (double-post)
+  assert.equal(validateMove('Demon', s, { authorId: 'uB', messageId: 'x3' }).reason, 'double_post');
+  const del = removeEntryByMessage(s, 'x2');
+  assert.equal(del.ok, true);
+  s = del.nextState;
+  assert.deepEqual(s.words, ['A']);
+  assert.equal(s.lastAuthorId, 'uA');
+  // now the corrected word is accepted
+  const fix = validateMove('Demon', s, { authorId: 'uB', messageId: 'x4' });
+  assert.equal(fix.ok, true);
+  assert.deepEqual(fix.nextState.words, ['A', 'Demon']);
+});
+
+test('renderStory: capitalizes sentences, attaches punctuation, one sentence per line', () => {
+  let s = initState();
+  for (const [w, a] of [['it', 'u1'], ['was', 'u2'], ['dark.', 'u1'], ['a', 'u2'], ['demon', 'u1'], ['appeared!', 'u2']]) {
+    s = validateMove(w, s, { authorId: a, messageId: w }).nextState;
+  }
+  assert.equal(renderStory(s), 'It was dark.\nA demon appeared!');
+});
+
+test('standalone punctuation and paragraph markers are valid moves', () => {
+  let s = initState();
+  s = validateMove('Hello', s, { authorId: 'u1', messageId: 'p1' }).nextState;
+  s = validateMove('---', s, { authorId: 'u2', messageId: 'p2' }).nextState; // paragraph break
+  s = validateMove('world', s, { authorId: 'u1', messageId: 'p3' }).nextState;
+  s = validateMove('!', s, { authorId: 'u2', messageId: 'p4' }).nextState;   // standalone punctuation
+  assert.equal(renderStory(s), 'Hello\n\nWorld!');
+});
