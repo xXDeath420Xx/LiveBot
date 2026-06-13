@@ -26,6 +26,7 @@ async function handle(message, session) {
   if (!content.trim()) return false;
   const res = validateMove(content, session.state, {
     authorId: message.author.id,
+    messageId: message.id,
     noDoublePost: session.state.noDoublePost !== false,
   });
   if (!res.ok) {
