@@ -3,6 +3,11 @@ import {
     EmbedBuilder,
     ChannelType,
     MessageFlags,
+    PermissionFlagsBits,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    ActionRowBuilder,
 } from 'discord.js';
 import logger from '../../utils/logger.js';
 
@@ -22,11 +27,7 @@ export default {
         // ── Per-user account linking ──
         .addSubcommand(sub =>
             sub.setName('link')
-                .setDescription('Link YOUR Buy Me a Coffee account with a read-only API key')
-                .addStringOption(opt =>
-                    opt.setName('api_key')
-                        .setDescription('Your read-only BMC API key (stored encrypted)')
-                        .setRequired(true)))
+                .setDescription('Link YOUR Buy Me a Coffee account (opens a private form for your key)'))
 
         .addSubcommand(sub =>
             sub.setName('unlink')
@@ -94,14 +95,19 @@ export default {
 
             switch (sub) {
                 case 'link': {
-                    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-                    const key = interaction.options.getString('api_key');
-                    const { accountId } = await manager.linkUser(userId, key);
-                    return interaction.editReply(
-                        `✅ Linked${accountId ? ` (account \`${accountId}\`)` : ''}! ` +
-                        'Now run `/buymeacoffee announce` to choose where your supporters are announced.\n' +
-                        `_${KEY_HELP}_`
-                    );
+                    // Open a private modal so the key is entered in a form, never typed as a
+                    // visible command option (and never posted). Submission → bmc_link_submit.
+                    const modal = new ModalBuilder()
+                        .setCustomId('bmc_link_submit')
+                        .setTitle('Link Buy Me a Coffee');
+                    const keyInput = new TextInputBuilder()
+                        .setCustomId('api_key')
+                        .setLabel('Your read-only BMC API key')
+                        .setPlaceholder('Paste your read-only key — stored encrypted, never shown')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true);
+                    modal.addComponents(new ActionRowBuilder().addComponents(keyInput));
+                    return interaction.showModal(modal);
                 }
 
                 case 'unlink': {
@@ -114,8 +120,17 @@ export default {
                     if (!guildId) {
                         return interaction.reply({ content: '⚠️ Use this in a server.', flags: MessageFlags.Ephemeral });
                     }
-                    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                     const channel = interaction.options.getChannel('channel');
+                    // You may only route YOUR supporter alerts to a channel you can post in
+                    // yourself — stops a member binding the bot to staff/announcement channels.
+                    const perms = channel.permissionsFor(interaction.member);
+                    if (!perms?.has(PermissionFlagsBits.ViewChannel) || !perms?.has(PermissionFlagsBits.SendMessages)) {
+                        return interaction.reply({
+                            content: `🚫 You can only announce in a channel you can post in yourself — you don't have permission to send messages in <#${channel.id}>.`,
+                            flags: MessageFlags.Ephemeral,
+                        });
+                    }
+                    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                     await manager.setAnnounce(userId, guildId, channel.id, userId);
                     return interaction.editReply(
                         `✅ Your new Buy Me a Coffee supporters will be announced in <#${channel.id}>.\n` +
@@ -234,7 +249,7 @@ export default {
                             '1. Go to **developers.buymeacoffee.com**\n' +
                             '2. Open **Settings → API**\n' +
                             '3. Generate a **read-only** API key (it only reads supporters — it can\'t spend or change anything)\n' +
-                            '4. Run `/buymeacoffee link api_key:<your key>` (the reply is private)\n' +
+                            '4. Run `/buymeacoffee link` — a **private form** opens where you paste the key (it\'s never shown or posted; stored encrypted). You can also link it securely on the **dashboard**.\n' +
                             '5. Run `/buymeacoffee announce` in any server to post your supporters there'
                         );
                     return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
