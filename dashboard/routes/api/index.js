@@ -19,7 +19,25 @@ import pollsRoutes from './features/polls.js';
 import suggestionsRoutes from './features/suggestions.js';
 import coreRoutes from './features/core.js';
 import rankcardRoutes from './features/rankcard.js';
+import commandsRoutes from './features/commands.js';
+import phishingRoutes from './features/phishing.js';
+import freeGamesRoutes from './features/free-games.js';
+import prefixCommandsRoutes from './features/prefix-commands.js';
+import customBotRoutes from './features/custom-bot.js';
+import emojiManagerRoutes from './features/emoji-manager.js';
+import todoRoutes from './features/todo.js';
+import globalBanRoutes from '../features/global-ban.js';
+import autoresponderRoutes from './features/autoresponders.js';
+import throneRoutes from './features/throne.js';
+import serverTransferRoutes from './features/server-transfer.js';
+import twitchSchedulesRoutes from './features/twitch-schedules.js';
+import inviteFilterRoutes from './features/invite-filter.js';
+import feedsRoutes from './features/feeds.js';
+import owoRoutes from './features/owo.js';
 import fourthwallRoutes from './features/fourthwall.js';
+
+// User-scoped APIs (req.user only — NOT guild-scoped)
+import meBuyMeACoffeeRoutes from './me/buymeacoffee.js';
 
 const router = express.Router();
 
@@ -28,6 +46,10 @@ router.use(apiCheckAuth);
 
 // Bot context switching endpoint
 router.post('/bot/switch', switchBotContext);
+
+// User-scoped routes (login-only via apiCheckAuth above; scoped to req.user.id,
+// so a user can only ever touch their OWN row — NO guild-admin gate here).
+router.use('/me/buymeacoffee', meBuyMeACoffeeRoutes);
 
 // Guild-specific API routes
 // Each feature router handles its own /guilds/:guildId prefix internally
@@ -50,6 +72,21 @@ router.use('/guilds/:guildId/polls', pollsRoutes);
 router.use('/guilds/:guildId/suggestions', suggestionsRoutes);
 router.use('/guilds/:guildId/core', coreRoutes);
 router.use('/guilds/:guildId/rank-card', rankcardRoutes);
+router.use('/guilds/:guildId/commands', commandsRoutes);
+router.use('/guilds/:guildId/phishing', phishingRoutes);
+router.use('/guilds/:guildId/free-games', freeGamesRoutes);
+router.use('/guilds/:guildId/prefix-commands', prefixCommandsRoutes);
+router.use('/guilds/:guildId/custom-bot', customBotRoutes);
+router.use('/guilds/:guildId/emoji-manager', emojiManagerRoutes);
+router.use('/guilds/:guildId/todo', todoRoutes);
+router.use('/guilds/:guildId/autoresponders', autoresponderRoutes);
+router.use('/guilds/:guildId/throne', throneRoutes);
+router.use('/guilds/:guildId/transfer', serverTransferRoutes);
+router.use('/guilds/:guildId/twitch-schedules', twitchSchedulesRoutes);
+router.use('/guilds/:guildId/invite-filter', inviteFilterRoutes);
+router.use('/guilds/:guildId/feeds', feedsRoutes);
+router.use('/guilds/:guildId/owo', owoRoutes);
+router.use('/guilds', globalBanRoutes);
 router.use('/guilds/:guildId/fourthwall', fourthwallRoutes);
 
 // Health check
@@ -81,7 +118,12 @@ router.get('/docs', (req, res) => {
             polls: '/api/guilds/:guildId/polls',
             suggestions: '/api/guilds/:guildId/suggestions',
             core: '/api/guilds/:guildId/core',
-            rankCard: '/api/guilds/:guildId/rank-card'
+            rankCard: '/api/guilds/:guildId/rank-card',
+            commands: '/api/guilds/:guildId/commands',
+            phishing: '/api/guilds/:guildId/phishing',
+            freeGames: '/api/guilds/:guildId/free-games',
+            prefixCommands: '/api/guilds/:guildId/prefix-commands',
+            emojiManager: '/api/guilds/:guildId/emoji-manager'
         }
     });
 });

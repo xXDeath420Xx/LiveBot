@@ -9030,6 +9030,14 @@ function start(botClient) {
         });
     });
 
+    // Per-USER Buy Me a Coffee link page (login-only; user-scoped, NOT guild-admin)
+    app.get('/buymeacoffee', checkAuth, (req, res) => {
+        res.render('buymeacoffee-tailwind', {
+            user: req.user,
+            clientId: process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID
+        });
+    });
+
     // Docs page
     app.get('/docs', (req, res) => {
         res.render('docs-tailwind', {
