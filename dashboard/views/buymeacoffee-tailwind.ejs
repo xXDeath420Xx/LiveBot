@@ -70,6 +70,8 @@
         .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(255, 221, 0, 0.25); }
         .btn-danger { background: rgba(248, 113, 113, 0.15); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--accent-red); }
         .btn-danger:hover:not(:disabled) { background: var(--accent-red); color: white; }
+        .btn-secondary { background: rgba(255, 221, 0, 0.1); border: 1px solid rgba(255, 221, 0, 0.35); color: var(--bmc-yellow); }
+        .btn-secondary:hover:not(:disabled) { background: rgba(255, 221, 0, 0.2); }
         .status-msg { font-size: 0.85rem; }
         .status-msg.ok { color: var(--accent-green); }
         .status-msg.err { color: var(--accent-red); }
@@ -136,10 +138,13 @@
                     <span id="bmc-status-text">Loading…</span>
                 </div>
 
-                <label class="field-label" for="bmc-key">Read-only API key</label>
+                <p class="note" style="margin-bottom:0.6rem;">Buy Me a Coffee has no "Connect" button — every creator generates their own read-only token. It's two clicks:</p>
+                <a href="https://developers.buymeacoffee.com" target="_blank" rel="noopener" class="btn btn-secondary" style="display:inline-block;margin-bottom:0.9rem;">① Generate your read-only token on Buy Me a Coffee ↗</a>
+
+                <label class="field-label" for="bmc-key">② Paste your read-only API key</label>
                 <input id="bmc-key" class="input" type="password" autocomplete="off" spellcheck="false"
                        placeholder="Paste your Buy Me a Coffee read-only API key">
-                <p class="note">🔒 Stored encrypted, never displayed back to you. The key never leaves your account.</p>
+                <p class="note">🔒 Stored encrypted, never displayed back to you, and it never passes through Discord — it goes straight from your browser to the server over HTTPS.</p>
 
                 <div class="row">
                     <button id="bmc-link-btn" class="btn btn-primary" type="button">Link account</button>
