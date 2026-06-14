@@ -41,6 +41,7 @@ import { startBirthdayScheduler, stopBirthdayScheduler } from './jobs/birthday-s
 import { startTwitchScheduleScheduler, stopTwitchScheduleScheduler } from './jobs/twitch-schedule-scheduler.js';
 import { startFreeGamesScheduler, stopFreeGamesScheduler } from './jobs/free-games-scheduler.js';
 import { startSteamWatchScheduler, stopSteamWatchScheduler } from './jobs/steam-watch-scheduler.js';
+import { startBuyMeACoffeeScheduler, stopBuyMeACoffeeScheduler } from './jobs/buymeacoffee-scheduler.js';
 import { startQOTDScheduler, stopQOTDScheduler } from './jobs/qotd-scheduler.js';
 import initReminderScheduler from './jobs/reminder-scheduler.js';
 import { startTikTokVideoChecker, stopTikTokVideoChecker } from './jobs/tiktok-video-checker.js';
@@ -78,6 +79,7 @@ import ServerStatsManager from './core/server-stats-manager.js';
 import StatDisplayManager from './core/stat-display-manager.js';
 import EmojiStatsManager from './core/emoji-stats-manager.js';
 import ScheduleManager from './core/schedule-manager.js';
+import BuyMeACoffeeManager from './core/buymeacoffee-manager.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
@@ -287,6 +289,9 @@ async function initializeManagers(client) {
   client.scheduleManager = new ScheduleManager(client);
   client.scheduleManager.startTickerUpdates(60000); // Update tickers every minute
   logger.info('[Core] Schedule manager initialized');
+
+  client.buymeacoffeeManager = new BuyMeACoffeeManager(client);
+  logger.info('[Core] Buy Me a Coffee manager initialized');
 
   // RPG managers
   client.rpgCharacterManager = new RPGCharacterManager(client);
@@ -739,6 +744,9 @@ async function initializeSchedulersAndDashboard(client) {
 
   startSteamWatchScheduler(client);
   logger.info('[Core] Steam Watch scheduler initialized');
+
+  startBuyMeACoffeeScheduler(client);
+  logger.info('[Core] Buy Me a Coffee scheduler initialized');
 
   startQOTDScheduler(client);
   logger.info('[Core] QOTD scheduler initialized');
