@@ -45,6 +45,7 @@ import { handleForumSuggestionSubmit, handleForumBugReportSubmit } from './modal
 import { handleCahBlankSubmit } from './modals/cah_blank.js';
 import { handleCahPasswordJoin } from './modals/cah_pwjoin.js';
 import { handleFourthwallSetupSubmit } from './modals/fourthwall_setup_submit.js';
+import { handleBmcLinkSubmit } from './modals/bmc_link_submit.js';
 import { handleFourthwallShopPage } from './buttons/fourthwall_shop_page.js';
 import { handleFourthwallShopPick } from './select-menus/fourthwall_shop_pick.js';
 import { handleBirthdayMonthSelect } from './select-menus/birthday_month.js';
@@ -171,6 +172,7 @@ export const modalHandlers = {
   'cah_blank:': handleCahBlankSubmit,
   'cah_pwjoin:': handleCahPasswordJoin,
   'fourthwall_setup_submit': handleFourthwallSetupSubmit,
+  'bmc_link_submit': handleBmcLinkSubmit,
 
   // Birthday set modal (self + admin)
   'bday:modal:': handleBirthdaySetModal,
