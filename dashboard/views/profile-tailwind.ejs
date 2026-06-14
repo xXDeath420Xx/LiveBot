@@ -52,7 +52,8 @@
         .page-header { margin-bottom: 2rem; }
         .page-header h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem; }
         .page-header p { color: var(--text-secondary); font-size: 0.95rem; }
-        .profile-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 20px; padding: 2rem; margin-bottom: 2rem; backdrop-filter: blur(10px); }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .profile-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--accent-purple); border-radius: 4px 20px 20px 4px; padding: 2rem; margin-bottom: 2rem; animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
         .profile-header { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 1.5rem; }
         .profile-avatar { width: 120px; height: 120px; border-radius: 20px; border: 3px solid var(--border-color); object-fit: cover; flex-shrink: 0; }
         .profile-info { flex: 1; min-width: 200px; }
@@ -72,12 +73,18 @@
         .btn-danger:hover { background: var(--accent-red); color: white; }
         .section-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; }
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-        .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; text-align: center; transition: all 0.3s; backdrop-filter: blur(10px); }
-        .stat-card:hover { border-color: var(--stat-color, var(--accent-purple)); transform: translateY(-2px); }
-        .stat-icon { width: 48px; height: 48px; margin: 0 auto 1rem; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+        .stat-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 1.5rem; text-align: center; transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1); position: relative; overflow: hidden; animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--stat-color, var(--accent-purple)), color-mix(in srgb, var(--stat-color, var(--accent-purple)) 30%, transparent)); opacity: 0; transition: opacity 0.3s; }
+        .stat-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.1); box-shadow: 0 8px 24px color-mix(in srgb, var(--stat-color, #a78bfa) 8%, rgba(0,0,0,0.2)); }
+        .stat-card:hover::before { opacity: 1; }
+        .stat-card:hover .stat-icon { transform: scale(1.1); }
+        .stat-card:nth-child(1) { animation-delay: 0.05s; }
+        .stat-card:nth-child(2) { animation-delay: 0.1s; }
+        .stat-card:nth-child(3) { animation-delay: 0.15s; }
+        .stat-icon { width: 48px; height: 48px; margin: 0 auto 1rem; border-radius: 12px; display: flex; align-items: center; justify-content: center; transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
         .stat-icon svg { width: 24px; height: 24px; }
         .stat-value { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.25rem; }
-        .stat-label { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
+        .stat-label { font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.25rem; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
         .stat-sublabel { font-size: 0.75rem; color: var(--text-muted); }
         .stat-purple { --stat-color: var(--accent-purple); }
         .stat-purple .stat-icon { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
@@ -85,7 +92,7 @@
         .stat-amber .stat-icon { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
         .stat-cyan { --stat-color: var(--accent-cyan); }
         .stat-cyan .stat-icon { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); }
-        .info-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; margin-bottom: 2rem; backdrop-filter: blur(10px); }
+        .info-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--accent-cyan); border-radius: 4px 16px 16px 4px; overflow: hidden; margin-bottom: 2rem; animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: 0.2s; }
         .info-row { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); }
         .info-row:last-child { border-bottom: none; }
         .info-label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem; }
@@ -206,6 +213,7 @@
                 <div class="navbar-links">
                     <a href="/">Home</a>
                     <a href="/commands">Commands</a>
+                    <a href="/cards">Cards</a>
                     <a href="/status">Status</a>
                     <a href="/dashboard">Dashboard</a>
                 </div>
@@ -226,11 +234,13 @@
         <div class="mobile-menu-inner">
             <a href="/" class="mobile-menu-link">Home</a>
             <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/cards" class="mobile-menu-link">Cards</a>
             <a href="/status" class="mobile-menu-link">Status</a>
             <a href="/dashboard" class="mobile-menu-link">Dashboard</a>
             <div class="mobile-menu-divider"></div>
             <a href="/profile" class="mobile-menu-link" style="color: var(--accent-purple);">Profile</a>
             <a href="/settings" class="mobile-menu-link">Settings</a>
+            <a href="/buymeacoffee" class="mobile-menu-link">Buy Me a Coffee</a>
             <div class="mobile-menu-divider"></div>
             <a href="/logout" class="btn btn-danger">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
@@ -277,6 +287,10 @@
                             <a href="/settings" class="btn btn-secondary">
                                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                                 Settings
+                            </a>
+                            <a href="/buymeacoffee" class="btn btn-secondary">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8h14a4 4 0 010 8h-1M3 8v8a4 4 0 004 4h6a4 4 0 004-4M3 8V6a2 2 0 012-2h10a2 2 0 012 2v2M8 1v2M11 1v2"/></svg>
+                                Buy Me a Coffee
                             </a>
                         </div>
                     </div>
@@ -388,6 +402,7 @@
         <div class="container">
             <div class="footer-links">
                 <a href="/commands" class="footer-link">Commands</a>
+                <a href="/cards" class="footer-link">Cards</a>
                 <a href="/status" class="footer-link">Status</a>
                 <a href="/docs" class="footer-link">Documentation</a>
                 <a href="/terms" class="footer-link">Terms</a>
