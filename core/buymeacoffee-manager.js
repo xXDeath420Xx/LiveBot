@@ -7,38 +7,57 @@ const LOG_TAG = '[BMC]';
 const BMC_API_BASE = 'https://developers.buymeacoffee.com/api/v1';
 
 /**
- * Buy Me a Coffee integration manager.
+ * Buy Me a Coffee integration manager — per-USER multi-tenant model.
  *
- * One read-only BMC account (key in env BMC_API_KEY, or a per-guild encrypted
- * override). Each configured guild announces new supporters/subscriptions/extras
- * independently via per-type high-water-marks stored in bmc_config.
+ * ANY user in ANY guild links THEIR OWN BMC read-only API key (`bmc_user_links`),
+ * then announces THEIR supporters in one channel per guild (`bmc_announce`).
+ * Mirrors the Throne two-table split (user→account; per-guild subscription→channel).
  */
 export default class BuyMeACoffeeManager {
     constructor(client) {
         this.client = client;
     }
 
-    // ─── Config ──────────────────────────────────────────────────────
+    // ─── Key helpers ─────────────────────────────────────────────────
 
-    async getConfig(guildId) {
-        const [rows] = await pool.execute('SELECT * FROM bmc_config WHERE guild_id = ?', [guildId]);
-        return rows[0] || null;
+    /**
+     * The BMC read-only key is a JWT. Base64-decode the payload (middle segment)
+     * and return `sub` (the account id) for display. Returns null on any failure.
+     */
+    decodeAccountId(apiKey) {
+        try {
+            const parts = String(apiKey).split('.');
+            if (parts.length < 2) return null;
+            const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            const json = Buffer.from(payloadB64, 'base64').toString('utf8');
+            const payload = JSON.parse(json);
+            return payload?.sub != null ? String(payload.sub) : null;
+        } catch {
+            return null;
+        }
     }
 
     /**
-     * Resolve the API key for a guild: decrypt the per-guild override if set,
-     * else fall back to the env key.
+     * Validate a key by hitting the supporters endpoint.
+     * 200 (even `{ error: "No supporters" }`) → valid (true).
+     * 401/403 → invalid (false). Network/other error → throw.
      */
-    async getApiKey(guildId) {
-        const cfg = await this.getConfig(guildId);
-        if (cfg?.api_key) {
-            try {
-                return encryption.decrypt(JSON.parse(cfg.api_key));
-            } catch (error) {
-                logger.error(`${LOG_TAG} Failed to decrypt api_key for guild ${guildId}`, { error: error.message });
-            }
+    async validateKey(apiKey) {
+        let res;
+        try {
+            res = await fetch(`${BMC_API_BASE}/supporters?page=1`, {
+                headers: {
+                    Authorization: `Bearer ${apiKey}`,
+                    Accept: 'application/json',
+                },
+            });
+        } catch (error) {
+            throw new Error(`Could not reach Buy Me a Coffee: ${error.message}`);
         }
-        return process.env.BMC_API_KEY || null;
+        if (res.status === 401 || res.status === 403) return false;
+        if (res.ok) return true;
+        // Other non-2xx — treat as a transient failure to surface
+        throw new Error(`Buy Me a Coffee returned HTTP ${res.status}`);
     }
 
     // ─── BMC API ─────────────────────────────────────────────────────
@@ -168,110 +187,172 @@ export default class BuyMeACoffeeManager {
         return { supporters, subscriptions, extras };
     }
 
-    // ─── Config mutations ────────────────────────────────────────────
+    // ─── User links ──────────────────────────────────────────────────
 
     /**
-     * Upsert config with channel + enabled=1 AND baseline the high-water-marks
-     * to the current max id per type, so existing supporters are NOT re-announced.
-     * If the fetch fails, marks default to 0 (and we log).
+     * Link a user to their own BMC account. Validates the key first; baselines
+     * the per-type high-water-marks to the current max id so existing supporters
+     * are NOT re-announced.
+     * @returns {Promise<{ accountId: string|null }>}
      */
-    async setChannel(guildId, channelId, setBy) {
-        let lastSupport = 0;
-        let lastSubscription = 0;
-        let lastExtra = 0;
-
+    async linkUser(userId, apiKey) {
+        let valid;
         try {
-            const apiKey = await this.getApiKey(guildId);
-            if (apiKey) {
-                const { supporters, subscriptions, extras } = await this.fetchAll(apiKey);
-                lastSupport = this._maxId(supporters);
-                lastSubscription = this._maxId(subscriptions);
-                lastExtra = this._maxId(extras);
-            } else {
-                logger.warn(`${LOG_TAG} No API key available to baseline guild ${guildId}; marks set to 0`);
-            }
+            valid = await this.validateKey(apiKey);
         } catch (error) {
-            logger.error(`${LOG_TAG} Failed to baseline high-water-marks for guild ${guildId}`, { error: error.message });
+            logger.warn(`${LOG_TAG} Key validation network error for user ${userId}`, { error: error.message });
+            throw new Error('Could not reach Buy Me a Coffee to validate the key. Please try again.');
+        }
+        if (!valid) {
+            throw new Error('That API key is invalid. Generate a read-only key at developers.buymeacoffee.com → Settings → API.');
         }
 
+        // Baseline high-water-marks to the current max id per type
+        let lastSupport = '0';
+        let lastSubscription = '0';
+        let lastExtra = '0';
+        try {
+            const { supporters, subscriptions, extras } = await this.fetchAll(apiKey);
+            lastSupport = this._maxId(supporters);
+            lastSubscription = this._maxId(subscriptions);
+            lastExtra = this._maxId(extras);
+        } catch (error) {
+            logger.error(`${LOG_TAG} Failed to baseline marks for user ${userId}`, { error: error.message });
+        }
+
+        const accountId = this.decodeAccountId(apiKey);
+        const encrypted = JSON.stringify(encryption.encrypt(apiKey));
+
         await pool.execute(
-            `INSERT INTO bmc_config
-                (guild_id, channel_id, enabled, last_support_id, last_subscription_id, last_extra_id, set_by)
-             VALUES (?, ?, 1, ?, ?, ?, ?)
+            `INSERT INTO bmc_user_links
+                (user_id, api_key, account_id, last_support_id, last_subscription_id, last_extra_id)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                api_key = VALUES(api_key),
+                account_id = VALUES(account_id),
+                last_support_id = VALUES(last_support_id),
+                last_subscription_id = VALUES(last_subscription_id),
+                last_extra_id = VALUES(last_extra_id)`,
+            [userId, encrypted, accountId, lastSupport, lastSubscription, lastExtra]
+        );
+
+        return { accountId };
+    }
+
+    async unlinkUser(userId) {
+        await pool.execute('DELETE FROM bmc_announce WHERE user_id = ?', [userId]);
+        await pool.execute('DELETE FROM bmc_user_links WHERE user_id = ?', [userId]);
+    }
+
+    async getLink(userId) {
+        const [rows] = await pool.execute('SELECT * FROM bmc_user_links WHERE user_id = ?', [userId]);
+        return rows[0] || null;
+    }
+
+    /** Decrypted API key for a user, or null if not linked / undecryptable. */
+    async getApiKeyForUser(userId) {
+        const link = await this.getLink(userId);
+        if (!link?.api_key) return null;
+        try {
+            return encryption.decrypt(JSON.parse(link.api_key));
+        } catch (error) {
+            logger.error(`${LOG_TAG} Failed to decrypt api_key for user ${userId}`, { error: error.message });
+            return null;
+        }
+    }
+
+    // ─── Announce targets ────────────────────────────────────────────
+
+    /**
+     * Upsert an announce subscription for the caller in a guild. Requires the
+     * user to have already linked their BMC account.
+     */
+    async setAnnounce(userId, guildId, channelId, addedBy) {
+        const link = await this.getLink(userId);
+        if (!link) {
+            throw new Error('Link your Buy Me a Coffee first with /buymeacoffee link.');
+        }
+        await pool.execute(
+            `INSERT INTO bmc_announce (user_id, guild_id, channel_id, enabled, added_by)
+             VALUES (?, ?, ?, 1, ?)
              ON DUPLICATE KEY UPDATE
                 channel_id = VALUES(channel_id),
                 enabled = 1,
-                last_support_id = VALUES(last_support_id),
-                last_subscription_id = VALUES(last_subscription_id),
-                last_extra_id = VALUES(last_extra_id),
-                set_by = VALUES(set_by)`,
-            [guildId, channelId, lastSupport, lastSubscription, lastExtra, setBy]
+                added_by = VALUES(added_by)`,
+            [userId, guildId, channelId, addedBy || null]
         );
-
-        return { lastSupport, lastSubscription, lastExtra };
     }
 
-    async disable(guildId) {
-        await pool.execute('UPDATE bmc_config SET enabled = 0 WHERE guild_id = ?', [guildId]);
-    }
-
-    async setApiKey(guildId, key, by) {
-        const encrypted = JSON.stringify(encryption.encrypt(key));
+    async stopAnnounce(userId, guildId) {
         await pool.execute(
-            `INSERT INTO bmc_config (guild_id, api_key, set_by)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE api_key = VALUES(api_key), set_by = VALUES(set_by)`,
-            [guildId, encrypted, by]
+            'UPDATE bmc_announce SET enabled = 0 WHERE user_id = ? AND guild_id = ?',
+            [userId, guildId]
         );
     }
 
-    async clearApiKey(guildId) {
-        await pool.execute('UPDATE bmc_config SET api_key = NULL WHERE guild_id = ?', [guildId]);
+    /** Enabled announce targets for a user. */
+    async getAnnounceTargets(userId) {
+        const [rows] = await pool.execute(
+            'SELECT * FROM bmc_announce WHERE user_id = ? AND enabled = 1',
+            [userId]
+        );
+        return rows;
+    }
+
+    async getUserStatus(userId) {
+        const link = await this.getLink(userId);
+        const [targets] = await pool.execute(
+            'SELECT * FROM bmc_announce WHERE user_id = ?',
+            [userId]
+        );
+        return {
+            linked: !!link,
+            accountId: link?.account_id || null,
+            targets,
+        };
     }
 
     // ─── Polling / announcing ────────────────────────────────────────
 
     /**
-     * Poll one guild: announce items whose numeric id > stored last_*_id
-     * (oldest→newest), then advance the marks. Catches+logs its own errors.
-     * @returns {number} total announced
+     * Poll one user: announce items whose numeric id > stored last_*_id
+     * (oldest→newest) to ALL of that user's enabled announce targets, then
+     * advance the marks ONCE. Catches+logs its own errors; never throws.
+     * @returns {Promise<number>} total announcements posted
      */
-    async pollGuild(guildId) {
+    async pollUser(userId) {
         try {
-            const cfg = await this.getConfig(guildId);
-            if (!cfg || !cfg.enabled || !cfg.channel_id) return 0;
+            const link = await this.getLink(userId);
+            if (!link) return 0;
 
-            const apiKey = await this.getApiKey(guildId);
+            const apiKey = await this.getApiKeyForUser(userId);
             if (!apiKey) {
-                logger.warn(`${LOG_TAG} No API key for guild ${guildId}; skipping poll`);
+                logger.warn(`${LOG_TAG} No usable API key for user ${userId}; skipping poll`);
                 return 0;
             }
 
-            const channel = await this.findChannel(guildId, cfg.channel_id);
-            if (!channel) {
-                logger.warn(`${LOG_TAG} Channel ${cfg.channel_id} not found for guild ${guildId}`);
-                return 0;
-            }
+            const targets = await this.getAnnounceTargets(userId);
+            if (targets.length === 0) return 0;
 
             const { supporters, subscriptions, extras } = await this.fetchAll(apiKey);
 
             let announced = 0;
-            announced += await this._announceType(channel, cfg, supporters, BigInt(cfg.last_support_id || 0), 'last_support_id', guildId);
-            announced += await this._announceType(channel, cfg, subscriptions, BigInt(cfg.last_subscription_id || 0), 'last_subscription_id', guildId);
-            announced += await this._announceType(channel, cfg, extras, BigInt(cfg.last_extra_id || 0), 'last_extra_id', guildId);
-
-            // Touch updated_at
-            await pool.execute('UPDATE bmc_config SET updated_at = CURRENT_TIMESTAMP WHERE guild_id = ?', [guildId]);
+            announced += await this._announceType(userId, targets, supporters, BigInt(link.last_support_id || 0), 'last_support_id');
+            announced += await this._announceType(userId, targets, subscriptions, BigInt(link.last_subscription_id || 0), 'last_subscription_id');
+            announced += await this._announceType(userId, targets, extras, BigInt(link.last_extra_id || 0), 'last_extra_id');
 
             return announced;
         } catch (error) {
-            logger.error(`${LOG_TAG} pollGuild failed for guild ${guildId}`, { error: error.message });
+            logger.error(`${LOG_TAG} pollUser failed for user ${userId}`, { error: error.message });
             return 0;
         }
     }
 
-    async _announceType(channel, cfg, items, lastId, column, guildId) {
-        // New items: id > lastId, oldest→newest
+    /**
+     * Fan out fresh items (id > lastId) for one type to every target, then
+     * advance the user's high-water-mark for that type to the max id seen.
+     */
+    async _announceType(userId, targets, items, lastId, column) {
         const fresh = items
             .filter(it => {
                 try { return BigInt(it.id) > lastId; } catch { return false; }
@@ -282,33 +363,45 @@ export default class BuyMeACoffeeManager {
 
         let announced = 0;
         let maxSeen = lastId;
+
         for (const item of fresh) {
-            try {
-                await channel.send({ embeds: [this.buildEmbed(item, cfg)] });
-                announced++;
-            } catch (error) {
-                logger.error(`${LOG_TAG} Failed to send announcement in guild ${guildId}`, { error: error.message });
+            for (const target of targets) {
+                const channel = await this.findChannel(target.guild_id, target.channel_id);
+                if (!channel) {
+                    logger.warn(`${LOG_TAG} Channel ${target.channel_id} not found for guild ${target.guild_id} (user ${userId})`);
+                    continue;
+                }
+                try {
+                    await channel.send({ embeds: [this.buildEmbed(item, target)] });
+                    announced++;
+                } catch (error) {
+                    logger.error(`${LOG_TAG} Failed to send announcement for user ${userId} in guild ${target.guild_id}`, { error: error.message });
+                }
             }
             const idBig = BigInt(item.id);
             if (idBig > maxSeen) maxSeen = idBig;
         }
 
-        // Advance high-water-mark to the max id seen (even on send failure, to avoid re-spam loops)
-        await pool.execute(`UPDATE bmc_config SET ${column} = ? WHERE guild_id = ?`, [maxSeen.toString(), guildId]);
+        // Advance the user's high-water-mark ONCE (even on partial send failures,
+        // to avoid re-spam loops on the next cycle).
+        await pool.execute(
+            `UPDATE bmc_user_links SET ${column} = ? WHERE user_id = ?`,
+            [maxSeen.toString(), userId]
+        );
 
         return announced;
     }
 
-    buildEmbed(item, cfg) {
+    buildEmbed(item, target) {
         const titles = {
             supporter: '☕ New supporter!',
             subscription: '🎟️ New member!',
             extra: '🌟 New purchase!',
         };
 
-        const showNames = cfg ? Number(cfg.show_names) !== 0 : true;
-        const showAmounts = cfg ? Number(cfg.show_amounts) !== 0 : true;
-        const color = (cfg && cfg.embed_color) || '#FFDD00';
+        const showNames = target ? Number(target.show_names) !== 0 : true;
+        const showAmounts = target ? Number(target.show_amounts) !== 0 : true;
+        const color = (target && target.embed_color) || '#FFDD00';
 
         const embed = new EmbedBuilder()
             .setTitle(titles[item.type] || '☕ New support!')
