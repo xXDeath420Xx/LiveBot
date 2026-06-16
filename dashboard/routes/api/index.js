@@ -40,7 +40,14 @@ import fourthwallRoutes from './features/fourthwall.js';
 import meBuyMeACoffeeRoutes from './me/buymeacoffee.js';
 import meStreamTeamRoutes from './me/stream-team.js';
 
+// PUBLIC APIs (NO login required — mounted before apiCheckAuth below)
+import publicStreamTeamRoutes from '../public/stream-team.js';
+
 const router = express.Router();
+
+// PUBLIC routes — mounted BEFORE the global apiCheckAuth so they're reachable
+// without a Discord login. Optional auth via `if (req.user)` inside the router.
+router.use('/public/stream-team', publicStreamTeamRoutes);
 
 // Apply auth to all API routes
 router.use(apiCheckAuth);
