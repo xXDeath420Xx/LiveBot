@@ -40,6 +40,36 @@ export async function handleTicketCreate(interaction) {
 
         if (customId.startsWith('ticket_create_panel_')) {
             panelId = customId.split('_')[3];
+            // If this panel has an attached form, open it as a modal — and thread the
+            // panelId into the modal customId so the ticket uses THIS panel's config
+            // (category, support role, extra viewer), not the guild-wide fallback.
+            const [prows] = await pool.execute(
+                "SELECT form_id FROM ticket_panels WHERE panel_id = ? AND guild_id = ?",
+                [panelId, guildId]
+            );
+            const panelFormId = prows[0]?.form_id;
+            if (panelFormId) {
+                const [questions] = await pool.execute(
+                    "SELECT question_id, question_text, question_type FROM ticket_form_questions WHERE form_id = ? ORDER BY question_id LIMIT 5",
+                    [panelFormId]
+                );
+                if (questions.length > 0) {
+                    const modal = new ModalBuilder()
+                        .setCustomId(`ticket_form_submit_${panelFormId}_${panelId}`)
+                        .setTitle('Application');
+                    for (const question of questions) {
+                        modal.addComponents(new ActionRowBuilder().addComponents(
+                            new TextInputBuilder()
+                                .setCustomId(`question_${question.question_id}`)
+                                .setLabel(question.question_text.substring(0, 45))
+                                .setStyle(question.question_type === 'paragraph' ? TextInputStyle.Paragraph : TextInputStyle.Short)
+                                .setRequired(true)
+                        ));
+                    }
+                    await interaction.showModal(modal);
+                    return;
+                }
+            }
         } else if (customId.startsWith('ticket_create_form_')) {
             const formId = customId.split('_')[3];
 
@@ -180,6 +210,19 @@ export async function createTicket(interaction, formResponses = null, formId = n
             });
         }
 
+        // Extra viewer (e.g. the server owner for application-style panels). With
+        // support_role_id NULL, this makes the ticket opener + this-user-only.
+        if (config.extra_viewer_id) {
+            permissionOverwrites.push({
+                id: config.extra_viewer_id,
+                allow: [
+                    PermissionsBitField.Flags.ViewChannel,
+                    PermissionsBitField.Flags.SendMessages,
+                    PermissionsBitField.Flags.ReadMessageHistory
+                ]
+            });
+        }
+
         const channel = await interaction.guild.channels.create({
             name: channelName,
             type: 0, // Text channel
@@ -222,10 +265,12 @@ export async function createTicket(interaction, formResponses = null, formId = n
                     .setEmoji('🔒')
             );
 
-        // Build content with optional support role ping
+        // Build content with optional support role / extra-viewer ping
         let messageContent = `${interaction.user}`;
         if (config.support_role_id) {
             messageContent += ` - <@&${config.support_role_id}>`;
+        } else if (config.extra_viewer_id) {
+            messageContent += ` - <@${config.extra_viewer_id}>`;
         }
 
         await channel.send({
