@@ -259,6 +259,7 @@ function start(botClient) {
             '/card',
             '/cards',
             '/supporters',
+            '/api/public/stream-team', // public anonymous signup — protected by honeypot + rate-limit + Twitch-resolve gate, not session CSRF
         ]
     }));
 
