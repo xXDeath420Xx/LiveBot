@@ -9038,6 +9038,14 @@ function start(botClient) {
         });
     });
 
+    // Stream Team Signup page (user-scoped — opens a private Discord ticket)
+    app.get('/stream-team', checkAuth, (req, res) => {
+        res.render('stream-team-tailwind', {
+            user: req.user,
+            clientId: process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID
+        });
+    });
+
     // Docs page
     app.get('/docs', (req, res) => {
         res.render('docs-tailwind', {

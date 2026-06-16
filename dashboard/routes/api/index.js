@@ -38,6 +38,7 @@ import fourthwallRoutes from './features/fourthwall.js';
 
 // User-scoped APIs (req.user only — NOT guild-scoped)
 import meBuyMeACoffeeRoutes from './me/buymeacoffee.js';
+import meStreamTeamRoutes from './me/stream-team.js';
 
 const router = express.Router();
 
@@ -50,6 +51,7 @@ router.post('/bot/switch', switchBotContext);
 // User-scoped routes (login-only via apiCheckAuth above; scoped to req.user.id,
 // so a user can only ever touch their OWN row — NO guild-admin gate here).
 router.use('/me/buymeacoffee', meBuyMeACoffeeRoutes);
+router.use('/me/stream-team', meStreamTeamRoutes);
 
 // Guild-specific API routes
 // Each feature router handles its own /guilds/:guildId prefix internally
