@@ -9038,10 +9038,11 @@ function start(botClient) {
         });
     });
 
-    // Stream Team Signup page (user-scoped — opens a private Discord ticket)
-    app.get('/stream-team', checkAuth, (req, res) => {
+    // Stream Team Signup page (PUBLIC — anyone with a Twitch can apply; logged-in
+    // users get a richer, linked ticket they can chat in). No checkAuth.
+    app.get('/stream-team', (req, res) => {
         res.render('stream-team-tailwind', {
-            user: req.user,
+            user: req.user || null,
             clientId: process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID
         });
     });

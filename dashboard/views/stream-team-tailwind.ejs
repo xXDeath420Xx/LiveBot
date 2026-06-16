@@ -104,10 +104,16 @@
                     <a href="/status">Status</a>
                     <a href="/dashboard">Dashboard</a>
                 </div>
+                <% if (user) { %>
                 <a href="/profile" class="user-menu">
                     <img src="<%= user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="" class="user-avatar">
                     <span class="user-name"><%= user.username %></span>
                 </a>
+                <% } else { %>
+                <a href="/auth/discord?returnTo=/stream-team" class="user-menu">
+                    <span class="user-name">Log in with Discord</span>
+                </a>
+                <% } %>
             </div>
         </div>
     </nav>
@@ -116,12 +122,12 @@
         <div class="container">
             <div class="page-header">
                 <h1>📺 Stream Team Signup</h1>
-                <p>Apply to join the <strong>Against_The_Tide</strong> stream team. Submitting opens a private Discord ticket that only you and the server owner can see.</p>
+                <p>Apply to join the <strong>Against_The_Tide</strong> stream team. <strong>No Discord account needed — apply with your Twitch.</strong> If you're in our Discord, log in first and you'll get a private ticket you can chat in.</p>
             </div>
 
             <div class="privacy">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                <span>Your application opens a <strong>private ticket channel</strong> in the Discord server — only <strong>you</strong> and the <strong>server owner</strong> can read it. No one else sees your answers.</span>
+                <span>Your application opens a <strong>private ticket channel</strong> only the <strong>server owner</strong> can read. If you log in with Discord and you're a member, you'll be added to the ticket so you can chat there too.</span>
             </div>
 
             <!-- Loading state -->
@@ -143,13 +149,26 @@
             <!-- Signup form -->
             <div id="form-card" class="card hidden">
                 <h3>Tell us about your stream</h3>
-                <p class="muted" style="margin-bottom:1.25rem;">All three fields are required.</p>
+                <p class="muted" style="margin-bottom:1.25rem;">All fields below are required. We'll verify your Twitch channel exists before submitting.</p>
                 <div id="fields"></div>
+
+                <!-- Optional Discord username (shown to logged-out applicants too) -->
+                <div class="field" id="discord-field">
+                    <label class="field-label" for="discord_username">Your Discord username (optional)</label>
+                    <input type="text" class="input" id="discord_username" placeholder="e.g. yourname" autocomplete="off">
+                </div>
+
+                <!-- HONEYPOT — hidden from humans, bots fill it. Never visible. -->
+                <div aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;">
+                    <label for="website">Website (leave blank)</label>
+                    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                </div>
+
                 <div class="row">
                     <button id="submit-btn" class="btn btn-primary" type="button">Submit application</button>
                     <span id="status-msg" class="status-msg"></span>
                 </div>
-                <p class="note">By submitting you open a private ticket the server owner will review. You'll be pinged there.</p>
+                <p class="note">By submitting you open a private ticket the server owner will review.</p>
             </div>
 
             <!-- The team link -->
@@ -179,8 +198,9 @@
 
     <script>
     (function () {
-        const base = '/api/me/stream-team';
+        const base = '/api/public/stream-team';
         let questions = [];
+        let loggedIn = false;
 
         function show(id) { document.getElementById(id).classList.remove('hidden'); }
         function hide(id) { document.getElementById(id).classList.add('hidden'); }
@@ -224,8 +244,8 @@
             try {
                 const data = await fetch(base + '/panel', { headers: { Accept: 'application/json' } }).then(r => r.json());
                 hide('loading');
+                loggedIn = !!data.loggedIn;
                 if (!data.exists) { show('unavailable'); return; }
-                if (data.hasOpenTicket) { show('already'); return; }
                 questions = data.questions || [];
                 renderFields(questions);
                 show('form-card');
@@ -248,17 +268,31 @@
                         return;
                     }
                 }
+                const discordEl = document.getElementById('discord_username');
+                const honeypotEl = document.getElementById('website');
                 btn.disabled = true;
                 setMsg('Submitting…', 'info');
                 try {
-                    const r = await fetch(base + '/signup', {
+                    const r = await fetch(base + '/apply', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ answers })
+                        body: JSON.stringify({
+                            answers,
+                            discord_username: (discordEl && discordEl.value || '').trim(),
+                            website: (honeypotEl && honeypotEl.value || '')
+                        })
                     }).then(x => x.json());
                     if (r.ok) {
-                        setMsg('Application submitted! Check your private ticket in Discord.', 'ok');
                         hide('form-card');
+                        const box = document.querySelector('#already .status-box span');
+                        const note = document.querySelector('#already .muted');
+                        if (r.linked) {
+                            if (box) box.textContent = 'Application submitted!';
+                            if (note) note.textContent = 'A private ticket has been opened in the Discord server — head there to chat with the owner. You can only have one open application at a time.';
+                        } else {
+                            if (box) box.textContent = 'Application received!';
+                            if (note) note.textContent = "Thanks! The server owner has been notified and will review your application. Since you applied without logging in, we'll reach out via the details you provided.";
+                        }
                         show('already');
                     } else {
                         setMsg(r.error || 'Could not submit your application.', 'err');
