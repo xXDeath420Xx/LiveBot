@@ -17,17 +17,61 @@ const UC_EXTRACT = [
 ];
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
+// Only ever fetch these exact hosts (SSRF guard — the fetch target must be a real
+// YouTube host, never inferred from an unanchored substring of attacker input).
+const ALLOWED_HOSTS = new Set(['www.youtube.com', 'youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be']);
+
 // Decide what to do with the raw input: return {uc} if we already have the id, else {url} to fetch.
 function plan(input) {
-  const s = String(input ?? '').trim();
+  let s = String(input ?? '').trim();
   if (!s) return null;
   if (UC_RE.test(s)) return { uc: s };
-  const direct = s.match(/youtube\.com\/channel\/(UC[A-Za-z0-9_-]{22})/i);
-  if (direct) return { uc: direct[1] };
-  if (/^https?:\/\//i.test(s) && /youtube\.com|youtu\.be/i.test(s)) return { url: s.split(/[?#]/)[0] };
-  // @handle, bare handle, or a plain name → treat as a handle URL
-  const handle = s.replace(/^@/, '').split(/[/?#]/)[0];
+
+  // Normalise a scheme-less YouTube URL (e.g. "youtube.com/@x") so it parses as a URL.
+  if (/^(?:www\.|m\.|music\.)?youtube\.com\//i.test(s) || /^youtu\.be\//i.test(s)) s = 'https://' + s;
+
+  if (/^https?:\/\//i.test(s)) {
+    let u;
+    try { u = new URL(s); } catch { throw new Error("That doesn't look like a valid URL."); }
+    const host = u.hostname.toLowerCase().replace(/\.$/, '');
+    if (!ALLOWED_HOSTS.has(host)) throw new Error('Only youtube.com / youtu.be links are allowed.');
+    const ch = u.pathname.match(/\/channel\/(UC[A-Za-z0-9_-]{22})/); // /channel/UC… → use id, no fetch
+    if (ch) return { uc: ch[1] };
+    // Rebuild a clean https URL from the validated host + path only (drops query/fragment/credentials).
+    return { url: `https://${host}${u.pathname}` };
+  }
+
+  // Not a URL: a bare @handle / handle / name → fixed-host handle URL (host can't be attacker-controlled).
+  const handle = s.replace(/^@/, '').split(/[/?#\s]/)[0];
+  if (!handle) throw new Error('Enter a YouTube channel URL, @handle, or UC… ID.');
   return { url: `https://www.youtube.com/@${encodeURIComponent(handle)}` };
+}
+
+// Fetch with manual redirect handling — every hop's host is re-validated against the
+// allowlist so a youtube.com URL can't bounce the server to an internal/attacker host
+// (defense-in-depth on top of the initial-host check in plan()).
+async function safeFetch(url) {
+  let current = url;
+  for (let hop = 0; hop < 4; hop++) {
+    const res = await fetch(current, {
+      headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(12000),
+    });
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('location');
+      if (!loc) throw new Error('Got an unexpected redirect from YouTube.');
+      const next = new URL(loc, current);
+      const host = next.hostname.toLowerCase().replace(/\.$/, '');
+      if (next.protocol !== 'https:' || !ALLOWED_HOSTS.has(host)) {
+        throw new Error('Only youtube.com / youtu.be links are allowed.');
+      }
+      current = next.toString();
+      continue;
+    }
+    return res;
+  }
+  throw new Error('Too many redirects looking that up.');
 }
 
 /**
@@ -41,8 +85,9 @@ export async function resolveYouTubeChannelId(input) {
 
   let res;
   try {
-    res = await fetch(p.url, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' }, signal: AbortSignal.timeout(12000) });
-  } catch {
+    res = await safeFetch(p.url);
+  } catch (err) {
+    if (/only youtube|too many redirects|unexpected redirect/i.test(err.message)) throw err;
     throw new Error("Couldn't reach YouTube to look that up — try again, or paste the channel's UC… ID.");
   }
   if (!res.ok) throw new Error(`Couldn't find that YouTube channel (HTTP ${res.status}). Double-check the URL or @handle.`);
