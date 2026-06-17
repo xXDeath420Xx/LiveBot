@@ -3972,7 +3972,6 @@ function start(botClient) {
                 youtubeFeeds:   await pool.execute('SELECT * FROM youtube_feeds   WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
                 twitterFeeds:   await pool.execute('SELECT * FROM twitter_feeds   WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
                 blueskyFeeds:   await pool.execute('SELECT * FROM bluesky_feeds   WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
-                instagramFeeds: await pool.execute('SELECT * FROM instagram_feeds WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
                 facebookFeeds:  await pool.execute('SELECT * FROM facebook_feeds  WHERE guild_id = ? ORDER BY id DESC', [guildId]).then(r => r[0]).catch(() => []),
                 autoPublisherConfig: autoPublisherConfig,
                 autorolesConfig: autorolesConfig,
@@ -5203,49 +5202,25 @@ function start(botClient) {
     // ===========================
     // INSTAGRAM ROUTES
     // ===========================
-    app.post('/manage/:guildId/add-instagram-feed', checkAuth, checkGuildAdmin, async (req, res) => {
-        const guildId = req.params.guildId;
-        const wantsJson = req.is('application/json') || req.accepts(['html', 'json']) === 'json';
-        try {
-            let { instagram_username } = req.body;
-            const channelId = req.body.channel_id || req.body.discord_channel_id;
-            if (!instagram_username || !channelId) {
-                if (wantsJson) return res.status(400).json({ error: 'Missing required fields: instagram_username, channel_id' });
-                return res.redirect(`/manage/${guildId}?page=feeds&error=missing_fields`);
-            }
-            instagram_username = instagram_username.trim().replace(/^@/, '');
-
-            const { igBusinessDiscovery } = await import('../utils/platforms/meta.js');
-            const biz = await igBusinessDiscovery(instagram_username, { mediaLimit: 1 });
-            if (!biz) {
-                const msg = `Instagram profile @${instagram_username} not found or not a Business/Creator account (Graph API requirement)`;
-                if (wantsJson) return res.status(404).json({ error: msg });
-                return res.redirect(`/manage/${guildId}?page=feeds&error=instagram_not_discoverable`);
-            }
-
-            await pool.execute(
-                'INSERT INTO instagram_feeds (guild_id, instagram_username, ig_user_id, channel_id) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id), ig_user_id = VALUES(ig_user_id)',
-                [guildId, instagram_username, biz.id || null, channelId]
-            );
-            logger.info(`[Feeds] Instagram feed added: @${instagram_username} → ${channelId} in guild ${guildId}`);
-            if (wantsJson) return res.json({ success: true, instagram_username, channel_id: channelId });
-            res.redirect(`/manage/${guildId}?page=feeds&success=instagram_added`);
-        } catch (error) {
-            logger.error('[POST add-instagram-feed Error]', error);
-            if (wantsJson) return res.status(500).json({ error: 'Failed to add Instagram feed' });
-            res.redirect(`/manage/${guildId}?page=feeds&error=instagram`);
+    // Instagram feeds were removed: the only sanctioned source is Meta's Graph API, which
+    // requires the target to have a Business/Creator account + an app-reviewed token — so it
+    // never worked for normal users. These routes now just report that it's gone (handles any
+    // stale form/bookmark gracefully). The remove route stays so existing rows can be cleaned.
+    app.post('/manage/:guildId/add-instagram-feed', checkAuth, checkGuildAdmin, (req, res) => {
+        if (req.is('application/json') || req.accepts(['html', 'json']) === 'json') {
+            return res.status(410).json({ error: 'Instagram feeds are no longer supported (Meta\'s Graph API requires a Business account).' });
         }
+        res.redirect(`/manage/${req.params.guildId}?page=feeds&error=instagram_removed`);
     });
 
     app.post('/manage/:guildId/remove-instagram-feed', checkAuth, checkGuildAdmin, async (req, res) => {
         const guildId = req.params.guildId;
         try {
             await pool.execute('DELETE FROM instagram_feeds WHERE id = ? AND guild_id = ?', [req.body.feedId, guildId]);
-            res.redirect(`/manage/${guildId}?page=feeds&success=instagram_removed`);
         } catch (error) {
             logger.error('[POST remove-instagram-feed Error]', error);
-            res.redirect(`/manage/${guildId}?page=feeds&error=instagram`);
         }
+        res.redirect(`/manage/${guildId}?page=feeds`);
     });
 
     // ===========================

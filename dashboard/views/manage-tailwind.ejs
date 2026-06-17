@@ -1206,7 +1206,6 @@
     const youtubeFeeds = locals.youtubeFeeds || [];
     const twitterFeeds = locals.twitterFeeds || [];
     const blueskyFeeds = locals.blueskyFeeds || [];
-    const instagramFeeds = locals.instagramFeeds || [];
     const facebookFeeds = locals.facebookFeeds || [];
     const twitchScheduleSyncs = locals.twitchScheduleSyncs || [];
     const autoPublisherConfig = locals.autoPublisherConfig || {};
@@ -1468,7 +1467,7 @@
                     'logging': { partial: 'logging', data: { guild, settings: logConfig, auditLogs: typeof auditLogs !== 'undefined' ? auditLogs : [], channels, channelSettingsMap: typeof channelSettingsMap !== 'undefined' ? channelSettingsMap : new Map() } },
                     'action-log': { partial: 'action-log', data: { guild, actionLogs: typeof actionLogs !== 'undefined' ? actionLogs : [] } },
                     'analytics': { partial: 'analytics', data: { guild, serverStats: typeof serverStats !== 'undefined' ? serverStats : [] } },
-                    'feeds': { partial: 'feeds', data: { guild, guildId: guild.id, redditFeeds, youtubeFeeds, twitterFeeds, blueskyFeeds: (locals.blueskyFeeds || []), instagramFeeds: (locals.instagramFeeds || []), facebookFeeds: (locals.facebookFeeds || []), channels } },
+                    'feeds': { partial: 'feeds', data: { guild, guildId: guild.id, redditFeeds, youtubeFeeds, twitterFeeds, blueskyFeeds: (locals.blueskyFeeds || []), facebookFeeds: (locals.facebookFeeds || []), channels } },
                     'twitch-schedules': { partial: 'streaming', data: streamingData },
                     'announcements': { partial: 'streaming', data: streamingData },
                     'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
@@ -1932,12 +1931,12 @@
                             </div>
                         </div>
                     </a>
-                    <a href="/manage/<%= guild.id %>?page=feeds" class="module-card indigo" data-tags="reddit youtube twitter rss social feed notifications instagram facebook">
+                    <a href="/manage/<%= guild.id %>?page=feeds" class="module-card indigo" data-tags="reddit youtube twitter rss social feed notifications facebook">
                         <div class="module-header">
                             <div class="module-icon"><i class="fas fa-rss"></i></div>
                             <div>
                                 <div class="module-title">Social Feeds</div>
-                                <div class="module-desc">Reddit, YouTube, Twitter/X, Instagram, and Facebook feeds</div>
+                                <div class="module-desc">Reddit, YouTube, Twitter/X, and Facebook feeds</div>
                             </div>
                         </div>
                     </a>
