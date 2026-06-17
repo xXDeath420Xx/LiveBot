@@ -4,12 +4,13 @@
 const rFeeds = locals.redditFeeds || [];
 const yFeeds = locals.youtubeFeeds || [];
 const tFeeds = locals.twitterFeeds || [];
-const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
+const bFeeds = locals.blueskyFeeds || [];
+const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length + bFeeds.length;
 %>
 
 <div class="space-y-6">
     <!-- Stats -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
         <%- include('../../components/cards/statCard', {
             title: 'Total Feeds',
             value: totalFeeds,
@@ -32,6 +33,12 @@ const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
             title: 'Twitter/X',
             value: tFeeds.length,
             icon: '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+            color: 'info'
+        }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Bluesky',
+            value: bFeeds.length,
+            icon: '<svg class="w-6 h-6" fill="currentColor" viewBox="0 0 64 57"><path d="M13.873 3.805C21.21 9.332 29.103 20.537 32 26.55v15.882c0-.338-.13.044-.41.867-1.512 4.456-7.418 21.847-20.923 7.944-7.111-7.32-3.819-14.64 9.125-16.85-7.405 1.264-15.73-.825-18.014-9.015C1.12 23.022 0 8.51 0 6.55 0-3.268 8.579-.182 13.873 3.805zm36.254 0C42.79 9.332 34.897 20.537 32 26.55v15.882c0-.338.13.044.41.867 1.512 4.456 7.418 21.847 20.923 7.944 7.111-7.32 3.819-14.64-9.125-16.85 7.405 1.264 15.73-.825 18.014-9.015C62.88 23.022 64 8.51 64 6.55c0-9.818-8.578-6.732-13.873-2.745z"/></svg>',
             color: 'info'
         }) %>
     </div>
@@ -132,9 +139,9 @@ const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
         <form id="youtube-feed-form" class="mb-4">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                 <div class="form-group">
-                    <label class="form-label">YouTube Channel ID</label>
-                    <input type="text" name="youtube_channel_id" class="form-input w-full" required placeholder="UC...">
-                    <p class="form-hint">Channel ID starting with UC</p>
+                    <label class="form-label">YouTube Channel</label>
+                    <input type="text" name="youtube_channel_id" class="form-input w-full" required placeholder="https://youtube.com/@handle  ·  @handle  ·  or UC… ID">
+                    <p class="form-hint">Paste the channel URL or <strong>@handle</strong> (e.g. <code>youtube.com/@GirlGoGrr</code>) — we'll look up the ID for you. A raw <code>UC…</code> ID works too.</p>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Post to Channel</label>
@@ -262,6 +269,80 @@ const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
             </div>
         <% } %>
     </div>
+
+    <!-- Bluesky Feeds -->
+    <div class="card">
+        <div class="flex items-center gap-3 mb-4">
+            <div class="p-2 bg-sky-500/10 rounded-lg">
+                <svg class="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 64 57">
+                    <path d="M13.873 3.805C21.21 9.332 29.103 20.537 32 26.55v15.882c0-.338-.13.044-.41.867-1.512 4.456-7.418 21.847-20.923 7.944-7.111-7.32-3.819-14.64 9.125-16.85-7.405 1.264-15.73-.825-18.014-9.015C1.12 23.022 0 8.51 0 6.55 0-3.268 8.579-.182 13.873 3.805zm36.254 0C42.79 9.332 34.897 20.537 32 26.55v15.882c0-.338.13.044.41.867 1.512 4.456 7.418 21.847 20.923 7.944 7.111-7.32 3.819-14.64-9.125-16.85 7.405 1.264 15.73-.825 18.014-9.015C62.88 23.022 64 8.51 64 6.55c0-9.818-8.578-6.732-13.873-2.745z"/>
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-white">Bluesky Feeds</h3>
+                <p class="text-sm text-gray-400">Automatically post new posts from Bluesky accounts</p>
+            </div>
+        </div>
+
+        <form id="bluesky-feed-form" class="mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                <div class="form-group">
+                    <label class="form-label">Bluesky Handle</label>
+                    <input type="text" name="bluesky_handle" class="form-input w-full" required placeholder="user.bsky.social">
+                    <p class="form-hint">Full handle, e.g. <code>jay.bsky.social</code></p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Post to Channel</label>
+                    <%- include('../../components/forms/channelSelect', {
+                        name: 'channel_id',
+                        channels: Array.from(channels.values()),
+                        selected: null,
+                        placeholder: 'Select channel'
+                    }) %>
+                </div>
+                <button type="submit" class="btn btn-primary w-full">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Bluesky Feed
+                </button>
+            </div>
+        </form>
+
+        <% if (bFeeds.length > 0) { %>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-dark-400">
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Bluesky Handle</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Channel</th>
+                            <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-dark-400">
+                        <% bFeeds.forEach(feed => { %>
+                            <tr class="hover:bg-dark-600 transition-colors">
+                                <td class="py-3 px-4">
+                                    <span class="text-sky-400 font-medium">@<%= feed.bluesky_handle %></span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-gray-400">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <button onclick="deleteBlueskyFeed('<%= feed.id %>')" class="btn btn-danger btn-sm">Remove</button>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="text-center py-8 bg-dark-700 rounded-lg border border-dashed border-dark-400">
+                <span class="text-2xl text-gray-500 block mb-2">🦋</span>
+                <p class="text-gray-400">No Bluesky feeds configured</p>
+            </div>
+        <% } %>
+    </div>
 </div>
 
 <script>
@@ -329,6 +410,32 @@ async function deleteTwitterFeed(id) {
     if (!confirm('Remove this feed?')) return;
     try {
         const response = await fetch(`/api/guilds/<%= guildId %>/feeds/twitter/${id}`, { method: 'DELETE' });
+        if (response.ok) { showToast('success', 'Feed removed'); location.reload(); }
+        else throw new Error('Failed');
+    } catch (e) { showToast('error', 'Failed to remove'); }
+}
+
+document.getElementById('bluesky-feed-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/feeds/bluesky', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bluesky_handle: formData.get('bluesky_handle'), channel_id: formData.get('channel_id') })
+        });
+        if (response.ok) { showToast('success', 'Bluesky feed added'); location.reload(); }
+        else {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed');
+        }
+    } catch (e) { showToast('error', e.message || 'Failed to add feed'); }
+});
+
+async function deleteBlueskyFeed(id) {
+    if (!confirm('Remove this feed?')) return;
+    try {
+        const response = await fetch(`/api/guilds/<%= guildId %>/feeds/bluesky/${id}`, { method: 'DELETE' });
         if (response.ok) { showToast('success', 'Feed removed'); location.reload(); }
         else throw new Error('Failed');
     } catch (e) { showToast('error', 'Failed to remove'); }
