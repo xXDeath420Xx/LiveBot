@@ -2,7 +2,10 @@
 const rFeeds = redditFeeds || [];
 const yFeeds = youtubeFeeds || [];
 const tFeeds = twitterFeeds || [];
-const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
+const bFeeds = (typeof blueskyFeeds !== 'undefined') ? blueskyFeeds : [];
+const iFeeds = (typeof instagramFeeds !== 'undefined') ? instagramFeeds : [];
+const fFeeds = (typeof facebookFeeds !== 'undefined') ? facebookFeeds : [];
+const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length + bFeeds.length + iFeeds.length + fFeeds.length;
 %>
 
 <div class="page-section">
@@ -35,6 +38,18 @@ const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
         <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
             <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Twitter</div>
             <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #1DA1F2;"><%= tFeeds.length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Bluesky</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #0085FF;"><%= bFeeds.length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Instagram</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #E1306C;"><%= iFeeds.length %></div>
+        </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Facebook</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #1877F2;"><%= fFeeds.length %></div>
         </div>
     </div>
 
@@ -131,9 +146,9 @@ const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
     <form action="/manage/<%= guild.id %>/add-youtube-feed" method="POST" style="margin-bottom: var(--spacing-5);">
         <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
             <div>
-                <label class="form-label">YouTube Channel ID</label>
-                <input type="text" name="youtube_channel_id" class="form-control" required placeholder="UC...">
-                <div class="form-help">Channel ID starting with UC</div>
+                <label class="form-label">YouTube Channel</label>
+                <input type="text" name="youtube_channel_id" class="form-control" required placeholder="https://youtube.com/@handle, @handle, or UC… ID">
+                <div class="form-help">Paste the channel URL or <strong>@handle</strong> — we'll look up the ID for you. A raw <code>UC…</code> ID works too.</div>
             </div>
             <div>
                 <label class="form-label">Post to Channel</label>
@@ -278,6 +293,183 @@ const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length;
                 <i class="fab fa-twitter" style="font-size: var(--font-size-2xl);"></i>
             </div>
             <div style="color: var(--color-text-secondary);">No Twitter feeds configured</div>
+        </div>
+    <% } %>
+</div>
+
+<!-- Bluesky Feeds -->
+<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
+    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+        <span style="color: #0085FF;">🦋</span> Bluesky Feeds
+    </h3>
+    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
+        Automatically post new posts from Bluesky accounts
+    </p>
+    <form action="/manage/<%= guild.id %>/add-bluesky-feed" method="POST" style="margin-bottom: var(--spacing-5);">
+        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+            <div>
+                <label class="form-label">Bluesky Handle</label>
+                <input type="text" name="bluesky_handle" class="form-control" required placeholder="user.bsky.social">
+                <div class="form-help">Full handle (e.g. <code>jay.bsky.social</code>)</div>
+            </div>
+            <div>
+                <label class="form-label">Post to Channel</label>
+                <select name="channel_id" class="form-select" required>
+                    <option value="">Select channel</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>">#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    <i class="fas fa-plus"></i><span>Add Bluesky Feed</span>
+                </button>
+            </div>
+        </div>
+    </form>
+    <% if (bFeeds.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>Bluesky Handle</th><th>Channel</th><th class="text-end">Actions</th></tr></thead>
+                <tbody>
+                    <% bFeeds.forEach(feed => { %>
+                        <tr>
+                            <td><span style="color: #0085FF; font-weight: var(--font-weight-medium);">@<%= feed.bluesky_handle %></span></td>
+                            <td><span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span></td>
+                            <td class="text-end">
+                                <form action="/manage/<%= guild.id %>/remove-bluesky-feed" method="POST" style="display: inline;">
+                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i><span>Remove</span></button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
+            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2); font-size: var(--font-size-2xl);">🦋</div>
+            <div style="color: var(--color-text-secondary);">No Bluesky feeds configured</div>
+        </div>
+    <% } %>
+</div>
+
+<!-- Instagram Feeds -->
+<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
+    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+        <i class="fab fa-instagram" style="color: #E1306C;"></i> Instagram Feeds
+    </h3>
+    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
+        Automatically post new Instagram posts (uses Meta Graph API — connected account only)
+    </p>
+    <form action="/manage/<%= guild.id %>/add-instagram-feed" method="POST" style="margin-bottom: var(--spacing-5);">
+        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+            <div>
+                <label class="form-label">Instagram Username</label>
+                <input type="text" name="instagram_username" class="form-control" required placeholder="instagram">
+                <div class="form-help">Without @ symbol</div>
+            </div>
+            <div>
+                <label class="form-label">Post to Channel</label>
+                <select name="channel_id" class="form-select" required>
+                    <option value="">Select channel</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>">#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    <i class="fas fa-plus"></i><span>Add Instagram Feed</span>
+                </button>
+            </div>
+        </div>
+    </form>
+    <% if (iFeeds.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>Instagram Account</th><th>Channel</th><th class="text-end">Actions</th></tr></thead>
+                <tbody>
+                    <% iFeeds.forEach(feed => { %>
+                        <tr>
+                            <td><span style="color: #E1306C; font-weight: var(--font-weight-medium);">@<%= feed.instagram_username %></span></td>
+                            <td><span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span></td>
+                            <td class="text-end">
+                                <form action="/manage/<%= guild.id %>/remove-instagram-feed" method="POST" style="display: inline;">
+                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i><span>Remove</span></button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
+            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2);"><i class="fab fa-instagram" style="font-size: var(--font-size-2xl);"></i></div>
+            <div style="color: var(--color-text-secondary);">No Instagram feeds configured</div>
+        </div>
+    <% } %>
+</div>
+
+<!-- Facebook Feeds -->
+<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
+    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
+        <i class="fab fa-facebook" style="color: #1877F2;"></i> Facebook Page Feeds
+    </h3>
+    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
+        Automatically post new Facebook Page posts (uses Meta Graph API — connected page only)
+    </p>
+    <form action="/manage/<%= guild.id %>/add-facebook-feed" method="POST" style="margin-bottom: var(--spacing-5);">
+        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+            <div>
+                <label class="form-label">Facebook Page ID</label>
+                <input type="text" name="facebook_page_id" class="form-control" required placeholder="1009504068903484">
+                <div class="form-help">Numeric page ID (found in Meta Business Suite)</div>
+            </div>
+            <div>
+                <label class="form-label">Post to Channel</label>
+                <select name="channel_id" class="form-select" required>
+                    <option value="">Select channel</option>
+                    <% channels.forEach(channel => { %>
+                        <option value="<%= channel.id %>">#<%= channel.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    <i class="fas fa-plus"></i><span>Add Facebook Feed</span>
+                </button>
+            </div>
+        </div>
+    </form>
+    <% if (fFeeds.length > 0) { %>
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr><th>Facebook Page</th><th>Channel</th><th class="text-end">Actions</th></tr></thead>
+                <tbody>
+                    <% fFeeds.forEach(feed => { %>
+                        <tr>
+                            <td><code style="background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);"><%= feed.page_name || feed.facebook_page_id %></code></td>
+                            <td><span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span></td>
+                            <td class="text-end">
+                                <form action="/manage/<%= guild.id %>/remove-facebook-feed" method="POST" style="display: inline;">
+                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i><span>Remove</span></button>
+                                </form>
+                            </td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    <% } else { %>
+        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
+            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2);"><i class="fab fa-facebook" style="font-size: var(--font-size-2xl);"></i></div>
+            <div style="color: var(--color-text-secondary);">No Facebook feeds configured</div>
         </div>
     <% } %>
 </div>
