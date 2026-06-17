@@ -46,6 +46,7 @@ import { handleCahBlankSubmit } from './modals/cah_blank.js';
 import { handleCahPasswordJoin } from './modals/cah_pwjoin.js';
 import { handleFourthwallSetupSubmit } from './modals/fourthwall_setup_submit.js';
 import { handleBmcLinkSubmit } from './modals/bmc_link_submit.js';
+import { handleSetupButton, handleSetupChannelSelect } from './setup-wizard-handler.js';
 import { handleFourthwallShopPage } from './buttons/fourthwall_shop_page.js';
 import { handleFourthwallShopPick } from './select-menus/fourthwall_shop_pick.js';
 import { handleBirthdayMonthSelect } from './select-menus/birthday_month.js';
@@ -59,6 +60,11 @@ import { handleCinemaButton, handleCinemaSeekModal, handleCinemaSelect, handleCi
  * Maps button customId prefixes to their handlers
  */
 export const buttonHandlers = {
+  // /setup wizard buttons
+  'setup_enable_': handleSetupButton,
+  'setup_skip_': handleSetupButton,
+  'setup_back_': handleSetupButton,
+
   // Ticket handlers
   'ticket_create': handleTicketCreate,
   'ticket_close_': handleTicketClose,
@@ -149,7 +155,10 @@ export const selectMenuHandlers = {
 
   // Cinema track-select menus
   'cinema_audio:': handleCinemaSelect,
-  'cinema_sub:': handleCinemaSelect
+  'cinema_sub:': handleCinemaSelect,
+
+  // /setup wizard channel picker
+  'setup_chan_': handleSetupChannelSelect,
 };
 
 /**

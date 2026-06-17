@@ -429,6 +429,15 @@ export default {
       }
     }
 
+    // Channel select menus (e.g. the /setup wizard channel picker) — same prefix registry.
+    else if (interaction.isChannelSelectMenu()) {
+      const channelSelectHandler = getSelectMenuHandler(interaction.customId);
+      if (channelSelectHandler) {
+        await channelSelectHandler(interaction);
+        return;
+      }
+    }
+
     // Handle modal submissions
     else if (interaction.isModalSubmit()) {
       logger.debug(`[Modal] ${interaction.customId} submitted by ${interaction.user.tag}`);
