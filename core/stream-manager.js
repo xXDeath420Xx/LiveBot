@@ -2,14 +2,13 @@ import pool from '../utils/db.js';
 import * as twitchApi from '../utils/platforms/twitch.js';
 import * as kickApi from '../utils/platforms/kick.js';
 import * as facebookApi from '../utils/platforms/facebook.js';
-import * as instagramApi from '../utils/platforms/instagram.js';
 import * as youtubeApi from '../utils/platforms/youtube.js';
 import * as tiktokApi from '../utils/platforms/tiktok.js';
 import * as trovoApi from '../utils/platforms/trovo-api.js';
 import logger from '../utils/logger.js';
 import { updateAnnouncement, deleteAnnouncement, editAnnouncementStreamEnded } from '../utils/announcer.js';
 import platformCache from '../utils/platformCache.js';
-import { createMutex, withMutex } from '../utils/mutex.js';
+
 
 // Platform backoff tracking for rate limit handling
 const platformBackoff = new Map();
@@ -90,31 +89,37 @@ function recordPlatformSuccess(platform) {
 // In-memory state tracking for live announcements
 const liveAnnouncements = new Map();
 
-// Counter to track stream check passes for embed updates
-let streamCheckPassCounter = 0;
-const passCounterMutex = createMutex(5000); // Mutex with 5s timeout to prevent deadlocks
-const EMBED_UPDATE_INTERVAL = 5; // Update embeds every 5th pass
-const STALE_CLEANUP_INTERVAL = 12; // Run stale cleanup every 12th pass
-const UNTRACKED_CLEANUP_INTERVAL = 30; // Run untracked message cleanup every 30th pass
+// Re-announcement cooldown: after an announcement is cleaned up (edited/deleted),
+// don't post a new one for the same streamer/guild/channel for this many minutes.
+// Prevents duplicates from Twitch API hiccups causing false offline→online cycles.
+const RE_ANNOUNCE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+const reAnnounceCooldowns = new Map(); // key: announcementKey → timestamp of cleanup
+
+// Note: Cycle counting moved to stream-check-scheduler.js to count per-cron-cycle, not per-bot-call
 
 // Grace period for offline detection (require N consecutive offline checks before deleting)
-const OFFLINE_GRACE_PERIOD = 4; // Require 4 consecutive offline checks before deleting announcement (prevents API flakiness spam)
+// Twitch/Kick APIs can flicker "offline" for 5+ minutes during hiccups.
+// 6 checks × 1-min cron = 6 minutes before we believe a stream is truly offline.
+const OFFLINE_GRACE_PERIOD = 6;
 
-// Age-based failsafe (force delete announcements older than this many hours)
-// This is a FAILSAFE only for truly stuck announcements, not for regular cleanup
-// Regular cleanup happens via offline detection with grace period
-const MAX_ANNOUNCEMENT_AGE_MINUTES = 360; // 6 hours - only delete if announcement is stuck for this long
+// Age-based failsafe for announcements that got stuck (cleanup failed, bot crashed, etc.)
+// Only applies to announcements that have accumulated offline checks — NOT live streams.
+const MAX_ANNOUNCEMENT_AGE_MINUTES = 30; // 30 minutes with offline checks = definitely offline
 
 // Platform API modules mapping
 const platformModules = {
     twitch: twitchApi,
     kick: kickApi,
     facebook: facebookApi,
-    instagram: instagramApi,
     youtube: youtubeApi,
     tiktok: tiktokApi,
     trovo: trovoApi,
 };
+
+// Tracks platforms we've already warned about as unsupported. Without this,
+// a bad row like platform='twitter' produces an ERROR every check cycle —
+// 29 per hour in the wild — and drowns out real errors.
+const _unsupportedPlatformsWarned = new Set();
 
 // Load active announcements from database on startup
 async function loadAnnouncementsFromDatabase() {
@@ -127,6 +132,7 @@ async function loadAnnouncementsFromDatabase() {
             const key = `${row.guild_id}-${row.platform}-${row.username}-${row.channel_id}`;
             liveAnnouncements.set(key, {
                 messageId: row.message_id,
+                pingMessageId: row.ping_message_id || null,
                 streamerId: row.streamer_id,
                 platform: row.platform,
                 username: row.username,
@@ -169,8 +175,16 @@ async function cleanupOrphanedAnnouncements(client) {
 
         for (const announcement of orphaned) {
             try {
-                // Delete the Discord message
-                await deleteAnnouncement(client, announcement.channel_id, announcement.message_id);
+                // Delete the Discord message (use correct bot client for multi-bot guilds)
+                const guildClient = (global.botManager ? global.botManager.getClientForGuild(announcement.guild_id) : null) || client;
+                const deleteSuccess = await deleteAnnouncement(guildClient, announcement.channel_id, announcement.message_id);
+                // Also delete ping message if it exists
+                if (announcement.ping_message_id) {
+                    deleteAnnouncement(guildClient, announcement.channel_id, announcement.ping_message_id).catch(() => {});
+                }
+
+                // Best-effort Discord delete — proceed with DB cleanup regardless
+                // (subscription was removed, so the DB record must go either way)
 
                 // Remove from in-memory tracking
                 const key = `${announcement.guild_id}-${announcement.platform}-${announcement.username}-${announcement.channel_id}`;
@@ -206,57 +220,150 @@ async function cleanupOrphanedAnnouncements(client) {
 }
 
 // Clean up untracked Discord messages (messages in channel but not in database)
-async function cleanupUntrackedDiscordMessages(client) {
+// When deep=true (startup), scans full channel history instead of just recent pages
+async function cleanupUntrackedDiscordMessages(client, { deep = false } = {}) {
     let connection;
     try {
         connection = await pool.getConnection();
 
-        // Get all announcement channels from guilds
-        const [channels] = await connection.query(`
-            SELECT DISTINCT announcement_channel_id
-            FROM guilds
-            WHERE announcement_channel_id IS NOT NULL
-            UNION
-            SELECT DISTINCT announcement_channel_id
-            FROM twitch_teams
-            WHERE announcement_channel_id IS NOT NULL
-        `);
+        // Get all announcement channels with guild_id (separate queries to avoid collation conflicts)
+        const [gChannels] = await connection.query('SELECT DISTINCT announcement_channel_id, guild_id FROM guilds WHERE announcement_channel_id IS NOT NULL');
+        const [gcChannels] = await connection.query('SELECT DISTINCT announcement_channel_id, guild_id FROM guild_config WHERE announcement_channel_id IS NOT NULL');
+        const [tChannels] = await connection.query('SELECT DISTINCT announcement_channel_id, NULL AS guild_id FROM twitch_teams WHERE announcement_channel_id IS NOT NULL');
+        const [sChannels] = await connection.query('SELECT DISTINCT announcement_channel_id, guild_id FROM subscriptions WHERE announcement_channel_id IS NOT NULL');
+        // Include cross-network notification target channels (unified community channels)
+        const [cnChannels] = await connection.query('SELECT DISTINCT target_channel_id AS announcement_channel_id, target_guild_id AS guild_id FROM cross_network_notifications WHERE enabled = 1').catch(() => [[]]);
 
-        logger.info(`Checking ${channels.length} announcement channels for untracked messages`, { category: "streams" });
+        // Deduplicate in JS
+        const channelSet = new Set();
+        const channels = [];
+        for (const row of [...gChannels, ...gcChannels, ...tChannels, ...sChannels, ...cnChannels]) {
+            const key = `${row.guild_id}:${row.announcement_channel_id}`;
+            if (!channelSet.has(key)) {
+                channelSet.add(key);
+                channels.push(row);
+            }
+        }
+
+        // Build per-guild edit_on_end majority map (determines cleanup behavior)
+        const [subSettings] = await connection.query(`
+            SELECT guild_id,
+                   SUM(edit_on_end = 1) AS edit_count,
+                   COUNT(*) AS total
+            FROM subscriptions
+            GROUP BY guild_id
+        `);
+        const guildEditOnEnd = {};
+        for (const row of subSettings) {
+            guildEditOnEnd[row.guild_id] = Number(row.edit_count) > Number(row.total) / 2;
+        }
+
+        // Build set of all our bot user IDs for matching bot-direct messages
+        const ourBotIds = new Set();
+        if (client.user?.id) ourBotIds.add(client.user.id);
+        if (global.botManager?.clients) {
+            for (const [, botClient] of global.botManager.clients.entries()) {
+                if (botClient.user?.id) ourBotIds.add(botClient.user.id);
+            }
+        }
+
+        logger.info(`Checking ${channels.length} announcement channels for untracked messages (${deep ? 'deep scan' : 'normal'})`, { category: "streams" });
 
         let totalDeleted = 0;
+        let totalEdited = 0;
 
-        for (const { announcement_channel_id } of channels) {
+        for (const { announcement_channel_id, guild_id } of channels) {
             try {
-                const channel = await client.channels.fetch(announcement_channel_id);
+                // Use the correct bot client for this guild (custom bots can't be reached by the default client)
+                const guildClient = (guild_id && global.botManager)
+                    ? (global.botManager.getClientForGuild(guild_id) || client)
+                    : client;
+
+                const channel = await guildClient.channels.fetch(announcement_channel_id).catch(() => null);
                 if (!channel || !channel.isTextBased()) continue;
 
-                // Fetch recent messages (last 100)
-                const messages = await channel.messages.fetch({ limit: 100 });
+                // Fetch messages: deep mode scans full history (startup), normal mode scans 3 pages
+                const maxPages = deep ? 50 : 3; // deep: up to 5000 messages, normal: up to 300
+                const allMessages = new Map();
+                let lastId = null;
+                for (let page = 0; page < maxPages; page++) {
+                    const fetchOptions = { limit: 100 };
+                    if (lastId) fetchOptions.before = lastId;
+                    const batch = await channel.messages.fetch(fetchOptions);
+                    if (batch.size === 0) break;
+                    for (const [id, msg] of batch) allMessages.set(id, msg);
+                    lastId = batch.last()?.id;
+                    if (batch.size < 100) break; // No more messages in channel
+                }
 
-                for (const [messageId, message] of messages) {
-                    // Skip non-webhook messages and messages from wrong bot
-                    if (!message.webhookId) continue;
+                for (const [messageId, message] of allMessages) {
+                    // Match webhook messages OR bot-direct messages from any of our bots
+                    const isOurWebhook = !!message.webhookId;
+                    const isOurBot = message.author?.bot && ourBotIds.has(message.author.id);
+                    if (!isOurWebhook && !isOurBot) continue;
 
-                    // Check if this message is tracked in database
+                    const authorName = message.embeds?.[0]?.author?.name || '';
+
+                    // Skip "was LIVE on" (stream-ended messages are intentional)
+                    if (authorName.includes('was LIVE on')) continue;
+
+                    // Only target LIVE announcement embeds ("is LIVE on")
+                    // Skip non-stream messages (pinned info, welcome messages, etc.)
+                    if (!authorName.includes('is LIVE on')) continue;
+
+                    // Check if this message is tracked in either announcement system
                     const [tracked] = await connection.query(
                         'SELECT id FROM live_announcements WHERE message_id = ?',
                         [messageId]
                     );
+                    const [crossTracked] = await connection.query(
+                        'SELECT id FROM cross_network_messages WHERE message_id = ?',
+                        [messageId]
+                    ).catch(() => [[]]);
 
-                    // If not tracked and is a webhook message, it's orphaned
-                    if (tracked.length === 0) {
+                    // If not tracked in either system, it's orphaned — handle per guild's edit_on_end setting
+                    if (tracked.length === 0 && crossTracked.length === 0) {
                         try {
-                            await message.delete();
-                            totalDeleted++;
-                            logger.info(`Deleted untracked Discord message in channel ${announcement_channel_id}`, {
-                                category: "streams",
-                                messageId,
-                                channelId: announcement_channel_id
-                            });
-                        } catch (deleteError) {
-                            logger.warn(`Failed to delete untracked message ${messageId}:`, {
-                                error: deleteError.message,
+                            if (guildEditOnEnd[guild_id]) {
+                                // edit_on_end guild: edit to "stream ended" instead of deleting
+                                const match = authorName.match(/^(.+?) is LIVE on (\w+)/);
+                                const username = match?.[1] || 'Unknown';
+                                const platform = (match?.[2] || 'unknown').toLowerCase();
+
+                                let vod = null;
+                                if (platform === 'twitch') {
+                                    try { vod = await twitchApi.getLatestVod(username); } catch { /* ignore */ }
+                                }
+
+                                const editSuccess = await editAnnouncementStreamEnded(
+                                    guildClient, announcement_channel_id, messageId,
+                                    username, platform, vod
+                                );
+
+                                if (editSuccess) {
+                                    totalEdited++;
+                                    logger.info(`Edited untracked orphan to stream-ended in channel ${announcement_channel_id}`, {
+                                        category: "streams", messageId, username, platform,
+                                        channelId: announcement_channel_id, guildId: guild_id
+                                    });
+                                } else {
+                                    logger.warn(`Failed to edit untracked orphan ${messageId} — will retry next cycle`, {
+                                        category: "streams", channelId: announcement_channel_id, guildId: guild_id
+                                    });
+                                }
+                            } else {
+                                await message.delete();
+                                totalDeleted++;
+                                logger.info(`Deleted untracked ${isOurWebhook ? 'webhook' : 'bot-direct'} message in channel ${announcement_channel_id}`, {
+                                    category: "streams",
+                                    messageId,
+                                    channelId: announcement_channel_id,
+                                    guildId: guild_id
+                                });
+                            }
+                        } catch (cleanupError) {
+                            logger.warn(`Failed to clean up untracked message ${messageId}:`, {
+                                error: cleanupError.message,
                                 category: "streams"
                             });
                         }
@@ -270,7 +377,7 @@ async function cleanupUntrackedDiscordMessages(client) {
             }
         }
 
-        logger.info(`Untracked message cleanup complete. Deleted ${totalDeleted} untracked Discord messages.`, { category: "streams" });
+        logger.info(`Untracked message cleanup complete. Deleted ${totalDeleted}, edited ${totalEdited} untracked Discord messages.`, { category: "streams" });
     } catch (error) {
         logger.error('Failed to clean up untracked Discord messages:', { error, category: "streams" });
     } finally {
@@ -284,14 +391,21 @@ async function cleanupStaleAnnouncementsByAge(client) {
     try {
         connection = await pool.getConnection();
 
-        // Find announcements that are old AND have been detected as offline
-        // This ensures we only delete announcements that SHOULD have been cleaned up but weren't
-        // We do NOT delete announcements for streamers who are still live, even if they've been streaming for hours
+        // Clean up stuck PENDING slots (reserved but never posted — e.g. posting failed)
+        // 5-minute timeout: if PENDING for 5+ minutes, the posting cycle clearly failed
+        await connection.query(
+            `DELETE FROM live_announcements WHERE message_id = 'PENDING' AND created_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)`
+        );
+
+        // Find announcements that have accumulated offline checks and are old enough
+        // This catches announcements where the normal cleanup path failed (DB error, crash, etc.)
+        // We do NOT force-remove by age alone — that kills genuinely long-running streams.
         const [staleAnnouncements] = await connection.query(`
             SELECT *
             FROM live_announcements
-            WHERE created_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)
-            AND offline_check_count >= ?
+            WHERE message_id != 'PENDING'
+              AND created_at < DATE_SUB(NOW(), INTERVAL ? MINUTE)
+              AND offline_check_count >= ?
         `, [MAX_ANNOUNCEMENT_AGE_MINUTES, OFFLINE_GRACE_PERIOD]);
 
         if (staleAnnouncements.length === 0) {
@@ -299,9 +413,10 @@ async function cleanupStaleAnnouncementsByAge(client) {
             return;
         }
 
-        logger.warn(`[Age-based Cleanup] Found ${staleAnnouncements.length} stuck announcements (older than ${MAX_ANNOUNCEMENT_AGE_MINUTES} minutes AND offline_check_count >= ${OFFLINE_GRACE_PERIOD}) - forcing cleanup`, {
+        logger.warn(`[Age-based Cleanup] Found ${staleAnnouncements.length} stuck announcements - forcing cleanup`, {
             category: 'streams',
-            count: staleAnnouncements.length
+            count: staleAnnouncements.length,
+            threshold: `${MAX_ANNOUNCEMENT_AGE_MINUTES}min + ${OFFLINE_GRACE_PERIOD} offline checks`
         });
 
         let deletedCount = 0;
@@ -312,25 +427,37 @@ async function cleanupStaleAnnouncementsByAge(client) {
                 // Delete or edit the Discord message (use correct bot client for multi-bot guilds)
                 const guildClient = global.botManager ? global.botManager.getClientForGuild(announcement.guild_id) : client;
 
-                if (announcement.delete_on_end !== 0) {
-                    if (announcement.edit_on_end) {
-                        // edit_on_end: edit to "stream ended" instead of deleting
-                        let vod = null;
-                        if (announcement.platform === 'twitch') {
-                            vod = await twitchApi.getLatestVod(announcement.username);
-                        }
-                        await editAnnouncementStreamEnded(
-                            guildClient || client, announcement.channel_id, announcement.message_id,
-                            announcement.username, announcement.platform, vod
-                        );
-                    } else {
-                        await deleteAnnouncement(guildClient || client, announcement.channel_id, announcement.message_id);
+                let cleanupSuccess = true;
+                if (announcement.edit_on_end) {
+                    // edit_on_end: edit to "stream ended" instead of deleting
+                    let vod = null;
+                    if (announcement.platform === 'twitch') {
+                        vod = await twitchApi.getLatestVod(announcement.username);
                     }
+                    cleanupSuccess = await editAnnouncementStreamEnded(
+                        guildClient || client, announcement.channel_id, announcement.message_id,
+                        announcement.username, announcement.platform, vod
+                    );
+                } else if (announcement.delete_on_end !== 0) {
+                    cleanupSuccess = await deleteAnnouncement(guildClient || client, announcement.channel_id, announcement.message_id);
                 }
 
-                // Remove from in-memory tracking
+                if (!cleanupSuccess) {
+                    logger.warn(`[Age-based Cleanup] Failed to edit/delete for ${announcement.username} — skipping DB cleanup for retry`, {
+                        category: 'streams', messageId: announcement.message_id, channelId: announcement.channel_id
+                    });
+                    continue;
+                }
+
+                // Delete ping message if it exists
+                if (announcement.ping_message_id) {
+                    deleteAnnouncement(guildClient || client, announcement.channel_id, announcement.ping_message_id).catch(() => {});
+                }
+
+                // Remove from in-memory tracking and set cooldown
                 const key = `${announcement.guild_id}-${announcement.platform}-${announcement.username}-${announcement.channel_id}`;
                 liveAnnouncements.delete(key);
+                reAnnounceCooldowns.set(key, Date.now());
 
                 // Delete from database
                 await connection.query(
@@ -451,7 +578,7 @@ async function reserveAnnouncementSlot(guildId, platform, username, channelId, s
 }
 
 // Save announcement to database
-async function saveAnnouncementToDatabase(guildId, platform, username, channelId, messageId, streamerId, discordUserId, streamStartedAt = null, deleteOnEnd = true, editOnEnd = false) {
+async function saveAnnouncementToDatabase(guildId, platform, username, channelId, messageId, streamerId, discordUserId, streamStartedAt = null, deleteOnEnd = true, editOnEnd = false, pingMessageId = null) {
     let connection;
     try {
         // Convert ISO datetime to MySQL format if needed
@@ -469,10 +596,10 @@ async function saveAnnouncementToDatabase(guildId, platform, username, channelId
 
         connection = await pool.getConnection();
         await connection.query(
-            `INSERT INTO live_announcements (guild_id, platform, username, channel_id, message_id, streamer_id, discord_user_id, stream_started_at, offline_check_count, delete_on_end, edit_on_end)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-             ON DUPLICATE KEY UPDATE message_id = VALUES(message_id), stream_started_at = VALUES(stream_started_at), offline_check_count = 0, delete_on_end = VALUES(delete_on_end), edit_on_end = VALUES(edit_on_end), updated_at = CURRENT_TIMESTAMP`,
-            [guildId, platform, username, channelId, messageId, streamerId, discordUserId, mysqlDatetime, deleteOnEnd ? 1 : 0, editOnEnd ? 1 : 0]
+            `INSERT INTO live_announcements (guild_id, platform, username, channel_id, message_id, streamer_id, discord_user_id, stream_started_at, offline_check_count, delete_on_end, edit_on_end, ping_message_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE message_id = VALUES(message_id), stream_started_at = VALUES(stream_started_at), offline_check_count = 0, delete_on_end = VALUES(delete_on_end), edit_on_end = VALUES(edit_on_end), ping_message_id = VALUES(ping_message_id), updated_at = CURRENT_TIMESTAMP`,
+            [guildId, platform, username, channelId, messageId, streamerId, discordUserId, mysqlDatetime, deleteOnEnd ? 1 : 0, editOnEnd ? 1 : 0, pingMessageId]
         );
     } catch (error) {
         if (error.code !== 'ER_NO_SUCH_TABLE') {
@@ -539,60 +666,51 @@ async function clearAllAnnouncements() {
 }
 
 /**
- * Main stream checking function
+ * Perform once-per-cycle setup tasks (load DB state, run cleanups).
+ * Called by the scheduler ONCE before any bot's checkStreamers calls.
  */
-async function checkStreamers(client) {
-    // Use mutex to safely read/modify pass counter (prevents race conditions with concurrent bot instances)
-    const { isFirstPass, shouldUpdateEmbeds, shouldRunStaleCleanup, shouldRunUntrackedCleanup, currentPass } =
-        await passCounterMutex.runExclusive(() => {
-            const isFirst = streamCheckPassCounter === 0;
-
-            // Increment counter
-            streamCheckPassCounter++;
-            const current = streamCheckPassCounter;
-
-            // Calculate what actions to take
-            const updateEmbeds = current >= EMBED_UPDATE_INTERVAL;
-            const staleCleanup = current % STALE_CLEANUP_INTERVAL === 0;
-            const untrackedCleanup = current % UNTRACKED_CLEANUP_INTERVAL === 0;
-
-            // Reset counter if needed
-            if (updateEmbeds) {
-                streamCheckPassCounter = 0;
-            }
-
-            return {
-                isFirstPass: isFirst,
-                shouldUpdateEmbeds: updateEmbeds,
-                shouldRunStaleCleanup: staleCleanup,
-                shouldRunUntrackedCleanup: untrackedCleanup,
-                currentPass: current
-            };
-        });
+async function performCycleSetup(client, cycleOptions = {}) {
+    const { isFirstPass, shouldRunStaleCleanup, shouldRunUntrackedCleanup, shouldRunOrphanCleanup, currentPass } = cycleOptions;
 
     // Only load announcements from database on first pass to preserve in-memory counters
     if (isFirstPass) {
         await loadAnnouncementsFromDatabase();
         await cleanupOrphanedAnnouncements(client);
-        await cleanupUntrackedDiscordMessages(client);
-        // Note: Age-based cleanup runs periodically, not on first pass, to avoid deleting legitimate long streams
-    }
-
-    if (shouldUpdateEmbeds) {
-        logger.info(`[Stream Manager] Pass #${currentPass}: Will update embeds for live streamers`, { category: "streams" });
-    } else {
-        logger.info(`[Stream Manager] Pass #${currentPass}/${EMBED_UPDATE_INTERVAL}`, { category: "streams" });
+        // Deep scan on startup: scan full channel history to clear backlog of orphaned messages
+        await cleanupUntrackedDiscordMessages(client, { deep: true });
+        // Run age-based cleanup on startup to catch any stuck announcements immediately
+        await cleanupStaleAnnouncementsByAge(client);
     }
 
     // Run periodic cleanup tasks
     if (shouldRunStaleCleanup) {
-        logger.info(`[Stream Manager] Running periodic age-based cleanup (pass #${currentPass})`, { category: "streams" });
+        logger.info(`[Stream Manager] Running periodic age-based cleanup (cycle #${currentPass})`, { category: "streams" });
         await cleanupStaleAnnouncementsByAge(client);
     }
 
+    if (shouldRunOrphanCleanup) {
+        logger.info(`[Stream Manager] Running periodic orphaned announcement cleanup (cycle #${currentPass})`, { category: "streams" });
+        await cleanupOrphanedAnnouncements(client);
+    }
+
     if (shouldRunUntrackedCleanup) {
-        logger.info(`[Stream Manager] Running untracked message cleanup (pass #${currentPass})`, { category: "streams" });
+        logger.info(`[Stream Manager] Running untracked message cleanup (cycle #${currentPass})`, { category: "streams" });
         await cleanupUntrackedDiscordMessages(client);
+    }
+
+}
+
+/**
+ * Main stream checking function.
+ * cycleOptions is provided by the scheduler and shared across all bot calls in a cycle.
+ */
+async function checkStreamers(client, cycleOptions = {}) {
+    const { shouldUpdateEmbeds = false, currentPass = 0 } = cycleOptions;
+
+    if (shouldUpdateEmbeds) {
+        logger.info(`[Stream Manager] Cycle #${currentPass}: Will update embeds for live streamers`, { category: "streams" });
+    } else {
+        logger.info(`[Stream Manager] Cycle #${currentPass}: Normal check`, { category: "streams" });
     }
 
     let connection;
@@ -622,11 +740,11 @@ async function checkStreamers(client) {
             `SELECT sub.subscription_id, sub.guild_id,
                     COALESCE(sub.announcement_channel_id, gc.announcement_channel_id) AS sub_channel_id,
                     sub.live_role_id AS sub_role_id, sub.override_nickname, sub.override_avatar_url,
-                    sub.team_subscription_id, sub.delete_on_end, sub.edit_on_end, sub.custom_message,
+                    sub.team_subscription_id, sub.delete_on_end, sub.edit_on_end, sub.custom_message, sub.ping_role_id,
                     s.streamer_id, s.discord_user_id, s.username, s.platform, s.profile_image_url
              FROM subscriptions sub
              JOIN streamers s ON sub.streamer_id = s.streamer_id
-             LEFT JOIN guild_config gc ON CAST(sub.guild_id AS CHAR) = CAST(gc.guild_id AS CHAR)
+             LEFT JOIN guild_config gc ON sub.guild_id COLLATE utf8mb4_unicode_ci = gc.guild_id COLLATE utf8mb4_unicode_ci
              ${guildFilter}`,
             queryParams
         );
@@ -640,14 +758,20 @@ async function checkStreamers(client) {
                 g.guild_id,
                 g.announcement_channel_id AS guild_channel_id,
                 g.live_role_id AS guild_role_id,
-                g.use_webhook_persona
+                g.use_webhook_persona,
+                g.stream_ignored_roles
             FROM guilds g
         `);
 
         logger.info(`[Stream Manager] Loaded ${subscriptions.length} subscriptions, ${teams.length} teams, ${guildSettings.length} guilds`, { category: "streams" });
 
         const teamsMap = new Map(teams.map(t => [t.id, t]));
-        const guildsMap = new Map(guildSettings.map(g => [g.guild_id, g]));
+        const guildsMap = new Map(guildSettings.map(g => {
+            g.ignored_roles_set = new Set(
+                g.stream_ignored_roles ? JSON.parse(g.stream_ignored_roles) : []
+            );
+            return [g.guild_id, g];
+        }));
 
         // Group subscriptions by unique streamer
         const streamersToCheck = new Map();
@@ -768,11 +892,17 @@ async function processUniqueStreamer(
 
     const api = platformModules[streamer.platform];
     if (!api) {
-        logger.error(`[processUniqueStreamer] No API module found for platform: ${streamer.platform}`, {
-            category: "streams",
-            platform: streamer.platform,
-            availablePlatforms: Object.keys(platformModules)
-        });
+        // De-spam: log this ONCE per platform per process. A bad platform row
+        // (e.g. 'twitter' — not a stream platform) would otherwise re-trigger
+        // this error every cycle for the life of the process.
+        if (!_unsupportedPlatformsWarned.has(streamer.platform)) {
+            _unsupportedPlatformsWarned.add(streamer.platform);
+            logger.error(`[processUniqueStreamer] No API module found for platform: ${streamer.platform} — suppressing further warnings this session`, {
+                category: "streams",
+                platform: streamer.platform,
+                availablePlatforms: Object.keys(platformModules)
+            });
+        }
         return;
     }
 
@@ -875,15 +1005,18 @@ async function processUniqueStreamer(
 
             const guildOp = guildOperations.get(sub.guild_id);
 
-            // Skip if streamer has Discord link but is not a member of this guild
-            if (streamer.discord_user_id && !guildOp.member) {
-                logger.warn(`[processUniqueStreamer] Skipping announcement - streamer ${streamer.username} has Discord link but is not a member of guild ${sub.guild_id}`, {
-                    category: "streams",
-                    streamer: streamer.username,
-                    discord_user_id: streamer.discord_user_id,
-                    guild_id: sub.guild_id
-                });
-                continue;
+            // If streamer has Discord link but is not a member, skip ONLY the role operations (not announcements)
+            // Announcements should still be posted — the streamer doesn't need to be in the guild for that
+
+            // Check if streamer has an ignored role (opt-out)
+            if (guildOp.member && guildDefault?.ignored_roles_set?.size > 0) {
+                const hasIgnoredRole = guildOp.member.roles.cache.some(r => guildDefault.ignored_roles_set.has(r.id));
+                if (hasIgnoredRole) {
+                    logger.info(`[processUniqueStreamer] Skipping ${streamer.username} in guild ${sub.guild_id} — member has ignored role`, {
+                        category: "streams", streamer: streamer.username, guild_id: sub.guild_id
+                    });
+                    continue;
+                }
             }
 
             const team = sub.team_subscription_id ? teamsMap.get(sub.team_subscription_id) : null;
@@ -985,19 +1118,35 @@ async function processUniqueStreamer(
                 const announcementKey = `${guild.id}-${streamer.platform}-${streamer.username}-${channelId}`;
                 let announcementData = liveAnnouncements.get(announcementKey);
 
+                // PENDING means another cycle reserved the slot but hasn't posted yet — skip
+                if (announcementData?.messageId === 'PENDING') {
+                    logger.info(`[processUniqueStreamer] In-memory announcement is PENDING for ${streamer.username} in channel ${channelId} — skipping`, {
+                        category: "streams", guildId: guild.id
+                    });
+                    continue;
+                }
+
                 // If not in memory, check database (for multi-bot instances)
                 if (!announcementData) {
                     try {
                         const [dbAnnouncements] = await pool.execute(
-                            `SELECT message_id, streamer_id, platform, username, discord_user_id, delete_on_end, edit_on_end, offline_check_count
+                            `SELECT message_id, streamer_id, platform, username, discord_user_id, delete_on_end, edit_on_end, offline_check_count, ping_message_id
                              FROM live_announcements
                              WHERE guild_id = ? AND platform = ? AND username = ? AND channel_id = ?`,
                             [guild.id, streamer.platform, streamer.username, channelId]
                         );
                         if (dbAnnouncements.length > 0) {
                             const dbAnn = dbAnnouncements[0];
+                            // PENDING means another cycle reserved but hasn't posted yet — skip this streamer
+                            if (dbAnn.message_id === 'PENDING') {
+                                logger.info(`[processUniqueStreamer] DB announcement slot is PENDING for ${streamer.username} in channel ${channelId} — skipping (another cycle will post)`, {
+                                    category: "streams", guildId: guild.id
+                                });
+                                continue;
+                            }
                             announcementData = {
                                 messageId: dbAnn.message_id,
+                                pingMessageId: dbAnn.ping_message_id || null,
                                 streamerId: dbAnn.streamer_id,
                                 platform: dbAnn.platform,
                                 username: dbAnn.username,
@@ -1031,7 +1180,12 @@ async function processUniqueStreamer(
                 if (isLive && streamData) {
                     // Skip editing existing announcements on non-update passes to reduce API calls / flickering
                     if (announcementData && !shouldUpdateEmbeds) {
-                        announcementData.offlineCheckCount = 0;
+                        // Reset offline counter in memory AND database (prevents age-based cleanup
+                        // from seeing stale DB counter after API blips)
+                        if (announcementData.offlineCheckCount > 0) {
+                            announcementData.offlineCheckCount = 0;
+                            await updateOfflineCheckCount(guild.id, streamer.platform, streamer.username, channelId, 0);
+                        }
                         liveAnnouncements.set(announcementKey, announcementData);
                         continue;
                     }
@@ -1063,6 +1217,7 @@ async function processUniqueStreamer(
                             guild_id: guild.id,
                             profile_image_url: streamer.profile_image_url,
                             custom_message: subscription.custom_message,
+                            ping_role_id: subscription.ping_role_id,
                             override_nickname: subscription.override_nickname,
                             override_avatar_url: subscription.override_avatar_url,
                             discord_user_id: streamer.discord_user_id
@@ -1090,8 +1245,22 @@ async function processUniqueStreamer(
                         const guildSettings = guildOp.guildDefault;
                         const existingAnnouncement = announcementData ? { message_id: announcementData.messageId } : null;
 
-                        // If no existing announcement, reserve the slot in database FIRST to prevent race conditions
+                        // If no existing announcement, check re-announcement cooldown first
+                        // Prevents duplicates when Twitch API briefly flickers "offline" then back to "live"
                         if (!existingAnnouncement) {
+                            const cooldownExpiry = reAnnounceCooldowns.get(announcementKey);
+                            if (cooldownExpiry && (Date.now() - cooldownExpiry) < RE_ANNOUNCE_COOLDOWN_MS) {
+                                const remainingMs = RE_ANNOUNCE_COOLDOWN_MS - (Date.now() - cooldownExpiry);
+                                logger.info(`[processUniqueStreamer] Re-announcement cooldown active for ${streamer.username} — skipping (${Math.ceil(remainingMs / 1000)}s remaining)`, {
+                                    category: "streams",
+                                    channelId,
+                                    guildId: guild.id
+                                });
+                                continue;
+                            }
+                            // Clear expired cooldown
+                            if (cooldownExpiry) reAnnounceCooldowns.delete(announcementKey);
+
                             const reserved = await reserveAnnouncementSlot(
                                 guild.id,
                                 streamer.platform,
@@ -1116,6 +1285,50 @@ async function processUniqueStreamer(
                         // Get the correct bot client for this guild (supports multi-bot system)
                         const guildClient = global.botManager ? global.botManager.getClientForGuild(guild.id) : client;
 
+                        // If creating a NEW announcement (not editing existing), check if there's
+                        // already an orphaned "is LIVE on" message for this streamer in the channel.
+                        // This prevents duplicate LIVE messages when stream flickers offline/online.
+                        if (!existingAnnouncement) {
+                            try {
+                                const announceCh = await guildClient.channels.fetch(channelId).catch(() => null);
+                                if (announceCh?.isTextBased()) {
+                                    const recentMsgs = await announceCh.messages.fetch({ limit: 50 });
+                                    for (const [oldMsgId, oldMsg] of recentMsgs) {
+                                        const oldAuthor = oldMsg.embeds?.[0]?.author?.name || '';
+                                        // Match this exact streamer's orphaned LIVE embed
+                                        if (oldAuthor.includes(`${streamer.username} is LIVE on`) || oldAuthor.includes(`${streamer.username.charAt(0).toUpperCase() + streamer.username.slice(1)} is LIVE on`)) {
+                                            // Don't touch tracked messages
+                                            if (liveAnnouncements.has(announcementKey) || liveAnnouncements.get(announcementKey)?.messageId === oldMsgId) continue;
+
+                                            // Check DB too
+                                            const [trackedRow] = await pool.execute('SELECT id FROM live_announcements WHERE message_id = ?', [oldMsgId]);
+                                            if (trackedRow.length > 0) continue;
+
+                                            // Orphaned — clean it up
+                                            if (editOnEnd) {
+                                                let vod = null;
+                                                if (streamer.platform === 'twitch') {
+                                                    try { vod = await twitchApi.getLatestVod(streamer.username); } catch { /* ignore */ }
+                                                }
+                                                await editAnnouncementStreamEnded(guildClient, channelId, oldMsgId, streamer.username, streamer.platform, vod);
+                                            } else if (deleteOnEnd) {
+                                                await deleteAnnouncement(guildClient, channelId, oldMsgId);
+                                            }
+
+                                            logger.info(`[processUniqueStreamer] Cleaned up orphaned LIVE message before creating new announcement`, {
+                                                category: "streams", oldMessageId: oldMsgId, username: streamer.username, guildId: guild.id
+                                            });
+                                        }
+                                    }
+                                }
+                            } catch (cleanupErr) {
+                                // Non-fatal — orphan cleanup is best-effort
+                                logger.warn(`[processUniqueStreamer] Failed pre-announcement orphan cleanup for ${streamer.username}: ${cleanupErr.message}`, {
+                                    category: "streams"
+                                });
+                            }
+                        }
+
                         const message = await updateAnnouncement(
                             guildClient,
                             subContext,
@@ -1131,6 +1344,7 @@ async function processUniqueStreamer(
                             // Save to memory and database (reset offline counter since stream is live)
                             liveAnnouncements.set(announcementKey, {
                                 messageId: message.id,
+                                pingMessageId: message.pingMessageId || null,
                                 streamerId: streamer.streamer_id,
                                 platform: streamer.platform,
                                 username: streamer.username,
@@ -1150,13 +1364,15 @@ async function processUniqueStreamer(
                                 streamer.discord_user_id,
                                 streamData.started_at || new Date(),
                                 deleteOnEnd,
-                                editOnEnd
+                                editOnEnd,
+                                message.pingMessageId || null
                             );
 
                             logger.info(`[processUniqueStreamer] Announcement created/updated for ${streamer.username}`, {
                                 category: "streams",
                                 messageId: message.id
                             });
+
                         }
                     } catch (error) {
                         logger.error(`[processUniqueStreamer] Failed to create announcement for ${streamer.username}:`, {
@@ -1197,8 +1413,8 @@ async function processUniqueStreamer(
                                 // Check edit_on_end flag (per-subscription, stored on announcement)
                                 const shouldEdit = announcementData.editOnEnd !== undefined ? announcementData.editOnEnd : editOnEnd;
 
-                                if (shouldDelete && shouldEdit) {
-                                    // Edit announcement to "stream ended" instead of deleting
+                                if (shouldEdit) {
+                                    // Edit announcement to "stream ended" — works regardless of deleteOnEnd
                                     const guildClient = global.botManager ? global.botManager.getClientForGuild(guild.id) : client;
 
                                     // Fetch VOD for Twitch streamers
@@ -1207,39 +1423,75 @@ async function processUniqueStreamer(
                                         vod = await twitchApi.getLatestVod(streamer.username);
                                     }
 
-                                    await editAnnouncementStreamEnded(
+                                    const editSuccess = await editAnnouncementStreamEnded(
                                         guildClient, channelId, announcementData.messageId,
                                         streamer.username, streamer.platform, vod
                                     );
 
-                                    liveAnnouncements.delete(announcementKey);
-                                    await deleteAnnouncementFromDatabase(guild.id, streamer.platform, streamer.username, channelId);
+                                    if (editSuccess) {
+                                        // Delete the separate ping message if it exists
+                                        if (announcementData.pingMessageId) {
+                                            deleteAnnouncement(guildClient, channelId, announcementData.pingMessageId).catch(() => {});
+                                        }
+                                        liveAnnouncements.delete(announcementKey);
+                                        reAnnounceCooldowns.set(announcementKey, Date.now());
+                                        await deleteAnnouncementFromDatabase(guild.id, streamer.platform, streamer.username, channelId);
 
-                                    logger.info(`[processUniqueStreamer] Edited announcement to stream-ended for ${streamer.username} (edit_on_end)`, {
-                                        category: "streams",
-                                        hasVod: !!vod,
-                                        offlineCheckCount: currentCount,
-                                        guildId: guild.id
-                                    });
+                                        logger.info(`[processUniqueStreamer] Edited announcement to stream-ended for ${streamer.username} (edit_on_end)`, {
+                                            category: "streams",
+                                            hasVod: !!vod,
+                                            offlineCheckCount: currentCount,
+                                            guildId: guild.id
+                                        });
+                                    } else {
+                                        logger.warn(`[processUniqueStreamer] Failed to edit stream-ended for ${streamer.username} — keeping tracking record for retry`, {
+                                            category: "streams",
+                                            messageId: announcementData.messageId,
+                                            channelId,
+                                            guildId: guild.id
+                                        });
+                                    }
                                 } else if (shouldDelete) {
                                     // Get the correct bot client for this guild (supports multi-bot system)
                                     const guildClient = global.botManager ? global.botManager.getClientForGuild(guild.id) : client;
 
-                                    // Delete Discord message and remove from tracking
-                                    await deleteAnnouncement(guildClient, channelId, announcementData.messageId);
-                                    liveAnnouncements.delete(announcementKey);
-                                    await deleteAnnouncementFromDatabase(guild.id, streamer.platform, streamer.username, channelId);
+                                    // Delete Discord message — only remove tracking if Discord delete succeeded
+                                    const deleteSuccess = await deleteAnnouncement(guildClient, channelId, announcementData.messageId);
+                                    if (deleteSuccess) {
+                                        // Delete the separate ping message if it exists
+                                        if (announcementData.pingMessageId) {
+                                            deleteAnnouncement(guildClient, channelId, announcementData.pingMessageId).catch(() => {});
+                                        }
+                                        liveAnnouncements.delete(announcementKey);
+                                        reAnnounceCooldowns.set(announcementKey, Date.now());
+                                        await deleteAnnouncementFromDatabase(guild.id, streamer.platform, streamer.username, channelId);
 
-                                    logger.info(`[processUniqueStreamer] Deleted announcement for ${streamer.username} after ${currentCount} offline checks`, {
-                                        category: "streams",
-                                        deleted: true,
-                                        offlineCheckCount: currentCount
-                                    });
+                                        logger.info(`[processUniqueStreamer] Deleted announcement for ${streamer.username} after ${currentCount} offline checks`, {
+                                            category: "streams",
+                                            deleted: true,
+                                            offlineCheckCount: currentCount
+                                        });
+                                    } else {
+                                        // Discord delete failed — keep tracking so age-based cleanup can retry
+                                        logger.warn(`[processUniqueStreamer] Failed to delete Discord message for ${streamer.username} — keeping tracking record for retry`, {
+                                            category: "streams",
+                                            messageId: announcementData.messageId,
+                                            channelId,
+                                            guildId: guild.id,
+                                            offlineCheckCount: currentCount
+                                        });
+                                    }
                                 } else {
                                     // Keep Discord message but remove from live tracking
                                     // The message stays in the channel (deleteOnEnd=false) but we
                                     // stop counting this streamer as "live" in the dashboard
+                                    // Delete the separate ping message since stream is over
+                                    if (announcementData.pingMessageId) {
+                                        const guildClient2 = global.botManager ? global.botManager.getClientForGuild(guild.id) : client;
+                                        deleteAnnouncement(guildClient2, channelId, announcementData.pingMessageId).catch(() => {});
+                                    }
                                     liveAnnouncements.delete(announcementKey);
+                                    reAnnounceCooldowns.set(announcementKey, Date.now());
                                     await deleteAnnouncementFromDatabase(guild.id, streamer.platform, streamer.username, channelId);
 
                                     logger.info(`[processUniqueStreamer] Removed live tracking for ${streamer.username} (deleteOnEnd=false, Discord message kept)`, {
@@ -1291,7 +1543,10 @@ function getLiveAnnouncements() {
 }
 
 export {
+    performCycleSetup,
     checkStreamers,
     getLiveAnnouncements,
-    clearAllAnnouncements
+    clearAllAnnouncements,
+    updateOfflineCheckCount,
+    deleteAnnouncementFromDatabase
 };

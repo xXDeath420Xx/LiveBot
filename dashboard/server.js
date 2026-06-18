@@ -9068,6 +9068,14 @@ function start(botClient) {
         });
     });
 
+    // End User License Agreement page
+    app.get('/eula', (req, res) => {
+        res.render('eula-tailwind', {
+            user: req.user,
+            clientId: process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID
+        });
+    });
+
     // GitLab webhook (no auth, before CSRF)
     import('./routes/gitlab-webhook.js').then(({ default: gitlabRouter }) => {
         app.use('/', gitlabRouter);
