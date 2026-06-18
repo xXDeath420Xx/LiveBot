@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>End User License Agreement - CertiFried MultiTool</title>
+    <meta name="description" content="End User License Agreement (EULA) for CertiFried MultiTool Discord bot and dashboard.">
+    <meta name="theme-color" content="#a78bfa">
+    <meta property="og:title" content="End User License Agreement - CertiFried MultiTool">
+    <meta property="og:description" content="End User License Agreement (EULA) for CertiFried MultiTool Discord bot and dashboard.">
+    <meta property="og:image" content="/images/CertiFried.png">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-blue: #60a5fa;
+        }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.7;
+        }
+        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; animation: float 20s ease-in-out infinite; }
+        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -10%; left: -10%; }
+        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: 10%; right: -10%; animation-delay: -10s; }
+        @keyframes float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, 30px); } }
+        .container { width: 100%; max-width: 900px; margin: 0 auto; padding: 0 1.5rem; }
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
+        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover { color: var(--text-primary); }
+        .nav-cta { padding: 0.5rem 1rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white !important; border-radius: 8px; font-weight: 600; font-size: 0.85rem; }
+        main { position: relative; z-index: 1; padding: 120px 0 4rem; }
+        .page-header { text-align: center; margin-bottom: 3rem; }
+        .page-header h1 { font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.75rem; }
+        .page-header .updated { color: var(--text-muted); font-size: 0.9rem; }
+        .notice-box { background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(96, 165, 250, 0.1)); border: 1px solid rgba(167, 139, 250, 0.3); border-left: 4px solid var(--accent-purple); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 2.5rem; display: flex; align-items: center; gap: 1rem; }
+        .notice-box svg { width: 24px; height: 24px; color: var(--accent-purple); flex-shrink: 0; }
+        .notice-box p { color: var(--text-secondary); font-size: 0.95rem; }
+        .legal-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: border-color 0.3s; }
+        .legal-section:hover { border-color: rgba(167, 139, 250, 0.3); }
+        .legal-section h2 { font-size: 1.35rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; }
+        .legal-section h2 svg { width: 22px; height: 22px; color: var(--accent-purple); }
+        .legal-section h3 { font-size: 1.1rem; font-weight: 600; margin: 1.5rem 0 0.75rem; color: var(--text-primary); }
+        .legal-section p { color: var(--text-secondary); margin-bottom: 1rem; }
+        .legal-section ul, .legal-section ol { margin-left: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); }
+        .legal-section li { margin-bottom: 0.5rem; }
+        .legal-section a { color: var(--accent-purple); text-decoration: none; }
+        .legal-section a:hover { text-decoration: underline; }
+        .legal-section code { background: rgba(167, 139, 250, 0.12); color: var(--accent-purple); padding: 0.1rem 0.4rem; border-radius: 5px; font-size: 0.85em; }
+        .contact-box { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem; text-align: center; margin-top: 2rem; }
+        .contact-box h3 { font-size: 1.25rem; margin-bottom: 1rem; }
+        .contact-box p { color: var(--text-secondary); margin-bottom: 1.5rem; }
+        .contact-links { display: flex; flex-direction: column; gap: 0.75rem; align-items: center; }
+        .contact-links a { color: var(--accent-purple); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
+        .contact-links a:hover { text-decoration: underline; }
+        .contact-links svg { width: 18px; height: 18px; }
+        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
+        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
+        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
+        .footer-link:hover { color: var(--accent-purple); }
+        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
+        @media (max-width: 768px) { .navbar-links { display: none; } .legal-section { padding: 1.5rem; } .footer-links { flex-direction: column; gap: 0.75rem; } }
+        /* Mobile Menu Styles */
+        .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; padding: 0.5rem; z-index: 1001; }
+        .mobile-menu-btn svg { width: 24px; height: 24px; color: var(--text-primary); }
+        .mobile-menu { position: fixed; top: 0; right: -100%; width: 280px; height: 100vh; background: rgba(11, 15, 17, 0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 1000; transition: right 0.3s ease; padding: 5rem 1.5rem 2rem; border-left: 1px solid var(--border-color); }
+        .mobile-menu.active { right: 0; }
+        .mobile-menu-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 999; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
+        .mobile-menu-overlay.active { opacity: 1; visibility: visible; }
+        .mobile-menu-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; cursor: pointer; padding: 0.5rem; }
+        .mobile-menu-close svg { width: 24px; height: 24px; color: var(--text-primary); }
+        .mobile-menu-links { display: flex; flex-direction: column; gap: 0.5rem; }
+        .mobile-menu-links a { color: var(--text-secondary); text-decoration: none; font-size: 1rem; font-weight: 500; padding: 0.75rem 1rem; border-radius: 8px; transition: all 0.2s; }
+        .mobile-menu-links a:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.05); }
+        .mobile-menu-links .nav-cta { display: inline-block; text-align: center; margin-top: 1rem; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white !important; border-radius: 8px; font-weight: 600; }
+        @media (max-width: 768px) { .mobile-menu-btn { display: block; } }
+    </style>
+</head>
+<body>
+    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/" class="navbar-brand">
+                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                <span>CertiFried</span>
+            </a>
+            <div class="navbar-links">
+                <a href="/">Home</a>
+                <a href="/commands">Commands</a>
+                <a href="/cards">Cards</a>
+                <a href="/status">Status</a>
+                <a href="/donate">Donate</a>
+                <a href="/auth/discord" class="nav-cta">Login</a>
+            </div>
+            <button class="mobile-menu-btn" aria-label="Open menu">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Mobile Menu -->
+    <div class="mobile-menu-overlay"></div>
+    <div class="mobile-menu">
+        <button class="mobile-menu-close" aria-label="Close menu">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+        <div class="mobile-menu-links">
+            <a href="/">Home</a>
+            <a href="/commands">Commands</a>
+            <a href="/cards">Cards</a>
+            <a href="/status">Status</a>
+            <a href="/donate">Donate</a>
+            <a href="/auth/discord" class="nav-cta">Login</a>
+        </div>
+    </div>
+
+    <main>
+        <div class="container">
+            <div class="page-header">
+                <h1>End User License Agreement</h1>
+                <p class="updated">Last Updated: <%= new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></p>
+            </div>
+
+            <div class="notice-box">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <p>This End User License Agreement ("EULA") governs your right to use the CertiFried MultiTool software and dashboard. It works alongside our <a href="/terms" style="color: var(--accent-purple);">Terms of Service</a> and <a href="/privacy" style="color: var(--accent-purple);">Privacy Policy</a>. By inviting the bot or using the dashboard, you accept this EULA in full.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>1. License Grant</h2>
+                <p>Subject to your continued compliance with this EULA, the <a href="/terms">Terms of Service</a>, and Discord's policies, CertiFried ("we", "us", the "Licensor") grants you a <strong>limited, non-exclusive, non-transferable, non-sublicensable, revocable license</strong> to:</p>
+                <ul>
+                    <li>Invite and operate the CertiFried MultiTool bot in Discord servers you own or administer;</li>
+                    <li>Access and use the web dashboard at certifriedmultitool.com to configure those servers;</li>
+                    <li>Use the bot's commands and features for their intended personal and community purposes.</li>
+                </ul>
+                <p>This is a license to <strong>use</strong> the software as a service &mdash; it is not a sale. No ownership of the software is transferred to you.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>2. Scope of Permitted Use</h2>
+                <p>The license above covers all standard bot and dashboard functionality, including moderation and security tools, multi-platform streaming and social feed notifications, music and voice features, leveling, economy, the Dungeons &amp; Dragons 5e RPG (<code>/rpg</code>), word games, Cards Against Humanity and other games, ticket and form systems, Stream Team signups, greeting cards, and creator integrations (Buy Me a Coffee, Throne, Fourthwall, Steam).</p>
+                <p>Where you connect third-party accounts (e.g. Twitch, YouTube, Kick, Google Gemini, Meta, Buy Me a Coffee), you grant us permission to access those services on your behalf solely to deliver the feature you enabled, and you remain responsible for complying with each third party's terms.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>3. License Restrictions</h2>
+                <p>You may <strong>not</strong>, and may not permit anyone else to:</p>
+                <ul>
+                    <li>Copy, reproduce, distribute, resell, rent, lease, or commercially exploit the software except as expressly permitted here;</li>
+                    <li>Reverse engineer, decompile, disassemble, or otherwise attempt to derive the source code, except to the limited extent applicable law prohibits this restriction;</li>
+                    <li>Modify, adapt, translate, or create derivative works of the bot or dashboard;</li>
+                    <li>Remove, obscure, or alter any copyright, trademark, or other proprietary notices;</li>
+                    <li>Use the software to build or train a competing product or service;</li>
+                    <li>Circumvent, disable, or interfere with security, rate-limiting, authentication, or licensing mechanisms;</li>
+                    <li>Access the software through automated means (scraping, bots, scripts) other than the supported Discord and dashboard interfaces;</li>
+                    <li>Use the software for any unlawful purpose or in any way that violates the <a href="/terms">Terms of Service</a>.</li>
+                </ul>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>4. Ownership and Intellectual Property</h2>
+                <p>The CertiFried MultiTool bot, dashboard, source code, designs, logos, command structures, documentation, and all related intellectual property are and remain the exclusive property of CertiFried and its developers. All rights not expressly granted to you in this EULA are reserved.</p>
+                <p>"CertiFried", the CertiFried logo, and related branding are trademarks of the Licensor. This EULA does not grant you any right to use them except to identify the service.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>5. Your Content</h2>
+                <p>You retain ownership of the content you and your community submit through the software &mdash; including messages, greeting-card signatures, images, voice recordings, configuration data, and game progress. By submitting content, you grant us a limited, worldwide, royalty-free license to host, store, process, transmit, and display that content <strong>solely</strong> for the purpose of operating and providing the service to you.</p>
+                <p>You are responsible for ensuring you have the rights to any content you submit, and that it complies with the Prohibited Activities section of our <a href="/terms">Terms of Service</a>. We do not claim ownership of your content and do not sell it. See our <a href="/privacy">Privacy Policy</a> for how data is handled.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>6. Custom Bot Instances</h2>
+                <p>CertiFried offers self-service and managed "custom bot" instances that run the CertiFried software under your own Discord application and token. The license, restrictions, and ownership terms in this EULA apply equally to custom bot instances. You are responsible for safeguarding any bot tokens or credentials you provide; we store provided tokens in encrypted form and use them only to operate your custom bot.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>7. Updates and Changes</h2>
+                <p>The software is provided as an evolving service. We may add, modify, suspend, or remove features, commands, or integrations at any time, and may update or restart the bot to deliver improvements and fixes. We may revise this EULA from time to time; changes are effective upon posting, and your continued use of the software constitutes acceptance of the revised EULA.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>8. Fees and Donations</h2>
+                <p>The CertiFried MultiTool license is currently provided free of charge. Voluntary donations support development and hosting costs; they are non-refundable and do not purchase, expand, or guarantee any license rights, features, or service levels beyond those generally available to all users.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>9. Term and Termination</h2>
+                <p>This EULA is effective until terminated. Your license terminates automatically and immediately if you breach any of its terms. You may terminate the license at any time by removing the bot from your servers and ceasing use of the dashboard.</p>
+                <p>We may suspend or terminate your license, with or without notice, for any violation of this EULA or the <a href="/terms">Terms of Service</a>. Upon termination, you must stop all use of the software. Sections covering ownership, restrictions, disclaimers, and limitation of liability survive termination.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>10. Disclaimer of Warranties</h2>
+                <p>The software is provided <strong>"AS IS"</strong> and <strong>"AS AVAILABLE"</strong>, without warranties of any kind, whether express, implied, or statutory, including any implied warranties of merchantability, fitness for a particular purpose, title, or non-infringement. We do not warrant that the software will be uninterrupted, error-free, secure, or that it will meet your requirements. You use the software at your own risk.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>11. Limitation of Liability</h2>
+                <p>To the maximum extent permitted by law, CertiFried and its developers shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of profits, data, use, or goodwill, arising out of or related to your use of (or inability to use) the software. Our total aggregate liability shall not exceed $100 USD or the amount you paid us in the twelve months preceding the claim, whichever is greater.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>12. Indemnification</h2>
+                <p>You agree to indemnify and hold harmless CertiFried and its developers from any claims, damages, losses, liabilities, and expenses (including reasonable legal fees) arising from your use or misuse of the software, your violation of this EULA, or your infringement of any third-party right.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7l9-4 9 4M4 10v10a1 1 0 001 1h14a1 1 0 001-1V10M9 21V12h6v9"/></svg>13. Relationship to Other Agreements; Governing Law</h2>
+                <p>This EULA supplements and is incorporated into our <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a>. If there is a direct conflict between this EULA and the Terms of Service regarding the license to use the software, this EULA controls for licensing matters. This EULA is governed by applicable law without regard to conflict-of-law principles, and any disputes will be handled as described in the Terms of Service.</p>
+            </div>
+
+            <div class="contact-box">
+                <h3>Questions About This License?</h3>
+                <p>If you have any questions about this End User License Agreement, please contact us:</p>
+                <div class="contact-links">
+                    <a href="https://certifriedmultitool.com/discord" target="_blank">
+                        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
+                        Discord Support Server
+                    </a>
+                    <a href="/terms">Read the Terms of Service</a>
+                    <a href="/privacy">Read the Privacy Policy</a>
+                    <a href="/">Return to Home</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-links">
+                <a href="/commands" class="footer-link">Commands</a>
+                <a href="/cards" class="footer-link">Cards</a>
+                <a href="/status" class="footer-link">Status</a>
+                <a href="/docs" class="footer-link">Documentation</a>
+                <a href="/terms" class="footer-link">Terms</a>
+                <a href="/privacy" class="footer-link">Privacy</a>
+                <a href="/eula" class="footer-link">EULA</a>
+            </div>
+            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Mobile Menu Functionality
+        const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+        const mobileMenuClose = document.querySelector('.mobile-menu-close');
+        const mobileMenu = document.querySelector('.mobile-menu');
+        const mobileMenuOverlay = document.querySelector('.mobile-menu-overlay');
+
+        function openMobileMenu() {
+            mobileMenu.classList.add('active');
+            mobileMenuOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMobileMenu() {
+            mobileMenu.classList.remove('active');
+            mobileMenuOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        mobileMenuBtn.addEventListener('click', openMobileMenu);
+        mobileMenuClose.addEventListener('click', closeMobileMenu);
+        mobileMenuOverlay.addEventListener('click', closeMobileMenu);
+
+        // Close menu on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && mobileMenu.classList.contains('active')) {
+                closeMobileMenu();
+            }
+        });
+
+        // Close menu when clicking on a link
+        document.querySelectorAll('.mobile-menu-links a').forEach(link => {
+            link.addEventListener('click', closeMobileMenu);
+        });
+    </script>
+</body>
+</html>
