@@ -105,6 +105,7 @@
             <div class="navbar-links">
                 <a href="/">Home</a>
                 <a href="/commands">Commands</a>
+                <a href="/cards">Cards</a>
                 <a href="/status">Status</a>
                 <a href="/donate">Donate</a>
                 <a href="/auth/discord" class="nav-cta">Login</a>
@@ -124,6 +125,7 @@
         <div class="mobile-menu-links">
             <a href="/">Home</a>
             <a href="/commands">Commands</a>
+                <a href="/cards">Cards</a>
             <a href="/status">Status</a>
             <a href="/donate">Donate</a>
             <a href="/auth/discord" class="nav-cta">Login</a>
@@ -165,11 +167,34 @@
                 </table>
                 <h3>User-Provided Data</h3>
                 <ul>
-                    <li>Streamer tracking preferences and platform usernames</li>
-                    <li>Custom command configurations</li>
-                    <li>Economy and leveling data</li>
-                    <li>Form responses and ticket messages</li>
-                    <li>Moderation logs and warnings</li>
+                    <li>Streamer tracking preferences and platform usernames (Twitch, Kick, YouTube, Trovo, TikTok, Facebook) and social feed subscriptions (Reddit, YouTube, Twitter/X, Bluesky, Facebook)</li>
+                    <li>Custom command and custom embed configurations</li>
+                    <li>Economy, leveling, gambling, trading, and pet data (currency balances, inventories, shop purchases)</li>
+                    <li>Game progress and stats: Dungeons &amp; Dragons 5e RPG character data (characters, inventory, combat and quest progress), word-game and Cards Against Humanity scores, trivia, hangman, and counting stats</li>
+                    <li>Form responses, ticket messages, and support interactions, including Stream Team application form responses</li>
+                    <li>Moderation logs, warnings, and infraction history</li>
+                    <li>Birthday dates and birthday card signatures, messages, likes, and replies</li>
+                    <li>Reaction role selections</li>
+                    <li>Welcome card and appearance customizations (uploaded images)</li>
+                    <li>Suggestion, poll, and giveaway participation</li>
+                    <li>Custom bot tokens (encrypted with AES-256-GCM at rest)</li>
+                    <li>Per-user Buy Me a Coffee API keys you link for supporter announcements (encrypted at rest)</li>
+                </ul>
+                <h3>Group Greeting Cards Data</h3>
+                <ul>
+                    <li><strong>Card data:</strong> Card title, occasion type, recipient name, creator name, background images (including AI-generated), music URLs, wishlist links, logos, passwords (hashed with SHA-256), scheduled delivery dates</li>
+                    <li><strong>Signature data:</strong> Signer name, Discord/Twitch user ID (if logged in), avatar URL, message text, custom font settings (color, family, size), GIF/image URLs, YouTube video URLs</li>
+                    <li><strong>Voice recordings:</strong> Audio files (WebM format, max 30 seconds) recorded via browser MediaRecorder API, stored as files on our server</li>
+                    <li><strong>Gift card codes:</strong> Encrypted with AES-256-GCM before storage. The plaintext code exists only briefly in server memory during encryption/decryption. Codes are never logged, never rendered in HTML, and never accessible to administrators</li>
+                    <li><strong>Guest signer data:</strong> Name and optional email address provided by the guest. No account is created. Guest entries are identified by a random ID (not trackable across cards)</li>
+                    <li><strong>AI image prompts:</strong> Text prompts used to generate card covers are stored alongside the card for reference. Prompts are sent to Google Gemini API for image generation</li>
+                    <li><strong>Likes, replies, and view counts:</strong> Signature likes, threaded replies, and page view counts</li>
+                </ul>
+                <h3>Dashboard Data</h3>
+                <ul>
+                    <li>Discord OAuth session data (user ID, username, guild list) for dashboard authentication</li>
+                    <li>Session IP address and user agent (for security monitoring)</li>
+                    <li>Uploaded files (avatars, welcome banners, PDF imports, voice recordings, AI-generated images) stored on the server</li>
                 </ul>
             </div>
 
@@ -186,6 +211,17 @@
             </div>
 
             <div class="legal-section">
+                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>Administrator Access Disclosure</h2>
+                <p>In the interest of full transparency, the following authorized administrators have dashboard access to view guild settings and bot configurations for any server with the bot installed:</p>
+                <ul>
+                    <li><strong>xXDeath420Xx</strong> (Discord ID: 365905620060340224) &mdash; Lead Developer &amp; Bot Owner</li>
+                    <li><strong>Orsokuma (Bear)</strong> (Discord ID: 685127470625980501) &mdash; Co-Administrator &amp; Support Lead</li>
+                </ul>
+                <p>This access is used <strong>exclusively for bot support purposes</strong> &mdash; diagnosing issues, verifying configurations, and assisting server administrators. We will never access, manage, or modify your server settings without your explicit consent and knowledge.</p>
+                <p>Administrator access does <strong>not</strong> include reading private messages, accessing restricted channels, or viewing any user's Discord authentication credentials.</p>
+            </div>
+
+            <div class="legal-section">
                 <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>4. Information Sharing</h2>
                 <div class="highlight-box">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -197,9 +233,12 @@
             <div class="legal-section">
                 <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>5. Data Security</h2>
                 <ul>
-                    <li><strong>Encryption:</strong> Data in transit uses TLS/SSL</li>
-                    <li><strong>Database Security:</strong> Password-protected with restricted access</li>
-                    <li><strong>Rate Limiting:</strong> Protection against abuse</li>
+                    <li><strong>Transport Encryption:</strong> All data in transit uses TLS/SSL</li>
+                    <li><strong>At-Rest Encryption:</strong> Sensitive data (custom bot tokens, gift card codes) is encrypted with AES-256-GCM using a server-side encryption key</li>
+                    <li><strong>Password Hashing:</strong> Card passwords and user authentication tokens are hashed with SHA-256 (one-way, non-reversible)</li>
+                    <li><strong>Database Security:</strong> Password-protected with restricted access, private network only</li>
+                    <li><strong>Gift Code Isolation:</strong> Encrypted gift card codes are never rendered in page HTML, never logged, and only decryptable via an authenticated API request by the card recipient</li>
+                    <li><strong>Rate Limiting:</strong> Protection against abuse on all API endpoints</li>
                     <li><strong>Regular Updates:</strong> Security patches applied promptly</li>
                 </ul>
             </div>
@@ -210,10 +249,21 @@
                     <thead><tr><th>Data Category</th><th>Retention Period</th></tr></thead>
                     <tbody>
                         <tr><td>Server configurations</td><td>Until bot removal</td></tr>
-                        <tr><td>User economy/leveling</td><td>Until deletion request</td></tr>
-                        <tr><td>Moderation logs</td><td>90 days (configurable)</td></tr>
+                        <tr><td>User economy/leveling data</td><td>Until deletion request</td></tr>
+                        <tr><td>Moderation logs &amp; infractions</td><td>90 days (configurable)</td></tr>
                         <tr><td>Command statistics</td><td>30 days (anonymized)</td></tr>
-                        <tr><td>Error logs</td><td>14 days</td></tr>
+                        <tr><td>Message activity logs</td><td>90 days</td></tr>
+                        <tr><td>Stream announcements</td><td>Deleted when stream ends (configurable)</td></tr>
+                        <tr><td>Birthday cards &amp; signatures</td><td>Indefinite (deletable by card creator or admin)</td></tr>
+                        <tr><td>Standalone greeting cards</td><td>Indefinite (deletable by card creator)</td></tr>
+                        <tr><td>Voice recordings</td><td>Deleted with the associated signature or card</td></tr>
+                        <tr><td>Encrypted gift card codes</td><td>Deleted with the associated signature or card</td></tr>
+                        <tr><td>AI-generated images &amp; prompts</td><td>Deleted with the associated card</td></tr>
+                        <tr><td>Guest signer names &amp; emails</td><td>Deleted with the associated signature or card</td></tr>
+                        <tr><td>Uploaded files (avatars, banners, images)</td><td>Until replaced or deleted</td></tr>
+                        <tr><td>Custom bot tokens</td><td>Encrypted at rest; deleted on bot removal</td></tr>
+                        <tr><td>Dashboard sessions</td><td>7 days (auto-expire)</td></tr>
+                        <tr><td>Error logs</td><td>3 days</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -243,7 +293,7 @@
                 <h3>Contact Us About Privacy</h3>
                 <p>If you have questions or wish to exercise your data rights, please contact us:</p>
                 <div class="contact-links">
-                    <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank">
+                    <a href="https://certifriedmultitool.com/discord" target="_blank">
                         <svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
                         Discord Support Server
                     </a>
@@ -258,6 +308,7 @@
         <div class="container">
             <div class="footer-links">
                 <a href="/commands" class="footer-link">Commands</a>
+                <a href="/cards" class="footer-link">Cards</a>
                 <a href="/status" class="footer-link">Status</a>
                 <a href="/docs" class="footer-link">Documentation</a>
                 <a href="/terms" class="footer-link">Terms</a>

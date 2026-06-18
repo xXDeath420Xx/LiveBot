@@ -64,7 +64,7 @@
       <a class="card d" href="<%= discordHref %>">
         <span class="badge">Discord Bot<% if (locals.discordLoggedIn) { %> <span class="signed">● signed in</span><% } %></span>
         <h3>Command your community</h3>
-        <p>Moderation, anti-nuke, leveling, economy, music, giveaways, reaction roles and stream alerts — all dashboard-driven.</p>
+        <p>Moderation, anti-nuke, leveling, economy, music, giveaways, reaction roles, stream alerts, plus games like a full D&amp;D 5e RPG, word games and Cards Against Humanity — all dashboard-driven.</p>
         <span class="go"><%= locals.discordLoggedIn ? 'Open your dashboard' : 'Log in with Discord' %> →</span>
         <div class="mini">
           <div><b><%= Number(locals.discordServers || 0).toLocaleString() %></b><span>servers served</span></div>
