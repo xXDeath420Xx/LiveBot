@@ -145,7 +145,7 @@ export default class EpicGamesScraper extends FreeGamesScraper {
         platform_ios: false,
         platform_xbox: false,
         platform_playstation: false,
-        url: `https://store.epicgames.com/en-US/p/${game.productSlug || game.urlSlug}`,
+        url: this.buildStoreUrl(game),
         thumbnail_url: thumbnail,
         org_price_usd: originalPrice,
         until_date: offer.endDate ? new Date(offer.endDate) : null,
@@ -159,6 +159,41 @@ export default class EpicGamesScraper extends FreeGamesScraper {
       });
       return null;
     }
+  }
+
+  /**
+   * Build a valid Epic Games Store product URL.
+   *
+   * Epic's free-games API no longer populates `productSlug` for most titles, and
+   * `urlSlug` is an internal 32-hex offer id that does NOT resolve to a store page
+   * (e.g. /p/da528841e0eb43d8b93fd243c6767b0c -> 404). The real, browsable slug
+   * lives in `catalogNs.mappings[].pageSlug` (pageType "productHome"), mirrored in
+   * `offerMappings[]`. Prefer those; only fall back to productSlug; never use the
+   * GUID urlSlug. If nothing valid is found, link to the free-games landing page.
+   *
+   * @param {Object} game - Raw game data from Epic
+   * @returns {string} A valid store URL
+   */
+  buildStoreUrl(game) {
+    const clean = (s) => (s ? String(s).replace(/^\/+/, '').replace(/\/home$/i, '') : null);
+    const looksLikeGuid = (s) => /^[0-9a-f]{32}$/i.test(s || '');
+
+    const fromMappings = (arr) => {
+      if (!Array.isArray(arr)) return null;
+      const home = arr.find((m) => m.pageType === 'productHome' && m.pageSlug);
+      const pick = clean((home || arr.find((m) => m.pageSlug))?.pageSlug);
+      return pick && !looksLikeGuid(pick) ? pick : null;
+    };
+
+    const ps = clean(game.productSlug);
+    const slug =
+      fromMappings(game.catalogNs?.mappings) ||
+      fromMappings(game.offerMappings) ||
+      (ps && !looksLikeGuid(ps) ? ps : null);
+
+    return slug
+      ? `https://store.epicgames.com/en-US/p/${slug}`
+      : 'https://store.epicgames.com/en-US/free-games';
   }
 
   /**
