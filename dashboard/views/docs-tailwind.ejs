@@ -483,9 +483,9 @@
                         <div class="step">
                             <div class="step-number">2</div>
                             <div class="step-content">
-                                <h3>Run Setup Command</h3>
-                                <p>Initialize the bot for your server with default configurations.</p>
-                                <div class="code-block">/admin setup</div>
+                                <h3>Run the Setup Wizard</h3>
+                                <p>Run <code>/setup</code> for a guided walkthrough that lets you opt in or out of each feature one at a time, or <code>/admin setup</code> to initialize with default configurations.</p>
+                                <div class="code-block">/setup</div>
                             </div>
                         </div>
                         <div class="step">
@@ -507,7 +507,7 @@
                         </div>
                         <div class="feature-content">
                             <div class="feature-title">Stream Notifications</div>
-                            <div class="feature-desc">Track streamers across 7 platforms: Twitch, YouTube, Kick, TikTok, Trovo, Facebook, and Instagram.</div>
+                            <div class="feature-desc">Track streamers across 6 platforms: Twitch, YouTube, Kick, TikTok, Trovo, and Facebook. Plus social feeds from Reddit, YouTube, X (Twitter), Bluesky, and Facebook.</div>
                         </div>
                     </div>
                     <div class="feature-card">
@@ -537,15 +537,33 @@
                             <div class="feature-desc">Full economy with currency, shops, gambling, trading, and leaderboards.</div>
                         </div>
                     </div>
-                    <div class="feature-card">
+                    <a href="/docs/rpg" class="feature-card" style="text-decoration: none; color: inherit;">
                         <div class="feature-icon cyan">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>
                         </div>
                         <div class="feature-content">
-                            <div class="feature-title">RPG &amp; Games</div>
-                            <div class="feature-desc">Leveling system, XP rewards, mini-games, battles, and interactive commands.</div>
+                            <div class="feature-title">D&amp;D 5e RPG</div>
+                            <div class="feature-desc">A full Dungeons &amp; Dragons 5e engine with an AI Dungeon Master &mdash; characters, dice, combat, spells, quests, dungeons, party &amp; PvP. Play with <code>/rpg</code>. See the full guide &rarr;</div>
+                        </div>
+                    </a>
+                    <div class="feature-card">
+                        <div class="feature-icon blue">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                        </div>
+                        <div class="feature-content">
+                            <div class="feature-title">Word Games</div>
+                            <div class="feature-desc">Quick-play word games via <code>/wordgame</code>: Last Letter, One Word Story, Coordle (collaborative Wordle), and WordSeek.</div>
                         </div>
                     </div>
+                    <a href="/cah" class="feature-card" style="text-decoration: none; color: inherit;">
+                        <div class="feature-icon" style="background: rgba(0,0,0,0.25); color: var(--text-primary);">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zm3 3h2m-2 4h6m-6 4h4"/></svg>
+                        </div>
+                        <div class="feature-content">
+                            <div class="feature-title">Cards Against Humanity</div>
+                            <div class="feature-desc">Play the classic party game in Discord or the browser &mdash; shared engine, custom card packs, and per-server settings. Play at <a href="/cah" style="color: var(--accent-purple);">/cah</a>.</div>
+                        </div>
+                    </a>
                     <div class="feature-card">
                         <div class="feature-icon" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B;">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
@@ -573,6 +591,24 @@
                             <div class="feature-desc">Free digital group cards for any occasion. AI covers, custom fonts, voice messages, GIFs, encrypted gift codes, and more. Works standalone or connected to Discord.</div>
                         </div>
                     </a>
+                    <a href="/stream-team" class="feature-card" style="text-decoration: none; color: inherit;">
+                        <div class="feature-icon" style="background: rgba(45,212,191,0.15); color: #2dd4bf;">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2M3 19c2.5 0 2.5-2 5-2s2.5 2 5 2 2.5-2 5-2 2.5 2 5 2"/></svg>
+                        </div>
+                        <div class="feature-content">
+                            <div class="feature-title">Stream Team Signups</div>
+                            <div class="feature-desc">Apply to join a creator's stream team in a few clicks &mdash; each application opens a private ticket for the owner and applicant. Our own team is Against_The_Tide. Apply at <a href="/stream-team" style="color: var(--accent-green);">/stream-team</a>.</div>
+                        </div>
+                    </a>
+                    <div class="feature-card">
+                        <div class="feature-icon yellow">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h2a2 2 0 012 2v3a4 4 0 01-4 4V10zm0 0V8a2 2 0 012-2h11a2 2 0 012 2v2m0 0h1a3 3 0 010 6h-1m-2 5H7"/></svg>
+                        </div>
+                        <div class="feature-content">
+                            <div class="feature-title">Buy Me a Coffee</div>
+                            <div class="feature-desc">Link your own Buy Me a Coffee account and the bot announces your new supporters to the channels you choose. Set it up with <code>/buymeacoffee link</code> and <code>/buymeacoffee announce</code>.</div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Kick Defender -->
