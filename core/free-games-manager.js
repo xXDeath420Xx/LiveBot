@@ -626,10 +626,11 @@ export default class FreeGamesManager {
     if (product.store === 'epic') {
       links += `[Open in browser ↗](${product.url})    `;
 
-      // Extract product slug from URL for launcher link
-      const urlMatch = product.url.match(/\/p\/([^\/]+)/);
+      // Extract product slug from URL for launcher link. Skip it for internal
+      // 32-hex GUID slugs (legacy bad data) — those don't resolve to a real page.
+      const urlMatch = product.url.match(/\/p\/([^\/?#]+)/);
       const productSlug = urlMatch ? urlMatch[1] : '';
-      if (productSlug) {
+      if (productSlug && !/^[0-9a-f]{32}$/i.test(productSlug)) {
         links += `[Open in Epic Games Launcher ↗](https://launcher.store.epicgames.com/p/${productSlug})`;
       }
     } else {
