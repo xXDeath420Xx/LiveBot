@@ -5200,30 +5200,6 @@ function start(botClient) {
     });
 
     // ===========================
-    // INSTAGRAM ROUTES
-    // ===========================
-    // Instagram feeds were removed: the only sanctioned source is Meta's Graph API, which
-    // requires the target to have a Business/Creator account + an app-reviewed token — so it
-    // never worked for normal users. These routes now just report that it's gone (handles any
-    // stale form/bookmark gracefully). The remove route stays so existing rows can be cleaned.
-    app.post('/manage/:guildId/add-instagram-feed', checkAuth, checkGuildAdmin, (req, res) => {
-        if (req.is('application/json') || req.accepts(['html', 'json']) === 'json') {
-            return res.status(410).json({ error: 'Instagram feeds are no longer supported (Meta\'s Graph API requires a Business account).' });
-        }
-        res.redirect(`/manage/${req.params.guildId}?page=feeds&error=instagram_removed`);
-    });
-
-    app.post('/manage/:guildId/remove-instagram-feed', checkAuth, checkGuildAdmin, async (req, res) => {
-        const guildId = req.params.guildId;
-        try {
-            await pool.execute('DELETE FROM instagram_feeds WHERE id = ? AND guild_id = ?', [req.body.feedId, guildId]);
-        } catch (error) {
-            logger.error('[POST remove-instagram-feed Error]', error);
-        }
-        res.redirect(`/manage/${guildId}?page=feeds`);
-    });
-
-    // ===========================
     // FACEBOOK PAGE ROUTES
     // ===========================
     app.post('/manage/:guildId/add-facebook-feed', checkAuth, checkGuildAdmin, async (req, res) => {

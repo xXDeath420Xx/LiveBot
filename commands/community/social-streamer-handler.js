@@ -15,7 +15,6 @@ import * as twitchApi from '../../utils/platforms/twitch.js';
 import * as kickApi from '../../utils/platforms/kick.js';
 import * as youtubeApi from '../../utils/platforms/youtube.js';
 import * as facebookApi from '../../utils/platforms/facebook.js';
-import * as instagramApi from '../../utils/platforms/instagram.js';
 import * as tiktokApi from '../../utils/platforms/tiktok.js';
 import * as trovoApi from '../../utils/platforms/trovo.js';
 
@@ -25,8 +24,7 @@ export const platformChoices = [
     { name: 'YouTube', value: 'youtube' },
     { name: 'TikTok', value: 'tiktok' },
     { name: 'Trovo', value: 'trovo' },
-    { name: 'Facebook', value: 'facebook' },
-    { name: 'Instagram', value: 'instagram' }
+    { name: 'Facebook', value: 'facebook' }
 ];
 
 const platformModules = {
@@ -34,7 +32,6 @@ const platformModules = {
     kick: kickApi,
     youtube: youtubeApi,
     facebook: facebookApi,
-    instagram: instagramApi,
     tiktok: tiktokApi,
     trovo: trovoApi
 };
@@ -425,8 +422,7 @@ export async function handleCheckLive(interaction) {
             youtube: (id) => `https://youtube.com/channel/${id}`,
             tiktok: (username) => `https://tiktok.com/@${username}`,
             trovo: (username) => `https://trovo.live/s/${username}`,
-            facebook: (username) => `https://facebook.com/gaming/${username}`,
-            instagram: (username) => `https://instagram.com/${username}`
+            facebook: (username) => `https://facebook.com/gaming/${username}`
         };
 
         const lines = liveStreamers.map(s => {
