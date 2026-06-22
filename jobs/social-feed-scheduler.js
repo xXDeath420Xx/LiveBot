@@ -2,6 +2,9 @@ import cron from 'node-cron';
 import { checkRedditFeeds } from '../core/reddit-feed.js';
 import { checkTwitterFeeds } from '../core/twitter-feed.js';
 import { checkYouTubeFeeds } from '../core/youtube-feed.js';
+import { checkBlueskyFeeds } from '../core/bluesky-feed.js';
+import { checkFacebookFeeds } from '../core/facebook-feed.js';
+import { checkSocialFeeds } from './social-feed-checker.js';
 import logger from '../utils/logger.js';
 
 let generalScheduledTask = null;
@@ -29,16 +32,16 @@ function startSocialFeedScheduler(discordClient) {
         logger.info('[SocialFeedScheduler] Twitter feed check completed');
     });
 
-    // Reddit & YouTube - Run every 15 minutes
+    // Reddit & YouTube & Bluesky & Facebook - Run every 15 minutes
     generalScheduledTask = cron.schedule('*/15 * * * *', async () => {
-        logger.info('[SocialFeedScheduler] Checking Reddit & YouTube feeds for all bots...');
+        logger.info('[SocialFeedScheduler] Checking Reddit, YouTube, Bluesky & Facebook feeds for all bots...');
         await checkAllBotFeeds('general');
-        logger.info('[SocialFeedScheduler] Reddit & YouTube feed check completed');
+        logger.info('[SocialFeedScheduler] General feed check completed');
     });
 
     logger.info('[SocialFeedScheduler] Social feed scheduler started');
     logger.info('[SocialFeedScheduler] - Twitter: every 5 minutes');
-    logger.info('[SocialFeedScheduler] - Reddit/YouTube: every 15 minutes');
+    logger.info('[SocialFeedScheduler] - Reddit/YouTube/Bluesky/Facebook: every 15 minutes');
 }
 
 /**
@@ -54,7 +57,10 @@ async function checkAllBotFeeds(type) {
             } else {
                 await Promise.allSettled([
                     checkRedditFeeds(defaultClient),
-                    checkYouTubeFeeds(defaultClient)
+                    checkYouTubeFeeds(defaultClient),
+                    checkBlueskyFeeds(defaultClient),
+                    checkFacebookFeeds(defaultClient),
+                    checkSocialFeeds(defaultClient),
                 ]);
             }
         } catch (error) {
@@ -73,7 +79,9 @@ async function checkAllBotFeeds(type) {
                 } else {
                     await Promise.allSettled([
                         checkRedditFeeds(botClient),
-                        checkYouTubeFeeds(botClient)
+                        checkYouTubeFeeds(botClient),
+                        checkBlueskyFeeds(botClient),
+                        checkFacebookFeeds(botClient)
                     ]);
                 }
             } catch (error) {

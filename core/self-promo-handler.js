@@ -17,7 +17,6 @@ import { safeJsonArray } from '../utils/safeJson.js';
 import { parseStreamUrl } from '../utils/stream-url-parser.js';
 import * as twitchApi from '../utils/platforms/twitch.js';
 import * as kickApi from '../utils/platforms/kick.js';
-import { igBusinessDiscovery } from '../utils/platforms/meta.js';
 
 // Config cache per guild
 const selfPromoConfigCache = new Map();
@@ -156,15 +155,11 @@ export async function validatePlatformUser(platform, username) {
         }
 
         if (platform === 'instagram') {
-            // Try Graph API business_discovery; soft-fall through on null so
-            // personal accounts and unconfigured deployments still work — the
-            // hard correctness gate is the URL parser, not validation.
-            const biz = await igBusinessDiscovery(username, { mediaLimit: 0 });
-            if (biz?.username) {
-                return { platformUserId: biz.id || username, canonicalUsername: biz.username };
-            }
-            logger.warn(`[SelfPromo] Instagram @${username} not discoverable; passing through unvalidated`);
-            return { platformUserId: username, canonicalUsername: username };
+            // Instagram is no longer a supported go-live platform — Meta's Graph API
+            // cannot detect Lives, so a subscription would never announce. Reject the
+            // link instead of creating a phantom subscription.
+            logger.info(`[SelfPromo] Ignoring Instagram link @${username} — platform not supported`);
+            return null;
         }
 
         // YouTube, TikTok, Trovo, Facebook - pass through
