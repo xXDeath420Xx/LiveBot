@@ -288,6 +288,20 @@ export async function handlePlay(interaction) {
             return interaction.editReply({ content: `No results found for: ${query}` });
         }
 
+        // Spotify: the extractor caps playlists at 100 and strips the `explicit` flag,
+        // so long lists were truncated and explicit songs bridged to radio edits. Fetch
+        // the FULL list ourselves and make explicit tracks bridge to the uncensored
+        // YouTube upload. (Mutates searchResult in place.)
+        if (source.platform === 'spotify') {
+            try {
+                const { enrichSpotifySearchResult } = await import('../../core/spotify-resolver.js');
+                const r = await enrichSpotifySearchResult(player, searchResult, query, interaction.user);
+                if (r.ok) console.log(`[Spotify] full list: ${r.total} tracks (+${r.added} recovered, ${r.explicit} explicit)`);
+            } catch (e) {
+                console.warn(`[Spotify] enrich failed, falling back to extractor result: ${e.message}`);
+            }
+        }
+
         // Convert YouTube Shorts URLs to regular watch URLs
         let validTracks = searchResult.tracks.map(t => {
             if (t.url?.includes('youtube.com/shorts/')) {
