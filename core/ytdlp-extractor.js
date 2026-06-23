@@ -401,7 +401,10 @@ class YtDlpExtractor extends BaseExtractor {
             const isSpotifyUrl = info.url?.includes('spotify.com');
 
             if (isSpotifyUrl) {
-                const searchQuery = `${info.title} ${info.author || ''}`.trim();
+                const customQuery = info?.metadata?.bridgeQuery;
+                const searchQuery = (typeof customQuery === 'string' && customQuery.trim())
+                    ? customQuery.trim()
+                    : `${info.title} ${info.author || ''}`.trim();
                 logger.info(`[YtDlp] Spotify URL detected, searching YouTube for: ${searchQuery}`);
                 return await this.getAudioUrlFromSearch(searchQuery);
             }
@@ -438,9 +441,14 @@ class YtDlpExtractor extends BaseExtractor {
             return this.stream(track);
         }
 
-        const bridgeQuery = typeof sourceExtractor?.createBridgeQuery === 'function'
-            ? sourceExtractor.createBridgeQuery(track)
-            : null;
+        // An explicit-aware query set by core/spotify-resolver.js wins over the source
+        // extractor's createBridgeQuery (which appends "official audio" → clean uploads).
+        const customQuery = track?.metadata?.bridgeQuery;
+        const bridgeQuery = (typeof customQuery === 'string' && customQuery.trim())
+            ? customQuery
+            : (typeof sourceExtractor?.createBridgeQuery === 'function'
+                ? sourceExtractor.createBridgeQuery(track)
+                : null);
         const query = (bridgeQuery && bridgeQuery.trim())
             || `${track.title || ''} ${track.author || ''}`.trim();
 

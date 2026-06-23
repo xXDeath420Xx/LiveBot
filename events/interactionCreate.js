@@ -525,6 +525,15 @@ export default {
                 });
               }
 
+              // Spotify: recover the full (un-truncated) list + make explicit tracks
+              // bridge to the uncensored YouTube upload instead of a radio edit.
+              if (songQuery.includes('spotify.com/')) {
+                try {
+                  const { enrichSpotifySearchResult } = await import('../core/spotify-resolver.js');
+                  await enrichSpotifySearchResult(player, searchResult, songQuery, interaction.user);
+                } catch (e) { logger.warn(`[Music Panel] Spotify enrich failed: ${e.message}`); }
+              }
+
               // Convert any shorts URLs in results to regular watch URLs
               let validTracks = searchResult.tracks.map(t => {
                 if (t.url?.includes('youtube.com/shorts/')) {
@@ -713,6 +722,14 @@ export default {
                     return interaction.editReply({
                       content: `❌ Could not load the playlist. Make sure the link is valid and public.`
                     });
+                  }
+
+                  // Spotify: recover the full list + explicit-aware bridging.
+                  if (cleanPlaylistLink.includes('spotify.com/')) {
+                    try {
+                      const { enrichSpotifySearchResult } = await import('../core/spotify-resolver.js');
+                      await enrichSpotifySearchResult(player, searchResult, cleanPlaylistLink, interaction.user);
+                    } catch (e) { logger.warn(`[Music Panel] Spotify enrich failed: ${e.message}`); }
                   }
 
                   const trackCount = searchResult.tracks.length;
