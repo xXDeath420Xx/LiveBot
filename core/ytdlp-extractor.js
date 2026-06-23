@@ -488,11 +488,13 @@ class YtDlpExtractor extends BaseExtractor {
             '--no-warnings',
             '--no-playlist',
             '--flat-playlist',
-            '--print', '%(duration)s|%(webpage_url)s|%(title)s',
+            '--print', '%(duration)s|%(webpage_url)s|%(title)s|%(channel)s',
             '--extractor-args', 'youtube:player_client=default',
         ];
         args.push(...cookieArgs());
-        args.push(`ytsearch5:${searchQuery}`);
+        // Search wider so the exact official cut (often ranked below remixes/covers/
+        // lyric videos) is actually in the candidate set.
+        args.push(`ytsearch10:${searchQuery}`);
 
         const result = await ytdlpPool.execute(args, { timeout: 30000 });
         const stderr = result.stderr || '';
@@ -507,29 +509,42 @@ class YtDlpExtractor extends BaseExtractor {
         }
 
         const candidates = result.stdout.trim().split('\n').map(line => {
-            const idx = line.indexOf('|');
-            const idx2 = idx >= 0 ? line.indexOf('|', idx + 1) : -1;
-            if (idx < 0 || idx2 < 0) return null;
-            const duration = parseInt(line.substring(0, idx), 10);
-            const webpage_url = line.substring(idx + 1, idx2);
-            const title = line.substring(idx2 + 1);
+            const parts = line.split('|');
+            if (parts.length < 3) return null;
+            const duration = parseInt(parts[0], 10);
+            const webpage_url = parts[1];
+            const title = parts[2] || '';
+            const channel = parts[3] || '';
             if (!Number.isFinite(duration) || duration <= 0 || !webpage_url) return null;
-            return { duration, webpage_url, title };
+            return { duration, webpage_url, title, channel, delta: Math.abs(duration - expectedDurationSec) };
         }).filter(Boolean);
 
         if (candidates.length === 0) {
-            logger.warn(`[YtDlp] No usable candidates from ytsearch5 for "${searchQuery}"`);
+            logger.warn(`[YtDlp] No usable candidates from ytsearch10 for "${searchQuery}"`);
             return null;
         }
 
-        const tolerance = 0.25;
-        const minDur = expectedDurationSec * (1 - tolerance);
-        const maxDur = expectedDurationSec * (1 + tolerance);
-        const match = candidates.find(c => c.duration >= minDur && c.duration <= maxDur);
+        // Official auto-generated "Art Track" uploads live on "<Artist> - Topic" channels
+        // and mirror the exact album release (correct length + explicit preserved). Prefer
+        // them, then prefer the CLOSEST duration — never just the first within a window.
+        const isOfficial = (c) => /-\s*topic$/i.test(c.channel) || /provided to youtube|official audio/i.test(c.title);
+        const rank = (a, b) => (Number(isOfficial(b)) - Number(isOfficial(a))) || (a.delta - b.delta);
 
-        if (match) {
-            logger.info(`[YtDlp] Duration-matched candidate: "${match.title}" (${match.duration}s vs expected ${expectedDurationSec}s)`);
-            return match;
+        // 1) EXACT match: same duration within max(3s, 2%). This is the real cut.
+        const exactThresh = Math.max(3, expectedDurationSec * 0.02);
+        const exact = candidates.filter(c => c.delta <= exactThresh).sort(rank);
+        if (exact.length) {
+            const m = exact[0];
+            logger.info(`[YtDlp] Exact match: "${m.title}" [${m.channel}] (${m.duration}s vs ${expectedDurationSec}s${isOfficial(m) ? ', official' : ''})`);
+            return m;
+        }
+
+        // 2) No exact cut available: take the CLOSEST within ±15% (official preferred).
+        const within = candidates.filter(c => c.delta <= expectedDurationSec * 0.15).sort(rank);
+        if (within.length) {
+            const m = within[0];
+            logger.info(`[YtDlp] Closest match: "${m.title}" [${m.channel}] (${m.duration}s vs ${expectedDurationSec}s, Δ${m.delta}s)`);
+            return m;
         }
 
         const summary = candidates.map(c => `${c.duration}s`).join(', ');
