@@ -56,10 +56,12 @@ export function parseSpotifyUrl(url) {
     return m ? { type: m[1], id: m[2] } : null;
 }
 
-// Explicit-aware YouTube bridge query. For explicit tracks we add "explicit" (and avoid
-// the "official audio" bias that returns radio edits); clean tracks get a plain query.
+// Explicit-aware YouTube bridge query. Uses the PRIMARY artist (the "<Artist> - Topic"
+// channel + duration match nails the exact official cut); appends "explicit" for explicit
+// tracks so YouTube serves the uncensored version instead of a radio edit.
 export function buildBridgeQuery({ title, artist, explicit }) {
-    const base = `${title} ${artist}`.replace(/\s+/g, ' ').trim();
+    const primary = String(artist || '').split(',')[0].trim();
+    const base = `${title} ${primary}`.replace(/\s+/g, ' ').trim();
     return explicit ? `${base} explicit` : base;
 }
 
@@ -157,12 +159,13 @@ export async function enrichSpotifySearchResult(player, searchResult, url, reque
 
     let explicitCount = full.filter(t => t.explicit).length;
 
-    // 1) explicit-aware query for the tracks already present (same playlist order).
-    // Track.metadata is getter-only in discord-player v7 — must use setMetadata().
+    // 1) Give EVERY present track an exact-match bridge query (primary artist + duration
+    // match → the official cut; explicit songs get the uncensored version). Track.metadata
+    // is getter-only in discord-player v7 — must use setMetadata().
     for (let i = 0; i < existing.length; i++) {
         const item = full[i];
-        if (item && item.explicit) {
-            existing[i].setMetadata({ ...(existing[i].metadata || {}), bridgeQuery: buildBridgeQuery(item), explicit: true });
+        if (item) {
+            existing[i].setMetadata({ ...(existing[i].metadata || {}), bridgeQuery: buildBridgeQuery(item), explicit: item.explicit });
         }
     }
 
