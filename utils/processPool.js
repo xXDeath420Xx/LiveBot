@@ -80,7 +80,13 @@ class ProcessPool {
     let completed = false;
     let processKilled = false;
 
-    const proc = spawn('yt-dlp', args);
+    // Use the venv yt-dlp (latest + bgutil PO-token plugin → talks to the bgutil
+    // provider on :4416). The standalone binary can't load Python plugins, so it can't
+    // use PO tokens. Override with YTDLP_PATH if needed.
+    const ytdlpBin = process.env.YTDLP_PATH || '/home/death/yt-dlp-venv/bin/yt-dlp';
+    const proc = spawn(ytdlpBin, args, {
+      env: { ...process.env, PATH: '/home/death/yt-dlp-venv/bin:/home/death/.local/bin:/home/death/.deno/bin:/usr/local/bin:/usr/bin:/bin' }
+    });
 
     // Set up timeout
     const timeoutId = setTimeout(() => {
@@ -194,8 +200,8 @@ class ProcessPool {
 
 // Singleton instance for yt-dlp
 const ytdlpPool = new ProcessPool({
-  maxConcurrent: 5,
-  timeout: 6000
+  maxConcurrent: 2,
+  timeout: 30000
 });
 
 export default ytdlpPool;
