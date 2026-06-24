@@ -123,73 +123,133 @@ async function downloadTo(url, dest) {
   await fsp.writeFile(dest, Buffer.from(await res.arrayBuffer()));
 }
 
+export async function isShowcaseChannel(channelId) {
+  return (await showcaseChannels()).has(channelId);
+}
+
+function showcaseUrl(id) {
+  const base = (process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/$/, '');
+  return `${base}/showcase/${id}`;
+}
+
+function buildShowcaseEmbed({ user, creatorName, title, kind, id }) {
+  return new EmbedBuilder()
+    .setColor(0xF0A500)
+    .setAuthor({ name: `${creatorName} shared a ${kind === 'video' ? 'video' : 'track'}`, iconURL: user.displayAvatarURL() })
+    .setTitle(title || (kind === 'video' ? 'New video' : 'New track'))
+    .setDescription(`▶️ **[Play it here](${showcaseUrl(id)})** — streamed, watermarked, no download.`)
+    .setFooter({ text: 'Creator content • protected playback' })
+    .setTimestamp();
+}
+
 /**
- * messageCreate hook. Returns true if it consumed a showcase upload.
+ * Core ingest: download → transcode to AES-HLS → DB row. Returns {id, kind} or throws.
+ * Shared by the channel-drop hook and the /showcase upload command.
+ */
+async function ingest({ url, name, size, kind, guildId, channelId, creatorId, creatorName, title }) {
+  if (size > MAX_BYTES) throw new Error('file too large');
+  const id = crypto.randomBytes(8).toString('hex');
+  const tmpBase = path.join(SHOWCASE_DIR, '_tmp');
+  await fsp.mkdir(tmpBase, { recursive: true });
+  const tmpFile = path.join(tmpBase, `${id}-${(name || 'media').replace(/[^\w.-]/g, '_')}`);
+  try {
+    await downloadTo(url, tmpFile);
+    await transcodeToHls(tmpFile, path.join(SHOWCASE_DIR, id), kind, creatorName);
+    await pool.execute(
+      'INSERT INTO showcase_items (id, guild_id, channel_id, creator_id, title, kind) VALUES (?,?,?,?,?,?)',
+      [id, guildId, channelId, creatorId, (title || name)?.slice(0, 200) || null, kind]
+    );
+    return { id, kind };
+  } catch (e) {
+    await fsp.rm(path.join(SHOWCASE_DIR, id), { recursive: true, force: true }).catch(() => {});
+    throw e;
+  } finally {
+    await fsp.unlink(tmpFile).catch(() => {});
+  }
+}
+
+/**
+ * messageCreate hook (channel-drop path). Returns true if it consumed a showcase upload.
+ * Convenient but the raw file briefly exists on Discord's CDN before deletion — the
+ * /showcase upload command avoids that.
  */
 export async function handleShowcaseMessage(message) {
   try {
     if (!message.guild || message.author?.bot) return false;
     if (!message.attachments?.size) return false;
-    const channels = await showcaseChannels();
-    if (!channels.has(message.channelId)) return false;
+    if (!(await showcaseChannels()).has(message.channelId)) return false;
 
     const media = [...message.attachments.values()]
       .map(a => ({ att: a, kind: classify(a) }))
       .filter(x => x.kind);
     if (!media.length) return false; // not media — leave it for normal handling
 
-    const tmpBase = path.join(SHOWCASE_DIR, '_tmp');
-    await fsp.mkdir(tmpBase, { recursive: true });
-
     const creatorName = message.member?.displayName || message.author.username;
     const baseTitle = (message.content || '').trim().slice(0, 200);
     const posted = [];
-
     for (const { att, kind } of media) {
-      if (att.size > MAX_BYTES) { logger.warn(`[Showcase] skip oversized ${att.name} (${att.size}b)`); continue; }
-      const id = crypto.randomBytes(8).toString('hex');
-      const tmpFile = path.join(tmpBase, `${id}-${(att.name || 'media').replace(/[^\w.-]/g, '_')}`);
       try {
-        await downloadTo(att.url, tmpFile);
-        await transcodeToHls(tmpFile, path.join(SHOWCASE_DIR, id), kind, creatorName);
-        await pool.execute(
-          'INSERT INTO showcase_items (id, guild_id, channel_id, creator_id, title, kind) VALUES (?,?,?,?,?,?)',
-          [id, message.guildId, message.channelId, message.author.id, baseTitle || att.name?.slice(0, 200) || null, kind]
-        );
-        posted.push({ id, kind, name: att.name || (kind === 'video' ? 'video' : 'track') });
+        const r = await ingest({
+          url: att.url, name: att.name, size: att.size, kind,
+          guildId: message.guildId, channelId: message.channelId,
+          creatorId: message.author.id, creatorName, title: baseTitle,
+        });
+        posted.push({ ...r, name: att.name });
       } catch (e) {
-        logger.error('[Showcase] processing failed', { error: e.message, file: att.name });
-        await fsp.rm(path.join(SHOWCASE_DIR, id), { recursive: true, force: true }).catch(() => {});
-      } finally {
-        await fsp.unlink(tmpFile).catch(() => {});
+        logger.error('[Showcase] channel-drop processing failed', { error: e.message, file: att.name });
       }
     }
 
-    // Remove the original (kills the Discord CDN download link). Do this even if some
-    // items failed — we don't want the raw attachment lingering in a showcase channel.
+    // Remove the original (kills the Discord CDN link), even on partial failure.
     await message.delete().catch(() => {});
 
     if (!posted.length) {
       await message.channel.send({ content: `<@${message.author.id}> I couldn't process that upload — make sure it's a normal audio/video file under 250 MB.` }).catch(() => {});
       return true;
     }
-
-    const base = (process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/$/, '');
     for (const item of posted) {
-      const url = `${base}/showcase/${item.id}`;
-      const embed = new EmbedBuilder()
-        .setColor(0xF0A500)
-        .setAuthor({ name: `${creatorName} shared a ${item.kind === 'video' ? 'video' : 'track'}`, iconURL: message.author.displayAvatarURL() })
-        .setTitle(baseTitle || item.name)
-        .setDescription(`▶️ **[Play it here](${url})** — streamed, watermarked, no download.`)
-        .setFooter({ text: 'Creator content • protected playback' })
-        .setTimestamp();
-      await message.channel.send({ content: `🎶 New from <@${message.author.id}>`, embeds: [embed] }).catch(() => {});
+      await message.channel.send({
+        content: `🎶 New from <@${message.author.id}>`,
+        embeds: [buildShowcaseEmbed({ user: message.author, creatorName, title: baseTitle || item.name, kind: item.kind, id: item.id })],
+      }).catch(() => {});
     }
     return true;
   } catch (err) {
     logger.error('[Showcase] hook error', { error: err.message });
     return false;
+  }
+}
+
+/**
+ * /showcase upload — the PRIVATE path. The attached file goes only to the bot (never
+ * posted to the channel), so no other member can grab it. Ephemeral throughout.
+ */
+export async function handleShowcaseUploadCommand(interaction) {
+  if (!(await isShowcaseChannel(interaction.channelId))) {
+    return interaction.reply({ content: 'Run this **in a Creator Showcase channel** — your upload will be posted there as a protected stream.', ephemeral: true });
+  }
+  const att = interaction.options.getAttachment('file');
+  const kind = att && classify(att);
+  if (!kind) {
+    return interaction.reply({ content: 'Attach an **audio or video** file (mp3, wav, mp4, mov, webm, …).', ephemeral: true });
+  }
+  await interaction.reply({ content: '⏳ Processing your upload privately — this can take a moment for video…', ephemeral: true });
+  try {
+    const creatorName = interaction.member?.displayName || interaction.user.username;
+    const title = (interaction.options.getString('title') || '').slice(0, 200);
+    const { id } = await ingest({
+      url: att.url, name: att.name, size: att.size, kind,
+      guildId: interaction.guildId, channelId: interaction.channelId,
+      creatorId: interaction.user.id, creatorName, title,
+    });
+    await interaction.channel.send({
+      content: `🎶 New from <@${interaction.user.id}>`,
+      embeds: [buildShowcaseEmbed({ user: interaction.user, creatorName, title: title || att.name, kind, id })],
+    });
+    await interaction.editReply('✅ Posted! Your raw file was **never shared in the channel** — only the protected, no-download stream is visible.');
+  } catch (e) {
+    logger.error('[Showcase] command upload failed', { error: e.message });
+    await interaction.editReply('❌ Couldn\'t process that — make sure it\'s a normal audio/video file under 250 MB.');
   }
 }
 
