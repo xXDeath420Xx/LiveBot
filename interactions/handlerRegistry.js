@@ -6,6 +6,7 @@ import logger from '../utils/logger.js';
 
 // Pre-load all button handlers
 import { handleSelfPromoJoin } from './buttons/selfpromo_join.js';
+import { handleShowcaseUploadButton } from './buttons/showcase_upload.js';
 import { handleSelfPromoJoinModal } from './modals/selfpromo_join_modal.js';
 import { handleTicketCreate } from './buttons/ticket_create.js';
 import { handleTicketClose } from './buttons/ticket_close.js';
@@ -116,6 +117,7 @@ export const buttonHandlers = {
 
   // Self-promo "add me" button (level-gated → opens paste-links modal)
   'selfpromo_join': handleSelfPromoJoin,
+  'showcase_upload': handleShowcaseUploadButton,
 
   // CAH buttons
   'cah_join:': handleCahJoin,
