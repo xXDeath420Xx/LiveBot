@@ -34,6 +34,23 @@ export function load() {
       if (!byLength.has(L)) byLength.set(L, []);
       byLength.get(L).push(w);
     }
+    // Supplemental REAL words missing from the base list (data/words/english-extra.txt).
+    // Curated + dictionary-API-verified (see scripts/verify-words.mjs). Merged so they
+    // validate in the games. Optional file — absent = no-op. These also feed the
+    // random-word pools via byLength.
+    try {
+      let added = 0;
+      for (const w of readLines('english-extra.txt').filter(w => /^[a-z]+$/.test(w))) {
+        if (!english.has(w)) {
+          english.add(w);
+          const L = w.length;
+          if (!byLength.has(L)) byLength.set(L, []);
+          byLength.get(L).push(w);
+          added++;
+        }
+      }
+      if (added) logger.info('[WordBank] merged english-extra', { added });
+    } catch { /* optional supplemental file */ }
     answers = readLines('coordle-answers.txt').filter(w => /^[a-z]{5}$/.test(w));
     // Intersect the curated list with the dictionary so WordSeek only ever
     // plants real English words, even if the curated file is edited later.
