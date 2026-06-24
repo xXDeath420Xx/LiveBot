@@ -11,6 +11,7 @@ import { handleWordGameMessage } from '../core/word-game-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 import { handlePrefixCommand } from '../core/prefix-command-manager.js';
 import { handleSelfPromoMessage, checkAnnounceChannelGate } from '../core/self-promo-handler.js';
+import { handleShowcaseMessage } from '../core/showcase-manager.js';
 import { spawnPokemon } from '../commands/games/pokemon.js';
 import { handleRPGReply, handleRPGMentionOrChannel, getUserActiveChannel } from '../core/rpg-reply-handler.js';
 import pool from '../utils/db.js';
@@ -174,6 +175,10 @@ export default {
 
       // Prefix command handling — runs before all other message processing
       if (await handlePrefixCommand(message)) return;
+
+      // Creator Showcase: re-host audio/video uploads as protected HLS and delete the
+      // original attachment. Consumes the message so normal processing is skipped.
+      if (await handleShowcaseMessage(message)) return;
 
       // Check automod whitelist once for all moderation systems
       const isAutomodWhitelisted = message.guild ? await isWhitelisted(message.guild.id, message.author.id) : false;
