@@ -34,23 +34,30 @@ export function load() {
       if (!byLength.has(L)) byLength.set(L, []);
       byLength.get(L).push(w);
     }
-    // Supplemental REAL words missing from the base list (data/words/english-extra.txt).
-    // Curated + dictionary-API-verified (see scripts/verify-words.mjs). Merged so they
-    // validate in the games. Optional file — absent = no-op. These also feed the
-    // random-word pools via byLength.
-    try {
+    // Supplemental dictionaries (optional files; absent = no-op):
+    //  - english-extra.txt: curated + API-verified gaps (scripts/verify-words.mjs).
+    //    Goes into BOTH validation and the random-word pools (it's clean).
+    //  - english-large.txt: the full-dictionary breadth (Webster's 2nd + aspell +
+    //    words_alpha union). Goes into VALIDATION ONLY — its long tail has some noise,
+    //    so we never PLANT those words in WordSeek/random-answer games, only accept them.
+    const mergeFile = (file, intoPools) => {
       let added = 0;
-      for (const w of readLines('english-extra.txt').filter(w => /^[a-z]+$/.test(w))) {
-        if (!english.has(w)) {
-          english.add(w);
+      for (const w of readLines(file).filter(w => /^[a-z]+$/.test(w))) {
+        if (english.has(w)) continue;
+        english.add(w);
+        if (intoPools) {
           const L = w.length;
           if (!byLength.has(L)) byLength.set(L, []);
           byLength.get(L).push(w);
-          added++;
         }
+        added++;
       }
-      if (added) logger.info('[WordBank] merged english-extra', { added });
-    } catch { /* optional supplemental file */ }
+      return added;
+    };
+    let extraAdded = 0, largeAdded = 0;
+    try { extraAdded = mergeFile('english-extra.txt', true); } catch { /* optional */ }
+    try { largeAdded = mergeFile('english-large.txt', false); } catch { /* optional */ }
+    if (extraAdded || largeAdded) logger.info('[WordBank] merged supplements', { extra: extraAdded, large: largeAdded, total: english.size });
     answers = readLines('coordle-answers.txt').filter(w => /^[a-z]{5}$/.test(w));
     // Intersect the curated list with the dictionary so WordSeek only ever
     // plants real English words, even if the curated file is edited later.
