@@ -40,11 +40,24 @@ export function parseLinksBlock(text) {
  */
 export async function getJoinConfig(guildId) {
   const [at] = await pool.execute(
-    'SELECT announcement_channel_id, min_level FROM guild_streamer_auto_track WHERE guild_id = ? AND enabled = 1 LIMIT 1',
+    'SELECT announcement_channel_id, min_level, role_id FROM guild_streamer_auto_track WHERE guild_id = ? AND enabled = 1 LIMIT 1',
     [guildId]
   );
   if (at.length && at[0].announcement_channel_id) {
-    return { channelId: at[0].announcement_channel_id, minLevel: Number(at[0].min_level) || 0 };
+    let minLevel = Number(at[0].min_level) || 0;
+    // The manual form must respect the SAME level gate as the auto-track role's
+    // opt-in button (reaction_role_mappings.min_level), even when the presence
+    // add-gate (guild_streamer_auto_track.min_level) is deliberately left at 0 so
+    // existing role-holders keep announcing after an XP reset. Otherwise a low-level
+    // user could self-add via the form and bypass the role's level requirement.
+    if (at[0].role_id) {
+      const [rm] = await pool.execute(
+        'SELECT MAX(min_level) AS lvl FROM reaction_role_mappings WHERE role_id = ?',
+        [at[0].role_id]
+      );
+      minLevel = Math.max(minLevel, Number(rm[0]?.lvl) || 0);
+    }
+    return { channelId: at[0].announcement_channel_id, minLevel };
   }
   const [sp] = await pool.execute(
     'SELECT channel_id, announce_min_level, announce_gate_enabled FROM self_promo_config WHERE guild_id = ? LIMIT 1',
