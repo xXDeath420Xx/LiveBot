@@ -106,7 +106,7 @@ router.get('/showcase/:id', async (req, res) => {
   const id = req.params.id;
   const token = signToken(id);
   const title = escapeHtml(item.title || (item.kind === 'video' ? 'Untitled video' : 'Untitled track'));
-  const isVideo = item.kind === 'video';
+  // Audio is rendered as a waveform video, so everything plays in a <video> element.
   res.set('Content-Type', 'text/html; charset=utf-8').send(`<!DOCTYPE html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>${title} — CertiFried</title>
@@ -124,7 +124,7 @@ router.get('/showcase/:id', async (req, res) => {
  <span class="badge">CERTIFRIED • PROTECTED PLAYBACK</span>
  <h1 style="margin-top:.7rem">${title}</h1>
  <div class="by">Creator content — streaming only, downloading disabled.</div>
- <${isVideo ? 'video' : 'audio'} id="p" controls playsinline controlsList="nodownload noplaybackrate" disablePictureInPicture oncontextmenu="return false"></${isVideo ? 'video' : 'audio'}>
+ <video id="p" controls playsinline controlsList="nodownload noplaybackrate" disablePictureInPicture oncontextmenu="return false"></video>
  <div class="note">Please respect the creator — recording or redistributing this content is not allowed.</div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
