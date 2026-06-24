@@ -108,9 +108,14 @@ async function transcodeToHls(inputPath, outDir, kind, creatorName) {
       '-vf', wm, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
       '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', ...common];
   } else {
-    // audio-only HLS (the player page carries the attribution/watermark)
+    // audio → a waveform "music video" so the track carries the same baked-in visual
+    // watermark as video and plays in the (download-disabled) video player.
+    const wm = `drawtext=fontfile=${FONT}:text='${watermark(creatorName)}':x=16:y=h-th-16:fontsize=20:fontcolor=white@0.9:box=1:boxcolor=black@0.5:boxborderw=10`;
+    const fc = `[0:a]showwaves=s=1280x400:mode=cline:rate=20:colors=0xF0A500|0xFF8C00,format=yuv420p[w];[w]${wm}[vout]`;
     args = ['-hide_banner', '-loglevel', 'error', '-i', inputPath,
-      '-vn', '-c:a', 'aac', '-b:a', '192k', ...common];
+      '-filter_complex', fc, '-map', '[vout]', '-map', '0:a',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '192k', ...common];
   }
   await run('ffmpeg', args);
   // keyinfo no longer needed on disk after encode
