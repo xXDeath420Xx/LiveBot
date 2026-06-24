@@ -57,3 +57,5 @@ test-trovo-debug.mjs
 test-trovo.mjs
 test_db.js
 test_db2.js
+
+data/showcase/

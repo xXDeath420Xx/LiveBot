@@ -20,6 +20,7 @@ import ebookRecordRouter from './routes/ebook-record.js';
 import fourthwallWebhookRouter from './routes/webhooks/fourthwall.js';
 import kickWebhooksRouter from './routes/kick-webhooks.js';
 import streamRouter from './routes/stream.js';
+import showcaseRouter from './routes/showcase.js';
 import streamInternalRouter from './routes/stream-internal.js';
 import streamConnectRouter from './routes/stream-connect.js';
 import { invalidateMusicConfigCache } from '../utils/music_helpers.js';
@@ -223,6 +224,10 @@ function start(botClient) {
 
     // Kick event webhooks — same pre-body-parser mount (RSA signature over raw bytes)
     app.use('/kick/webhooks', kickWebhooksRouter);
+
+    // Creator Showcase — public tokenized HLS player + segment serving (no session auth;
+    // access is gated by the per-playback signed token, not login).
+    app.use('/', showcaseRouter);
 
     // Apply API rate limiter after passport so req.user is available for admin bypass
     app.use('/api', apiLimiter);
