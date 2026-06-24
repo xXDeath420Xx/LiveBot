@@ -1,4 +1,7 @@
-import { SlashCommandBuilder, PermissionsBitField, ChannelType } from 'discord.js';
+import {
+    SlashCommandBuilder, PermissionsBitField, ChannelType,
+    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+} from 'discord.js';
 import {
     addShowcaseChannel, removeShowcaseChannel, listShowcaseChannels, handleShowcaseUploadCommand,
 } from '../../core/showcase-manager.js';
@@ -31,6 +34,12 @@ export default {
                     opt.setName('channel').setDescription('Channel to disable (defaults to current)')
                         .addChannelTypes(ChannelType.GuildText)))
         .addSubcommand(sub =>
+            sub.setName('panel')
+                .setDescription('[Admin] Make this a showcase channel and post an Upload button panel')
+                .addChannelOption(opt =>
+                    opt.setName('channel').setDescription('Channel for the panel (defaults to current)')
+                        .addChannelTypes(ChannelType.GuildText)))
+        .addSubcommand(sub =>
             sub.setName('list').setDescription('[Admin] List the Creator Showcase channels in this server')),
 
     async execute(interaction) {
@@ -55,6 +64,27 @@ export default {
                     `• Just **dropping a file** in the channel — convenient, but the raw file briefly hits Discord's CDN before I delete it.\n` +
                     `_Either way: I re-host it as a watermarked, download-disabled stream. Note that anything playable can still be screen/stream-captured — this stops casual downloading, not determined ripping._`
                 );
+            }
+            if (sub === 'panel') {
+                await interaction.deferReply({ ephemeral: true });
+                const channel = interaction.options.getChannel('channel') || interaction.channel;
+                await addShowcaseChannel(interaction.guildId, channel.id, interaction.user.id);
+                const embed = new EmbedBuilder()
+                    .setColor(0xF0A500)
+                    .setTitle('🎶 Share your music & video')
+                    .setDescription(
+                        'Drop your **own** tracks and clips here as **protected streams** — they play in the browser, ' +
+                        'watermarked, with **downloading disabled**.\n\n' +
+                        'Tap **📤 Upload** below: you’ll get a private link, pick your file, and it posts here automatically. ' +
+                        'Your file goes **straight to our server — never shared in Discord**.\n\n' +
+                        '_Heads up: anything playable can still be screen-recorded — this stops casual downloading, not determined ripping._'
+                    )
+                    .setFooter({ text: 'Creator content • protected playback' });
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('showcase_upload').setLabel('Upload your music / video').setEmoji('📤').setStyle(ButtonStyle.Primary)
+                );
+                await channel.send({ embeds: [embed], components: [row] });
+                return interaction.editReply(`✅ Posted the upload panel in <#${channel.id}> and enabled it as a Creator Showcase.`);
             }
             if (sub === 'remove') {
                 await interaction.deferReply({ ephemeral: true });

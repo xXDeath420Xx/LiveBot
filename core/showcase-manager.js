@@ -132,10 +132,10 @@ function showcaseUrl(id) {
   return `${base}/showcase/${id}`;
 }
 
-function buildShowcaseEmbed({ user, creatorName, title, kind, id }) {
+export function buildShowcaseEmbed({ user, creatorName, title, kind, id }) {
   return new EmbedBuilder()
     .setColor(0xF0A500)
-    .setAuthor({ name: `${creatorName} shared a ${kind === 'video' ? 'video' : 'track'}`, iconURL: user.displayAvatarURL() })
+    .setAuthor({ name: `${creatorName} shared a ${kind === 'video' ? 'video' : 'track'}`, iconURL: user?.displayAvatarURL?.() || undefined })
     .setTitle(title || (kind === 'video' ? 'New video' : 'New track'))
     .setDescription(`▶️ **[Play it here](${showcaseUrl(id)})** — streamed, watermarked, no download.`)
     .setFooter({ text: 'Creator content • protected playback' })
@@ -146,15 +146,19 @@ function buildShowcaseEmbed({ user, creatorName, title, kind, id }) {
  * Core ingest: download → transcode to AES-HLS → DB row. Returns {id, kind} or throws.
  * Shared by the channel-drop hook and the /showcase upload command.
  */
-async function ingest({ url, name, size, kind, guildId, channelId, creatorId, creatorName, title }) {
-  if (size > MAX_BYTES) throw new Error('file too large');
+async function ingest({ url, inputPath, name, size, kind, guildId, channelId, creatorId, creatorName, title }) {
+  if (size && size > MAX_BYTES) throw new Error('file too large');
   const id = crypto.randomBytes(8).toString('hex');
-  const tmpBase = path.join(SHOWCASE_DIR, '_tmp');
-  await fsp.mkdir(tmpBase, { recursive: true });
-  const tmpFile = path.join(tmpBase, `${id}-${(name || 'media').replace(/[^\w.-]/g, '_')}`);
-  try {
+  let src = inputPath, tmpFile = null;
+  if (!src) {
+    const tmpBase = path.join(SHOWCASE_DIR, '_tmp');
+    await fsp.mkdir(tmpBase, { recursive: true });
+    tmpFile = path.join(tmpBase, `${id}-${(name || 'media').replace(/[^\w.-]/g, '_')}`);
     await downloadTo(url, tmpFile);
-    await transcodeToHls(tmpFile, path.join(SHOWCASE_DIR, id), kind, creatorName);
+    src = tmpFile;
+  }
+  try {
+    await transcodeToHls(src, path.join(SHOWCASE_DIR, id), kind, creatorName);
     await pool.execute(
       'INSERT INTO showcase_items (id, guild_id, channel_id, creator_id, title, kind) VALUES (?,?,?,?,?,?)',
       [id, guildId, channelId, creatorId, (title || name)?.slice(0, 200) || null, kind]
@@ -164,8 +168,56 @@ async function ingest({ url, name, size, kind, guildId, channelId, creatorId, cr
     await fsp.rm(path.join(SHOWCASE_DIR, id), { recursive: true, force: true }).catch(() => {});
     throw e;
   } finally {
-    await fsp.unlink(tmpFile).catch(() => {});
+    if (tmpFile) await fsp.unlink(tmpFile).catch(() => {});
   }
+}
+
+// classify by filename/mime — exported for the web upload route
+export function classifyMedia(name, contentType) {
+  return classify({ name, contentType });
+}
+
+// ── upload tokens (button → ephemeral web-upload link) ──────────────────────
+export function signUploadToken(guildId, channelId, userId, ttlMs = 20 * 60 * 1000) {
+  const exp = Date.now() + ttlMs;
+  const data = `${guildId}.${channelId}.${userId}.${exp}`;
+  const mac = crypto.createHmac('sha256', SECRET).update(`up:${data}`).digest('base64url');
+  return `${data}.${mac}`;
+}
+export function verifyUploadToken(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 5) return null;
+  const [guildId, channelId, userId, exp, mac] = parts;
+  if (Number(exp) < Date.now()) return null;
+  const good = crypto.createHmac('sha256', SECRET).update(`up:${guildId}.${channelId}.${userId}.${exp}`).digest('base64url');
+  try { if (!crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(good))) return null; } catch { return null; }
+  return { guildId, channelId, userId };
+}
+
+/**
+ * Web-upload path: a local file (multer) → protected stream → post the embed via the
+ * right guild client. The file never touched Discord. Returns { id, kind }.
+ */
+export async function ingestWebUpload({ inputPath, name, size, guildId, channelId, creatorId, title }) {
+  const kind = classify({ name });
+  if (!kind) throw new Error('not audio/video');
+  const client = global.botManager?.getClientForGuild?.(guildId) || global.client || global.botManager?.getDefaultClient?.();
+  if (!client) throw new Error('no client');
+  const guild = await client.guilds.fetch(guildId).catch(() => null);
+  const member = guild ? await guild.members.fetch(creatorId).catch(() => null) : null;
+  const user = await client.users.fetch(creatorId).catch(() => null);
+  const creatorName = member?.displayName || user?.username || 'creator';
+
+  const { id } = await ingest({ inputPath, name, size, kind, guildId, channelId, creatorId, creatorName, title });
+
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (channel?.isTextBased?.()) {
+    await channel.send({
+      content: `🎶 New from <@${creatorId}>`,
+      embeds: [buildShowcaseEmbed({ user, creatorName, title: title || name, kind, id })],
+    }).catch(() => {});
+  }
+  return { id, kind };
 }
 
 /**

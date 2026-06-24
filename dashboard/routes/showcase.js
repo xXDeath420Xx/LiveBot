@@ -9,13 +9,84 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
+import multer from 'multer';
 import pool from '../../utils/db.js';
-import { SHOWCASE_DIR, signToken, verifyToken } from '../../core/showcase-manager.js';
+import {
+  SHOWCASE_DIR, signToken, verifyToken,
+  verifyUploadToken, ingestWebUpload, isShowcaseChannel,
+} from '../../core/showcase-manager.js';
 
 const router = express.Router();
 const ID_RE = /^[a-f0-9]{16}$/;
 const SEG_RE = /^seg\d+\.ts$/;
 const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ── Web upload (button → ephemeral link → this form; file never touches Discord) ──
+const UPLOAD_TMP = path.join(SHOWCASE_DIR, '_uploads');
+fs.mkdirSync(UPLOAD_TMP, { recursive: true });
+const upload = multer({
+  dest: UPLOAD_TMP,
+  limits: { fileSize: 250 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /^(audio|video)\//.test(file.mimetype) ||
+      /\.(mp3|wav|flac|ogg|oga|m4a|aac|opus|aiff?|mp4|mov|webm|mkv|avi|m4v|flv|wmv)$/i.test(file.originalname);
+    cb(ok ? null : new Error('Only audio/video files are accepted'), ok);
+  },
+});
+
+router.get('/showcase/upload/:token', (req, res) => {
+  if (!verifyUploadToken(req.params.token)) {
+    return res.status(403).send('<body style="font-family:sans-serif;background:#0b0f11;color:#f1f0f6;padding:2rem">This upload link has expired or is invalid. Tap <b>📤 Upload</b> again in Discord for a fresh one.</body>');
+  }
+  const t = escapeHtml(req.params.token);
+  res.set('Content-Type', 'text/html; charset=utf-8').send(`<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Upload to CertiFried Showcase</title><style>
+ *{box-sizing:border-box;margin:0;padding:0} body{background:#0b0f11;color:#f1f0f6;font-family:Inter,system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1.25rem}
+ .card{width:100%;max-width:440px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:1.6rem}
+ h1{font-size:1.2rem;margin-bottom:.4rem} p{color:#928da8;font-size:.85rem;margin-bottom:1.1rem}
+ label{display:block;font-size:.78rem;color:#b9b4cc;margin:.8rem 0 .35rem} input{width:100%;padding:.7rem;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#15131d;color:#f1f0f6;font-size:.9rem}
+ button{width:100%;margin-top:1.2rem;padding:.8rem;border:0;border-radius:10px;background:#f0a500;color:#1a1205;font-weight:700;font-size:.95rem;cursor:pointer}
+ button:disabled{opacity:.6;cursor:default} .msg{margin-top:1rem;font-size:.85rem;min-height:1.2rem}
+</style></head><body><div class="card">
+ <h1>🎶 Upload to the Showcase</h1>
+ <p>Audio or video, up to 250&nbsp;MB. It posts back to Discord as a watermarked, no-download stream.</p>
+ <form id="f">
+   <label>Your file</label><input id="file" type="file" accept="audio/*,video/*" required>
+   <label>Title (optional)</label><input id="title" type="text" maxlength="200" placeholder="Name your piece">
+   <button id="b" type="submit">Upload</button>
+ </form>
+ <div class="msg" id="m"></div>
+</div><script>
+ var f=document.getElementById('f'),b=document.getElementById('b'),m=document.getElementById('m');
+ f.onsubmit=async function(e){e.preventDefault();var fi=document.getElementById('file');if(!fi.files[0])return;
+   b.disabled=true;b.textContent='Uploading & processing…';m.textContent='Please keep this tab open.';
+   var fd=new FormData();fd.append('file',fi.files[0]);fd.append('title',document.getElementById('title').value||'');
+   try{var r=await fetch(location.pathname,{method:'POST',body:fd});var j=await r.json().catch(function(){return{};});
+     if(r.ok&&j.ok){m.style.color='#7dfc4f';m.textContent='✅ Posted to your channel! You can close this tab.';b.textContent='Done';}
+     else{m.style.color='#ff6b6b';m.textContent='❌ '+(j.error||'Upload failed')+'. Get a fresh link in Discord.';b.disabled=false;b.textContent='Upload';}
+   }catch(err){m.style.color='#ff6b6b';m.textContent='❌ Network error — try again.';b.disabled=false;b.textContent='Upload';}
+ };
+</script></body></html>`);
+});
+
+router.post('/showcase/upload/:token', upload.single('file'), async (req, res) => {
+  const cleanup = () => { if (req.file?.path) fs.unlink(req.file.path, () => {}); };
+  const claim = verifyUploadToken(req.params.token);
+  if (!claim) { cleanup(); return res.status(403).json({ error: 'Link expired' }); }
+  if (!req.file) return res.status(400).json({ error: 'No file received' });
+  try {
+    if (!(await isShowcaseChannel(claim.channelId))) { cleanup(); return res.status(400).json({ error: 'Channel is no longer a showcase' }); }
+    await ingestWebUpload({
+      inputPath: req.file.path, name: req.file.originalname, size: req.file.size,
+      guildId: claim.guildId, channelId: claim.channelId, creatorId: claim.userId,
+      title: (req.body.title || '').slice(0, 200),
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Processing failed' });
+  } finally { cleanup(); }
+});
 
 async function getItem(id) {
   if (!ID_RE.test(id)) return null;
