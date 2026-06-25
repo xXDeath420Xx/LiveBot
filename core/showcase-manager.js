@@ -101,24 +101,25 @@ async function transcodeToHls(inputPath, outDir, kind, creatorName) {
     path.join(outDir, 'playlist.m3u8'),
   ];
 
-  let args;
   if (kind === 'video') {
     const wm = `drawtext=fontfile=${FONT}:text='${watermark(creatorName)}':x=12:y=h-th-12:fontsize=18:fontcolor=white@0.85:box=1:boxcolor=black@0.45:boxborderw=8`;
-    args = ['-hide_banner', '-loglevel', 'error', '-i', inputPath,
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', inputPath,
       '-vf', wm, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
-      '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', ...common];
+      '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', ...common]);
   } else {
-    // audio → a waveform "music video" so the track carries the same baked-in visual
-    // watermark as video and plays in the (download-disabled) video player.
+    // audio → render a STATIC full-waveform image (always visible — showwaves' animated
+    // line is mostly black at quiet moments / before playback), on the dark brand bg,
+    // then loop it under the audio with the watermark baked in. Plays in the video player.
+    const wavePng = path.join(outDir, '_wave.png');
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', inputPath,
+      '-filter_complex', 'color=c=0x0b0f11:s=1280x400[bg];[0:a]showwavespic=s=1280x400:colors=0xF0A500|0xFF8C00[fg];[bg][fg]overlay=format=auto',
+      '-frames:v', '1', wavePng]);
     const wm = `drawtext=fontfile=${FONT}:text='${watermark(creatorName)}':x=16:y=h-th-16:fontsize=20:fontcolor=white@0.9:box=1:boxcolor=black@0.5:boxborderw=10`;
-    const fc = `[0:a]showwaves=s=1280x400:mode=cline:rate=20:colors=0xF0A500|0xFF8C00,format=yuv420p[w];[w]${wm}[vout]`;
-    args = ['-hide_banner', '-loglevel', 'error', '-i', inputPath,
-      '-filter_complex', fc, '-map', '[vout]', '-map', '0:a',
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', '-pix_fmt', 'yuv420p',
-      '-c:a', 'aac', '-b:a', '192k', ...common];
+    await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-loop', '1', '-framerate', '5', '-i', wavePng, '-i', inputPath,
+      '-vf', wm, '-r', '5', '-c:v', 'libx264', '-tune', 'stillimage', '-preset', 'veryfast', '-crf', '26', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '192k', '-g', '10', '-shortest', ...common]);
+    await fsp.unlink(wavePng).catch(() => {});
   }
-  await run('ffmpeg', args);
-  // keyinfo no longer needed on disk after encode
   await fsp.unlink(keyInfoPath).catch(() => {});
 }
 
