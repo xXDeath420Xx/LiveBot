@@ -85,7 +85,7 @@ function watermark(name) {
   return `@${safe} | CertiFried`;
 }
 
-async function transcodeToHls(inputPath, outDir, kind, creatorName) {
+export async function transcodeToHls(inputPath, outDir, kind, creatorName) {
   await fsp.mkdir(outDir, { recursive: true });
   // AES-128 key + keyinfo (line1 = URI written into the m3u8, line2 = key file, line3 = IV)
   const keyPath = path.join(outDir, 'enc.key');
@@ -114,7 +114,8 @@ async function transcodeToHls(inputPath, outDir, kind, creatorName) {
     await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', inputPath,
       '-filter_complex', 'color=c=0x0b0f11:s=1280x400[bg];[0:a]showwavespic=s=1280x400:colors=0xF0A500|0xFF8C00[fg];[bg][fg]overlay=format=auto',
       '-frames:v', '1', wavePng]);
-    const wm = `drawtext=fontfile=${FONT}:text='${watermark(creatorName)}':x=16:y=h-th-16:fontsize=20:fontcolor=white@0.9:box=1:boxcolor=black@0.5:boxborderw=10`;
+    // Centered watermark/logo overlaid on top of the waveform.
+    const wm = `drawtext=fontfile=${FONT}:text='${watermark(creatorName)}':x=(w-text_w)/2:y=(h-text_h)/2:fontsize=46:fontcolor=white@0.65:shadowcolor=black@0.8:shadowx=2:shadowy=2`;
     await run('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-loop', '1', '-framerate', '5', '-i', wavePng, '-i', inputPath,
       '-vf', wm, '-r', '5', '-c:v', 'libx264', '-tune', 'stillimage', '-preset', 'veryfast', '-crf', '26', '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '192k', '-g', '10', '-shortest', ...common]);
