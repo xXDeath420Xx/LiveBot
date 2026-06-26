@@ -279,27 +279,40 @@ export async function handlePlay(interaction) {
 
     try {
         const searchResult = await player.search(query, { requestedBy: interaction.user });
+
+        // Spotify: resolve via OUR Spotify Web API so the FULL list comes back complete
+        // and explicit-aware. The bundled SpotifyExtractor caps playlists at 100, strips
+        // the `explicit` flag (→ radio edits), and can return nothing if its token flow
+        // hiccups. So:
+        //   • if it returned tracks → enrich (recover 101..N, tag explicit) in place;
+        //   • if it returned NOTHING → build the whole list directly from our API.
+        // Audio is then bridged (YouTube → SoundCloud fallback), independent of Spotify.
+        if (source.platform === 'spotify') {
+            try {
+                const { enrichSpotifySearchResult, buildSpotifyEntity } = await import('../../core/spotify-resolver.js');
+                if (searchResult.hasTracks()) {
+                    const r = await enrichSpotifySearchResult(player, searchResult, query, interaction.user);
+                    if (r.ok) console.log(`[Spotify] full list: ${r.total} tracks (+${r.added} recovered, ${r.explicit} explicit)`);
+                } else {
+                    const built = await buildSpotifyEntity(player, query, interaction.user);
+                    if (built) {
+                        searchResult.setTracks(built.tracks);
+                        if (built.playlist) searchResult.setPlaylist(built.playlist);
+                        console.log(`[Spotify] built ${built.tracks.length} tracks directly from Spotify API (extractor returned none)`);
+                    }
+                }
+            } catch (e) {
+                console.warn(`[Spotify] resolve failed, falling back to extractor result: ${e.message}`);
+            }
+        }
+
         if (!searchResult.hasTracks()) {
             if (source.platform === 'spotify') {
                 return interaction.editReply({
-                    content: `Could not fetch the ${source.displayName}. Make sure the link is public and try again.`
+                    content: `Could not fetch the ${source.displayName}. Make sure the link is public and that the Spotify API keys are valid, then try again.`
                 });
             }
             return interaction.editReply({ content: `No results found for: ${query}` });
-        }
-
-        // Spotify: the extractor caps playlists at 100 and strips the `explicit` flag,
-        // so long lists were truncated and explicit songs bridged to radio edits. Fetch
-        // the FULL list ourselves and make explicit tracks bridge to the uncensored
-        // YouTube upload. (Mutates searchResult in place.)
-        if (source.platform === 'spotify') {
-            try {
-                const { enrichSpotifySearchResult } = await import('../../core/spotify-resolver.js');
-                const r = await enrichSpotifySearchResult(player, searchResult, query, interaction.user);
-                if (r.ok) console.log(`[Spotify] full list: ${r.total} tracks (+${r.added} recovered, ${r.explicit} explicit)`);
-            } catch (e) {
-                console.warn(`[Spotify] enrich failed, falling back to extractor result: ${e.message}`);
-            }
         }
 
         // Convert YouTube Shorts URLs to regular watch URLs
