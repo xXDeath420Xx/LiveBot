@@ -4,6 +4,7 @@
  */
 import { spawn } from 'child_process';
 import logger from './logger.js';
+import { ytdlpSourceArgs } from './ipv6-rotator.js';
 
 class ProcessPool {
   constructor(options = {}) {
@@ -67,7 +68,13 @@ class ProcessPool {
    */
   runProcess(request) {
     this.running++;
-    const { args, options, resolve, reject, queuedAt } = request;
+    const { args: baseArgs, options, resolve, reject, queuedAt } = request;
+
+    // IPv6 rotation: bind YouTube requests to a fresh source address from our /64 so
+    // there's no single IP for YouTube to rate-limit. No-op (prepends nothing) unless
+    // YTDLP_IPV6_SUBNET is set. A new address is chosen per spawn, so retries — which
+    // are separate execute() calls — automatically get a different IP too.
+    const args = [...ytdlpSourceArgs(baseArgs), ...baseArgs];
 
     const waitTime = Date.now() - queuedAt;
     if (waitTime > 100) {
