@@ -47,6 +47,18 @@ function randHextet() {
   return Math.floor(Math.random() * 0x10000).toString(16);
 }
 
+// Binding yt-dlp to a global v6 source makes it unable to reach the bgutil PO-token
+// provider on 127.0.0.1 (v4 loopback ≠ v6 source). bgutil listens on *:4416, and the
+// whole /64 is locally delivered (AnyIP), so we redirect the PO fetch to a v6 address
+// in our own block — reachable from any rotated source. Override with YTDLP_POT_BASEURL.
+function potBaseUrl() {
+  if (process.env.YTDLP_POT_BASEURL) return process.env.YTDLP_POT_BASEURL;
+  const g = prefixGroups();
+  if (!g) return null;
+  const port = process.env.YTDLP_POT_PORT || '4416';
+  return `http://[${g.join(':')}::1]:${port}`;
+}
+
 /** A random global address inside the configured /64, or null when disabled. */
 export function randomIPv6() {
   const g = prefixGroups();
@@ -69,5 +81,10 @@ export function ytdlpSourceArgs(args) {
   if (!/ytsearch|youtube\.com|youtu\.be/i.test(joined)) return [];   // not YouTube
   if (joined.includes('--source-address')) return [];                // already set
   const addr = randomIPv6();
-  return addr ? ['--source-address', addr] : [];
+  if (!addr) return [];
+  const out = ['--source-address', addr];
+  // Keep PO tokens working while bound to a v6 source (see potBaseUrl).
+  const burl = potBaseUrl();
+  if (burl) out.push('--extractor-args', `youtubepot-bgutilhttp:base_url=${burl}`);
+  return out;
 }
