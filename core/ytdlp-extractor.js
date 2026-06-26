@@ -1,5 +1,4 @@
 import { BaseExtractor, Track, Playlist } from 'discord-player';
-import { spawn } from 'child_process';
 import { existsSync, copyFileSync, mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { dirname, join } from 'path';
@@ -218,48 +217,54 @@ class YtDlpExtractor extends BaseExtractor {
     }
 
     async searchWithSource(originalQuery, context, searchQuery, isPlaylist) {
-        return new Promise((resolve, reject) => {
+        // Build yt-dlp arguments. Routed through ytdlpPool so metadata extraction uses
+        // the SAME venv yt-dlp as streaming — the one that loads the bgutil PO-token
+        // plugin. Spawning /home/death/.local/bin/yt-dlp directly (as this used to)
+        // meant every search hit YouTube with NO PO token, which is the first and most
+        // bot-detection-prone request of every play.
+        const args = [
+            '--dump-json',
+            '--ignore-errors',
+            '--no-check-formats',
+            '--extractor-args', 'youtube:player_client=default'
+        ];
 
-            // Build yt-dlp arguments
-            const args = [
-                '--dump-json',
-                '--ignore-errors',
-                '--no-check-formats',
-                '--remote-components', 'ejs:github',
-                '--extractor-args', 'youtube:player_client=default'
-            ];
+        args.push(...cookieArgs());
 
-            args.push(...cookieArgs());
+        if (!isPlaylist) {
+            args.push('--no-playlist');
+        } else {
+            args.push('--flat-playlist');
+        }
 
-            if (!isPlaylist) {
-                args.push('--no-playlist');
-            } else {
-                args.push('--flat-playlist');
-            }
+        args.push(searchQuery);
 
-            args.push(searchQuery);
+        let result;
+        try {
+            // Playlists can take a while to enumerate; give metadata more headroom.
+            result = await ytdlpPool.execute(args, { timeout: isPlaylist ? 60000 : 35000 });
+        } catch (err) {
+            logger.error(`[YtDlp] searchWithSource pool error: ${err.message}`);
+            return this.createResponse();
+        }
 
-            const ytdlp = spawn('/home/death/.local/bin/yt-dlp', args, {
-                env: { ...process.env, PATH: '/home/death/.local/bin:/home/death/.deno/bin:/usr/local/bin:/usr/bin:/bin' }
-            });
+        const jsonData = result.stdout || '';
+        const errorOutput = result.stderr || '';
 
-            let jsonData = '';
-            let errorOutput = '';
+        if (looksLikeCookieRotation(errorOutput)) {
+            notifyCookieRotation({ source: 'searchWithSource', query: searchQuery }).catch(() => {});
+        }
 
-            ytdlp.stdout.on('data', (data) => {
-                jsonData += data.toString();
-            });
+        // With --ignore-errors yt-dlp can exit non-zero yet still emit good entries
+        // (e.g. one dead track in a 100-song playlist). Parse whatever we got; only
+        // bail when stdout is genuinely empty.
+        if (!jsonData.trim()) {
+            logger.error(`[YtDlp] Search failed (code ${result.code}): ${errorOutput.substring(0, 300)}`);
+            return this.createResponse();
+        }
 
-            ytdlp.stderr.on('data', (data) => {
-                errorOutput += data.toString();
-            });
-
-            ytdlp.on('close', (code) => {
-                if (code !== 0 || !jsonData.trim()) {
-                    logger.error(`[YtDlp] Search failed: ${errorOutput}`);
-                    return resolve(this.createResponse());
-                }
-
+        return new Promise((resolve) => {
+            {
                 try {
                     // For playlists, yt-dlp outputs one JSON object per line
                     const lines = jsonData.trim().split('\n').filter(line => line.trim());
@@ -373,12 +378,7 @@ class YtDlpExtractor extends BaseExtractor {
                     logger.error(`[YtDlp] Parse error: ${error.message}`);
                     resolve(this.createResponse());
                 }
-            });
-
-            ytdlp.on('error', (err) => {
-                logger.error(`[YtDlp] Spawn error: ${err.message}`);
-                reject(new Error(`yt-dlp spawn failed: ${err.message}`));
-            });
+            }
         });
     }
 
@@ -483,29 +483,36 @@ class YtDlpExtractor extends BaseExtractor {
         return null;
     }
 
-    async _findBestDurationMatch(searchQuery, expectedDurationSec) {
+    /**
+     * Rank duration-matched candidates for a query on a given search engine, BEST first.
+     * Returns an ordered array (not just one) so the caller can fall through to the next
+     * candidate when the top pick is blocked (age-gate / bot-detection / DRM). `engine`
+     * is a yt-dlp search prefix: 'ytsearch10' (YouTube) or 'scsearch10' (SoundCloud).
+     */
+    async _rankDurationMatches(searchQuery, expectedDurationSec, engine = 'ytsearch10') {
+        const isYoutube = engine.startsWith('yt');
         const args = [
             '--no-warnings',
             '--no-playlist',
             '--flat-playlist',
-            '--print', '%(duration)s|%(webpage_url)s|%(title)s|%(channel)s',
-            '--extractor-args', 'youtube:player_client=default',
+            '--print', '%(duration)s|%(webpage_url)s|%(title)s|%(channel,uploader)s',
         ];
+        if (isYoutube) args.push('--extractor-args', 'youtube:player_client=default');
         args.push(...cookieArgs());
         // Search wider so the exact official cut (often ranked below remixes/covers/
         // lyric videos) is actually in the candidate set.
-        args.push(`ytsearch10:${searchQuery}`);
+        args.push(`${engine}:${searchQuery}`);
 
         const result = await ytdlpPool.execute(args, { timeout: 30000 });
         const stderr = result.stderr || '';
 
-        if (looksLikeCookieRotation(stderr)) {
-            notifyCookieRotation({ source: '_findBestDurationMatch', query: searchQuery }).catch(() => {});
+        if (isYoutube && looksLikeCookieRotation(stderr)) {
+            notifyCookieRotation({ source: '_rankDurationMatches', query: searchQuery }).catch(() => {});
         }
 
-        if (result.code !== 0 || !result.stdout?.trim()) {
-            logger.error(`[YtDlp] Duration-aware search failed: ${stderr.substring(0, 200)}`);
-            return null;
+        if (!result.stdout?.trim()) {
+            logger.error(`[YtDlp] Duration-aware ${engine} search failed: ${stderr.substring(0, 200)}`);
+            return [];
         }
 
         const candidates = result.stdout.trim().split('\n').map(line => {
@@ -520,8 +527,8 @@ class YtDlpExtractor extends BaseExtractor {
         }).filter(Boolean);
 
         if (candidates.length === 0) {
-            logger.warn(`[YtDlp] No usable candidates from ytsearch10 for "${searchQuery}"`);
-            return null;
+            logger.warn(`[YtDlp] No usable candidates from ${engine} for "${searchQuery}"`);
+            return [];
         }
 
         // Official auto-generated "Art Track" uploads live on "<Artist> - Topic" channels
@@ -530,25 +537,38 @@ class YtDlpExtractor extends BaseExtractor {
         const isOfficial = (c) => /-\s*topic$/i.test(c.channel) || /provided to youtube|official audio/i.test(c.title);
         const rank = (a, b) => (Number(isOfficial(b)) - Number(isOfficial(a))) || (a.delta - b.delta);
 
-        // 1) EXACT match: same duration within max(3s, 2%). This is the real cut.
+        // EXACT cut first (within max(3s, 2%)), then anything within ±15%, each block
+        // internally ranked official-then-closest. Concatenating the blocks gives a
+        // single best-first list to walk.
         const exactThresh = Math.max(3, expectedDurationSec * 0.02);
         const exact = candidates.filter(c => c.delta <= exactThresh).sort(rank);
-        if (exact.length) {
-            const m = exact[0];
-            logger.info(`[YtDlp] Exact match: "${m.title}" [${m.channel}] (${m.duration}s vs ${expectedDurationSec}s${isOfficial(m) ? ', official' : ''})`);
-            return m;
-        }
+        const near = candidates.filter(c => c.delta > exactThresh && c.delta <= expectedDurationSec * 0.15).sort(rank);
+        const ordered = [...exact, ...near];
 
-        // 2) No exact cut available: take the CLOSEST within ±15% (official preferred).
-        const within = candidates.filter(c => c.delta <= expectedDurationSec * 0.15).sort(rank);
-        if (within.length) {
-            const m = within[0];
-            logger.info(`[YtDlp] Closest match: "${m.title}" [${m.channel}] (${m.duration}s vs ${expectedDurationSec}s, Δ${m.delta}s)`);
-            return m;
+        if (ordered.length === 0) {
+            const summary = candidates.map(c => `${c.duration}s`).join(', ');
+            logger.warn(`[YtDlp] No duration match for "${searchQuery}" (expected ${expectedDurationSec}s). Candidates: ${summary}`);
+        } else {
+            const m = ordered[0];
+            logger.info(`[YtDlp] ${engine} best: "${m.title}" [${m.channel}] (${m.duration}s vs ${expectedDurationSec}s, Δ${m.delta}s${isOfficial(m) ? ', official' : ''}) — ${ordered.length} candidate(s)`);
         }
+        return ordered;
+    }
 
-        const summary = candidates.map(c => `${c.duration}s`).join(', ');
-        logger.warn(`[YtDlp] No duration match for "${searchQuery}" (expected ${expectedDurationSec}s). Candidates: ${summary}`);
+    /**
+     * Walk a ranked candidate list and return the audio URL of the FIRST one that
+     * actually resolves. Skips age-gated / DRM / bot-blocked uploads (one attempt each
+     * so we move on fast) instead of dying on the top pick.
+     */
+    async _firstPlayable(candidates, max = 4) {
+        for (const c of candidates.slice(0, max)) {
+            try {
+                const url = await this.getAudioUrlDirect(c.webpage_url, 1);
+                if (url) return url;
+            } catch (err) {
+                logger.warn(`[YtDlp] Candidate blocked (${err.message}), trying next: ${c.title}`);
+            }
+        }
         return null;
     }
 
@@ -575,8 +595,8 @@ class YtDlpExtractor extends BaseExtractor {
         return args;
     }
 
-    async getAudioUrlDirect(url) {
-        for (let attempt = 0; attempt < 3; attempt++) {
+    async getAudioUrlDirect(url, maxAttempts = 3) {
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
             const args = this._buildStreamArgs(url);
             args.push(url);
 
@@ -591,70 +611,94 @@ class YtDlpExtractor extends BaseExtractor {
 
             const stderrFull = result.stderr || '';
             const stderr = stderrFull.substring(0, 200);
-            // Don't retry on permanent failures (video unavailable, deleted, terminated)
+            // Don't retry on permanent / per-video failures — the caller (bridge /
+            // _firstPlayable) should move to the next candidate, not hammer this one.
             if (stderr.includes('Video unavailable') || stderr.includes('terminated') || stderr.includes('removed') || stderr.includes('Private video')) {
                 logger.error(`[YtDlp] Permanent failure: ${stderr}`);
                 throw new Error('Video unavailable');
+            }
+            if (stderr.includes('confirm your age') || stderr.includes('age-restricted')) {
+                throw new Error('Video is age-restricted');
+            }
+            if (stderr.includes('DRM')) {
+                throw new Error('DRM protected');
             }
 
             if (looksLikeCookieRotation(stderrFull)) {
                 notifyCookieRotation({ source: 'getAudioUrlDirect', query: url }).catch(() => {});
             }
 
-            if (attempt < 2) {
+            if (attempt < maxAttempts - 1) {
                 const isBotDetect = looksLikeCookieRotation(stderrFull);
                 const delay = isBotDetect ? 4000 : 2000;
                 logger.warn(`[YtDlp] Attempt ${attempt + 1} failed (${isBotDetect ? 'bot detection' : stderr.substring(0, 80)}), retrying in ${delay / 1000}s...`);
                 await new Promise(r => setTimeout(r, delay));
             } else {
-                logger.error(`[YtDlp] All 3 attempts failed: ${stderr}`);
+                if (looksLikeCookieRotation(stderrFull)) throw new Error("Sign in to confirm you're not a bot");
+                logger.error(`[YtDlp] All ${maxAttempts} attempt(s) failed: ${stderr}`);
                 throw new Error('Failed to get audio URL');
             }
         }
     }
 
+    /**
+     * Resolve a playable audio URL for a free-text query. Tries, in order:
+     *   1. YouTube duration-matched candidates (when we know the expected length),
+     *      walking down the list so an age-gated/blocked top result doesn't kill it;
+     *   2. SoundCloud duration-matched candidates (full-length, skips DRM uploads);
+     *   3. plain ytsearch then scsearch when no duration hint is available.
+     * This is the "if YouTube wants to be a cunt, fall back" path.
+     */
     async getAudioUrlFromSearch(searchQuery, expectedDurationSec = null) {
-        // Duration-aware path: pick the best-matching candidate from top 5, then
-        // resolve its direct audio URL. Prevents 30s SoundCloud-preview fallbacks
-        // from pretending to be full-length tracks when bridging Spotify.
+        // Duration-aware path: prefer the exact official cut, but try every close
+        // candidate (YouTube then SoundCloud) before giving up. Prevents 30s preview
+        // clips from masquerading as full tracks when bridging Spotify.
         if (expectedDurationSec && expectedDurationSec > 0) {
-            const match = await this._findBestDurationMatch(searchQuery, expectedDurationSec);
-            if (!match) {
-                throw new Error(`Bridge duration mismatch — likely a preview clip (expected ${expectedDurationSec}s, no full-length match for "${searchQuery}")`);
-            }
-            return await this.getAudioUrlDirect(match.webpage_url);
+            const ytCandidates = await this._rankDurationMatches(searchQuery, expectedDurationSec, 'ytsearch10');
+            const ytUrl = await this._firstPlayable(ytCandidates);
+            if (ytUrl) return ytUrl;
+
+            logger.warn(`[YtDlp] YouTube blocked/empty for "${searchQuery}" — falling back to SoundCloud`);
+            const scCandidates = await this._rankDurationMatches(searchQuery, expectedDurationSec, 'scsearch10');
+            const scUrl = await this._firstPlayable(scCandidates);
+            if (scUrl) return scUrl;
+
+            throw new Error(`Bridge duration mismatch — no full-length match on YouTube or SoundCloud for "${searchQuery}" (expected ${expectedDurationSec}s)`);
         }
 
-        for (let attempt = 0; attempt < 2; attempt++) {
-            const args = this._buildStreamArgs('https://youtube.com');
-            args.push(`ytsearch:${searchQuery}`);
+        // No duration hint: plain search. Try YouTube (with one bot-detection retry),
+        // then fall back to SoundCloud.
+        for (const engine of ['ytsearch', 'scsearch']) {
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const args = this._buildStreamArgs(engine === 'ytsearch' ? 'https://youtube.com' : 'https://soundcloud.com');
+                args.push(`${engine}:${searchQuery}`);
 
-            const result = await ytdlpPool.execute(args, { timeout: 30000 });
+                const result = await ytdlpPool.execute(args, { timeout: 30000 });
 
-            logger.info(`[YtDlp] Search stream result (attempt ${attempt + 1}): code=${result.code}, stdout=${result.stdout?.length || 0} bytes, stderr=${(result.stderr || '').substring(0, 150)}`);
+                logger.info(`[YtDlp] ${engine} stream (attempt ${attempt + 1}): code=${result.code}, stdout=${result.stdout?.length || 0} bytes, stderr=${(result.stderr || '').substring(0, 120)}`);
 
-            if (result.code === 0 && result.stdout.trim()) {
-                const resultUrl = result.stdout.trim().split('\n')[0].trim();
-                logger.info(`[YtDlp] Got audio URL from search, returning for discord-player`);
-                return resultUrl;
+                if (result.code === 0 && result.stdout.trim()) {
+                    const resultUrl = result.stdout.trim().split('\n')[0].trim();
+                    logger.info(`[YtDlp] Got audio URL from ${engine}`);
+                    return resultUrl;
+                }
+
+                const stderr = result.stderr || '';
+                if (engine === 'ytsearch' && looksLikeCookieRotation(stderr)) {
+                    notifyCookieRotation({ source: 'getAudioUrlFromSearch', query: searchQuery }).catch(() => {});
+                    if (attempt === 0) {
+                        logger.warn(`[YtDlp] YouTube bot detection on search, retrying in 3s...`);
+                        await new Promise(r => setTimeout(r, 3000));
+                        continue;
+                    }
+                }
+                // This engine failed for a non-retryable reason — move to the next one.
+                logger.error(`[YtDlp] ${engine} stream failed (code ${result.code}): ${stderr.substring(0, 200)}`);
+                break;
             }
-
-            const stderr = result.stderr || '';
-
-            if (looksLikeCookieRotation(stderr)) {
-                notifyCookieRotation({ source: 'getAudioUrlFromSearch', query: searchQuery }).catch(() => {});
-            }
-
-            // Retry on bot detection — it's intermittent
-            if (attempt === 0 && looksLikeCookieRotation(stderr)) {
-                logger.warn(`[YtDlp] YouTube bot detection on search, retrying in 3s...`);
-                await new Promise(r => setTimeout(r, 3000));
-                continue;
-            }
-
-            logger.error(`[YtDlp] Search stream failed (code ${result.code}): ${stderr.substring(0, 300)}`);
-            throw new Error(`Failed to find audio for: ${searchQuery}`);
         }
+
+        throw new Error(`Failed to find audio for: ${searchQuery}`);
     }
 
     formatDuration(seconds) {

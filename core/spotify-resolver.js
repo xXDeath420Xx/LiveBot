@@ -11,7 +11,7 @@
 // `track.metadata.bridgeQuery`.
 
 import axios from 'axios';
-import { Track } from 'discord-player';
+import { Track, Playlist } from 'discord-player';
 import logger from '../utils/logger.js';
 
 function msToTimecode(ms) {
@@ -138,6 +138,50 @@ export async function resolveSpotify(url) {
         return null;
     }
     return null;
+}
+
+// Build playable discord-player Tracks for a Spotify URL using ONLY our Spotify Web API
+// credentials — no dependency on the bundled SpotifyExtractor. This is the "play from
+// Spotify links/playlists directly" path: if player.search() comes back empty (extractor
+// token hiccup, identifier drift, etc.) we still get the full, explicit-aware list and
+// bridge the audio. Returns { tracks, playlist } or null. The bridge (YtDlp → SoundCloud
+// fallback) plays each track's `metadata.bridgeQuery`.
+export async function buildSpotifyEntity(player, url, requestedBy) {
+    const resolved = await resolveSpotify(url);
+    if (!resolved || !resolved.tracks.length) return null;
+
+    const tracks = resolved.tracks.map(item => {
+        const t = new Track(player, {
+            title: item.title,
+            author: item.artist,
+            duration: msToTimecode(item.durationMs),
+            url: item.url || 'https://open.spotify.com/',
+            thumbnail: item.thumbnail || undefined,
+            source: 'spotify',
+            requestedBy,
+            metadata: { bridgeQuery: buildBridgeQuery(item), explicit: item.explicit },
+        });
+        return t;
+    });
+
+    if (resolved.type === 'track') {
+        return { tracks, playlist: null };
+    }
+
+    const playlist = new Playlist(player, {
+        title: resolved.name || 'Spotify',
+        thumbnail: tracks[0]?.thumbnail,
+        description: `${tracks.length} tracks`,
+        type: 'playlist',
+        source: 'spotify',
+        author: { name: 'Spotify', url },
+        tracks,
+        id: url,
+        url,
+        rawPlaylist: null,
+    });
+    tracks.forEach(t => { t.playlist = playlist; });
+    return { tracks, playlist };
 }
 
 // Take a discord-player searchResult from player.search(spotifyUrl) — which the

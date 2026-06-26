@@ -199,8 +199,11 @@ class ProcessPool {
 }
 
 // Singleton instance for yt-dlp
+// maxConcurrent 3 (was 2): metadata extraction now shares this pool with stream-URL
+// resolution and the multi-candidate bridge fallback, so give it one more slot to keep
+// search + playback from starving each other under light multi-guild load.
 const ytdlpPool = new ProcessPool({
-  maxConcurrent: 2,
+  maxConcurrent: 3,
   timeout: 30000
 });
 
