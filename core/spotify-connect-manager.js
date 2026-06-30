@@ -14,6 +14,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
+import WebSocket from 'ws';
 import logger from '../utils/logger.js';
 
 const sessions = new Map(); // id -> { id, port, fifo, busyGuildId }
@@ -86,3 +87,59 @@ export function openPcmStream(session) {
 }
 
 export function getSession(id) { return sessions.get(id); }
+
+/** open.spotify.com/<type>/<id> (or a spotify: URI) → spotify:<type>:<id>. */
+export function uriFromUrl(url) {
+  if (!url) return null;
+  if (url.startsWith('spotify:')) return url;
+  const m = String(url).match(/spotify\.com\/(track|playlist|album|artist|episode|show)\/([A-Za-z0-9]+)/);
+  return m ? `spotify:${m[1]}:${m[2]}` : null;
+}
+
+/**
+ * Play one Spotify URI on a session and return a self-describing WAV Readable for
+ * discord-player (48k stereo). The stream ENDS itself when go-librespot reports the
+ * track finished (`not_playing`/`stopped` on the /events WS), so the discord-player
+ * queue advances to the next track. We pause go-librespot on finish so its context
+ * autoplay doesn't bleed into the FIFO before the next track's play() takes over.
+ */
+export async function streamTrack(session, uri) {
+  await play(session, uri).catch(() => {}); // 500-on-success; state is the truth
+
+  // raw FIFO (s16le 44.1k) → 48k stereo WAV on stdout
+  const ff = spawn('ffmpeg', [
+    '-hide_banner', '-loglevel', 'error',
+    '-f', 's16le', '-ar', '44100', '-ac', '2', '-i', session.fifo,
+    '-ar', '48000', '-ac', '2', '-f', 'wav', 'pipe:1',
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  ff.stderr.on('data', () => {});
+  ff.on('error', e => logger.error(`[SpotifyConnect] streamTrack ffmpeg error: ${e.message}`));
+
+  let ws = null, started = false, ended = false;
+  const endStream = (why) => {
+    if (ended) return; ended = true;
+    logger.info(`[SpotifyConnect] track stream ending (${why})`);
+    pause(session).catch(() => {});          // stop autoplay bleed
+    setTimeout(() => { try { ff.kill('SIGKILL'); } catch {} }, 250); // flush tail
+    try { ws?.close(); } catch {}
+  };
+  try {
+    ws = new WebSocket(`ws://127.0.0.1:${session.port}/events`);
+    ws.on('message', (raw) => {
+      let e; try { e = JSON.parse(raw.toString()); } catch { return; }
+      if (e.type === 'playing' || e.type === 'metadata' || e.type === 'will_play') started = true;
+      if (started && (e.type === 'not_playing' || e.type === 'stopped')) endStream(e.type);
+    });
+    ws.on('error', () => {}); // WS optional; if it dies the queue can still be /skip'd
+  } catch {}
+
+  ff.stdout.on('close', () => { try { ws?.close(); } catch {} });
+  return ff.stdout;
+}
+
+/** Release whatever session a guild is holding (queue end / disconnect / stop). */
+export function releaseGuild(guildId) {
+  for (const s of sessions.values()) {
+    if (s.busyGuildId === guildId) { pause(s).catch(() => {}); s.busyGuildId = null; }
+  }
+}
