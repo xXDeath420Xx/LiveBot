@@ -1,6 +1,31 @@
 import { EmbedBuilder } from 'discord.js';
 import { checkMusicPermissions, useMainPlayer, getLeaveOptions } from '../../utils/music_helpers.js';
 import db from '../../utils/db.js';
+import {
+  pickSession, acquire, release, streamTrack, uriFromUrl,
+} from '../../core/spotify-connect-manager.js';
+import logger from '../../utils/logger.js';
+
+/**
+ * discord-player onBeforeCreateStream hook: for a Spotify TRACK, play it through
+ * go-librespot (real Spotify audio) instead of bridging to YouTube. Returns a stream
+ * to use it, or null to fall through to the normal YouTube/SoundCloud extraction —
+ * so non-Spotify tracks, and Spotify tracks when every account is busy, still play.
+ */
+async function spotifyConnectStream(track, _queryType, queue) {
+  try {
+    const uri = track.metadata?.spotifyUri || uriFromUrl(track.url);
+    if (!uri || !uri.startsWith('spotify:track:')) return null; // only single tracks
+    const session = pickSession(track.requestedBy?.id);
+    if (!session) return null;
+    if (!acquire(session, queue.guild.id)) return null; // account busy → YouTube fallback
+    logger.info(`[SpotifyConnect] /music routing "${track.title}" through go-librespot (${uri})`);
+    return await streamTrack(session, uri);
+  } catch (e) {
+    logger.error(`[SpotifyConnect] onBeforeCreateStream failed: ${e.message}`);
+    return null; // fall back to YouTube bridge
+  }
+}
 
 // ============================================================================
 // DEDUPLICATION SYSTEM
@@ -377,6 +402,9 @@ export async function handlePlay(interaction) {
                 },
                 selfDeaf: true,
                 volume: 80,
+                // Spotify tracks play through go-librespot (real Spotify audio); the hook
+                // returns null for everything else → normal YouTube/SoundCloud bridge.
+                onBeforeCreateStream: spotifyConnectStream,
                 ...(await getLeaveOptions(interaction.guildId)),
             }
         });

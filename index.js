@@ -484,6 +484,8 @@ async function initializeSchedulersAndDashboard(client) {
         logger.info(`[Music] Disconnected from voice in guild ${queue.guild.id}`);
         client.musicStatusManager?.removeMusicSession(queue.guild.id);
         client.musicPanelManager?.get(queue.guild.id)?.updatePanel();
+        // Free any go-librespot (Spotify-direct) account this guild was holding.
+        import('./core/spotify-connect-manager.js').then(m => m.releaseGuild(queue.guild.id)).catch(() => {});
 
         // Voice camp: if this guild has a camp channel, reconnect to it shortly after.
         // resolveCampChannel returns null for non-camp guilds, so this is a no-op there.
@@ -503,6 +505,8 @@ async function initializeSchedulersAndDashboard(client) {
       player.events.on('emptyQueue', async (queue) => {
         logger.info(`[Music] Queue is empty in guild ${queue.guild.id}`);
         client.musicPanelManager?.get(queue.guild.id)?.updatePanel();
+        // Free any go-librespot (Spotify-direct) account this guild was holding.
+        import('./core/spotify-connect-manager.js').then(m => m.releaseGuild(queue.guild.id)).catch(() => {});
 
         // If DJ mode is enabled, the DJ manager handles this via its own queueEnd listener
         // Don't duplicate the call here to prevent race conditions
