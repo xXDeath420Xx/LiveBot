@@ -2,7 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import { checkMusicPermissions, useMainPlayer, getLeaveOptions } from '../../utils/music_helpers.js';
 import db from '../../utils/db.js';
 import {
-  getSessionForUser, acquire, release, streamTrack, uriFromUrl,
+  getSessionForUser, acquire, release, streamTrack, uriFromUrl, isOwnerUser,
 } from '../../core/spotify-connect-manager.js';
 import logger from '../../utils/logger.js';
 
@@ -18,8 +18,17 @@ async function spotifyConnectStream(track, _queryType, queue) {
     if (!uri || !uri.startsWith('spotify:track:')) return null; // only single tracks
     const session = await getSessionForUser(track.requestedBy?.id);
     if (!session) return null;
-    if (!acquire(session, queue.guild.id)) return null; // account busy → YouTube fallback
-    logger.info(`[SpotifyConnect] /music routing "${track.title}" through go-librespot (${uri})`);
+    const owner = isOwnerUser(track.requestedBy?.id);
+    // owner preempts a non-owner on the shared account; non-owner yields → YouTube fallback
+    const stopHolder = async () => {
+      try {
+        const ch = queue.metadata?.channelId && await queue.guild.client.channels.fetch(queue.metadata.channelId).catch(() => null);
+        ch?.send?.('⏸️ The owner started Spotify on the shared account — **`/spotify link`** your own to keep playing here.').catch(() => {});
+      } catch {}
+      try { queue.delete(); } catch {}
+    };
+    if (!acquire(session, queue.guild.id, { owner, stopHolder })) return null;
+    logger.info(`[SpotifyConnect] /music routing "${track.title}" through go-librespot (${uri})${owner ? ' [owner]' : ''}`);
     return await streamTrack(session, uri);
   } catch (e) {
     logger.error(`[SpotifyConnect] onBeforeCreateStream failed: ${e.message}`);
