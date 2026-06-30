@@ -13,9 +13,17 @@
  */
 import http from 'node:http';
 import fs from 'node:fs';
-import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { spawn, execFileSync } from 'node:child_process';
 import WebSocket from 'ws';
+import pool from '../utils/db.js';
+import encryption from '../utils/encryption.js';
 import logger from '../utils/logger.js';
+
+const GLR_BIN = '/home/death/go-librespot/bin/go-librespot';
+const ACCOUNTS_DIR = '/home/death/go-librespot/accounts';
+const USER_IDLE_MS = 5 * 60 * 1000; // tear down an idle user instance after 5 min
+let nextUserPort = 3700;            // owner is 3678; per-user instances 3700+
 
 const sessions = new Map(); // id -> { id, port, fifo, busyGuildId }
 
@@ -140,6 +148,168 @@ export async function streamTrack(session, uri) {
 /** Release whatever session a guild is holding (queue end / disconnect / stop). */
 export function releaseGuild(guildId) {
   for (const s of sessions.values()) {
-    if (s.busyGuildId === guildId) { pause(s).catch(() => {}); s.busyGuildId = null; }
+    if (s.busyGuildId === guildId) { pause(s).catch(() => {}); s.busyGuildId = null; markUsed(s.id); }
   }
+}
+
+// ── Per-user accounts (Spoticord model) ────────────────────────────────────────
+// Each linked user gets their own go-librespot instance, spawned on demand from the
+// credentials stored (encrypted) in spotify_links, on its own port + FIFO. Idle
+// instances are reaped; the owner instance is permanent (PM2) and never reaped.
+
+const userProcs = new Map();    // userId -> { proc, idleTimer }
+const pendingLinks = new Map(); // userId -> { proc, apiPort, dir } during /spotify link
+
+function ensureFifo(fifo) { if (!fs.existsSync(fifo)) { try { execFileSync('mkfifo', [fifo]); } catch (e) { logger.error(`[SpotifyConnect] mkfifo ${fifo}: ${e.message}`); } } }
+
+function writeConfig(dir, port, fifo) {
+  fs.writeFileSync(path.join(dir, 'config.yml'),
+    `device_name: CertiFried\nbitrate: 320\nzeroconf_enabled: false\n` +
+    `credentials:\n  type: interactive\n` +
+    `audio_backend: pipe\naudio_output_pipe: ${fifo}\naudio_output_pipe_format: s16le\n` +
+    `server:\n  enabled: true\n  address: 127.0.0.1\n  port: ${port}\n`);
+}
+
+function markUsed(id) {
+  const u = userProcs.get(id);
+  if (!u) return;
+  clearTimeout(u.idleTimer);
+  u.idleTimer = setTimeout(() => teardownUser(id), USER_IDLE_MS);
+}
+
+function teardownUser(userId) {
+  const id = `u_${userId}`;
+  const s = sessions.get(id);
+  if (s?.busyGuildId) return markUsed(id); // still playing — defer
+  const u = userProcs.get(id);
+  if (u) { clearTimeout(u.idleTimer); try { u.proc.kill('SIGKILL'); } catch {} userProcs.delete(id); }
+  sessions.delete(id);
+  logger.info(`[SpotifyConnect] reaped idle user instance ${id}`);
+}
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function spawnUserSession(userId, credentialsJson) {
+  const id = `u_${userId}`;
+  const dir = path.join(ACCOUNTS_DIR, id);
+  fs.mkdirSync(dir, { recursive: true });
+  const fifo = path.join(dir, 'audio.pipe');
+  ensureFifo(fifo);
+  fs.writeFileSync(path.join(dir, 'state.json'), credentialsJson, { mode: 0o600 });
+  const port = nextUserPort++;
+  writeConfig(dir, port, fifo);
+
+  const proc = spawn(GLR_BIN, ['--config_dir', dir], { stdio: ['ignore', 'pipe', 'pipe'] });
+  proc.stdout.on('data', () => {});
+  proc.stderr.on('data', () => {});
+  proc.on('exit', () => { sessions.delete(id); userProcs.delete(id); });
+
+  const session = registerSession(id, port, fifo);
+  userProcs.set(id, { proc, idleTimer: setTimeout(() => teardownUser(userId), USER_IDLE_MS) });
+
+  for (let i = 0; i < 24; i++) { await sleep(500); if (await isAlive(session)) { logger.info(`[SpotifyConnect] user session ${id} ready on :${port}`); return session; } }
+  logger.error(`[SpotifyConnect] user session ${id} never became ready`);
+  teardownUser(userId);
+  return null;
+}
+
+/** Account selection: the user's OWN linked account → owner shared fallback → null. */
+export async function getSessionForUser(userId) {
+  if (userId) {
+    const id = `u_${userId}`;
+    const existing = sessions.get(id);
+    if (existing && await isAlive(existing)) { markUsed(id); return existing; }
+    try {
+      const [rows] = await pool.execute('SELECT credentials FROM spotify_links WHERE user_id = ?', [userId]);
+      if (rows?.length) {
+        const creds = encryption.decrypt(JSON.parse(rows[0].credentials));
+        const s = await spawnUserSession(userId, creds);
+        if (s) { pool.execute('UPDATE spotify_links SET last_used_at = NOW() WHERE user_id = ?', [userId]).catch(() => {}); return s; }
+      }
+    } catch (e) { logger.error(`[SpotifyConnect] getSessionForUser(${userId}) failed: ${e.message}`); }
+  }
+  return sessions.get('owner') || null;
+}
+
+export async function isLinked(userId) {
+  try { const [r] = await pool.execute('SELECT 1 FROM spotify_links WHERE user_id = ?', [userId]); return !!r?.length; } catch { return false; }
+}
+
+/** Step 1 of linking: spawn interactive go-librespot, return the Spotify auth URL. */
+export async function startLink(userId) {
+  const id = `u_${userId}`;
+  const prev = pendingLinks.get(userId);
+  if (prev) { try { prev.proc.kill('SIGKILL'); } catch {} pendingLinks.delete(userId); }
+
+  const dir = path.join(ACCOUNTS_DIR, id);
+  fs.mkdirSync(dir, { recursive: true });
+  try { fs.unlinkSync(path.join(dir, 'state.json')); } catch {} // force fresh auth
+  const fifo = path.join(dir, 'audio.pipe'); ensureFifo(fifo);
+  const apiPort = nextUserPort++;
+  writeConfig(dir, apiPort, fifo);
+
+  const proc = spawn(GLR_BIN, ['--config_dir', dir], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let buf = '';
+  const url = await new Promise((resolve, reject) => {
+    const to = setTimeout(() => reject(new Error('timed out waiting for the Spotify auth link')), 20000);
+    const onData = (d) => {
+      buf += d.toString();
+      const m = buf.match(/visit the following link:\s*(\S+)/);
+      if (m) { clearTimeout(to); resolve(m[1]); }
+    };
+    proc.stdout.on('data', onData);
+    proc.stderr.on('data', onData);
+    proc.on('exit', () => { clearTimeout(to); reject(new Error('go-librespot exited before emitting an auth link')); });
+  });
+  pendingLinks.set(userId, { proc, apiPort, dir });
+  return url;
+}
+
+/** Step 2 of linking: the user pastes the 127.0.0.1 redirect URL; we complete it. */
+export async function finishLink(userId, redirectUrl) {
+  const p = pendingLinks.get(userId);
+  if (!p) throw new Error('No pending link — run `/spotify link` first.');
+
+  let u;
+  try { u = new URL(redirectUrl.trim()); } catch { throw new Error('That doesn\'t look like the redirect URL.'); }
+  if (u.hostname !== '127.0.0.1' || !u.pathname.startsWith('/login') || !u.searchParams.get('code')) {
+    throw new Error('Paste the FULL `http://127.0.0.1:…/login?code=…` URL from your browser\'s address bar.');
+  }
+  // Complete the handshake on the interactive instance (it owns u.port on the server).
+  await httpGetText(`http://127.0.0.1:${u.port}${u.pathname}${u.search}`).catch(() => {});
+
+  // Wait for credentials to persist
+  let creds = null;
+  const sp = path.join(p.dir, 'state.json');
+  for (let i = 0; i < 24; i++) { await sleep(300); if (fs.existsSync(sp)) { const c = fs.readFileSync(sp, 'utf8'); if (c.length > 50) { creds = c; break; } } }
+  if (!creds) throw new Error('Authorization didn\'t complete — try `/spotify link` again.');
+
+  let username = null;
+  try { const st = JSON.parse(await httpGetText(`http://127.0.0.1:${p.apiPort}/status`)); username = st.username || null; } catch {}
+
+  const enc = encryption.encrypt(creds);
+  await pool.execute(
+    `INSERT INTO spotify_links (user_id, credentials, spotify_user, device_name) VALUES (?,?,?,?)
+     ON DUPLICATE KEY UPDATE credentials=VALUES(credentials), spotify_user=VALUES(spotify_user), linked_at=NOW()`,
+    [userId, JSON.stringify(enc), username, 'CertiFried']
+  );
+
+  try { p.proc.kill('SIGKILL'); } catch {}
+  pendingLinks.delete(userId);
+  return { username };
+}
+
+export async function unlink(userId) {
+  teardownUser(userId);
+  const p = pendingLinks.get(userId);
+  if (p) { try { p.proc.kill('SIGKILL'); } catch {} pendingLinks.delete(userId); }
+  await pool.execute('DELETE FROM spotify_links WHERE user_id = ?', [userId]).catch(() => {});
+}
+
+function httpGetText(url) {
+  return new Promise((resolve, reject) => {
+    const r = http.get(url, { timeout: 10000 }, (res) => { let s = ''; res.on('data', c => s += c); res.on('end', () => resolve(s)); });
+    r.on('error', reject);
+    r.on('timeout', () => r.destroy(new Error('timeout')));
+  });
 }

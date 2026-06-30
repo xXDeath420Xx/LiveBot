@@ -6,8 +6,9 @@ import {
 } from 'discord-player';
 import { parseSpotifyUrl } from '../../core/spotify-resolver.js';
 import {
-  pickSession, acquire, release, play as glrPlay, pause as glrPause,
+  getSessionForUser, acquire, release, play as glrPlay, pause as glrPause,
   resume as glrResume, stop as glrStop, getStatus, openPcmStream,
+  startLink, finishLink, unlink, isLinked,
 } from '../../core/spotify-connect-manager.js';
 import logger from '../../utils/logger.js';
 
@@ -51,7 +52,12 @@ export default {
     .addSubcommand(s => s.setName('pause').setDescription('Pause Spotify playback'))
     .addSubcommand(s => s.setName('resume').setDescription('Resume Spotify playback'))
     .addSubcommand(s => s.setName('stop').setDescription('Stop and leave'))
-    .addSubcommand(s => s.setName('nowplaying').setDescription('What\'s playing on Spotify')),
+    .addSubcommand(s => s.setName('nowplaying').setDescription('What\'s playing on Spotify'))
+    .addSubcommand(s => s.setName('link').setDescription('Link YOUR Spotify Premium account so playback uses it'))
+    .addSubcommand(s => s.setName('finish')
+      .setDescription('Finish linking: paste the http://127.0.0.1… URL your browser landed on')
+      .addStringOption(o => o.setName('url').setDescription('The 127.0.0.1 redirect URL from your browser').setRequired(true)))
+    .addSubcommand(s => s.setName('unlink').setDescription('Unlink your Spotify account')),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -68,6 +74,33 @@ export default {
       return interaction.reply({ content: t ? `🎵 **${t.name}** — ${(t.artist_names || []).join(', ')}` : 'Loading…', ephemeral: true });
     }
 
+    // ── Account linking (Spoticord model) ──
+    if (sub === 'link') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const url = await startLink(interaction.user.id);
+        return interaction.editReply(
+          '**Link your own Spotify Premium** (one-time):\n' +
+          '1️⃣ Open this in a browser signed into **your** Spotify:\n' + url + '\n\n' +
+          '2️⃣ Click **Agree**. Your browser will then land on a `http://127.0.0.1:…` page that **won\'t load — that\'s expected.**\n' +
+          '3️⃣ Copy that full address-bar URL and run **`/spotify finish`** with it.\n\n' +
+          '_Premium required for on-demand playback. Your login is stored **encrypted**; `/spotify unlink` removes it._'
+        );
+      } catch (e) { return interaction.editReply(`Couldn't start linking: ${e.message}`); }
+    }
+    if (sub === 'finish') {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { username } = await finishLink(interaction.user.id, interaction.options.getString('url'));
+        return interaction.editReply(`✅ Linked${username ? ` **${username}**` : ''}! Your Spotify now plays through **your own account**. Just use \`/music play <spotify link>\` or \`/spotify play\`.`);
+      } catch (e) { return interaction.editReply(`❌ ${e.message}`); }
+    }
+    if (sub === 'unlink') {
+      await interaction.deferReply({ ephemeral: true });
+      await unlink(interaction.user.id);
+      return interaction.editReply('Unlinked your Spotify account. You\'ll use the shared account again.');
+    }
+
     // play
     const url = interaction.options.getString('url');
     const parsed = parseSpotifyUrl(url);
@@ -78,10 +111,13 @@ export default {
 
     await interaction.deferReply();
 
-    const session = pickSession(interaction.user.id);
-    if (!session) return interaction.editReply('No Spotify account is linked to the bot yet.');
+    const session = await getSessionForUser(interaction.user.id);
+    if (!session) return interaction.editReply('No Spotify account is available. Link yours with `/spotify link`.');
     if (!acquire(session, guildId)) {
-      return interaction.editReply('The shared Spotify account is busy in another server right now. (Link your own with `/spotify` once that\'s live.)');
+      const mine = await isLinked(interaction.user.id);
+      return interaction.editReply(mine
+        ? 'Your Spotify account is already streaming in another server. One stream per account.'
+        : 'The shared Spotify account is busy in another server. **Link your own** with `/spotify link` so you\'re never blocked.');
     }
 
     try {

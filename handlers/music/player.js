@@ -2,7 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import { checkMusicPermissions, useMainPlayer, getLeaveOptions } from '../../utils/music_helpers.js';
 import db from '../../utils/db.js';
 import {
-  pickSession, acquire, release, streamTrack, uriFromUrl,
+  getSessionForUser, acquire, release, streamTrack, uriFromUrl,
 } from '../../core/spotify-connect-manager.js';
 import logger from '../../utils/logger.js';
 
@@ -16,7 +16,7 @@ async function spotifyConnectStream(track, _queryType, queue) {
   try {
     const uri = track.metadata?.spotifyUri || uriFromUrl(track.url);
     if (!uri || !uri.startsWith('spotify:track:')) return null; // only single tracks
-    const session = pickSession(track.requestedBy?.id);
+    const session = await getSessionForUser(track.requestedBy?.id);
     if (!session) return null;
     if (!acquire(session, queue.guild.id)) return null; // account busy → YouTube fallback
     logger.info(`[SpotifyConnect] /music routing "${track.title}" through go-librespot (${uri})`);
