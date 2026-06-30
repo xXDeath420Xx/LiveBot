@@ -8,7 +8,7 @@ import { parseSpotifyUrl } from '../../core/spotify-resolver.js';
 import {
   getSessionForUser, acquire, release, play as glrPlay, pause as glrPause,
   resume as glrResume, stop as glrStop, getStatus, openPcmStream,
-  startLink, finishLink, unlink, isLinked,
+  startLink, finishLink, unlink, isLinked, isOwnerUser,
 } from '../../core/spotify-connect-manager.js';
 import logger from '../../utils/logger.js';
 
@@ -113,8 +113,9 @@ export default {
 
     const session = await getSessionForUser(interaction.user.id);
     if (!session) return interaction.editReply('No Spotify account is available. Link yours with `/spotify link`.');
-    if (!acquire(session, guildId)) {
-      const mine = await isLinked(interaction.user.id);
+    const owner = isOwnerUser(interaction.user.id);
+    if (!acquire(session, guildId, { owner, stopHolder: () => teardown(guildId) })) {
+      const mine = owner || await isLinked(interaction.user.id);
       return interaction.editReply(mine
         ? 'Your Spotify account is already streaming in another server. One stream per account.'
         : 'The shared Spotify account is busy in another server. **Link your own** with `/spotify link` so you\'re never blocked.');

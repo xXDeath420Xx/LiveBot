@@ -24,6 +24,9 @@ const GLR_BIN = '/home/death/go-librespot/bin/go-librespot';
 const ACCOUNTS_DIR = '/home/death/go-librespot/accounts';
 const USER_IDLE_MS = 5 * 60 * 1000; // tear down an idle user instance after 5 min
 let nextUserPort = 3700;            // owner is 3678; per-user instances 3700+
+const BOT_OWNER_ID = process.env.BOT_OWNER_ID || '365905620060340224';
+
+export function isOwnerUser(userId) { return !!userId && String(userId) === String(BOT_OWNER_ID); }
 
 const sessions = new Map(); // id -> { id, port, fifo, busyGuildId }
 
@@ -67,13 +70,36 @@ export function pickSession(/* userId */) {
   return owner || null;
 }
 
-export function acquire(session, guildId) {
-  if (session.busyGuildId && session.busyGuildId !== guildId) return false;
+/**
+ * Acquire a session for a guild. Opts:
+ *   owner=true       — this is the bot owner; PREEMPT a non-owner holder (priority on
+ *                      their own account, in any server).
+ *   stopHolder=fn    — how to stop THIS guild's playback; stored so a later owner
+ *                      preemption can cleanly bump us.
+ * Returns false when the session is taken and we can't preempt (non-owner, or it's
+ * the owner already streaming elsewhere — one stream per account, even for the owner).
+ */
+export function acquire(session, guildId, opts = {}) {
+  const { owner = false, stopHolder = null } = opts;
+  if (session.busyGuildId && session.busyGuildId !== guildId) {
+    if (owner && !session.ownerHeld) {
+      logger.info(`[SpotifyConnect] owner preempting ${session.id} from guild ${session.busyGuildId}`);
+      try { session.activeStream?.kill('SIGKILL'); } catch {} // free the FIFO immediately
+      session.activeStream = null;
+      Promise.resolve().then(() => session.stopHolder?.()).catch(() => {}); // stop their queue
+    } else {
+      return false;
+    }
+  }
   session.busyGuildId = guildId;
+  session.ownerHeld = owner;
+  session.stopHolder = stopHolder;
   return true;
 }
 export function release(session, guildId) {
-  if (!guildId || session.busyGuildId === guildId) session.busyGuildId = null;
+  if (!guildId || session.busyGuildId === guildId) {
+    session.busyGuildId = null; session.ownerHeld = false; session.stopHolder = null;
+  }
 }
 export function isFree(session) { return !session.busyGuildId; }
 
@@ -122,6 +148,8 @@ export async function streamTrack(session, uri) {
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
   ff.stderr.on('data', () => {});
   ff.on('error', e => logger.error(`[SpotifyConnect] streamTrack ffmpeg error: ${e.message}`));
+  session.activeStream = ff; // so an owner preemption can free the FIFO instantly
+  ff.on('exit', () => { if (session.activeStream === ff) session.activeStream = null; });
 
   let ws = null, started = false, ended = false;
   const endStream = (why) => {
@@ -148,7 +176,11 @@ export async function streamTrack(session, uri) {
 /** Release whatever session a guild is holding (queue end / disconnect / stop). */
 export function releaseGuild(guildId) {
   for (const s of sessions.values()) {
-    if (s.busyGuildId === guildId) { pause(s).catch(() => {}); s.busyGuildId = null; markUsed(s.id); }
+    if (s.busyGuildId === guildId) {
+      pause(s).catch(() => {});
+      s.busyGuildId = null; s.ownerHeld = false; s.stopHolder = null; s.activeStream = null;
+      markUsed(s.id);
+    }
   }
 }
 
@@ -213,8 +245,14 @@ async function spawnUserSession(userId, credentialsJson) {
   return null;
 }
 
-/** Account selection: the user's OWN linked account → owner shared fallback → null. */
+/**
+ * Account selection:
+ *   - the bot OWNER always gets the owner account (reserved + priority everywhere);
+ *   - a linked user gets their OWN account (spawned on demand);
+ *   - everyone else falls back to the owner account (shared), which the owner can preempt.
+ */
 export async function getSessionForUser(userId) {
+  if (isOwnerUser(userId)) return sessions.get('owner') || null;
   if (userId) {
     const id = `u_${userId}`;
     const existing = sessions.get(id);
