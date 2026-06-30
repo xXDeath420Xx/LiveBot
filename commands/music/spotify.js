@@ -85,15 +85,12 @@ export default {
     }
 
     try {
-      // Fresh start for this guild
       await teardown(guildId);
       acquire(session, guildId);
 
-      // 1) tell go-librespot to play; 2) open the audio pipe (ffmpeg blocks on read
-      //    until go-librespot opens the write side, so order is play → open).
-      const pr = await glrPlay(session, uriFor(parsed));
-      if (pr.code >= 400) { release(session, guildId); return interaction.editReply('Spotify wouldn\'t start that link (is it valid/public?).'); }
-
+      // Reader-first ordering: open ffmpeg on the FIFO (it waits for go-librespot to
+      // start writing), join the VC, THEN trigger playback — so audio flows from the
+      // first sample with no clipped intro.
       const ff = openPcmStream(session);
       const resource = createAudioResource(ff.stdout, { inputType: StreamType.Raw });
       const player = createAudioPlayer();
@@ -105,19 +102,25 @@ export default {
 
       connection.subscribe(player);
       player.play(resource);
-
       player.on('error', err => logger.error(`[SpotifyConnect] player error in ${guildId}: ${err.message}`));
       connection.on('stateChange', (_o, ns) => { if (ns.status === 'disconnected' || ns.status === 'destroyed') teardown(guildId); });
-
       live.set(guildId, { connection, player, ff, session, channelId: vc.id });
 
-      // brief settle, then report what Spotify says is playing
-      await new Promise(r => setTimeout(r, 1500));
-      const st = await getStatus(session).catch(() => null);
-      const t = st?.track;
-      return interaction.editReply(t
-        ? `🎧 **Spotify-direct** now playing **${t.name}** — ${(t.artist_names || []).join(', ')}\n_Real Spotify audio. \`/spotify stop\` to end._`
-        : `🎧 Spotify-direct started. _If you don't hear audio in a few seconds, \`/spotify stop\` and retry._`);
+      // Start playback. go-librespot's /player/play returns HTTP 500 EVEN ON SUCCESS,
+      // so we ignore the code and confirm via the player STATE instead.
+      await glrPlay(session, uriFor(parsed)).catch(() => {});
+      let st = null;
+      for (let i = 0; i < 8; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        st = await getStatus(session).catch(() => null);
+        if (st && st.track && !st.stopped) break;
+      }
+      if (!st || !st.track || st.stopped) {
+        await teardown(guildId);
+        return interaction.editReply('Spotify wouldn\'t start that link (is it valid/public?).');
+      }
+      const t = st.track;
+      return interaction.editReply(`🎧 **Spotify-direct** now playing **${t.name}** — ${(t.artist_names || []).join(', ')}\n_Real Spotify audio. \`/spotify stop\` to end._`);
     } catch (err) {
       logger.error(`[SpotifyConnect] play failed in ${guildId}: ${err.message}`);
       await teardown(guildId);
