@@ -7,6 +7,7 @@ import express from 'express';
 import pool from '../../../../utils/db.js';
 import logger from '../../../../utils/logger.js';
 import socketService from '../../../services/SocketService.js';
+import * as rumbleApi from '../../../../utils/platforms/rumble.js';
 
 const router = express.Router({ mergeParams: true });
 
@@ -27,7 +28,8 @@ router.get('/config', async (req, res) => {
             success: true,
             config: {
                 announcement_channel_id: config[0]?.announcement_channel_id || null,
-                live_role_id: config[0]?.live_role_id || null
+                live_role_id: config[0]?.live_role_id || null,
+                stream_ignored_roles: config[0]?.stream_ignored_roles ? JSON.parse(config[0].stream_ignored_roles) : []
             }
         });
     } catch (error) {
@@ -43,7 +45,10 @@ router.get('/config', async (req, res) => {
 router.put('/config', async (req, res) => {
     try {
         const { guildId } = req.params;
-        const { announcement_channel_id, live_role_id } = req.body;
+        const { announcement_channel_id, live_role_id, stream_ignored_roles } = req.body;
+        const ignoredRolesJson = stream_ignored_roles
+            ? JSON.stringify(Array.isArray(stream_ignored_roles) ? stream_ignored_roles : [stream_ignored_roles])
+            : null;
 
         // Check if this guild previously had no announcement channel
         const [prevConfig] = await pool.execute(
@@ -53,12 +58,13 @@ router.put('/config', async (req, res) => {
         const hadChannel = prevConfig.length > 0 && prevConfig[0].announcement_channel_id;
 
         await pool.execute(`
-            INSERT INTO guilds (guild_id, announcement_channel_id, live_role_id)
-            VALUES (?, ?, ?)
+            INSERT INTO guilds (guild_id, announcement_channel_id, live_role_id, stream_ignored_roles)
+            VALUES (?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 announcement_channel_id = VALUES(announcement_channel_id),
-                live_role_id = VALUES(live_role_id)
-        `, [guildId, announcement_channel_id || null, live_role_id || null]);
+                live_role_id = VALUES(live_role_id),
+                stream_ignored_roles = VALUES(stream_ignored_roles)
+        `, [guildId, announcement_channel_id || null, live_role_id || null, ignoredRolesJson]);
 
         // If a channel was just set (wasn't configured before), cross-pollinate existing streamers
         if (announcement_channel_id && !hadChannel) {
@@ -122,17 +128,26 @@ router.post('/subscriptions', async (req, res) => {
             return res.status(400).json({ error: 'Platform and username are required' });
         }
 
+        // Rumble is case-sensitive in its channel URLs, so store the canonical name
+        // rather than a lowercased one — and reject channels that don't exist.
+        let storedName = username.toLowerCase();
+        if (platform === 'rumble') {
+            const v = await rumbleApi.validateUser(username);
+            if (!v) return res.status(400).json({ error: `Rumble channel "${username}" not found` });
+            storedName = v.canonicalUsername;
+        }
+
         // Find or create streamer
         let [streamer] = await pool.execute(
             'SELECT streamer_id FROM streamers WHERE platform = ? AND username = ?',
-            [platform, username.toLowerCase()]
+            [platform, storedName]
         );
 
         let streamerId;
         if (streamer.length === 0) {
             const [result] = await pool.execute(
                 'INSERT INTO streamers (platform, username) VALUES (?, ?)',
-                [platform, username.toLowerCase()]
+                [platform, storedName]
             );
             streamerId = result.insertId;
         } else {

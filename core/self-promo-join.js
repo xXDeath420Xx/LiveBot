@@ -10,13 +10,30 @@
  */
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import encryption from '../utils/encryption.js';
 import { parseStreamUrl } from '../utils/stream-url-parser.js';
 import {
   validatePlatformUser, isStreamerAlreadyTracked, getTeamSubscriptionId, createStreamerAndSubscription,
 } from './self-promo-handler.js';
 import { syncLinkedPlatforms } from './streamer-sync.js';
+import * as rumbleApi from '../utils/platforms/rumble.js';
 
 const keyOf = (platform, username) => `${platform}:${String(username).toLowerCase()}`;
+
+// Rumble can't be verified from a URL (Cloudflare-blocked) — it needs the
+// streamer's Live Stream API key, collected in the form's optional field and
+// stored encrypted so utils/platforms/rumble.js can look it up by username.
+async function storeRumbleKey(username, key, guildId, addedBy) {
+  await pool.execute(`CREATE TABLE IF NOT EXISTS rumble_stream_keys (
+    rumble_username VARCHAR(255) NOT NULL PRIMARY KEY, api_key TEXT NOT NULL,
+    discord_user_id VARCHAR(20) NULL, added_by VARCHAR(20) NULL, guild_id VARCHAR(20) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`);
+  await pool.execute(
+    `INSERT INTO rumble_stream_keys (rumble_username, api_key, discord_user_id, added_by, guild_id)
+     VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE api_key=VALUES(api_key), discord_user_id=VALUES(discord_user_id), guild_id=VALUES(guild_id)`,
+    [username, JSON.stringify(encryption.encrypt(key)), addedBy || null, addedBy || null, guildId || null]
+  );
+}
 
 /** Pure: parse a pasted block (links one per line / space / comma) → deduped {platform, username}. */
 export function parseLinksBlock(text) {
@@ -69,7 +86,52 @@ export async function getJoinConfig(guildId) {
   return null;
 }
 
-async function addOne(guild, member, channelId, platform, username) {
+/**
+ * Tiered variant: resolve the join config for a SPECIFIC announcement channel
+ * (e.g. per-role signup panels routing to mod-live / admin-live / self-promo).
+ * Uses the matching guild_streamer_auto_track row (if any) for its level/role
+ * gate, and always announces to the passed channel. Falls back to no gate when
+ * there's no explicit auto-track row for that channel — the panel's own channel
+ * visibility is the access control in that case.
+ */
+export async function getJoinConfigForChannel(guildId, channelId) {
+  if (!channelId) return getJoinConfig(guildId);
+  const [at] = await pool.execute(
+    'SELECT min_level, role_id FROM guild_streamer_auto_track WHERE guild_id = ? AND announcement_channel_id = ? AND enabled = 1 LIMIT 1',
+    [guildId, channelId]
+  );
+  let minLevel = 0;
+  if (at.length) {
+    minLevel = Number(at[0].min_level) || 0;
+    if (at[0].role_id) {
+      const [rm] = await pool.execute(
+        'SELECT MAX(min_level) AS lvl FROM reaction_role_mappings WHERE role_id = ?',
+        [at[0].role_id]
+      );
+      minLevel = Math.max(minLevel, Number(rm[0]?.lvl) || 0);
+    }
+  }
+  return { channelId, minLevel };
+}
+
+async function addOne(guild, member, channelId, platform, username, opts = {}) {
+  // Rumble is verified from its channel page like everything else. A key is only
+  // stored if the member volunteered one (it serves as a fallback for detection).
+  if (platform === 'rumble') {
+    const v = await rumbleApi.validateUser(username);
+    if (!v) return { status: 'invalid', platform, username };
+    const { canonicalUsername, platformUserId } = v;
+    const key = opts.rumbleKey;
+    if (key) {
+      const kv = await rumbleApi.validateKey(key);
+      if (kv.ok) await storeRumbleKey(canonicalUsername, key, guild.id, member.id);
+    }
+    const { tracked } = await isStreamerAlreadyTracked(guild.id, 'rumble', platformUserId);
+    if (tracked) return { status: 'already', platform, username: canonicalUsername };
+    const teamId = await getTeamSubscriptionId(guild.id, member.id).catch(() => null);
+    const ok = await createStreamerAndSubscription(guild.id, 'rumble', platformUserId, canonicalUsername, member.id, channelId, teamId);
+    return { status: ok ? 'added' : 'error', platform, username: canonicalUsername };
+  }
   const validated = await validatePlatformUser(platform, username);
   if (!validated) return { status: 'invalid', platform, username };
   const { tracked } = await isStreamerAlreadyTracked(guild.id, platform, validated.platformUserId);
@@ -82,11 +144,11 @@ async function addOne(guild, member, channelId, platform, username) {
 }
 
 /** Add the pasted links for this member, then sync their other linked platforms. */
-export async function joinFromText(guild, member, channelId, text) {
+export async function joinFromText(guild, member, channelId, text, opts = {}) {
   const entries = parseLinksBlock(text);
   const results = [];
   for (const e of entries) {
-    try { results.push(await addOne(guild, member, channelId, e.platform, e.username)); }
+    try { results.push(await addOne(guild, member, channelId, e.platform, e.username, opts)); }
     catch (err) {
       logger.warn('[SelfPromoJoin] addOne failed', { error: err.message, platform: e.platform, username: e.username });
       results.push({ status: 'error', platform: e.platform, username: e.username });

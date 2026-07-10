@@ -17,6 +17,8 @@ import * as youtubeApi from '../../utils/platforms/youtube.js';
 import * as facebookApi from '../../utils/platforms/facebook.js';
 import * as tiktokApi from '../../utils/platforms/tiktok.js';
 import * as trovoApi from '../../utils/platforms/trovo.js';
+import * as rumbleApi from '../../utils/platforms/rumble.js';
+import encryption from '../../utils/encryption.js';
 
 export const platformChoices = [
     { name: 'Twitch', value: 'twitch' },
@@ -24,7 +26,8 @@ export const platformChoices = [
     { name: 'YouTube', value: 'youtube' },
     { name: 'TikTok', value: 'tiktok' },
     { name: 'Trovo', value: 'trovo' },
-    { name: 'Facebook', value: 'facebook' }
+    { name: 'Facebook', value: 'facebook' },
+    { name: 'Rumble', value: 'rumble' }
 ];
 
 const platformModules = {
@@ -33,8 +36,29 @@ const platformModules = {
     youtube: youtubeApi,
     facebook: facebookApi,
     tiktok: tiktokApi,
-    trovo: trovoApi
+    trovo: trovoApi,
+    rumble: rumbleApi
 };
+
+// Rumble is the only platform whose live status can't be derived from a username
+// (its pages are Cloudflare-blocked) — it needs a per-streamer Live Stream API key.
+// Store it encrypted, keyed by username, so utils/platforms/rumble.js can look it up.
+async function storeRumbleKey(username, key, guildId, addedBy) {
+    await pool.execute(`CREATE TABLE IF NOT EXISTS rumble_stream_keys (
+        rumble_username VARCHAR(255) NOT NULL PRIMARY KEY,
+        api_key TEXT NOT NULL,
+        discord_user_id VARCHAR(20) NULL,
+        added_by VARCHAR(20) NULL,
+        guild_id VARCHAR(20) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`);
+    await pool.execute(
+        `INSERT INTO rumble_stream_keys (rumble_username, api_key, added_by, guild_id)
+         VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE api_key=VALUES(api_key), added_by=VALUES(added_by), guild_id=VALUES(guild_id)`,
+        [username, JSON.stringify(encryption.encrypt(key)), addedBy || null, guildId || null]
+    );
+}
 
 export async function handleSetup(interaction) {
     await interaction.deferReply({ ephemeral: true });
@@ -176,6 +200,24 @@ export async function handleAdd(interaction) {
             } else if (platform === 'youtube') {
                 platformUserId = username;
                 canonicalUsername = username;
+            } else if (platform === 'rumble') {
+                // No API key required — the channel page carries live status.
+                const v = await rumbleApi.validateUser(username);
+                if (!v) {
+                    return await interaction.editReply(`Rumble channel "${username}" not found. Use the name from \`rumble.com/user/<name>\` or \`rumble.com/c/<name>\`.`);
+                }
+                platformUserId = v.platformUserId;
+                canonicalUsername = v.canonicalUsername;
+
+                // A key is optional, and only used as a fallback if the scrape ever fails.
+                const apiKey = interaction.options.getString('api_key')?.trim();
+                if (apiKey) {
+                    const kv = await rumbleApi.validateKey(apiKey);
+                    if (!kv.ok) {
+                        return await interaction.editReply(`That Rumble API key didn't work: **${kv.reason}**. You can leave \`api_key\` empty — it's no longer required.`);
+                    }
+                    await storeRumbleKey(canonicalUsername, apiKey, interaction.guild.id, interaction.user.id);
+                }
             } else {
                 platformUserId = username;
                 canonicalUsername = username;
@@ -935,6 +977,14 @@ export async function handleMassAdd(interaction) {
                     }
                     platformUserId = String(user.id);
                     canonicalUsername = user.slug || username;
+                } else if (platform === 'rumble') {
+                    const v = await rumbleApi.validateUser(username);
+                    if (!v) {
+                        failed.push(`${username} (not found)`);
+                        continue;
+                    }
+                    platformUserId = v.platformUserId;
+                    canonicalUsername = v.canonicalUsername;
                 } else {
                     platformUserId = username;
                 }

@@ -8,11 +8,17 @@
  */
 import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from 'discord.js';
 import logger from '../../utils/logger.js';
-import { getJoinConfig } from '../../core/self-promo-join.js';
+import { getJoinConfig, getJoinConfigForChannel } from '../../core/self-promo-join.js';
 
 export async function handleSelfPromoJoin(interaction) {
   try {
-    const cfg = await getJoinConfig(interaction.guildId);
+    // Optional tier suffix: `selfpromo_join:<announcementChannelId>` routes this
+    // panel to a specific live channel (mod-live / admin-live). Bare
+    // `selfpromo_join` uses the guild-default self-promo config.
+    const targetChannelId = interaction.customId.split(':')[1] || null;
+    const cfg = targetChannelId
+      ? await getJoinConfigForChannel(interaction.guildId, targetChannelId)
+      : await getJoinConfig(interaction.guildId);
     if (!cfg) {
       return interaction.reply({ content: 'Self-promo isn’t set up in this server yet.', ephemeral: true });
     }
@@ -32,15 +38,19 @@ export async function handleSelfPromoJoin(interaction) {
       }
     }
 
-    const modal = new ModalBuilder().setCustomId('selfpromo_join_modal').setTitle('Add your stream(s)');
+    const modal = new ModalBuilder()
+      .setCustomId(targetChannelId ? `selfpromo_join_modal:${targetChannelId}` : 'selfpromo_join_modal')
+      .setTitle('Add your stream(s)');
     const input = new TextInputBuilder()
       .setCustomId('links')
       .setLabel('Paste your channel link(s) — one per line')
       .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('https://twitch.tv/you\nhttps://kick.com/you\nhttps://youtube.com/@you\nhttps://trovo.live/s/you')
+      .setPlaceholder('https://twitch.tv/you\nhttps://kick.com/you\nhttps://youtube.com/@you\nhttps://rumble.com/user/you')
       .setRequired(true)
       .setMaxLength(1000);
-    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(input),
+    );
     await interaction.showModal(modal);
   } catch (err) {
     logger.error('[SelfPromoJoin] button error', { error: err.message });

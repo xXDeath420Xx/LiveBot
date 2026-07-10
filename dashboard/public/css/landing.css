@@ -17,6 +17,7 @@
     --youtube-color: #FF0000;
     --tiktok-color: #00f2ea;
     --trovo-color: #21d464;
+    --rumble-color: #85c742;
 }
 
 body, html {
@@ -190,6 +191,7 @@ a:hover {
 .platform-pill.platform-youtube { background-color: var(--youtube-color); color: #fff; }
 .platform-pill.platform-tiktok { background-color: var(--tiktok-color); color: #000; }
 .platform-pill.platform-trovo { background-color: var(--trovo-color); color: #000; }
+.platform-pill.platform-rumble { background-color: var(--rumble-color); color: #000; }
 
 .featured-streamer-card { display: flex; align-items: center; background-color: var(--background-tertiary); border-left: 4px solid var(--success-color); padding: 15px; border-radius: 8px; margin-bottom: 12px; text-align: left; }
 
@@ -199,6 +201,7 @@ a:hover {
 .featured-streamer-card.platform-youtube { border-left-color: var(--youtube-color); }
 .featured-streamer-card.platform-tiktok { border-left-color: var(--tiktok-color); }
 .featured-streamer-card.platform-trovo { border-left-color: var(--trovo-color); }
+.featured-streamer-card.platform-rumble { border-left-color: var(--rumble-color); }
 
 
 .featured-avatar { width: 48px; height: 48px; border-radius: 50%; margin-right: 15px; flex-shrink: 0; }
@@ -212,5 +215,6 @@ a:hover {
 .featured-info .live-platform-pill.platform-youtube { background-color: var(--youtube-color); color: #fff; }
 .featured-info .live-platform-pill.platform-tiktok { background-color: var(--tiktok-color); color: #000; }
 .featured-info .live-platform-pill.platform-trovo { background-color: var(--trovo-color); color: #000; }
+.featured-info .live-platform-pill.platform-rumble { background-color: var(--rumble-color); color: #000; }
 
 .featured-info .game { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.9em; color: var(--text-muted); }

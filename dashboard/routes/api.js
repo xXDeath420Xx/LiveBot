@@ -419,7 +419,8 @@ function getPlatformUrl(platform, username) {
     kick: `https://kick.com/${username}`,
     trovo: `https://trovo.live/${username}`,
     tiktok: `https://tiktok.com/@${username}`,
-    facebook: `https://facebook.com/${username}`
+    facebook: `https://facebook.com/${username}`,
+    rumble: `https://rumble.com/user/${username}`
   };
   return urls[platform.toLowerCase()] || `#`;
 }

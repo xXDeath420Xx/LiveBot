@@ -12,6 +12,7 @@
     kick:      { icon: '<b>K</b>',                          cls: 'platform-kick' },
     trovo:     { icon: '<b>T</b>',                          cls: 'platform-trovo' },
     tiktok:    { icon: '<i class="fab fa-tiktok"></i>',     cls: 'platform-tiktok' },
+    rumble:    { icon: '<b>R</b>',                          cls: 'platform-rumble' },
     facebook:  { icon: '<i class="fab fa-facebook-f"></i>', cls: 'platform-facebook' },
     instagram: { icon: '<i class="fab fa-instagram"></i>',  cls: 'platform-instagram' },
     twitter:   { icon: '<i class="fab fa-x-twitter"></i>',  cls: 'platform-twitter' },

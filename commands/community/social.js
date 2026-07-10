@@ -194,6 +194,9 @@ export default {
                         .addUserOption(opt =>
                             opt.setName('discord-user').setDescription('Link to a Discord user (optional)')
                         )
+                        .addStringOption(opt =>
+                            opt.setName('api_key').setDescription('Rumble ONLY: the streamer\'s Live Stream API key (rumble.com/account/livestream-api)')
+                        )
                 )
                 .addSubcommand(sub =>
                     sub.setName('remove')

@@ -5,6 +5,7 @@ import * as facebookApi from '../utils/platforms/facebook.js';
 import * as youtubeApi from '../utils/platforms/youtube.js';
 import * as tiktokApi from '../utils/platforms/tiktok.js';
 import * as trovoApi from '../utils/platforms/trovo-api.js';
+import * as rumbleApi from '../utils/platforms/rumble.js';
 import logger from '../utils/logger.js';
 import { updateAnnouncement, deleteAnnouncement, editAnnouncementStreamEnded } from '../utils/announcer.js';
 import platformCache from '../utils/platformCache.js';
@@ -106,6 +107,13 @@ const OFFLINE_GRACE_PERIOD = 6;
 // Only applies to announcements that have accumulated offline checks — NOT live streams.
 const MAX_ANNOUNCEMENT_AGE_MINUTES = 30; // 30 minutes with offline checks = definitely offline
 
+// Hard ceiling for a single streamer's live check. The YouTube module drives a
+// headless browser (page.goto, 45s each, sometimes twice) and can occasionally
+// hang past its own timeouts; without this guard one stuck check freezes the whole
+// serial cycle and every streamer after it never gets checked. 90s comfortably
+// covers a legitimate two-goto YouTube check while still bounding a true hang.
+const PER_STREAMER_TIMEOUT_MS = 90_000;
+
 // Platform API modules mapping
 const platformModules = {
     twitch: twitchApi,
@@ -114,6 +122,7 @@ const platformModules = {
     youtube: youtubeApi,
     tiktok: tiktokApi,
     trovo: trovoApi,
+    rumble: rumbleApi,
 };
 
 // Tracks platforms we've already warned about as unsupported. Without this,
@@ -598,7 +607,7 @@ async function saveAnnouncementToDatabase(guildId, platform, username, channelId
         await connection.query(
             `INSERT INTO live_announcements (guild_id, platform, username, channel_id, message_id, streamer_id, discord_user_id, stream_started_at, offline_check_count, delete_on_end, edit_on_end, ping_message_id)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE message_id = VALUES(message_id), stream_started_at = VALUES(stream_started_at), offline_check_count = 0, delete_on_end = VALUES(delete_on_end), edit_on_end = VALUES(edit_on_end), ping_message_id = VALUES(ping_message_id), updated_at = CURRENT_TIMESTAMP`,
+             ON DUPLICATE KEY UPDATE message_id = VALUES(message_id), stream_started_at = VALUES(stream_started_at), offline_check_count = 0, delete_on_end = VALUES(delete_on_end), edit_on_end = VALUES(edit_on_end), ping_message_id = COALESCE(VALUES(ping_message_id), ping_message_id), updated_at = CURRENT_TIMESTAMP`,
             [guildId, platform, username, channelId, messageId, streamerId, discordUserId, mysqlDatetime, deleteOnEnd ? 1 : 0, editOnEnd ? 1 : 0, pingMessageId]
         );
     } catch (error) {
@@ -806,7 +815,24 @@ async function checkStreamers(client, cycleOptions = {}) {
                 streamer: streamerInfo.username,
                 platform: streamerInfo.platform
             });
-            await processUniqueStreamer(client, streamerInfo, subs, guildsMap, teamsMap, roleOperationsByGuild, shouldUpdateEmbeds);
+            // Per-streamer wall-clock guard. A single hanging check (e.g. a headless
+            // YouTube page.goto that never resolves) must NOT stall the whole cycle and
+            // starve every streamer after it in the list. Abandon it and move on.
+            try {
+                await Promise.race([
+                    processUniqueStreamer(client, streamerInfo, subs, guildsMap, teamsMap, roleOperationsByGuild, shouldUpdateEmbeds),
+                    new Promise((_, reject) => setTimeout(
+                        () => reject(new Error('per-streamer timeout')),
+                        PER_STREAMER_TIMEOUT_MS
+                    )),
+                ]);
+            } catch (err) {
+                logger.warn(`[Stream Manager] Skipped ${streamerInfo.username} (${streamerInfo.platform}) after ${PER_STREAMER_TIMEOUT_MS}ms: ${err.message}`, {
+                    category: "streams",
+                    streamer: streamerInfo.username,
+                    platform: streamerInfo.platform,
+                });
+            }
             logger.info(`[Stream Manager] Completed processing streamer ${processedCount}/${streamersToCheck.size}: ${streamerInfo.username}`, {
                 category: "streams",
                 progress: `${processedCount}/${streamersToCheck.size}`
@@ -1243,7 +1269,7 @@ async function processUniqueStreamer(
                         }
 
                         const guildSettings = guildOp.guildDefault;
-                        const existingAnnouncement = announcementData ? { message_id: announcementData.messageId } : null;
+                        const existingAnnouncement = announcementData ? { message_id: announcementData.messageId, ping_message_id: announcementData.pingMessageId || null } : null;
 
                         // If no existing announcement, check re-announcement cooldown first
                         // Prevents duplicates when Twitch API briefly flickers "offline" then back to "live"

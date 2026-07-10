@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { getCatalog } from '../core/command-catalog.js';
 import { PermissionsBitField, EmbedBuilder } from 'discord.js';
 import * as ejs from 'ejs';
 import fs from 'fs';
@@ -18,9 +19,11 @@ import { csrfProtection, csrfToken } from '../utils/csrf-protection.js';
 import { createSessionMiddleware, sessionActivityMiddleware } from './config/session.js';
 import ebookRecordRouter from './routes/ebook-record.js';
 import fourthwallWebhookRouter from './routes/webhooks/fourthwall.js';
+import kofiWebhookRouter from './routes/webhooks/kofi.js';
 import kickWebhooksRouter from './routes/kick-webhooks.js';
 import streamRouter from './routes/stream.js';
 import showcaseRouter from './routes/showcase.js';
+import spritesRouter from './routes/sprites.js';
 import streamInternalRouter from './routes/stream-internal.js';
 import streamConnectRouter from './routes/stream-connect.js';
 import { invalidateMusicConfigCache } from '../utils/music_helpers.js';
@@ -151,13 +154,19 @@ function start(botClient) {
         legacyHeaders: false,
         keyGenerator: getClientIp,
         skip: (req) => {
-            // Skip static assets and API routes (API has its own dedicated limiter)
+            // Skip static assets and API routes (API has its own dedicated limiter).
+            // /sprites is a public showcase — auth endpoints under /sprites/auth and
+            // /sprites/resync still get individually rate-limited by other layers
+            // (Epic side), and the /auth-prefixed authLimiter above covers actual
+            // login mutation paths. Throttling /sprites/u/<slug> here just blocks
+            // friendly profile views.
             return req.path.startsWith('/css') ||
                    req.path.startsWith('/js') ||
                    req.path.startsWith('/images') ||
                    req.path.startsWith('/ebook') ||
                    req.path.startsWith('/api') ||
-                   req.path.startsWith('/tokes-bot/api');
+                   req.path.startsWith('/tokes-bot/api') ||
+                   req.path.startsWith('/sprites');
         }
     });
     app.use(globalLimiter);
@@ -225,9 +234,17 @@ function start(botClient) {
     // Kick event webhooks — same pre-body-parser mount (RSA signature over raw bytes)
     app.use('/kick/webhooks', kickWebhooksRouter);
 
+    // Ko-fi webhook receiver — form-urlencoded, parsed by the router itself. No signature
+    // header exists; auth is the URL token + the verification_token inside the payload.
+    app.use('/webhooks/kofi', kofiWebhookRouter);
+
     // Creator Showcase — public tokenized HLS player + segment serving (no session auth;
     // access is gated by the per-playback signed token, not login).
     app.use('/', showcaseRouter);
+
+    // Fortnite Sprite Tracker — public; users connect their own Epic account (no Discord
+    // login). Epic session lives in req.session.epicAccountId; images served from public/sprites/img.
+    app.use('/sprites', spritesRouter);
 
     // Apply API rate limiter after passport so req.user is available for admin bypass
     app.use('/api', apiLimiter);
@@ -260,6 +277,7 @@ function start(botClient) {
             '/api/status',
             '/api/ebook/record',
             '/webhooks/fourthwall',
+            '/webhooks/kofi',
             '/manage',
             '/card',
             '/cards',
@@ -698,6 +716,14 @@ function start(botClient) {
                 commandCount: 0
             });
         }
+    });
+
+    // 4:20 world clock as a standalone OBS browser source (transparent, no auth).
+    // Drop the full URL into an OBS "Browser" source. Tunable via query string:
+    //   ?bg=dark|<hex>  ?accent=<hex>  ?accent2=<hex>  ?ticker=0  ?scale=1.4
+    app.get(['/420', '/420-clock'], (req, res) => {
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.render('fourtwenty-overlay');
     });
 
     app.get('/auth/discord', (req, res, next) => {
@@ -8839,32 +8865,22 @@ function start(botClient) {
         }
     });
 
-    // Commands page
+    // Commands page. Every field is derived from the live command collection by
+    // `core/command-catalog.js`, so the page cannot drift from what the bot actually does.
     app.get('/commands', (req, res) => {
-        const commands = [];
-        const categoriesSet = new Set();
-
-        if (client && client.commands) {
-            client.commands.forEach(cmd => {
-                const category = cmd.category || 'General';
-                categoriesSet.add(category);
-                commands.push({
-                    name: cmd.data ? cmd.data.name : cmd.name,
-                    description: cmd.data ? cmd.data.description : cmd.description,
-                    category: category,
-                    usage: cmd.usage || '',
-                    examples: cmd.examples || []
-                });
-            });
-        }
-
-        const categories = Array.from(categoriesSet).sort();
-        res.render('commands-tailwind', {
+        const catalog = getCatalog(client);
+        const categories = [...new Set(catalog.commands.map(c => c.category))].sort();
+        res.render('commands-catalog', {
             user: req.user,
             clientId: process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID,
-            commands: commands,
-            categories: categories
+            catalog,
+            categories
         });
+    });
+
+    // Same data as JSON, for anyone who would rather grep it than scroll it.
+    app.get('/api/commands', (req, res) => {
+        res.set('Cache-Control', 'public, max-age=300').json(getCatalog(client));
     });
 
     // Status page
@@ -8966,7 +8982,8 @@ function start(botClient) {
             kick: `https://kick.com/${username}`,
             trovo: `https://trovo.live/${username}`,
             tiktok: `https://tiktok.com/@${username}`,
-            facebook: `https://facebook.com/${username}`
+            facebook: `https://facebook.com/${username}`,
+            rumble: `https://rumble.com/user/${username}`
         };
         return urls[platform.toLowerCase()] || `#`;
     }
