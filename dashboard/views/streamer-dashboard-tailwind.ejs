@@ -105,6 +105,7 @@
         .platform-youtube { background: #FF0000; }
         .platform-tiktok { background: #000; border: 1px solid #FE2C55; }
         .platform-trovo { background: #19D760; }
+        .platform-rumble { background: #85c742; }
         .platform-facebook { background: #1877F2; }
         .platform-instagram { background: linear-gradient(45deg, #F58529, #DD2A7B, #8134AF); }
 
@@ -179,6 +180,7 @@
                 <a href="/">Home</a>
                 <a href="/servers">Servers</a>
                 <a href="/commands">Commands</a>
+                <a href="/cards">Cards</a>
                 <a href="/status">Status</a>
             </div>
             <% if (user) { %>
@@ -211,6 +213,7 @@
             <a href="/">Home</a>
             <a href="/servers">Servers</a>
             <a href="/commands">Commands</a>
+                <a href="/cards">Cards</a>
             <a href="/status">Status</a>
             <% if (user) { %>
                 <a href="/profile">Profile</a>
@@ -315,6 +318,7 @@
         <div class="container">
             <div class="footer-links">
                 <a href="/commands" class="footer-link">Commands</a>
+                <a href="/cards" class="footer-link">Cards</a>
                 <a href="/status" class="footer-link">Status</a>
                 <a href="/docs" class="footer-link">Documentation</a>
                 <a href="/terms" class="footer-link">Terms</a>
@@ -419,6 +423,9 @@
                 platformIconHtml = '<img src="/images/kick.png" alt="Kick">';
             } else if (platform === 'trovo') {
                 platformIconHtml = '<img src="/images/trovo.png" alt="Trovo">';
+            } else if (platform === 'rumble') {
+                // No Font Awesome glyph and no bundled logo for Rumble — use a lettermark.
+                platformIconHtml = '<b>R</b>';
             } else {
                 platformIconHtml = `<i class="${platformIcons[platform] || 'fas fa-video'}"></i>`;
             }

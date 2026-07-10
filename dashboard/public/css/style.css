@@ -63,9 +63,13 @@ body {
 .bg-dark-3 { background-color: var(--dark-bg-tertiary) !important; }
 
 .form-label { font-weight: 500; color: #f1f1f1; }
-.form-control, .form-select { border-color: var(--dark-border-secondary); }
-.form-control:focus, .form-select:focus { background-color: var(--dark-bg-tertiary); color: var(--dark-text-primary); border-color: var(--focus-border); box-shadow: 0 0 0 0.25rem var(--focus-shadow); }
+.form-control, .form-select { border-color: var(--dark-border-secondary); background-color: var(--dark-bg-secondary); color: #ffffff !important; }
+.form-control:focus, .form-select:focus { background-color: var(--dark-bg-tertiary); color: #ffffff !important; border-color: var(--focus-border); box-shadow: 0 0 0 0.25rem var(--focus-shadow); }
 .form-control::placeholder { color: rgba(255, 255, 255, 0.65) !important; opacity: 1; }
+
+/* Global input text fix — white text on dark backgrounds everywhere */
+input, select, textarea { color: #ffffff !important; background-color: rgba(255, 255, 255, 0.05); }
+input::placeholder, textarea::placeholder { color: rgba(255, 255, 255, 0.4) !important; }
 .form-text, .text-muted, .command-page-subtitle { color: var(--dark-text-muted) !important; }
 
 .server-icon-large { width: 100px; height: 100px; border-radius: 50%; border: 3px solid var(--dark-border-primary); }
@@ -116,5 +120,6 @@ body {
 .platform-icon-kick, .platform-kick { color: #52E252; } .platform-kick { border-left-color: #52E252; }
 .platform-icon-tiktok, .platform-tiktok { color: #00f2ea; } .platform-tiktok { border-left-color: #00f2ea; }
 .platform-icon-trovo, .platform-trovo { color: #21d464; } .platform-trovo { border-left-color: #21d464; }
+.platform-icon-rumble, .platform-rumble { color: #85c742; } .platform-rumble { border-left-color: #85c742; }
 
 .landing-center { display: flex; justify-content: center; align-items: center; min-height: 80vh; }

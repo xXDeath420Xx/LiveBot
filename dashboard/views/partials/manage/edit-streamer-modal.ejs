@@ -333,6 +333,7 @@ select.form-select option {
                                 <option value="kick">Kick</option>
                                 <option value="tiktok">TikTok</option>
                                 <option value="trovo">Trovo</option>
+                                <option value="rumble">Rumble</option>
                                 <option value="facebook">Facebook</option>
                                 <option value="instagram">Instagram</option>
                             </select>
@@ -518,13 +519,25 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ${roleOptionsHtml}
                             </select>
                         </div>
+                        <div class="col-md-6">
+                            <label for="sub-ping-${subId}" class="form-label">Ping Role <small style="font-weight:400;color:rgba(255,255,255,0.4);">(notified on new posts/streams)</small></label>
+                            <select class="form-select" id="sub-ping-${subId}" name="subscriptions[${subId}][ping_role_id]">
+                                <option value="">No ping</option>
+                                <option value="everyone" ${sub.ping_role_id === 'everyone' ? 'selected' : ''}>@everyone</option>
+                                ${allRoles.map(role => {
+                                    const selected = sub.ping_role_id == role.id ? 'selected' : '';
+                                    return '<option value="' + role.id + '" ' + selected + '>' + role.name + '</option>';
+                                }).join('')}
+                            </select>
+                        </div>
                         <div class="col-12">
                             <label for="sub-message-${subId}" class="form-label">Custom Announcement Message</label>
                             <textarea class="form-control" id="sub-message-${subId}" name="subscriptions[${subId}][custom_message]" rows="3" placeholder="${sub.platform.toLowerCase() === 'tiktok' ? '{username} uploaded a new TikTok!\\n\\n{description}\\n\\n@everyone' : 'Hey @everyone, {username} is live!'}">${sub.custom_message || ''}</textarea>
                             <small style="color: rgba(255, 255, 255, 0.5); font-size: 0.8rem; margin-top: 6px; display: block;">
                                 ${sub.platform.toLowerCase() === 'tiktok'
-                                    ? '<strong>TikTok variables:</strong> {username}, {title}, {description}, {url} • Video will auto-embed'
-                                    : '<strong>Live stream variables:</strong> {username}, {game}, {title}, {url}'}
+                                    ? '<strong>Variables:</strong> {username}, {title}, {description}, {url}'
+                                    : '<strong>Variables:</strong> {username}, {game}, {title}, {url}'}
+                                • Ping role is set separately above
                             </small>
                         </div>
                         <div class="col-md-6">
@@ -555,7 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <label class="form-check-label" for="sub-notify-videos-${subId}">
                                     <strong>Enable video post notifications</strong>
                                     <small style="display: block; color: rgba(255, 255, 255, 0.5); font-size: 0.75rem; margin-top: 4px;">
-                                        Bot will announce new TikTok videos every 5 minutes
+                                        Checks for new TikTok videos every 5 minutes. Only videos posted within the last 24 hours are announced — older videos are silently indexed.
                                     </small>
                                 </label>
                             </div>
