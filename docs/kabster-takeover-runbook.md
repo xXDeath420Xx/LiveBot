@@ -58,9 +58,10 @@ and no name collisions; all five source images are still on the CDN.
 
 ---
 
-## 3. Progress that cannot be saved
+## 3. Progress — what survives
 
-Discord exposes no API for another bot's stored data. For these, users **start from zero**:
+Discord exposes no API for another bot's stored data, so I first assumed all of this was lost. Most
+of it isn't: the bots *said* enough in the channels to rebuild from.
 
 | Bot | Lost |
 |---|---|
@@ -69,8 +70,9 @@ Discord exposes no API for another bot's stored data. For these, users **start f
 | **Grow a Tree** | *nothing — carried over at 190ft, see below* |
 | **TacoShack** | *(not being retired — no equivalent exists)* |
 
-You accepted this. The bar therefore became **exact behaviour**, and the clones were audited against
-what the real bots actually posted in *this* guild and corrected (commit `d9915a8`):
+You accepted a reset on condition of **exact behaviour**, so the clones were audited against what
+the real bots actually posted in *this* guild and corrected (commit `d9915a8`). Since then, OwO and
+the tree turned out to be recoverable too — so only Cat Bot still resets.
 
 - **Cat Bot** — rarity slot 6 renamed `Gremlin` → **`Baby`**; spawn wording and `/cat setup` reply
   matched; achievements now render as an **"Achievement get!"** embed; added **"First cat!"** and
