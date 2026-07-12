@@ -1,0 +1,702 @@
+/*
+ * Guild takeover — migrate a server from third-party bots onto this one, channel by channel.
+ *
+ * Design rules, in order of importance:
+ *   1. NOTHING is posted, deleted or edited in any channel. Takeover only writes config
+ *      rows. Panels, welcome messages and rules stay exactly as the old bot left them.
+ *   2. `plan()` is pure inspection and always safe to run. `apply()` only ever performs the
+ *      steps a plan produced, and only the ones the caller explicitly opted into.
+ *   3. Every step is idempotent and independently skippable. Re-running is a no-op.
+ *   4. Live state wins. Where a value must be carried across (a counting channel's current
+ *      number), we read it from the channel's own history rather than guessing.
+ *   5. Removing the old bot is never automatic. We report which bots are now redundant and
+ *      leave the kick to a human.
+ */
+import { PermissionFlagsBits } from 'discord.js';
+import pool from '../utils/db.js';
+import logger from '../utils/logger.js';
+import ReactionRoleManager from './reaction-role-manager.js';
+
+/** X-Audit-Log-Reason must be ASCII — anything above 0x7E is rejected outright. */
+const ascii = (s) => String(s).replace(/[^\x20-\x7E]/g, '').slice(0, 400);
+
+/**
+ * What each incumbent bot does, and whether we can take it over.
+ * `probe` decides whether the feature is actually in use in this guild.
+ */
+export const KNOWN_BOTS = Object.freeze({
+  // Replaceable — we have the feature.
+  '510016054391734273': { name: 'counting', feature: 'counting' },
+  '696797815782768650': { name: 'Counting Bot', feature: 'counting' },
+  '282286160494067712': { name: 'Pingcord', feature: 'streams' },
+  '155149108183695360': { name: 'Dyno', feature: 'logging' },
+  '235148962103951360': { name: 'Carl-bot', feature: 'reaction_roles' },
+  '471091072546766849': { name: 'Friend Time', feature: 'timezone' },
+  '966695034340663367': { name: 'Cat Bot', feature: 'catbot' },
+  '972637072991068220': { name: 'Grow a Tree', feature: 'growtree' },
+  '408785106942164992': { name: 'OwO', feature: 'owo' },
+  '1071983600729346208': { name: 'CannaFriend', feature: 'cannabis' },
+  '696870234262339614': { name: 'Sx Bot', feature: 'emoji' },
+  '83010416610906112': { name: 'Nightbot', feature: 'custom_commands' },
+  '1437489496680828968': { name: 'Throne Integration', feature: 'throne' },
+  '672822334641537041': { name: 'FreeStuff', feature: 'free_games' },
+  '656621136808902656': { name: 'Birthday Bot', feature: 'birthday' },
+  '356268235697553409': { name: '.fmbot', feature: 'lastfm' },
+  '684773505157431347': { name: 'FlaviBot', feature: 'moderation' },
+  '836232765942923305': { name: 'Ko-fi Bot', feature: 'kofi' },
+
+  // Present but NOT replaceable — flagged, never claimed.
+  '490707751832649738': { name: 'TacoShack', feature: null, why: 'no equivalent: idle taco game' },
+  '302050872383242240': { name: 'DISBOARD', feature: null, why: 'server-listing bump service, nothing to replace' },
+  '351227880153546754': { name: 'BetterTTV', feature: null, why: 'Twitch emote service, not a Discord feature' },
+  // Blerp posts nothing — it plays soundboard clips into VOICE, so a message scan never sees it.
+  // Our /soundboard covers uploaded clips + a button panel, but NOT Blerp's hosted clip library
+  // or its Twitch integration, so this is not a clean swap. Flagged for a human decision.
+  '964278831085125722': { name: 'Blerp', feature: null, why: 'voice soundboard with a hosted clip library — /soundboard only plays clips you upload' },
+});
+
+/**
+ * Streamers the incumbent announced that we do not. Read out of Pingcord's own posts: it pings
+ * @everyone for Karabi420 in #kabs-live★, and she was never in our `subscriptions` — retiring
+ * Pingcord without this would silently stop the server's most important announcement.
+ */
+export const PINGCORD_STREAMERS = Object.freeze([
+  { platform: 'twitch', username: 'karabi420', channelId: '814371170341617664', pingRoleId: 'everyone' },
+]);
+
+/**
+ * Bots that post only through webhooks have no guild member to detect. TANGIA is one: it
+ * pipes Twitch TTS into a channel and owns no bot user.
+ */
+export const WEBHOOK_ONLY = Object.freeze({
+  TANGIA: 'Twitch-side TTS overlay, not a Discord feature',
+});
+
+/**
+ * Exact reply parity, recovered from message history. Discord exposes no API for another bot's
+ * configuration, so these were reconstructed from what the bot actually posted and the messages
+ * users typed to trigger it.
+ *
+ * Nightbot's `!pp` answered with a different percentage every time (`9%`, `10%`, `1%`), so it is
+ * a random roll, not a fixed string — `{random:a-b}` reproduces it. `:0` is literal.
+ *
+ * `bruh` / `W` / `L` are AUTORESPONSES, not prefix commands: they fire on ordinary chat with no
+ * prefix at all. Registering them as commands would not reproduce the behaviour.
+ */
+export const NIGHTBOT_COMMANDS = Object.freeze([
+  { name: 'pp', response: '{user.name} has a {random:1-10}% inch pp :0' },
+  { name: 'karabi', response: 'this command was made by tiz bcuz why not' },
+]);
+
+const BRUH_ART =
+  '⡏⠉⠉⠉⠉⠉⠉⠋⠉⠉⠉⠉⠉⠉⠋⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙⠉⠉⠉⠹\n⡇⢸⣿⡟⠛⢿⣷⠀⢸⣿⡟⠛⢿⣷⡄⢸⣿⡇⠀⢸⣿⡇⢸⣿⡇⠀⢸⣿⡇⠀\n⡇⢸⣿⣧⣤⣾⠿⠀⢸⣿⣇⣀⣸⡿⠃⢸⣿⡇⠀⢸⣿⡇⢸⣿⣇⣀⣸⣿⡇⠀\n⡇⢸⣿⡏⠉⢹⣿⡆⢸⣿⡟⠛⢻⣷⡄⢸⣿⡇⠀⢸⣿⡇⢸⣿⡏⠉⢹⣿⡇⠀\n⡇⢸⣿⣧⣤⣼⡿⠃⢸⣿⡇⠀⢸⣿⡇⠸⣿⣧⣤⣼⡿⠁⢸⣿⡇⠀⢸⣿⡇⠀\n⣇⣀⣀⣀⣀⣀⣀⣄⣀⣀⣀⣀⣀⣀⣀⣠⣀⡈⠉⣁⣀⣄⣀⣀⣀⣠⣀⣀⣀⣰';
+
+/**
+ * These fire on the FIRST WORD of an ordinary chat message — Nightbot command semantics.
+ *
+ * The match type was established against all 4,773 human messages in the guild, because the two
+ * obvious readings are both catastrophically wrong:
+ *   • `starts_with 'W'`  → 184 matches ("Well", "When", "what…"). Nightbot replied to 3.
+ *   • `contains 'bruh'`  →   8 matches. "Love ya too bruh" got NO reply from Nightbot.
+ * Only "first word equals the trigger" reproduces the observed behaviour, so these are stored as
+ * `regex` (the `autoresponders` matcher compiles it case-insensitively when case_sensitive = 0).
+ *
+ * `\b` is what does the work: `^\s*w\b` matches "W", "W new bot", "W Batkabs!" but not "Well".
+ */
+export const NIGHTBOT_AUTORESPONSES = Object.freeze([
+  { name: 'bruh', pattern: '^\\s*bruh\\b', response: BRUH_ART },
+  { name: 'W',    pattern: '^\\s*w\\b',    response: 'WWW' },
+  { name: 'L',    pattern: '^\\s*l\\b',    response: 'Loser LLLLL' },
+]);
+
+/**
+ * Carl-bot's four self-assign panels, read out of #self-assign-roles. Emoji → role, exactly as
+ * they stand today. Rebuilt as our own panels; the old messages are never touched.
+ */
+export const SELF_ASSIGN_CHANNEL = '1466950359665873079';
+
+/**
+ * The platform panel's five emoji live on Carl-bot's OWN emoji server, not here. A bot may only
+ * use a custom emoji from a guild it is itself in, so once Carl-bot leaves we can neither react
+ * with them nor put them on a button — `UseExternalEmojis` does not grant access to a guild we
+ * are not in. The images are still served from the CDN, so we re-upload them into this guild and
+ * reference the local copies by NAME. Ids are deliberately absent: they only exist after upload.
+ */
+export const PLATFORM_EMOJI = Object.freeze([
+  { name: 'steam', sourceId: '948489425791361044' },
+  { name: 'xbox', sourceId: '948490089133133826' },
+  { name: 'playstation', sourceId: '948490481900347403' },
+  { name: 'switch', sourceId: '948490748746166292' },
+  { name: 'android', sourceId: '948490975213404160' },
+]);
+
+/** `:name:` means "the custom emoji called `name` in THIS guild" — resolved at panel-build time. */
+export function resolveEmoji(guild, spec) {
+  const m = /^:(\w+):$/.exec(spec);
+  if (!m) return spec; // plain unicode
+  const found = guild.emojis.cache.find(e => e.name === m[1]);
+  return found ? `<${found.animated ? 'a' : ''}:${found.name}:${found.id}>` : null;
+}
+
+export const CARLBOT_PANELS = Object.freeze([
+  { name: 'Where are you from?', roles: [
+    ['🇪🇺', '1466950885136535876', 'Europe'],
+    ['🦅', '1466950886134906932', 'North America'],
+    ['🌄', '1466950888034795693', 'South America'],
+    ['🐼', '1466950888760545333', 'Asia'],
+    ['🐨', '1466950889653932223', 'Oceania'],
+    // 🦒 → 1466950890425679976 is a DELETED role. Carl-bot's live panel still offers it and it
+    // silently does nothing. Rebuilding it verbatim would carry the bug across, so it is dropped;
+    // recreate the role and re-add the option if it is still wanted.
+  ] },
+  { name: 'What are your pronouns?', roles: [
+    ['🧡', '1466950818564411604', 'He/Him'],
+    ['💛', '1466950819432759296', 'She/Her'],
+    ['💜', '1466950820208840859', 'They/Them'],
+    ['💚', '1466950820888314058', 'Ask'],
+  ] },
+  // `:name:` — the local copy, uploaded by the `platform_emoji` step. See PLATFORM_EMOJI above.
+  { name: 'What platform do you game on?', roles: [
+    [':steam:', '1466950606135628061', 'PC'],
+    [':xbox:', '1466950606550995137', 'XBOX'],
+    [':playstation:', '1466950607993569512', 'Playstation'],
+    [':switch:', '1466950609008726127', 'Switch'],
+    [':android:', '1466950610279469123', 'Mobile'],
+  ] },
+  { name: 'What is your zodiac sign?', roles: [
+    ['♈', '1466950563781546195', 'Aries'],       ['♉', '1466950565287170270', 'Taurus'],
+    ['♊', '1466950565908058356', 'Gemini'],      ['♋', '1466950566188941543', 'Cancer'],
+    ['♌', '1466950567443173529', 'Leo'],         ['♍', '1466950567804014782', 'Virgo'],
+    ['♎', '1466950568399343901', 'Libra'],       ['♏', '1466950569519349936', 'Scorpio'],
+    ['♐', '1466950571301933248', 'Sagittarius'], ['♑', '1466950572132532460', 'Capricorn'],
+    ['♒', '1466950573415993385', 'Aquarius'],    ['♓', '1466950574582010085', 'Pisces'],
+  ] },
+]);
+
+/** Steps a plan can contain. Each is idempotent; `check` decides if it is already done. */
+const STEPS = {
+  counting: {
+    label: 'Counting',
+    describe: s => `Take over #${s.channelName} at **${s.lastNumber}** (next: ${s.lastNumber + 1}), ` +
+      `mode: ${s.failMode === 'delete' ? 'delete wrong numbers, never reset' : 'reset on wrong number'}`,
+    needs: ['ManageMessages', 'ViewChannel', 'ReadMessageHistory'],
+  },
+  platform_emoji: {
+    label: 'Platform emoji',
+    describe: s => `Re-upload ${s.missing.length} emoji (${s.missing.join(', ')}) into this server — ` +
+      'the platform role panel cannot use them while they live on Carl-bot\'s emoji server',
+    needs: ['ManageGuildExpressions'],
+  },
+  streams: { label: 'Stream announcements', describe: s => `Subscribe **${s.username}** (${s.platform}) → #${s.channelName}` },
+  logging: { label: 'Server logging', describe: s => `Log events to #${s.channelName}` },
+  timezone: { label: 'Timezones', describe: () => 'Enable /timezone (react 🕰️ to convert times)' },
+  catbot: { label: 'Cat Bot', describe: s => `Spawn cats in #${s.channelName}` },
+  growtree: { label: 'Grow a Tree', describe: () => 'Enable /tree (a tree is planted on first use)' },
+  owo: { label: 'OwO', describe: () => 'Enable OwO commands and the `owo` chat prefix' },
+};
+
+// ── Inspection ───────────────────────────────────────────────────────────────
+
+/**
+ * Read a counting channel's live state straight from its history: the highest number that
+ * forms an unbroken run ending at the newest numeric message. That is exactly where the old
+ * bot left off, whoever posted it.
+ *
+ * @returns {Promise<{lastNumber:number, lastUserId:string|null, sampled:number}|null>}
+ */
+export async function readCountingState(channel, scan = 200) {
+  const msgs = await channel.messages.fetch({ limit: Math.min(scan, 100) }).catch(() => null);
+  if (!msgs?.size) return null;
+
+  // Newest first. The first purely-numeric human message is the current count.
+  for (const m of msgs.values()) {
+    if (m.author.bot) continue;
+    const hit = /^(\d{1,15})$/.exec(m.content.trim());
+    if (hit) return { lastNumber: parseInt(hit[1], 10), lastUserId: m.author.id, sampled: msgs.size };
+  }
+  return null;
+}
+
+/** Which of the known bots are actually present right now. */
+export async function detectBots(guild) {
+  const present = [];
+  for (const [id, meta] of Object.entries(KNOWN_BOTS)) {
+    const member = await guild.members.fetch(id).catch(() => null);
+    if (member) present.push({ id, ...meta, tag: member.user.tag });
+  }
+  return present;
+}
+
+/**
+ * Channel names are routinely written in styled Unicode — `#𝗰𝗼𝘂𝗻𝘁𝗶𝗻𝗴` is
+ * MATHEMATICAL SANS-SERIF BOLD, and `/count/i` does not match a single character of it.
+ * NFKC folds those back to ASCII (`𝗰𝗼𝘂𝗻𝘁𝗶𝗻𝗴` → `counting`, `𝟰𝟮𝟬` → `420`).
+ */
+export function normalizeName(name) {
+  return String(name || '').normalize('NFKC').toLowerCase();
+}
+
+const nameMatches = (channel, re) => re.test(normalizeName(channel.name));
+
+/** Permissions we would need in a channel to run a step there. */
+function missingPerms(channel, guild, names) {
+  const me = guild.members.me;
+  const perms = channel.permissionsFor(me);
+  return (names ?? []).filter(n => !perms?.has(PermissionFlagsBits[n]));
+}
+
+// ── Planning ─────────────────────────────────────────────────────────────────
+
+/**
+ * Inspect the guild and produce the list of steps a takeover would perform.
+ * Purely read-only. Every step carries `done` (already true), `blocked` (why not), and the
+ * data `apply()` will need — so the plan a human approves is exactly what runs.
+ */
+export async function plan(guild, opts = {}) {
+  const guildId = guild.id;
+  const steps = [];
+  const push = (key, data) => steps.push({ key, ...data });
+
+  const bots = await detectBots(guild);
+  const byFeature = new Map(bots.filter(b => b.feature).map(b => [b.feature, b]));
+
+  // ── Counting ──
+  const countingChannel = opts.countingChannel
+    ?? guild.channels.cache.find(c => c.isTextBased?.() && nameMatches(c, /count/) && !nameMatches(c, /log/));
+  if (countingChannel) {
+    const [[row]] = await pool.execute(
+      'SELECT * FROM counting_channels WHERE guild_id = ? AND channel_id = ?', [guildId, countingChannel.id]);
+    const live = await readCountingState(countingChannel);
+    const miss = missingPerms(countingChannel, guild, STEPS.counting.needs);
+
+    push('counting', {
+      label: STEPS.counting.label,
+      channelId: countingChannel.id,
+      channelName: countingChannel.name,
+      lastNumber: live?.lastNumber ?? 0,
+      lastUserId: null, // never lock anyone out of the next number
+      // "Infinite attempts": the channel is a pure ladder of numbers. ANY message that is not
+      // the exact next number is deleted, no matter who posts it, and the count NEVER resets.
+      //   • allow_same_user MUST be 1 — otherwise the correct next number gets deleted purely
+      //     because the same person posted the previous one, which contradicts the rule.
+      //   • delete_chatter removes non-numeric talk.
+      //   • milestones would post a non-number into a numbers-only channel.
+      failMode: opts.failMode ?? 'delete',
+      allowSameUser: Number(opts.allowSameUser ?? 1),
+      reactOnValid: Number(opts.reactOnValid ?? 1),
+      announceMilestones: Number(opts.announceMilestones ?? 0),
+      deleteChatter: Number(opts.deleteChatter ?? 1),
+      done: !!(row?.is_active && Number(row.current_count) === (live?.lastNumber ?? -1)),
+      blocked: !live ? 'could not read the current number from recent history'
+        : miss.length ? `missing ${miss.join(', ')}` : null,
+      replaces: byFeature.get('counting')?.name ?? null,
+      note: live ? `read ${live.lastNumber} from the channel (sampled ${live.sampled} messages)` : null,
+    });
+  }
+
+  // ── Stale counting rows on channels that are not the counting channel ──
+  const [staleRows] = await pool.execute(
+    'SELECT channel_id FROM counting_channels WHERE guild_id = ? AND is_active = TRUE', [guildId]);
+  for (const r of staleRows) {
+    if (countingChannel && r.channel_id === countingChannel.id) continue;
+    const ch = guild.channels.cache.get(r.channel_id);
+    push('counting_disable', {
+      label: 'Disable stray counting channel',
+      channelId: r.channel_id,
+      channelName: ch?.name ?? r.channel_id,
+      done: false,
+      blocked: null,
+      note: 'counting is active here but this is not the counting channel',
+    });
+  }
+
+  // ── Logging ──
+  const [[logRow]] = await pool.execute('SELECT log_channel_id FROM logging_config WHERE guild_id = ?', [guildId]);
+  if (byFeature.has('logging')) {
+    push('logging', {
+      label: STEPS.logging.label,
+      channelId: logRow?.log_channel_id ?? null,
+      channelName: guild.channels.cache.get(logRow?.log_channel_id)?.name ?? '—',
+      done: !!logRow?.log_channel_id,
+      blocked: logRow?.log_channel_id ? null : 'no log channel configured — run /systems logging first',
+      replaces: byFeature.get('logging').name,
+    });
+  }
+
+  // ── Timezone (Friend Time) ──
+  if (byFeature.has('timezone')) {
+    const [[tz]] = await pool.execute('SELECT guild_id FROM tz_guild_config WHERE guild_id = ?', [guildId]);
+    push('timezone', {
+      label: STEPS.timezone.label, done: !!tz, blocked: null,
+      replaces: byFeature.get('timezone').name,
+    });
+  }
+
+  // ── Cat Bot ──
+  if (byFeature.has('catbot')) {
+    const [rows] = await pool.execute('SELECT channel_id FROM catbot_channels WHERE guild_id = ? AND enabled = 1', [guildId]);
+    const target = opts.catChannel ?? guild.channels.cache.get(rows[0]?.channel_id)
+      ?? guild.channels.cache.find(c => c.isTextBased?.() && nameMatches(c, /bot-spam|bot_commands|arcade|games/));
+    push('catbot', {
+      label: STEPS.catbot.label,
+      channelId: target?.id ?? null,
+      channelName: target?.name ?? '—',
+      done: rows.length > 0,
+      blocked: target ? null : 'no obvious channel — pass one explicitly',
+      replaces: byFeature.get('catbot').name,
+    });
+  }
+
+  // ── Grow a Tree ──
+  if (byFeature.has('growtree')) {
+    const [[tree]] = await pool.execute('SELECT guild_id FROM gat_trees WHERE guild_id = ?', [guildId]);
+    push('growtree', {
+      label: STEPS.growtree.label, done: !!tree,
+      blocked: tree ? null : 'a tree is planted by /tree plant — nothing to pre-configure',
+      replaces: byFeature.get('growtree').name,
+    });
+  }
+
+  // ── OwO ──
+  if (byFeature.has('owo')) {
+    const [[owo]] = await pool.execute('SELECT enabled FROM owo_config WHERE guild_id = ?', [guildId]);
+    push('owo', {
+      label: STEPS.owo.label, done: !!owo?.enabled,
+      blocked: 'the real OwO bot is still here — enabling ours would double-reply. Enable AFTER removing it.',
+      replaces: byFeature.get('owo').name,
+    });
+  }
+
+  // ── Ko-fi ──
+  if (byFeature.has('kofi')) {
+    const [[kofi]] = await pool.execute('SELECT enabled FROM kofi_config WHERE guild_id = ?', [guildId]);
+    push('kofi', {
+      label: 'Ko-fi supporter roles',
+      done: !!kofi?.enabled,
+      blocked: kofi?.enabled ? null
+        : "needs your Ko-fi webhook verification token — run /kofi setup, then /kofi tier",
+      replaces: byFeature.get('kofi').name,
+    });
+  }
+
+  // ── Streams (Pingcord) ──
+  if (byFeature.has('streams')) {
+    const [subs] = await pool.execute(
+      `SELECT st.username, st.platform FROM subscriptions s
+         JOIN streamers st ON st.streamer_id = s.streamer_id WHERE s.guild_id = ?`, [guildId]);
+    const have = new Set(subs.map(s => `${s.platform}/${s.username}`.toLowerCase()));
+    const missing = PINGCORD_STREAMERS.filter(s => !have.has(`${s.platform}/${s.username}`.toLowerCase()));
+
+    push('streams', {
+      label: 'Stream announcements',
+      streamers: missing,
+      done: missing.length === 0,
+      blocked: null,
+      note: missing.length
+        ? `MISSING: ${missing.map(s => `${s.platform}/${s.username}`).join(', ')} — the incumbent pings @everyone for this. ` +
+          `We currently announce: ${subs.map(s => s.username).join(', ') || 'nobody'}`
+        : `we announce: ${subs.map(s => `${s.platform}/${s.username}`).join(', ')}`,
+      replaces: byFeature.get('streams').name,
+    });
+  }
+
+  // ── Nightbot: custom commands + autoresponses, recovered from history ──
+  if (byFeature.has('custom_commands')) {
+    const [[haveCmds]] = await pool.execute(
+      'SELECT COUNT(*) AS n FROM custom_commands WHERE guild_id = ?', [guildId]);
+    const [[haveAuto]] = await pool.execute(
+      'SELECT COUNT(*) AS n FROM autoresponders WHERE guild_id = ?', [guildId]);
+
+    push('nightbot_commands', {
+      label: 'Nightbot commands',
+      done: Number(haveCmds.n) >= NIGHTBOT_COMMANDS.length,
+      blocked: null,
+      note: NIGHTBOT_COMMANDS.map(c => `!${c.name}`).join(', '),
+      replaces: byFeature.get('custom_commands').name,
+    });
+    push('nightbot_autoresponses', {
+      label: 'Nightbot autoresponses',
+      done: Number(haveAuto.n) >= NIGHTBOT_AUTORESPONSES.length,
+      blocked: null,
+      note: `${NIGHTBOT_AUTORESPONSES.map(a => a.name).join(', ')} — fire on the FIRST WORD of plain chat, not on a prefix`,
+      replaces: byFeature.get('custom_commands').name,
+    });
+  }
+
+  // ── Carl-bot: rebuild the self-assign panels as our own ──
+  if (byFeature.has('reaction_roles')) {
+    const channel = guild.channels.cache.get(SELF_ASSIGN_CHANNEL);
+    const [[panels]] = await pool.execute(
+      "SELECT COUNT(*) AS n FROM reaction_role_panels WHERE guild_id = ? AND message_id <> 'PENDING'", [guildId]);
+    const missingRoles = CARLBOT_PANELS.flatMap(p => p.roles)
+      .filter(([, id]) => !guild.roles.cache.has(id))
+      .map(([, id, label]) => label ?? id);
+
+    // Every `:name:` in a panel must exist in THIS guild before the panel can be posted.
+    const missingEmoji = CARLBOT_PANELS.flatMap(p => p.roles)
+      .filter(([emoji]) => resolveEmoji(guild, emoji) === null)
+      .map(([emoji, , label]) => `${emoji.replaceAll(':', '')} (${label})`);
+
+    const needUpload = PLATFORM_EMOJI.filter(e => !guild.emojis.cache.some(g => g.name === e.name));
+    // Static and animated have separate caps; these are all static PNGs.
+    const staticCap = { 0: 50, 1: 100, 2: 150, 3: 250 }[guild.premiumTier] ?? 50;
+    const staticUsed = guild.emojis.cache.filter(e => !e.animated).size;
+
+    push('platform_emoji', {
+      label: 'Platform emoji',
+      done: needUpload.length === 0,
+      missing: needUpload.map(e => e.name),
+      blocked: needUpload.length === 0 ? null
+        : staticUsed + needUpload.length > staticCap
+          ? `no room: ${staticUsed}/${staticCap} static emoji slots used, need ${needUpload.length} more`
+          : null,
+      note: `${staticUsed}/${staticCap} static slots used`,
+      replaces: byFeature.get('reaction_roles').name,
+    });
+
+    push('carlbot_panels', {
+      label: 'Self-assign role panels',
+      channelId: SELF_ASSIGN_CHANNEL,
+      channelName: channel?.name ?? SELF_ASSIGN_CHANNEL,
+      done: Number(panels.n) >= CARLBOT_PANELS.length,
+      // This is the ONE step that must post messages — a role panel IS a message. It is
+      // therefore never part of the config-only apply; it needs its own explicit action.
+      blocked: !channel ? 'self-assign channel not found'
+        : missingRoles.length ? `these roles no longer exist: ${missingRoles.join(', ')}`
+          : missingEmoji.length
+            ? `run the "Platform emoji" step first — these are not in this server yet: ${missingEmoji.join(', ')}`
+            : 'posts new panels — run this deliberately, it is the only step that creates messages',
+      note: CARLBOT_PANELS.map(p => `${p.name} (${p.roles.length})`).join(' · '),
+      replaces: byFeature.get('reaction_roles').name,
+    });
+  }
+
+  // ── Things we simply cannot do ──
+  const unreplaceable = [
+    ...bots.filter(b => !b.feature),
+    ...Object.entries(WEBHOOK_ONLY).map(([name, why]) => ({ id: null, name, feature: null, why })),
+  ];
+
+  // ── Manual carry-over: Nightbot replies, reaction-role panels ──
+  const [[cc]] = await pool.execute('SELECT COUNT(*) AS n FROM custom_commands WHERE guild_id = ?', [guildId]);
+  if (byFeature.has('custom_commands') && !Number(cc.n)) {
+    push('custom_commands', {
+      label: 'Custom chat replies',
+      done: false,
+      blocked: "another bot's custom commands are not readable over the API — re-create them in the Command Center",
+      replaces: byFeature.get('custom_commands').name,
+    });
+  }
+
+  return {
+    guildId,
+    guildName: guild.name,
+    bots,
+    unreplaceable,
+    steps,
+    actionable: steps.filter(s => !s.done && !s.blocked),
+  };
+}
+
+// ── Applying ─────────────────────────────────────────────────────────────────
+
+/**
+ * Perform the given steps. Writes config rows and never posts, edits or deletes a message. The one
+ * step that reaches into the guild itself is `platform_emoji`, which uploads emoji — additive, and
+ * a hard prerequisite for the role panel, which cannot use emoji hosted anywhere else.
+ * @param {string[]} only  step keys to run; anything else in the plan is skipped.
+ */
+export async function apply(guild, planned, only) {
+  const wanted = new Set(only ?? planned.actionable.map(s => s.key));
+  const results = [];
+
+  for (const step of planned.steps) {
+    if (!wanted.has(step.key)) continue;
+    if (step.done) { results.push({ ...step, outcome: 'already-done' }); continue; }
+    if (step.blocked) { results.push({ ...step, outcome: 'blocked' }); continue; }
+
+    try {
+      await runStep(guild, step);
+      results.push({ ...step, outcome: 'applied' });
+    } catch (err) {
+      logger.error(`[Takeover] step ${step.key} failed: ${err.message}`);
+      results.push({ ...step, outcome: 'failed', error: err.message });
+    }
+  }
+  return results;
+}
+
+async function runStep(guild, step) {
+  const g = guild.id;
+  switch (step.key) {
+    case 'counting': {
+      // Seed at the number the old bot left off on. last_user_id stays NULL so whoever
+      // posted last is not locked out of the next number.
+      await pool.execute(
+        `INSERT INTO counting_channels
+           (guild_id, channel_id, current_count, highest_count, last_user_id, reset_count, is_active,
+            fail_mode, allow_same_user, react_on_valid, announce_milestones, delete_chatter)
+         VALUES (?, ?, ?, ?, NULL, 0, TRUE, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           current_count = VALUES(current_count),
+           highest_count = GREATEST(highest_count, VALUES(highest_count)),
+           last_user_id = NULL,
+           is_active = TRUE,
+           fail_mode = VALUES(fail_mode),
+           allow_same_user = VALUES(allow_same_user),
+           react_on_valid = VALUES(react_on_valid),
+           announce_milestones = VALUES(announce_milestones),
+           delete_chatter = VALUES(delete_chatter)`,
+        [g, step.channelId, step.lastNumber, step.lastNumber, step.failMode,
+          step.allowSameUser, step.reactOnValid, step.announceMilestones, step.deleteChatter]);
+      return;
+    }
+    case 'counting_disable':
+      await pool.execute(
+        'UPDATE counting_channels SET is_active = FALSE WHERE guild_id = ? AND channel_id = ?', [g, step.channelId]);
+      return;
+
+    case 'timezone':
+      await pool.execute(
+        `INSERT INTO tz_guild_config (guild_id, enabled, auto_detect) VALUES (?, 1, 'react')
+         ON DUPLICATE KEY UPDATE enabled = 1`, [g]);
+      return;
+
+    case 'catbot': {
+      const { setupChannel, scheduleRespawn } = await import('./catbot/spawn-manager.js');
+      await setupChannel(g, step.channelId);
+      await scheduleRespawn(step.channelId);
+      return;
+    }
+
+    case 'owo':
+      await pool.execute(
+        `INSERT INTO owo_config (guild_id, enabled) VALUES (?, 1)
+         ON DUPLICATE KEY UPDATE enabled = 1`, [g]);
+      return;
+
+    case 'platform_emoji': {
+      // Pull each image straight from the CDN and re-host it here. Idempotent: an emoji whose name
+      // already exists is left alone, so a partial run can simply be repeated.
+      for (const { name, sourceId } of PLATFORM_EMOJI) {
+        if (guild.emojis.cache.some(e => e.name === name)) continue;
+
+        const res = await fetch(`https://cdn.discordapp.com/emojis/${sourceId}.png`);
+        if (!res.ok) throw new Error(`emoji ${name}: source image gone (HTTP ${res.status})`);
+        const buf = Buffer.from(await res.arrayBuffer());
+
+        await guild.emojis.create({
+          name,
+          attachment: buf,
+          reason: ascii('Takeover: re-hosting platform emoji so the role panel can use them'),
+        });
+      }
+      break;
+    }
+
+    case 'streams': {
+      // Reuse the same path self-promo uses, so the streamer row and subscription are created
+      // exactly as they would be by /socials — no bespoke insert that drifts from the real one.
+      const { createStreamerAndSubscription, validatePlatformUser } = await import('./self-promo-handler.js');
+      for (const s of step.streamers ?? []) {
+        // Resolve the platform's real user id (Twitch's numeric id), not the handle — the live
+        // checker keys on it. Fall back to the handle if the API is unreachable.
+        const v = await validatePlatformUser(s.platform, s.username);
+        const platformUserId = v?.platformUserId ?? s.username;
+        const username = v?.canonicalUsername ?? s.username;
+        await createStreamerAndSubscription(g, s.platform, platformUserId, username, null, s.channelId, null);
+        if (s.pingRoleId) {
+          await pool.execute(
+            `UPDATE subscriptions sub
+               JOIN streamers st ON st.streamer_id = sub.streamer_id
+                SET sub.ping_role_id = ?
+              WHERE sub.guild_id = ? AND st.platform = ? AND st.username = ?`,
+            [s.pingRoleId, g, s.platform, username]);
+        }
+      }
+      return;
+    }
+
+    case 'nightbot_commands':
+      for (const c of NIGHTBOT_COMMANDS) {
+        await pool.execute(
+          `INSERT INTO custom_commands (guild_id, command_name, response, action_type)
+           VALUES (?, ?, ?, 'reply')
+           ON DUPLICATE KEY UPDATE response = VALUES(response)`,
+          [g, c.name, c.response]);
+      }
+      return;
+
+    case 'nightbot_autoresponses':
+      // `autoresponders` is the LIVE table — `auto_responses` exists but NOTHING reads it.
+      // There is no unique key on (guild_id, trigger_text), so this is select-then-write.
+      for (const a of NIGHTBOT_AUTORESPONSES) {
+        const [dupe] = await pool.execute(
+          'SELECT id FROM autoresponders WHERE guild_id = ? AND trigger_text = ?', [g, a.pattern]);
+        if (dupe.length) {
+          await pool.execute(
+            "UPDATE autoresponders SET response_text = ?, match_type = 'regex', case_sensitive = 0, enabled = 1 WHERE id = ?",
+            [a.response, dupe[0].id]);
+        } else {
+          // 5s cooldown mirrors Nightbot's default, so a burst of "W"s cannot spam the channel.
+          await pool.execute(
+            `INSERT INTO autoresponders
+               (guild_id, trigger_text, response_text, match_type, case_sensitive, enabled, cooldown_seconds, created_by)
+             VALUES (?, ?, ?, 'regex', 0, 1, 5, ?)`,
+            [g, a.pattern, a.response, step.createdBy ?? '365905620060340224']);
+        }
+      }
+      return;
+
+    default:
+      throw new Error(`step "${step.key}" has no apply action`);
+  }
+}
+
+/**
+ * Rebuild Carl-bot's self-assign panels as our own. This POSTS MESSAGES, which is why it is not a
+ * case in `apply()` and can never be swept up by an "apply everything" click — it is its own
+ * deliberate action. Carl-bot's original panels are never touched; they simply stop responding
+ * when it leaves, and a moderator can delete them once ours are up.
+ *
+ * Buttons, not reactions: a reaction panel needs the member to have Add Reactions in the channel
+ * and silently does nothing when they don't, and every emoji must be re-fetched on restart.
+ *
+ * Idempotent by panel name — a panel we already posted is skipped, so a partial run is repeatable.
+ */
+export async function postPanels(guild) {
+  const channel = guild.channels.cache.get(SELF_ASSIGN_CHANNEL);
+  if (!channel) throw new Error('self-assign channel not found');
+
+  const [existing] = await pool.execute(
+    "SELECT panel_name FROM reaction_role_panels WHERE guild_id = ? AND message_id <> 'PENDING'",
+    [guild.id]);
+  const already = new Set(existing.map(r => r.panel_name));
+
+  const results = [];
+  for (const panel of CARLBOT_PANELS) {
+    if (already.has(panel.name)) { results.push({ panel: panel.name, outcome: 'already-done' }); continue; }
+
+    const roles = [];
+    for (const [emojiSpec, roleId, label] of panel.roles) {
+      const role = guild.roles.cache.get(roleId);
+      if (!role) throw new Error(`${panel.name}: role ${label} (${roleId}) no longer exists`);
+
+      const emoji = resolveEmoji(guild, emojiSpec);
+      if (emoji === null) throw new Error(`${panel.name}: emoji ${emojiSpec} is not in this server — run the platform_emoji step first`);
+
+      roles.push({ roleId, label, name: role.name, emoji, style: 'secondary' });
+    }
+
+    // Built against the client that actually holds this guild — with custom bots there is no one
+    // global client, and the manager resolves the guild from its own cache.
+    const manager = new ReactionRoleManager(guild.client);
+    const made = await manager.createReactionPanel(
+      guild.id, channel.id, panel.name, 'multiple', 'button', roles,
+      { title: panel.name, description: 'Pick as many as you like. Click again to remove.' });
+
+    if (!made) throw new Error(`${panel.name}: panel creation failed`);
+    results.push({ panel: panel.name, outcome: 'posted', messageId: made.messageId });
+  }
+  return results;
+}
