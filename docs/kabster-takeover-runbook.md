@@ -64,7 +64,7 @@ Discord exposes no API for another bot's stored data. For these, users **start f
 
 | Bot | Lost |
 |---|---|
-| **OwO** | cowoncy, animals, weapons, zoo |
+| **OwO** | *mostly recoverable — see below. Only cowoncy is truly lost.* |
 | **Cat Bot** | cats caught, achievements |
 | **Grow a Tree** | *nothing — carried over at 190ft, see below* |
 | **TacoShack** | *(not being retired — no equivalent exists)* |
@@ -117,7 +117,34 @@ It generates a real 190-segment trunk (writing `size` alone would have collapsed
 45m50s against their 45m52s — a 2-second rounding delta, confirming the growth curve is already
 theirs.
 
-**So only OwO and Cat Bot still reset**, and both now behave like the originals.
+### OwO progress is recoverable — `#owo-game` is a full transcript (commit `94cfb18`)
+
+OwO joined 2026-05-27 and `#owo-game` goes back that far, so the channel holds **its entire history
+in this guild**. And OwO is chatty: `owo inv` printed an exact inventory, every hunt/opening/battle
+after it is a replayable delta, and the hunt line carries each gem's remaining uses.
+
+**Only karabi actually plays.** Her state, rebuilt and cross-checked by hand:
+
+| | |
+|---|---|
+| gems | **502** across 20 kinds (494 in the dump + 8 from openings) |
+| active | Legendary Hunting + Empowering + Lucky — the exact loadout that gives 16-animal hunts |
+| lootboxes | **1** (3 + 6 found − 8 opened) |
+| weapon crates | **232** (227 + 5 found) |
+| weapons | **282** across 19 types |
+| team | `karabi's Team` — 🐊 🐅 🐘, all **L. 26** |
+
+```
+node scripts/owo-import-from-channel.mjs 814321716872347648 1509191647320346725 --apply
+```
+
+REST-GET only, dry-run by default. **Not lost:** gems, lootboxes, crates, weapons, team, pet levels.
+**Lost:** cowoncy (never printed), her pre-channel zoo (OwO's economy is global, so the imported zoo
+is a floor), and each weapon's rolled qualities (type and count exact, stats re-roll).
+
+**There are no guild bosses.** OwO has no such feature and none appear anywhere in the channel.
+
+**So only Cat Bot still truly resets.**
 
 ---
 
