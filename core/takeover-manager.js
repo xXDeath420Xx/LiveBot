@@ -98,11 +98,20 @@ const nameKey = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 /**
  * The set of bots actually still in the guild, by normalised name. Built from the scan rows so a
  * webhook can be tied back to whether its owning bot is still here.
+ *
+ * Records BOTH the scanned name and the name we know it by — they differ ("Throne Integration Bot"
+ * in the guild vs "Throne Integration" in KNOWN_BOTS), and a plain equality check silently treated
+ * a present, replaceable bot as absent and stopped gating it.
  */
 export function presentBotNames(scanBots) {
-  return new Set((scanBots ?? [])
-    .filter(b => b.kind === 'bot' && (b.present === 1 || b.present === true))
-    .map(b => nameKey(b.name)));
+  const set = new Set();
+  for (const b of scanBots ?? []) {
+    if (b.kind !== 'bot' || !(b.present === 1 || b.present === true)) continue;
+    set.add(nameKey(b.name));
+    const meta = resolveBotMeta(b.bot_id, b.name);
+    if (meta?.name) set.add(nameKey(meta.name));
+  }
+  return set;
 }
 
 /**
