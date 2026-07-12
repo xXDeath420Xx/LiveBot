@@ -66,7 +66,7 @@ Discord exposes no API for another bot's stored data. For these, users **start f
 |---|---|
 | **OwO** | cowoncy, animals, weapons, zoo |
 | **Cat Bot** | cats caught, achievements |
-| **Grow a Tree** | tree height (was **188 ft**), contributions |
+| **Grow a Tree** | *nothing — carried over at 190ft, see below* |
 | **TacoShack** | *(not being retired — no equivalent exists)* |
 
 You accepted this. The bar therefore became **exact behaviour**, and the clones were audited against
@@ -82,20 +82,42 @@ what the real bots actually posted in *this* guild and corrected (commit `d9915a
   could out-rank everyone by spamming `owoh` without ever talking. The real OwO grants no server XP
   either. Sacrifice still yields *essence*; that was never server XP.
 
-### OwO is the one real parity gap left — read this before retiring it
+### OwO — the four missing features are now built (commit `488c421`)
 
-Our OwO covers hunt, battle, zoo, sell, sacrifice, weapons, crates, quests, daily and leaderboards.
-It does **not** reproduce four things this server actually used:
+Upstream is vendored at `docs/Discord-OwO-Bot-master`, so these use its real constants, not guesses:
 
-| Real OwO here | Ours |
+| Real OwO here | Ours, now |
 |---|---|
-| `owoh` returns **several** animals on one line, "empowered by" gem counters | one animal, in an embed |
-| `owob` embed with **"<name>'s Team" / "Enemy Team"** fields | team log in the description, no fields |
-| **Lootboxes** and **Empowering Gems** | not implemented (tables exist, no code) |
-| **Timed weapon-crate drops** with a `RESETS IN 6H 7M` counter | crates exist; the timed drop does not |
+| `owoh` returns **several** animals on one line, "empowered by" gem counters | same: `N = (1 + Hunting.amount) × 2` if Empowering — a Legendary Hunting gem gives the **16** we observed |
+| `owob` embed with **`<name>'s Team` / `Enemy Team`** fields | same |
+| **Lootboxes** and **Empowering Gems** | 35-gem catalog, one active per type, `[left/length]` uses |
+| **Timed weapon-crate drops**, `RESETS IN 6H 7M` | same: first drop after midnight guaranteed, then 5%, cap 3/day |
 
-Closing these is a real piece of work. **Decide explicitly**: accept the gap and retire OwO, keep
-OwO running, or build the four features first. Nothing else in this runbook depends on the answer.
+Verified by replay: hunt XP is the sum of each animal's rank XP, and our table reproduces five
+captured hunts (126 / 489 / 62 / 443 / 108 xp) **exactly**.
+
+Two aliases changed to match upstream: **`owo lb` now opens a lootbox** (was leaderboard) and
+**`owo use` activates a gem** (was equip). `owo top` still reaches the leaderboard and `owo equip`
+still equips, so nothing became unreachable.
+
+`/owo` was already at Discord's 25-subcommand cap, so the six `team-*` subcommands were folded into
+a `team` group. Chat accepts both `owo team add` and `owo team-add`.
+
+### Grow a Tree — carried over, not reset (commit `51e19c4`)
+
+The real tree is **190ft** with **45m52s** of growing behind it. `/tree plant` now takes a `height`
+and a `last-watered-by`, so it continues instead of restarting:
+
+```
+/tree plant name:Kababi height:190 last-watered-by:@you
+```
+
+It generates a real 190-segment trunk (writing `size` alone would have collapsed the tree back to
+4ft on the first water), arrives **ready**, and keeps whose turn it is. Our `getTreeAge(190)` gives
+45m50s against their 45m52s — a 2-second rounding delta, confirming the growth curve is already
+theirs.
+
+**So only OwO and Cat Bot still reset**, and both now behave like the originals.
 
 ---
 
@@ -170,8 +192,8 @@ The 🦒 **Africa** role is **already deleted** — Carl-bot's live panel still 
 does nothing. We drop it rather than carry the bug across. Recreate the role and re-add the option
 if it is still wanted.
 
-*(`/tree plant` and `/cat setup` are also run here — a tree is planted by hand. Name the tree
-**Kababi**, as it was.)*
+*(`/cat setup` and the tree carry-over are run here:
+`/tree plant name:Kababi height:190 last-watered-by:@you`)*
 
 ### Step 9 — Retire the bots *(one at a time, owner only, typed confirmation)*
 Each bot is re-gated **live** at the moment of removal — a plan that passed an hour ago proves
@@ -191,8 +213,8 @@ the rest. Retire **Pingcord last** — it is the one whose failure is loudest an
 
 ## 6. Before you start
 
-- [ ] **Say out loud** that OwO / Cat Bot / Grow a Tree progress resets (§3). Do it *before*, not after.
-- [ ] Decide OwO: accept the parity gap, keep it, or build the four missing features (§3).
+- [ ] **Say out loud** that OwO and Cat Bot progress resets (§3). Do it *before*, not after.
+      Grow a Tree does NOT reset — it carries over at 190ft.
 - [ ] Get the **Ko-fi webhook token**.
 - [ ] Do **step 0**. Nothing retires without it.
 - [ ] Leave **TANGIA**'s webhook in `#𝙩𝙩𝙨` alone.
