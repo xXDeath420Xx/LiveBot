@@ -298,14 +298,7 @@ export async function readiness(guild) {
     hierarchy,
     security,
     roleHygiene: { duplicates, emptyRoles: empty, placeholderRoles: placeholders },
-    parityGaps: [
-      {
-        feature: 'OwO guild boss',
-        status: 'not-built',
-        detail: 'OwO spawns a guild boss (one appeared here and ran away undefeated). Ours does not. ' +
-          'Not a config row — a feature. Schema is known (guild_boss / user_boss); decision needed.',
-      },
-    ],
+    parityGaps: [], // OwO guild boss is now built (migration 154); nothing outstanding.
     notes: [
       'The analyzer was blind to Components V2 messages until 2026-07-12 — FreeStuff (95 posts) and ' +
       "OwO's guild boss were invisible. Re-scan to see them; FreeStuff parity (free_games) still holds.",

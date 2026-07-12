@@ -24,6 +24,9 @@ import {
 } from '../../core/owo/teams-service.js';
 import { simulateBattle, generateCpuTeam } from '../../core/owo/battle-engine.js';
 import { renderHunt, renderCrateDrop } from '../../core/owo/hunt-text.js';
+// The guild-boss handler is context-agnostic (works on an interaction the same as a prefix ctx),
+// so the slash path reuses the one in owo-prefix rather than duplicating it.
+import { handleBoss } from '../../handlers/owo-prefix.js';
 import { getLevel } from '../../core/owo/pet-levels.js';
 import { rollDailyDrop } from '../../core/owo/daily-drop.js';
 import * as lootboxService from '../../core/owo/lootbox-service.js';
@@ -157,6 +160,14 @@ const data = new SlashCommandBuilder()
                 { name: 'claim-all', value: 'claim-all' },
             ))
         .addIntegerOption(opt => opt.setName('slot').setDescription('Slot 1–3 to claim (leave empty to view)').setRequired(false).setMinValue(1).setMaxValue(3)))
+    .addSubcommand(sub => sub.setName('boss')
+        .setDescription('View the guild boss, or fight it with your active team.')
+        .addStringOption(opt => opt.setName('action').setDescription('view (default), fight, or spawn (admin)').setRequired(false)
+            .addChoices(
+                { name: 'view', value: 'view' },
+                { name: 'fight', value: 'fight' },
+                { name: 'spawn (admin)', value: 'spawn' },
+            )))
     .addSubcommand(sub => sub.setName('toggle')
         .setDescription('[Admin] Enable or disable the OwO module in this server.')
         .addBooleanOption(opt => opt.setName('enabled').setDescription('On/off').setRequired(true)));
@@ -233,6 +244,7 @@ async function execute(interaction) {
     if (sub === 'unequip')      return handleUnequip(interaction);
     if (sub === 'pet-name')     return handlePetName(interaction);
     if (sub === 'battle')       return handleBattle(interaction);
+    if (sub === 'boss')         return handleBoss(interaction);
     if (sub === 'quest')        return handleQuest(interaction);
 }
 

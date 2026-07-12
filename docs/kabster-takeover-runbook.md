@@ -190,9 +190,19 @@ mechanics exactly:
 
 So a boss is an ordinary battle enemy built from the systems we already have (animals, weapons,
 passives, teams), fought with your battle team, accumulating `total_dmg` per user, and despawning on
-a timer if the guild doesn't finish it. **Decision needed: build it, or accept the gap.**
+a timer if the guild doesn't finish it.
 
-**So Cat Bot still truly resets, and guild bosses are unbuilt.**
+**✅ Built (migration 154).** A guild boss now spawns off hunts (low chance, one at a time), or via
+`owo boss spawn` (manager only). Anyone fights it with their active team — `owo boss fight` or the
+**Fight!** button on the announcement — dealing damage drawn from their real roster (rank + stats +
+weapon), banked per user in `owo_boss_damage`. The announcement carries a live HP bar and Top-10
+board and a runs-away timer. Kill it before the timer and everyone who fought is paid cowoncy
+weighted by damage (top dealer gets +15%); miss the timer and it flees (a 2-minute reaper job edits
+the message to its fled state). `core/owo/guildboss-service.js` + `guildboss-text.js` +
+`interactions/buttons/owo_guildboss.js` + `jobs/owo-boss-reaper.js`. So OwO parity is now complete
+except progress (cowoncy).
+
+**So the only thing left that truly resets is Cat Bot.**
 
 ---
 

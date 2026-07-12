@@ -35,6 +35,8 @@ import startPollScheduler from './jobs/poll-scheduler.js';
 import startGiveawayScheduler from './jobs/giveaway-scheduler.js';
 import { startSocialFeedScheduler, stopSocialFeedScheduler } from './jobs/social-feed-scheduler.js';
 import { startStreamCheckScheduler, stopStreamCheckScheduler } from './jobs/stream-check-scheduler.js';
+import { startKofiExpiry, stopKofiExpiry } from './jobs/kofi-expiry.js';
+import { startOwoBossReaper, stopOwoBossReaper } from './jobs/owo-boss-reaper.js';
 import { startAnnouncementUpdater, stopAnnouncementUpdater } from './jobs/announcement-updater.js';
 import { startTeamSyncScheduler, stopTeamSyncScheduler } from './jobs/team-sync-scheduler.js';
 import { startBirthdayScheduler, stopBirthdayScheduler } from './jobs/birthday-scheduler.js';
@@ -45,6 +47,7 @@ import { startBuyMeACoffeeScheduler, stopBuyMeACoffeeScheduler } from './jobs/bu
 import { startQOTDScheduler, stopQOTDScheduler } from './jobs/qotd-scheduler.js';
 import initReminderScheduler from './jobs/reminder-scheduler.js';
 import { startTikTokVideoChecker, stopTikTokVideoChecker } from './jobs/tiktok-video-checker.js';
+import { startFishingTournamentScheduler, stopFishingTournamentScheduler } from './jobs/fishing-tournament-scheduler.js';
 import { startEventScheduleChecker, stopEventScheduleChecker } from './jobs/event-schedule-checker.js';
 import { startPvpTimeoutSweeper, stopPvpTimeoutSweeper } from './jobs/pvp-timeout-sweeper.js';
 import AutoMemeManager from './core/auto-meme-manager.js';
@@ -130,6 +133,9 @@ async function loadCommands(client) {
         const command = await import(`file://${filePath}`);
 
         if (command.default && command.default.data && command.default.execute) {
+          // The public command catalog scans this file for `showModal` to decide whether a
+          // command can be reached from chat. Nothing else reads it.
+          command.default.__filePath = filePath;
           client.commands.set(command.default.data.name, command.default);
           loadedCount++;
           logger.debug(`[Commands] Loaded ${folder}/${file}`);
@@ -439,6 +445,17 @@ async function initializeSchedulersAndDashboard(client) {
         logger.warn('[Music] Could not register SpotifyExtractor:', error.message);
       }
 
+      // 4. SoundCloudExtractor — the final failsafe. Registered last so it is only reached
+      // when a Spotify track cannot be streamed through go-librespot AND yt-dlp fails to
+      // bridge it (YouTube bot-wall, geo-block, removed video).
+      try {
+        const { SoundCloudExtractor } = await import('@discord-player/extractor');
+        await player.extractors.register(SoundCloudExtractor, {});
+        logger.info('[Music] SoundCloudExtractor registered (final fallback)');
+      } catch (error) {
+        logger.warn('[Music] Could not register SoundCloudExtractor:', error.message);
+      }
+
       // Queue mutations — refresh the panel so queue size / "Up Next" stay accurate
       // when tracks are added while something is already playing. playerStart only
       // fires on the first track, not on subsequent enqueues.
@@ -603,13 +620,19 @@ async function initializeSchedulersAndDashboard(client) {
 
         // If voice connection aborted, destroy queue — skipping won't help
         if (error.code === 'ABORT_ERR' || error.message?.includes('operation was aborted')) {
-          logger.warn(`[Music] Voice connection aborted in guild ${queue.guild.id} — destroying queue`);
+          const gid = queue.guild.id;
+          logger.warn(`[Music] Voice connection aborted in guild ${gid} — destroying queue`);
           try {
             queue.delete();
           } catch (e) {
             logger.error(`[Music] Could not delete queue:`, { error: e.message });
           }
-          client.musicPanelManager?.get(queue.guild.id)?.updatePanel();
+          client.musicPanelManager?.get(gid)?.updatePanel();
+          // A failed track must NOT leave a 24/7 bot out of voice — rejoin the camp
+          // (no-op if this guild isn't camped).
+          import('./core/voice-camp-manager.js').then(({ rejoinCamp, CAMP_REJOIN_DELAY_MS }) =>
+            setTimeout(() => rejoinCamp(client, player, gid).catch(() => {}), CAMP_REJOIN_DELAY_MS || 3000)
+          ).catch(() => {});
           return;
         }
 
@@ -639,12 +662,17 @@ async function initializeSchedulersAndDashboard(client) {
           }
         } catch (recoveryError) {
           logger.error(`[Music] Auto-recovery failed:`, { error: recoveryError.message });
+          const gid = queue.guild.id;
           try {
             queue.delete();
             logger.warn(`[Music] Deleted queue as last resort recovery`);
           } catch (deleteError) {
             logger.error(`[Music] Could not delete queue:`, { error: deleteError.message });
           }
+          // Same guard: don't strand a camped bot outside its 24/7 channel.
+          import('./core/voice-camp-manager.js').then(({ rejoinCamp, CAMP_REJOIN_DELAY_MS }) =>
+            setTimeout(() => rejoinCamp(client, player, gid).catch(() => {}), CAMP_REJOIN_DELAY_MS || 3000)
+          ).catch(() => {});
         }
 
         // Update the music panel to reflect the new state
@@ -726,7 +754,22 @@ async function initializeSchedulersAndDashboard(client) {
 
   // Start streaming schedulers
   startStreamCheckScheduler(client);
+  startKofiExpiry(client);
+  startOwoBossReaper(client);
   logger.info('[Core] Stream check scheduler initialized');
+
+  // Cat Bot: re-arm per-channel spawn timers and revive any that came due while we
+  // were down. Safe to call once with the default client — it resolves the owning
+  // bot per guild via botManager.
+  import('./core/catbot/spawn-manager.js')
+    .then(({ startSpawnEngine }) => startSpawnEngine())
+    .catch(err => logger.error(`[CatBot] engine start failed: ${err.message}`));
+
+  // Index every slash command so `!play`, `?ban`, `@bot play …` reach them. Built
+  // eagerly here so the first user doesn't pay for it; shared across custom bots.
+  import('./core/universal-commands.js')
+    .then(({ buildIndex }) => buildIndex(client))
+    .catch(err => logger.error(`[UniversalCmd] index failed: ${err.message}`));
 
   // Cinema panel reaper: edit a dangling control panel to "ended" when a movie
   // finishes unattended (state cleared by the cinema service, no Stop pressed).
@@ -754,6 +797,9 @@ async function initializeSchedulersAndDashboard(client) {
 
   startQOTDScheduler(client);
   logger.info('[Core] QOTD scheduler initialized');
+
+  startFishingTournamentScheduler(client);
+  logger.info('[Core] Fishing tournament scheduler initialized');
 
   startAutoMemeScheduler(client);
   logger.info('[Core] Auto-Meme scheduler initialized');
@@ -1183,6 +1229,7 @@ async function shutdown() {
 
     // Stop streaming schedulers
     stopStreamCheckScheduler();
+    stopOwoBossReaper();
     logger.info('[Scheduler] Stream check scheduler stopped');
 
     stopAnnouncementUpdater();
@@ -1265,6 +1312,10 @@ async function shutdown() {
     // Stop QOTD scheduler
     stopQOTDScheduler();
     logger.info('[Scheduler] QOTD scheduler stopped');
+
+    // Stop fishing tournament scheduler
+    stopFishingTournamentScheduler();
+    logger.info('[Scheduler] Fishing tournament scheduler stopped');
 
     // Stop auto-meme scheduler
     stopAutoMemeScheduler();
