@@ -7,29 +7,28 @@
 
 ---
 
-## 1. The one thing that blocks everything
+## 1. The hierarchy blocker — now CLEARED ✅
 
-**Kabbot cannot remove any of the bots today.**
+The earlier plan opened on a hard blocker: Kabbot and sixteen bots all sat on the same role,
+`Clanker 🤖`, and Discord only lets you remove a member whose highest role is *strictly below* yours,
+so Kabbot could not remove anything. **That has since been fixed** — Kabbot's managed role was raised
+above `Clanker 🤖`.
 
-Sixteen bots — including Kabbot — all hold the same role, **`Clanker 🤖` (position 103)**. Discord
-only lets you remove a member whose highest role is *strictly below* yours. Equal rank is a refusal,
-and **Administrator does not bypass it**. So Kabbot's highest role ties with every bot it is meant
-to replace.
+Verified live on 2026-07-12:
 
 ```
-105  Karabi
-104  Bot Developer
-103  Clanker 🤖        <-- Kabbot AND 15 bots to retire all sit here
-102  Kabbot            (managed/integration role)
-101  Twitch Mod
-100  Discord Mod
+106  Karabi
+105  Bot Developer
+104  Kabbot            <-- Kabbot's managed role, now ABOVE Clanker
+103  Clanker 🤖        <-- every bot to retire tops out here (or lower)
+102  Twitch Mod
+101  Discord Mod
 ```
 
-The retirement gate already catches this and refuses (`core/bot-retirement.js:146`), so nothing was
-ever going to slip through — but it means **step 0 below is mandatory**.
-
-Three bots are already below Kabbot and could be removed today: **Nightbot (87), DISBOARD (81),
-Sx Bot (80)**.
+**All 19 target bots are removable by Kabbot today.** 16 top out at `Clanker 🤖` (103); Nightbot (88),
+DISBOARD (82) and Sx Bot (81) are lower still. Nothing is blocked on hierarchy. The retirement gate
+(`core/bot-retirement.js`, strict `comparePositionTo(...) > 0`) now passes for each of them, so Step 0
+in §5 is already satisfied — leave it as a pre-flight check, not a task.
 
 ---
 
@@ -214,16 +213,43 @@ no bot user — leave the webhook in `#𝙩𝙩𝙨` alone).
 
 ---
 
+## 4½. Server health — the full-audit picture (2026-07-12)
+
+Run `node scripts/guild-full-audit.mjs 814321716872347648 --json out.json` for the complete dump
+(REST-GET only, safe while live). What it surfaced beyond the bots, and what to raise with the owner:
+
+**Snapshot.** Created 2021-02-25 (1,963 days). 115 members, 20 bot members. 34 text channels,
+6,743 messages. 113 emoji, 15 stickers, 13 soundboard sounds. 22 integrations, 11 invites, 2 webhooks.
+
+**Security — two things to fix, owner's call:**
+- **2FA for moderation is OFF.** Any compromised mod account can ban/kick. Owner can turn on
+  "Require 2FA for moderation" in Server Settings → Safety Setup.
+- **Verification is Low.** A fresh account can post immediately. Medium gates accounts younger than
+  5 minutes. Explicit-content filter is already at "All members" (good). One AutoMod rule
+  (Block Mention Spam) — light, but present.
+- Dangerous roles worth an eyeball: `ALT` and `Fake` both carry admin-equivalent perms with 1 and 3
+  holders. `Clanker 🤖` (the bot role) holds ManageGuild/ManageRoles — expected for bots, but it is
+  what every incumbent tops out at.
+
+**Role hygiene — Carl-bot leftovers, safe to prune AFTER the panels are rebuilt (Step 8):**
+- Pronoun roles exist ~5× over and region roles ~2× (old reaction-role panels stacked them up).
+- Several 0-holder roles and unnamed "new role" placeholders.
+- The readiness card on `?page=takeover` lists the exact duplicate names and counts live.
+
+**Nothing here blocks the takeover** — it is cleanup and hardening to do alongside it.
+
+---
+
 ## 5. The steps, in order
 
 Everything below is idempotent and safe to re-run. Steps 1–7 are **config only** — they never post,
 edit or delete a message. Steps 8 and 9 are the two that touch the server, and each is its own
 deliberate action.
 
-### Step 0 — Fix the hierarchy *(manual, you)*
-Drag Kabbot's role above **`Clanker 🤖`**, or move `Clanker 🤖` below it. Nothing can be retired
-until this is done. Karabi and Bot Developer stay above Kabbot either way.
-**Verify:** `/takeover` shows the `hierarchy` gate green.
+### Step 0 — Hierarchy *(already done — pre-flight check only)*
+Kabbot's role is at **104**, above `Clanker 🤖` (103). All 19 target bots are removable.
+**Verify before starting:** `?page=takeover` → open any bot → the `hierarchy` gate is green. If
+someone has since re-ordered roles and it is red, drag Kabbot's role back above `Clanker 🤖`.
 
 ### Step 1 — Scan *(already done — re-run to refresh)*
 Dashboard → `?page=takeover` → **Scan**. Full history, resumable, REST-GET only.

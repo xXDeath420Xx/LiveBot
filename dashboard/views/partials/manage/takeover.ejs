@@ -1,0 +1,398 @@
+<%# Analyze & Take Over. API-driven; needs `guild` in locals. %>
+<div class="page-section" id="takeoverPage" data-guild-id="<%= guild.id %>" data-guild-name="<%= guild.name %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-crosshairs"></i>
+                <span>Analyze &amp; Take Over</span>
+            </div>
+            <div class="page-section-subtitle">
+                Read every channel, work out what each bot does, replace what we can, and retire
+                the old bot only once nothing it does is left unexplained.
+            </div>
+        </div>
+    </div>
+
+    <div id="toError" class="alert alert-danger" hidden></div>
+
+    <!-- Phase 1: scan -->
+    <div class="to-card">
+        <div class="to-head">
+            <div>
+                <h3 class="to-h">1 · Scan the server</h3>
+                <p class="form-help">
+                    Reads every channel back to its first message. Nothing is posted, edited or
+                    deleted. Safe to run on a live server, and safe to interrupt — it resumes.
+                </p>
+            </div>
+            <div class="to-actions">
+                <select id="toDepth" class="form-control" style="max-width:11rem">
+                    <option value="deep">Full history</option>
+                    <option value="standard">Last 90 days</option>
+                    <option value="quick">Quick (1k / channel)</option>
+                </select>
+                <button class="btn btn-primary" id="toScan">Start scan</button>
+                <button class="btn btn-secondary" id="toCancel" hidden>Cancel</button>
+                <button class="btn btn-secondary" id="toResume" hidden>Resume</button>
+            </div>
+        </div>
+
+        <div id="toScanState" class="to-muted">Loading…</div>
+        <div class="to-bar" id="toBarWrap" hidden><div class="to-bar-fill" id="toBar" style="width:0%"></div></div>
+        <div id="toUnreadable"></div>
+    </div>
+
+    <!-- Phase 2: bots -->
+    <div class="to-card">
+        <h3 class="to-h">2 · What we found</h3>
+        <p class="form-help">
+            Every bot and webhook persona that has ever posted. Expand one to see the distinct
+            message shapes it shows — each must be accounted for before it can be removed.
+        </p>
+        <div id="toBots" class="to-list">Run a scan to see results.</div>
+    </div>
+
+    <!-- Phase 3: parity -->
+    <div class="to-card">
+        <div class="to-head">
+            <div>
+                <h3 class="to-h">3 · Apply feature parity</h3>
+                <p class="form-help">
+                    Writes configuration only. It carries live values across — a counting channel
+                    resumes at the exact number the old bot left off on.
+                </p>
+            </div>
+            <div class="to-actions">
+                <button class="btn btn-secondary" id="toPlan">Preview plan</button>
+                <button class="btn btn-primary" id="toApply" disabled>Apply selected</button>
+            </div>
+        </div>
+
+        <!-- Readiness: the full picture around the steps. Populated by Preview plan. -->
+        <div id="toReadiness" hidden>
+            <div class="to-ready-grid">
+                <div class="to-ready" id="toReadyHierarchy"></div>
+                <div class="to-ready" id="toReadySecurity"></div>
+                <div class="to-ready" id="toReadyHygiene"></div>
+                <div class="to-ready" id="toReadyGaps"></div>
+            </div>
+        </div>
+
+        <div id="toSteps" class="to-list to-muted">Preview a plan to see the steps.</div>
+    </div>
+</div>
+
+<style>
+  #takeoverPage .to-card { background:#1e2028; border:1px solid #2c2f3a; border-radius:10px; padding:1.1rem 1.25rem; margin-bottom:1rem; }
+  #takeoverPage .to-h { margin:0 0 .35rem; font-size:1rem; font-weight:600; }
+  #takeoverPage .to-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+  #takeoverPage .to-actions { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+  #takeoverPage .to-muted { color:#8b8f9e; font-size:.88rem; }
+  #takeoverPage .to-bar { height:8px; border-radius:999px; background:#2c2f3a; margin-top:.75rem; overflow:hidden; }
+  #takeoverPage .to-bar-fill { height:100%; background:linear-gradient(90deg,#5865F2,#57F287); transition:width .4s ease; }
+  #takeoverPage .to-list { margin-top:.9rem; display:grid; gap:.5rem; }
+  #takeoverPage .to-bot { border:1px solid #2c2f3a; border-radius:8px; background:#14161c; }
+  #takeoverPage .to-bot-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.7rem .9rem; cursor:pointer; }
+  #takeoverPage .to-bot-body { border-top:1px solid #2c2f3a; padding:.8rem .9rem; display:none; }
+  #takeoverPage .to-bot.open .to-bot-body { display:block; }
+  #takeoverPage .to-tag { font-size:.72rem; padding:.15rem .45rem; border-radius:999px; border:1px solid #2c2f3a; }
+  #takeoverPage .to-tag.ok { color:#57F287; border-color:#2f6f4a; }
+  #takeoverPage .to-tag.no { color:#ED4245; border-color:#6f2f2f; }
+  #takeoverPage .to-tag.warn { color:#c9a227; border-color:#6f5f2f; }
+  #takeoverPage .to-tpl { display:flex; align-items:flex-start; justify-content:space-between; gap:.8rem;
+    padding:.45rem .6rem; border:1px solid #23262f; border-radius:6px; margin-bottom:.35rem; font-size:.84rem; }
+  #takeoverPage .to-tpl code { color:#c9d1d9; word-break:break-word; }
+  #takeoverPage .to-trig { color:#8b8f9e; font-size:.78rem; }
+  #takeoverPage .to-gate { display:flex; gap:.55rem; align-items:flex-start; font-size:.86rem; padding:.2rem 0; }
+  #takeoverPage .to-step { display:flex; gap:.6rem; align-items:flex-start; padding:.55rem .7rem;
+    border:1px solid #2c2f3a; border-radius:8px; background:#14161c; font-size:.88rem; }
+  #takeoverPage .to-retire { margin-top:.8rem; padding-top:.8rem; border-top:1px solid #2c2f3a; display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+  #takeoverPage .to-ready-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:.7rem; margin:.9rem 0 1.1rem; }
+  #takeoverPage .to-ready { border:1px solid #2c2f3a; border-radius:8px; background:#14161c; padding:.75rem .9rem; }
+  #takeoverPage .to-ready h5 { margin:0 0 .5rem; font-size:.82rem; text-transform:uppercase; letter-spacing:.03em; color:#8b8f9e; }
+  #takeoverPage .to-ready .big { font-size:1.05rem; font-weight:600; }
+  #takeoverPage .to-ready .good { color:#57F287; }
+  #takeoverPage .to-ready .bad { color:#ED4245; }
+  #takeoverPage .to-ready .warn { color:#c9a227; }
+  #takeoverPage .to-ready ul { margin:.4rem 0 0; padding-left:1.05rem; font-size:.82rem; color:#c9d1d9; }
+  #takeoverPage .to-ready li { margin-bottom:.2rem; }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('takeoverPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const guildName = root.dataset.guildName;
+  const api = (p) => `/api/guilds/${guildId}/takeover${p}`;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  let poll = null;
+  let state = null;
+
+  async function req(url, options) {
+    const res = await fetch(url, { credentials:'same-origin', headers:{ 'Content-Type':'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const el = $('toError'); if (!m) { el.hidden = true; return; } el.textContent = m; el.hidden = false; };
+
+  function renderScan(d) {
+    const s = d.scan;
+    $('toScan').disabled = d.scanning;
+    $('toCancel').hidden = !d.scanning;
+    $('toResume').hidden = d.scanning || !s || s.status === 'complete' || s.status === 'cancelled';
+    $('toBarWrap').hidden = !s;
+
+    if (!s) { $('toScanState').textContent = 'No scan yet.'; return; }
+    $('toBar').style.width = `${s.pct}%`;
+    $('toScanState').innerHTML =
+      `<strong>${esc(s.status)}</strong> · ${s.channels_done}/${s.channels_total} channels · ` +
+      `${Number(s.messages_scanned).toLocaleString()} messages indexed` +
+      (s.error ? ` · <span style="color:#ED4245">${esc(s.error)}</span>` : '');
+
+    $('toUnreadable').innerHTML = d.unreadableChannels?.length
+      ? `<div class="to-muted" style="margin-top:.6rem">⚠ ${d.unreadableChannels.length} channel(s) excluded — we cannot read their history:
+           ${d.unreadableChannels.map(c => '#' + esc(c.name)).join(', ')}</div>`
+      : '';
+  }
+
+  function botTag(b) {
+    if (b.retired) return '<span class="to-tag ok">retired</span>';
+    if (b.kind === 'webhook') return '<span class="to-tag warn">webhook</span>';
+    if (!b.present) return '<span class="to-tag">gone</span>';
+    if (!b.known) return '<span class="to-tag warn">unrecognised</span>';
+    if (!b.feature) return '<span class="to-tag no">unreplaceable</span>';
+    return `<span class="to-tag ok">replaces: ${esc(b.feature)}</span>`;
+  }
+
+  function renderBots(d) {
+    const el = $('toBots');
+    if (!d.bots.length) { el.textContent = d.scan ? 'No bots posted in this server.' : 'Run a scan to see results.'; return; }
+
+    el.innerHTML = d.bots.map(b => `
+      <div class="to-bot" data-bot="${esc(b.bot_id)}">
+        <div class="to-bot-head" data-toggle="${esc(b.bot_id)}">
+          <div>
+            <strong>${esc(b.name)}</strong> ${botTag(b)}
+            <div class="to-muted">${Number(b.messages).toLocaleString()} messages in ${b.channels.length} channel(s)</div>
+            ${b.why ? `<div class="to-muted">${esc(b.why)}</div>` : ''}
+            ${b.holdsData ? `<div class="to-tag warn" style="display:inline-block;margin-top:.3rem">holds ${esc(b.holdsData.what)}</div>` : ''}
+          </div>
+          <span class="to-muted">▾</span>
+        </div>
+        <div class="to-bot-body" data-body="${esc(b.bot_id)}"></div>
+      </div>`).join('');
+  }
+
+  async function openBot(botId) {
+    const body = root.querySelector(`[data-body="${botId}"]`);
+    body.innerHTML = 'Loading evidence…';
+
+    const bot = state.bots.find(b => b.bot_id === botId);
+    const [tpl, gates] = await Promise.all([
+      req(api(`/bots/${botId}/templates`)),
+      bot.kind === 'bot' && bot.present ? req(api(`/bots/${botId}/gates`)).catch(e => ({ error: e.message })) : null,
+    ]);
+
+    const templates = tpl.templates.map(t => `
+      <div class="to-tpl">
+        <div>
+          <code>${esc(t.sample || '(empty)')}</code>
+          <div class="to-trig">×${t.occurrences}${t.triggers.length ? ' · triggered by ' + t.triggers.map(esc).join(', ') : ''}</div>
+        </div>
+        <label class="to-trig" style="white-space:nowrap">
+          <input type="checkbox" data-attr="${t.id}" ${t.attributed ? 'checked' : ''}>
+          covered${t.attributed_to ? ` (${esc(t.attributed_to)})` : ''}
+        </label>
+      </div>`).join('') || '<div class="to-muted">No message shapes recorded.</div>';
+
+    const gateHtml = !gates ? '' : gates.error
+      ? `<div class="to-muted">${esc(gates.error)}</div>`
+      : `<h4 class="to-h" style="margin-top:1rem">Removal gates</h4>` +
+        gates.gates.map(g => `
+          <div class="to-gate">
+            <span>${g.pass === true ? '✅' : g.pass === null ? '⏳' : '⛔'}</span>
+            <span><strong>${esc(g.label)}</strong>${g.detail ? `<br><span class="to-muted">${esc(g.detail)}</span>` : ''}</span>
+          </div>`).join('') +
+        retireBox(gates, bot);
+
+    body.innerHTML = `
+      <div class="to-actions" style="margin-bottom:.6rem">
+        <button class="btn btn-sm btn-secondary" data-auto="${botId}">Auto-attribute what we recognise</button>
+        <span class="to-muted">${tpl.templates.filter(t => !t.attributed).length} unexplained</span>
+      </div>
+      ${templates}
+      ${gateHtml}`;
+  }
+
+  function retireBox(gates, bot) {
+    if (!state.isOwner) return '<div class="to-muted" style="margin-top:.6rem">Only the server owner can remove a bot.</div>';
+    if (bot.retired) return '';
+
+    const ack = bot.holdsData && !gates.gates.find(g => g.id === 'data')?.pass
+      ? `<button class="btn btn-sm btn-secondary" data-ack="${bot.bot_id}">I exported ${esc(bot.holdsData.what)}</button>` : '';
+
+    return `<div class="to-retire">
+      ${ack}
+      <input type="text" class="form-control" style="max-width:16rem" placeholder="Type: ${esc(guildName)}" data-confirm="${bot.bot_id}">
+      <button class="btn btn-sm btn-danger" data-retire="${bot.bot_id}" ${gates.ready ? '' : 'disabled'}>
+        ${gates.ready ? 'Remove this bot' : 'Blocked'}
+      </button>
+      <span class="to-muted" data-rstatus="${bot.bot_id}"></span>
+    </div>`;
+  }
+
+  function renderReadiness(r) {
+    const wrap = $('toReadiness');
+    if (!r) { wrap.hidden = true; return; }
+    wrap.hidden = false;
+
+    const h = r.hierarchy || { removable: [], blocked: [] };
+    const blocked = h.blocked || [];
+    $('toReadyHierarchy').innerHTML =
+      `<h5>Can we remove them?</h5>` +
+      (blocked.length
+        ? `<div class="big bad">${blocked.length} blocked</div>
+           <ul>${blocked.map(b => `<li>${esc(b.name)} — tops out at <strong>${esc(b.topRole)}</strong> (${b.position}), our bot is ${h.botPosition}</li>`).join('')}</ul>
+           <div class="to-muted" style="margin-top:.4rem">Raise our bot's role above theirs, or nothing can be retired.</div>`
+        : `<div class="big good">✅ all ${h.removable?.length ?? 0} removable</div>
+           <div class="to-muted" style="margin-top:.35rem">Our role (${h.botPosition}) is above every target bot's highest role.</div>`);
+
+    const s = r.security || { warnings: [] };
+    $('toReadySecurity').innerHTML =
+      `<h5>Server security</h5>
+       <div>Verification: <strong class="${(s.warnings||[]).some(w=>/Verification/.test(w))?'warn':''}">${esc(s.verification)}</strong></div>
+       <div>2FA for mod: <strong class="${s.twoFactorForMod?'good':'warn'}">${s.twoFactorForMod?'required':'OFF'}</strong></div>
+       <div>Explicit filter: <strong>${esc(s.explicitContentFilter)}</strong></div>` +
+      ((s.warnings||[]).length ? `<ul>${s.warnings.map(w=>`<li class="warn">${esc(w)}</li>`).join('')}</ul>` : '');
+
+    const g = r.roleHygiene || { duplicates: [], emptyRoles: 0, placeholderRoles: 0 };
+    $('toReadyHygiene').innerHTML =
+      `<h5>Role hygiene</h5>
+       <div>Empty roles: <strong>${g.emptyRoles}</strong></div>
+       <div>Unnamed "new role": <strong>${g.placeholderRoles}</strong></div>` +
+      ((g.duplicates||[]).length
+        ? `<div style="margin-top:.35rem">Duplicate-named roles (Carl-bot leftovers):</div>
+           <ul>${g.duplicates.map(d=>`<li>${esc(d.name)} ×${d.count}</li>`).join('')}</ul>`
+        : `<div class="to-muted" style="margin-top:.35rem">No duplicate-named roles.</div>`);
+
+    const gaps = r.parityGaps || [];
+    $('toReadyGaps').innerHTML =
+      `<h5>Parity gaps &amp; notes</h5>` +
+      (gaps.length ? `<ul>${gaps.map(x=>`<li><strong class="warn">${esc(x.feature)}</strong> — ${esc(x.detail)}</li>`).join('')}</ul>` : '') +
+      ((r.notes||[]).length ? `<ul>${r.notes.map(n=>`<li class="to-muted">${esc(n)}</li>`).join('')}</ul>` : '');
+  }
+
+  function renderSteps(p) {
+    renderReadiness(p.readiness);
+    $('toSteps').innerHTML = p.steps.map(s => `
+      <div class="to-step">
+        <input type="checkbox" data-step="${esc(s.key)}" ${s.done || s.blocked ? 'disabled' : 'checked'}>
+        <div>
+          <strong>${esc(s.label)}</strong>
+          ${s.done ? '<span class="to-tag ok">done</span>' : ''}
+          ${s.blocked ? `<span class="to-tag no">blocked</span>` : ''}
+          ${s.replaces ? `<span class="to-muted"> — replaces ${esc(s.replaces)}</span>` : ''}
+          ${s.note ? `<div class="to-muted">${esc(s.note)}</div>` : ''}
+          ${s.blocked ? `<div class="to-muted">${esc(s.blocked)}</div>` : ''}
+        </div>
+      </div>`).join('') || '<div class="to-muted">Nothing to do.</div>';
+    $('toApply').disabled = !p.actionable.length;
+  }
+
+  async function load() {
+    try {
+      showError('');
+      state = await req(api('/'));
+      renderScan(state);
+      renderBots(state);
+
+      if (state.scanning && !poll) poll = setInterval(load, 3000);
+      if (!state.scanning && poll) { clearInterval(poll); poll = null; }
+    } catch (err) { showError(err.message); }
+  }
+
+  $('toScan').addEventListener('click', async () => {
+    if (!confirm('Read every message in every channel? This posts nothing, but can take a while.')) return;
+    try { await req(api('/scan'), { method:'POST', body: JSON.stringify({ depth: $('toDepth').value }) }); await load(); }
+    catch (err) { showError(err.message); }
+  });
+  $('toCancel').addEventListener('click', async () => { await req(api('/scan/cancel'), { method:'POST' }); await load(); });
+  $('toResume').addEventListener('click', async () => {
+    try { await req(api('/scan/resume'), { method:'POST' }); await load(); } catch (err) { showError(err.message); }
+  });
+
+  $('toPlan').addEventListener('click', async () => {
+    try { renderSteps(await req(api('/plan'))); } catch (err) { showError(err.message); }
+  });
+
+  $('toApply').addEventListener('click', async () => {
+    const only = [...root.querySelectorAll('[data-step]:checked')].map(el => el.dataset.step);
+    if (!only.length) return showError('Nothing selected.');
+    try {
+      const r = await req(api('/apply'), { method:'POST', body: JSON.stringify({ only }) });
+      const applied = r.results.filter(x => x.outcome === 'applied').length;
+      showError('');
+      alert(`Applied ${applied} step(s).`);
+      renderSteps(await req(api('/plan')));
+    } catch (err) { showError(err.message); }
+  });
+
+  root.addEventListener('click', async (e) => {
+    const toggle = e.target.closest('[data-toggle]');
+    if (toggle) {
+      const card = toggle.closest('.to-bot');
+      card.classList.toggle('open');
+      if (card.classList.contains('open')) await openBot(toggle.dataset.toggle).catch(err => showError(err.message));
+      return;
+    }
+
+    const auto = e.target.closest('[data-auto]');
+    if (auto) {
+      try { const r = await req(api(`/bots/${auto.dataset.auto}/auto-attribute`), { method:'POST' });
+        await openBot(auto.dataset.auto);
+        if (r.remaining) showError(`${r.remaining} template(s) still need a human. Tick the ones we cover.`);
+      } catch (err) { showError(err.message); }
+      return;
+    }
+
+    const ack = e.target.closest('[data-ack]');
+    if (ack) {
+      if (!confirm('Confirm the data has been exported? This cannot be undone once the bot is removed.')) return;
+      try { await req(api(`/bots/${ack.dataset.ack}/extraction-ack`), { method:'POST' }); await openBot(ack.dataset.ack); }
+      catch (err) { showError(err.message); }
+      return;
+    }
+
+    const rm = e.target.closest('[data-retire]');
+    if (rm) {
+      const botId = rm.dataset.retire;
+      const confirmEl = root.querySelector(`[data-confirm="${botId}"]`);
+      const status = root.querySelector(`[data-rstatus="${botId}"]`);
+      if (!confirm(`Remove this bot from ${guildName}? Its stored data is gone for good.`)) return;
+      rm.disabled = true;
+      try {
+        const r = await req(api(`/bots/${botId}/retire`), { method:'POST', body: JSON.stringify({ confirm: confirmEl.value }) });
+        status.textContent = `Removed via ${r.method}.`;
+        await load();
+      } catch (err) { status.textContent = err.message; status.style.color = '#ED4245'; rm.disabled = false; }
+    }
+  });
+
+  root.addEventListener('change', async (e) => {
+    const box = e.target.closest('[data-attr]');
+    if (!box) return;
+    try {
+      await req(api(`/templates/${box.dataset.attr}/attribute`), {
+        method:'POST', body: JSON.stringify({ attributed: box.checked, feature: 'manual' }),
+      });
+    } catch (err) { showError(err.message); box.checked = !box.checked; }
+  });
+
+  window.addEventListener('beforeunload', () => poll && clearInterval(poll));
+  load();
+})();
+</script>
