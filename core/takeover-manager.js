@@ -245,6 +245,74 @@ function missingPerms(channel, guild, names) {
   return (names ?? []).filter(n => !perms?.has(PermissionFlagsBits[n]));
 }
 
+/**
+ * Guild-level readiness — the picture *around* the parity steps. Pure inspection, safe to run any
+ * time. It answers the three questions a plan alone does not: can we actually remove these bots
+ * (hierarchy), is the server itself in good shape (security), and what parity gaps remain that are
+ * bigger than a config row.
+ *
+ * Hierarchy is the load-bearing one. Discord only lets a member remove another whose highest role is
+ * STRICTLY below its own; Administrator does not bypass it. So we compare our bot's top role against
+ * each target bot's top role and report exactly which are removable today.
+ */
+export async function readiness(guild) {
+  const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+  const myTop = me?.roles?.highest?.position ?? 0;
+
+  const bots = await detectBots(guild);
+  const hierarchy = { botPosition: myTop, removable: [], blocked: [] };
+  for (const b of bots) {
+    const member = await guild.members.fetch(b.id).catch(() => null);
+    if (!member) continue;
+    const top = member.roles.highest.position;
+    const entry = { name: b.name, id: b.id, position: top, topRole: member.roles.highest.name };
+    (myTop > top ? hierarchy.removable : hierarchy.blocked).push(entry);
+  }
+
+  // Server security posture. These are the settings a takeover should not silently inherit as-is.
+  const VERIF = ['None', 'Low', 'Medium', 'High', 'Highest'];
+  const FILTER = ['Disabled', 'Members without roles', 'All members'];
+  const security = {
+    verification: VERIF[guild.verificationLevel] ?? String(guild.verificationLevel),
+    twoFactorForMod: guild.mfaLevel === 1,
+    explicitContentFilter: FILTER[guild.explicitContentFilter] ?? String(guild.explicitContentFilter),
+    warnings: [],
+  };
+  if (guild.mfaLevel !== 1) security.warnings.push('2FA is NOT required for moderation actions — any compromised mod account can ban/kick.');
+  if ((guild.verificationLevel ?? 0) < 2) security.warnings.push(`Verification is ${security.verification} — a raid can post immediately. Medium+ gates new/unverified accounts.`);
+
+  // Role hygiene: same-named duplicates (Carl-bot rebuilds leave stacks of pronoun/region roles) and
+  // empty non-managed roles. Cheap — reads the role cache only, no member sweep.
+  const byName = new Map();
+  for (const r of guild.roles.cache.values()) {
+    if (r.managed || r.id === guild.id) continue;
+    const key = r.name.toLowerCase().trim();
+    (byName.get(key) ?? byName.set(key, []).get(key)).push(r);
+  }
+  const duplicates = [...byName.entries()].filter(([, rs]) => rs.length > 1)
+    .map(([name, rs]) => ({ name, count: rs.length }));
+  const empty = guild.roles.cache.filter(r => !r.managed && r.id !== guild.id && r.members.size === 0 && r.name !== 'new role').size;
+  const placeholders = guild.roles.cache.filter(r => r.name === 'new role').size;
+
+  return {
+    hierarchy,
+    security,
+    roleHygiene: { duplicates, emptyRoles: empty, placeholderRoles: placeholders },
+    parityGaps: [
+      {
+        feature: 'OwO guild boss',
+        status: 'not-built',
+        detail: 'OwO spawns a guild boss (one appeared here and ran away undefeated). Ours does not. ' +
+          'Not a config row — a feature. Schema is known (guild_boss / user_boss); decision needed.',
+      },
+    ],
+    notes: [
+      'The analyzer was blind to Components V2 messages until 2026-07-12 — FreeStuff (95 posts) and ' +
+      "OwO's guild boss were invisible. Re-scan to see them; FreeStuff parity (free_games) still holds.",
+    ],
+  };
+}
+
 // ── Planning ─────────────────────────────────────────────────────────────────
 
 /**
@@ -363,6 +431,8 @@ export async function plan(guild, opts = {}) {
     push('owo', {
       label: STEPS.owo.label, done: !!owo?.enabled,
       blocked: 'the real OwO bot is still here — enabling ours would double-reply. Enable AFTER removing it.',
+      note: 'parity: hunt/gems/lootboxes/crates/battle/pets are built; the GUILD BOSS is not (see readiness). ' +
+        'karabi progress is importable from #owo-game — cowoncy is the only unrecoverable piece.',
       replaces: byFeature.get('owo').name,
     });
   }
@@ -495,6 +565,10 @@ export async function plan(guild, opts = {}) {
     unreplaceable,
     steps,
     actionable: steps.filter(s => !s.done && !s.blocked),
+    readiness: await readiness(guild).catch(err => {
+      logger.warn(`[Takeover] readiness failed: ${err.message}`);
+      return null;
+    }),
   };
 }
 
