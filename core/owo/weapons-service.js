@@ -64,8 +64,12 @@ function pickWeaponClass() {
  * Build a fresh random weapon descriptor. No DB writes.
  * Returns { classKey, weaponId, rank, wear, wearId, stat, passives: [{name,id,quality}], emoji }
  */
-export function generateWeapon() {
-    const WeaponCls = pickWeaponClass();
+export function generateWeapon(weaponId = null) {
+    // A specific id is used when restoring an inventory we already know the shape of — the TYPE is
+    // known, the rolled qualities are not, so those are still random.
+    const WeaponCls = weaponId != null
+        ? (getWeaponById(weaponId) ?? pickWeaponClass())
+        : pickWeaponClass();
     const inst = new WeaponCls(null, null, true); // noCreate = don't roll internally
 
     const rankEntry = weightedPick(RANK_WEIGHTS);
