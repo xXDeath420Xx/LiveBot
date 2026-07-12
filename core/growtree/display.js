@@ -4,7 +4,7 @@
  */
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
 import { renderTree, renderTreeAscii, artInstalled } from './renderer.js';
-import { getTreeHeight, isGrowing, canBeWateredAt } from './formulas.js';
+import { getTreeHeight, isGrowing, canBeWateredAt, getTreeAge, formatDurationLong } from './formulas.js';
 
 const GREEN = 0x3E8E41;
 
@@ -33,10 +33,13 @@ export async function buildTreeMessage(tree, guild) {
   if (tree.lastWateredBy) lines.push(`Last watered by: <@${tree.lastWateredBy}>`);
   lines.push(growing ? `Ready to be watered <t:${readyAt}:R>` : '**Ready to be watered!**');
 
+  // The tree's age is the sum of every watering interval it has already served, so it is derived
+  // from the height rather than stored — a tree carried over at 190ft is correctly 45 minutes old.
   const embed = new EmbedBuilder()
     .setColor(GREEN)
     .setAuthor({ name: tree.name })
-    .setDescription(lines.join('\n'));
+    .setDescription(lines.join('\n'))
+    .setFooter({ text: `${formatDurationLong(getTreeAge(tree.size))} spent growing this tree` });
 
   const payload = { embeds: [embed], components: buildTreeComponents(growing) };
 
