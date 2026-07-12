@@ -89,6 +89,22 @@ export function backgroundForSize(size, current = 'Ground') {
   return current;
 }
 
+/** "45 minutes and 52 seconds" — spelled out, the way the tree's age is quoted. */
+export function formatDurationLong(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const units = [
+    ['day', Math.floor(s / 86400)],
+    ['hour', Math.floor((s % 86400) / 3600)],
+    ['minute', Math.floor((s % 3600) / 60)],
+    ['second', s % 60],
+  ].filter(([, n]) => n > 0);
+
+  if (!units.length) return '0 seconds';
+  const parts = units.map(([name, n]) => `${n} ${name}${n === 1 ? '' : 's'}`);
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
 export function formatDuration(seconds) {
   const s = Math.max(0, Math.floor(seconds));
   const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600);

@@ -36,16 +36,45 @@ export async function getTree(guildId) {
   return hydrate(row);
 }
 
-export async function plantTree(guildId, userId, name, rng = Math.random) {
+export const MAX_PLANT_HEIGHT = 10_000;
+
+/**
+ * Plant this server's tree.
+ *
+ * `height` carries a tree over from elsewhere instead of starting from a sapling. It cannot just
+ * set `size`: every growth and cooldown calculation reads `pieces.length`, and the next water
+ * writes `size = pieces.length`, so a tree with `size = 190` and three pieces would silently
+ * collapse back to 3ft the first time somebody watered it. So we generate a real trunk of that
+ * many segments, and the tree simply continues.
+ *
+ * `lastWateredBy` preserves whose turn it is — the no-self-water rule means that person still has
+ * to wait for someone else, exactly as they would have on the tree we are replacing.
+ */
+export async function plantTree(guildId, userId, name, rng = Math.random, opts = {}) {
   if (!NAME_RE.test(name)) return { ok: false, reason: 'name' };
   const existing = await getTree(guildId);
   if (existing) return { ok: false, reason: 'exists', tree: existing };
 
-  const pieces = newTree(rng);
+  const height = Math.trunc(Number(opts.height) || 0);
+  if (height && (height < 3 || height > MAX_PLANT_HEIGHT)) return { ok: false, reason: 'height' };
+
+  let pieces = newTree(rng);
+  while (height && pieces.length < height) pieces = grow(pieces, rng);
+
+  const background = backgroundForSize(pieces.length, 'Ground');
+  const lastWateredBy = opts.lastWateredBy ?? null;
+
+  // `last_watered_at = 0` leaves the tree READY, which is the honest handover state: it really is
+  // 190ft and it really is somebody else's turn. Stamping "watered just now" instead would put it
+  // mid-cooldown, and since the displayed height interpolates UP toward `size`, a 190ft tree would
+  // greet everyone as 189ft until the cooldown ran out.
+  const lastWateredAt = 0;
+
   const [r] = await pool.execute(
-    `INSERT IGNORE INTO gat_trees (guild_id, name, size, pieces, background, planted_by, last_watered_at)
-     VALUES (?, ?, ?, ?, 'Ground', ?, 0)`,
-    [guildId, name, pieces.length, JSON.stringify(pieces), userId]);
+    `INSERT IGNORE INTO gat_trees
+       (guild_id, name, size, pieces, background, planted_by, last_watered_by, last_watered_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [guildId, name, pieces.length, JSON.stringify(pieces), background, userId, lastWateredBy, lastWateredAt]);
   if (r.affectedRows !== 1) return { ok: false, reason: 'exists' };
   return { ok: true, tree: await getTree(guildId) };
 }
