@@ -123,11 +123,12 @@ theirs.
 
 ## 4. The 20 bots
 
-**Retire (14)** — we replace the feature:
+**Retire (15)** — we replace the feature:
 Carl-bot · Pingcord · Counting Bot · Nightbot · Sx Bot · CannaFriend · Friend Time · Birthday Bot ·
-Cat Bot · Grow a Tree · Ko-fi Bot · FreeStuff · FlaviBot · Throne Integration Bot
+Cat Bot · Grow a Tree · **OwO** · Ko-fi Bot · FreeStuff · FlaviBot · Throne Integration Bot
 
-**Retire (1, your call)** — OwO, subject to §3.
+OwO's four missing features are built (§3), so the only thing it still costs is its **progress**
+(cowoncy, animals, weapons, zoo) — which no API can move. Say that before retiring it.
 
 **Keep (4 + 1 webhook)** — no equivalent exists:
 **TacoShack** (idle game) · **DISBOARD** (bump service) · **BetterTTV** (Twitch emotes) ·
