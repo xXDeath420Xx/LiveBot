@@ -24,35 +24,50 @@ const ascii = (s) => String(s).replace(/[^\x20-\x7E]/g, '').slice(0, 400);
  * What each incumbent bot does, and whether we can take it over.
  * `probe` decides whether the feature is actually in use in this guild.
  */
+/**
+ * `coverage` is the honest verdict, and it is three-valued on purpose:
+ *   'full'    — we reproduce what it does here. Retire it.
+ *   'partial' — we reproduce the core of it but not all of it. `why` says exactly what is missing.
+ *   'none'    — genuinely nothing to replace. KEEP it; this is not a failure, it is a decision.
+ * Anything without `coverage` defaults to 'full' when a feature is set. Never label a bot we do
+ * replace as unreplaceable — that was the old bug, and it made a nearly-complete takeover read as
+ * a wall of red.
+ */
 export const KNOWN_BOTS = Object.freeze({
   // Replaceable — we have the feature.
-  '510016054391734273': { name: 'counting', feature: 'counting' },
-  '696797815782768650': { name: 'Counting Bot', feature: 'counting' },
-  '282286160494067712': { name: 'Pingcord', feature: 'streams' },
-  '155149108183695360': { name: 'Dyno', feature: 'logging' },
-  '235148962103951360': { name: 'Carl-bot', feature: 'reaction_roles' },
-  '471091072546766849': { name: 'Friend Time', feature: 'timezone' },
-  '966695034340663367': { name: 'Cat Bot', feature: 'catbot' },
-  '972637072991068220': { name: 'Grow a Tree', feature: 'growtree' },
-  '408785106942164992': { name: 'OwO', feature: 'owo' },
-  '1071983600729346208': { name: 'CannaFriend', feature: 'cannabis' },
-  '696870234262339614': { name: 'Sx Bot', feature: 'emoji' },
-  '83010416610906112': { name: 'Nightbot', feature: 'custom_commands' },
-  '1437489496680828968': { name: 'Throne Integration', feature: 'throne' },
-  '672822334641537041': { name: 'FreeStuff', feature: 'free_games' },
-  '656621136808902656': { name: 'Birthday Bot', feature: 'birthday' },
-  '356268235697553409': { name: '.fmbot', feature: 'lastfm' },
-  '684773505157431347': { name: 'FlaviBot', feature: 'moderation' },
-  '836232765942923305': { name: 'Ko-fi Bot', feature: 'kofi' },
+  '510016054391734273': { name: 'counting', feature: 'counting', coverage: 'full' },
+  '696797815782768650': { name: 'Counting Bot', feature: 'counting', coverage: 'full' },
+  '282286160494067712': { name: 'Pingcord', feature: 'streams', coverage: 'full' },
+  '155149108183695360': { name: 'Dyno', feature: 'logging', coverage: 'full' },
+  '235148962103951360': { name: 'Carl-bot', feature: 'reaction_roles', coverage: 'full' },
+  '471091072546766849': { name: 'Friend Time', feature: 'timezone', coverage: 'full' },
+  '966695034340663367': { name: 'Cat Bot', feature: 'catbot', coverage: 'full' },
+  '972637072991068220': { name: 'Grow a Tree', feature: 'growtree', coverage: 'full' },
+  '408785106942164992': { name: 'OwO', feature: 'owo', coverage: 'full' },
+  '1071983600729346208': { name: 'CannaFriend', feature: 'cannabis', coverage: 'full' },
+  '696870234262339614': { name: 'Sx Bot', feature: 'emoji', coverage: 'full' },
+  '83010416610906112': { name: 'Nightbot', feature: 'custom_commands', coverage: 'full' },
+  '1437489496680828968': { name: 'Throne Integration', feature: 'throne', coverage: 'full' },
+  '672822334641537041': { name: 'FreeStuff', feature: 'free_games', coverage: 'full' },
+  '656621136808902656': { name: 'Birthday Bot', feature: 'birthday', coverage: 'full' },
+  '356268235697553409': { name: '.fmbot', feature: 'lastfm', coverage: 'full' },
+  '684773505157431347': { name: 'FlaviBot', feature: 'moderation', coverage: 'full' },
+  '836232765942923305': { name: 'Ko-fi Bot', feature: 'kofi', coverage: 'full' },
 
-  // Present but NOT replaceable — flagged, never claimed.
-  '490707751832649738': { name: 'TacoShack', feature: null, why: 'no equivalent: idle taco game' },
-  '302050872383242240': { name: 'DISBOARD', feature: null, why: 'server-listing bump service, nothing to replace' },
-  '351227880153546754': { name: 'BetterTTV', feature: null, why: 'Twitch emote service, not a Discord feature' },
-  // Blerp posts nothing — it plays soundboard clips into VOICE, so a message scan never sees it.
-  // Our /soundboard covers uploaded clips + a button panel, but NOT Blerp's hosted clip library
-  // or its Twitch integration, so this is not a clean swap. Flagged for a human decision.
-  '964278831085125722': { name: 'Blerp', feature: null, why: 'voice soundboard with a hosted clip library — /soundboard only plays clips you upload' },
+  // Partial — we have the system, but not every part of what this bot gives you.
+  // Blerp posts nothing (it plays clips into VOICE), so a message scan never sees it. Our
+  // /soundboard does the Discord half — upload clips, button panel, play into VC. What it does
+  // NOT give you is Blerp's hosted clip library or its Twitch integration.
+  '964278831085125722': {
+    name: 'Blerp', feature: 'soundboard', coverage: 'partial',
+    why: '/soundboard plays clips into voice from a button panel — but you upload the clips. ' +
+      "Blerp's hosted library and Twitch integration do not come across.",
+  },
+
+  // Keep — genuinely no equivalent. Not a gap in us; just not a thing we do.
+  '490707751832649738': { name: 'TacoShack', feature: null, coverage: 'none', why: 'idle taco game — no equivalent' },
+  '302050872383242240': { name: 'DISBOARD', feature: null, coverage: 'none', why: 'server-listing bump service — nothing to replace' },
+  '351227880153546754': { name: 'BetterTTV', feature: null, coverage: 'none', why: 'Twitch emote service, not a Discord feature' },
 });
 
 /**
@@ -71,6 +86,94 @@ export const PINGCORD_STREAMERS = Object.freeze([
 export const WEBHOOK_ONLY = Object.freeze({
   TANGIA: 'Twitch-side TTS overlay, not a Discord feature',
 });
+
+/** Our own bots. They appear in a scan like anything else, but are never retirement targets. */
+const OURS = new Set(['certifriedutility', 'kabbot']);
+
+/** Discord's own personas. Not bots — nothing to attribute, nothing to remove. */
+const SYSTEM_PERSONAS = new Set(['communityupdates', 'automod', 'serverboost', 'discord']);
+
+const nameKey = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * The set of bots actually still in the guild, by normalised name. Built from the scan rows so a
+ * webhook can be tied back to whether its owning bot is still here.
+ */
+export function presentBotNames(scanBots) {
+  return new Set((scanBots ?? [])
+    .filter(b => b.kind === 'bot' && (b.present === 1 || b.present === true))
+    .map(b => nameKey(b.name)));
+}
+
+/**
+ * Does this speaker's message shapes have to be explained before anything can happen?
+ *
+ * Only a bot we are actually going to REMOVE gates on evidence. Three things are therefore NOT
+ * gated, and demanding checkboxes for them was pure noise that made a finished takeover look
+ * unfinished:
+ *   • a bot we keep (TacoShack, TANGIA — 770 TTS shapes we will never retire)
+ *   • one of ours, or a Discord system persona
+ *   • a bot that has ALREADY LEFT — you cannot retire what is not there (Dyno)
+ *
+ * A webhook is judged by its owning bot: FreeStuff posts through a webhook, so that evidence still
+ * counts while FreeStuff is in the guild. Dyno's webhook does not, because Dyno is gone.
+ */
+export function needsEvidence(meta, presentNames = null) {
+  if (!meta) return true; // unrecognised — a human genuinely must look
+  if (meta.coverage !== 'full' && meta.coverage !== 'partial') return false;
+  if (!presentNames) return true; // caller has no presence info — stay strict
+  return presentNames.has(nameKey(meta.name));
+}
+
+/**
+ * Resolve a scanned speaker to what we know about it.
+ *
+ * The analyzer keys a webhook persona as `wh:<name>`, not as a snowflake — so a straight
+ * `KNOWN_BOTS[botId]` lookup misses every webhook. That mattered: Dyno posted 252 of its message
+ * shapes through its webhook, FreeStuff posts through one too, and all of them sat permanently
+ * "unrecognised", blocking retirement on evidence we had already explained for the same bot's
+ * member account. Fall back to a name match for those.
+ *
+ * @param {string} botId    snowflake, or `wh:<name>` for a webhook persona
+ * @param {string} [name]   display name, used for the webhook fallback
+ * @param {string} [selfId] the id of the bot doing the takeover — never a retirement target
+ */
+export function resolveBotMeta(botId, name, selfId = null) {
+  if (selfId && botId === selfId) {
+    return { name: name ?? 'this bot', feature: null, coverage: 'self', why: 'this is the bot doing the takeover' };
+  }
+  const direct = KNOWN_BOTS[botId];
+  if (direct) return direct;
+
+  const key = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const nk = key(name);
+
+  // Ours (the main bot, which may have left the guild) — never a retirement target.
+  if (OURS.has(nk)) {
+    return { name: name, feature: null, coverage: 'self', why: 'one of our own bots' };
+  }
+  // Discord's own system personas. Not bots, not removable, nothing to replace.
+  if (SYSTEM_PERSONAS.has(nk)) {
+    return { name: name, feature: null, coverage: 'system', why: "Discord's own system messages — not a bot" };
+  }
+
+  // Webhook persona → match by name, both against the known bots and the webhook-only list.
+  const raw = String(botId ?? '').startsWith('wh:') ? String(botId).slice(3) : (name ?? '');
+  const needle = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!needle) return null;
+
+  for (const [whName, why] of Object.entries(WEBHOOK_ONLY)) {
+    if (whName.toLowerCase().replace(/[^a-z0-9]/g, '') === needle) {
+      return { name: whName, feature: null, coverage: 'none', why };
+    }
+  }
+  for (const meta of Object.values(KNOWN_BOTS)) {
+    const known = meta.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // `wh:Dyno™ #dyno-updates` → starts with `dyno`. Prefix match, not equality.
+    if (needle === known || needle.startsWith(known)) return meta;
+  }
+  return null;
+}
 
 /**
  * Exact reply parity, recovered from message history. Discord exposes no API for another bot's
