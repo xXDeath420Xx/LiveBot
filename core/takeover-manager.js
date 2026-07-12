@@ -420,7 +420,8 @@ export async function plan(guild, opts = {}) {
     const [[tree]] = await pool.execute('SELECT guild_id FROM gat_trees WHERE guild_id = ?', [guildId]);
     push('growtree', {
       label: STEPS.growtree.label, done: !!tree,
-      blocked: tree ? null : 'a tree is planted by /tree plant — nothing to pre-configure',
+      // Nothing to pre-configure — `/tree` plants on first use. Not a blocker, not a task.
+      noop: tree ? null : 'no setup needed — the first /tree plants the tree',
       replaces: byFeature.get('growtree').name,
     });
   }
@@ -430,8 +431,10 @@ export async function plan(guild, opts = {}) {
     const [[owo]] = await pool.execute('SELECT enabled FROM owo_config WHERE guild_id = ?', [guildId]);
     push('owo', {
       label: STEPS.owo.label, done: !!owo?.enabled,
-      blocked: 'the real OwO bot is still here — enabling ours would double-reply. Enable AFTER removing it.',
-      note: 'parity: hunt/gems/lootboxes/crates/battle/pets are built; the GUILD BOSS is not (see readiness). ' +
+      // Not blocked — everything works. It is SEQUENCED: enabling ours while the real OwO is still
+      // in the guild would make both bots answer `owoh`. Flip it on the moment OwO is removed.
+      sequenced: owo?.enabled ? null : 'enable the moment the real OwO bot is removed (both would double-reply otherwise)',
+      note: 'parity: hunt/gems/lootboxes/crates/battle/pets built; guild boss now built too (see readiness). ' +
         'karabi progress is importable from #owo-game — cowoncy is the only unrecoverable piece.',
       replaces: byFeature.get('owo').name,
     });
@@ -443,8 +446,10 @@ export async function plan(guild, opts = {}) {
     push('kofi', {
       label: 'Ko-fi supporter roles',
       done: !!kofi?.enabled,
-      blocked: kofi?.enabled ? null
-        : "needs your Ko-fi webhook verification token — run /kofi setup, then /kofi tier",
+      // The one genuine external dependency: Ko-fi's webhook token is not exposed by any API, so
+      // only the server owner can supply it. Everything else about Ko-fi is ready.
+      needsInput: kofi?.enabled ? null
+        : 'your Ko-fi webhook verification token (Ko-fi → Settings → API) — then /kofi setup and /kofi tier',
       replaces: byFeature.get('kofi').name,
     });
   }
@@ -524,18 +529,20 @@ export async function plan(guild, opts = {}) {
       replaces: byFeature.get('reaction_roles').name,
     });
 
+    // A genuine problem (missing channel/roles/emoji) is `blocked`. Otherwise it is READY but
+    // `deliberate`: a role panel IS a message, so this is the one step that posts to the guild and
+    // it must be triggered on its own (the "Post panels" button), never swept up by config-apply.
+    const panelBlocker = !channel ? 'self-assign channel not found'
+      : missingRoles.length ? `these roles no longer exist: ${missingRoles.join(', ')}`
+        : missingEmoji.length ? `upload the platform emoji first — not in this server yet: ${missingEmoji.join(', ')}`
+          : null;
     push('carlbot_panels', {
       label: 'Self-assign role panels',
       channelId: SELF_ASSIGN_CHANNEL,
       channelName: channel?.name ?? SELF_ASSIGN_CHANNEL,
       done: Number(panels.n) >= CARLBOT_PANELS.length,
-      // This is the ONE step that must post messages — a role panel IS a message. It is
-      // therefore never part of the config-only apply; it needs its own explicit action.
-      blocked: !channel ? 'self-assign channel not found'
-        : missingRoles.length ? `these roles no longer exist: ${missingRoles.join(', ')}`
-          : missingEmoji.length
-            ? `run the "Platform emoji" step first — these are not in this server yet: ${missingEmoji.join(', ')}`
-            : 'posts new panels — run this deliberately, it is the only step that creates messages',
+      blocked: panelBlocker,
+      deliberate: panelBlocker ? null : 'ready — posts 4 button panels. Use the "Post panels" action; it is the only step that writes to the guild.',
       note: CARLBOT_PANELS.map(p => `${p.name} (${p.roles.length})`).join(' · '),
       replaces: byFeature.get('reaction_roles').name,
     });
@@ -551,12 +558,20 @@ export async function plan(guild, opts = {}) {
   const [[cc]] = await pool.execute('SELECT COUNT(*) AS n FROM custom_commands WHERE guild_id = ?', [guildId]);
   if (byFeature.has('custom_commands') && !Number(cc.n)) {
     push('custom_commands', {
-      label: 'Custom chat replies',
+      label: 'Other custom chat replies',
       done: false,
-      blocked: "another bot's custom commands are not readable over the API — re-create them in the Command Center",
+      // The two Nightbot commands WE saw in history are handled by nightbot_commands above. This
+      // catch-all is only for any others: Discord exposes no API for a foreign bot's command list,
+      // so anything it never posted on-camera can only be re-created by hand.
+      needsInput: "any Nightbot commands beyond !pp/!karabi aren't API-readable — re-create them in the Command Center",
       replaces: byFeature.get('custom_commands').name,
     });
   }
+
+  // Give every step one honest status instead of overloading `blocked`. The distinction matters:
+  // only `blocked` is a problem. `ready` is one click away; `sequenced`/`deliberate`/`needs-input`
+  // are working-as-intended; `no-op` needs nothing at all.
+  for (const s of steps) s.status = statusOf(s);
 
   return {
     guildId,
@@ -564,12 +579,43 @@ export async function plan(guild, opts = {}) {
     bots,
     unreplaceable,
     steps,
-    actionable: steps.filter(s => !s.done && !s.blocked),
+    // "actionable" = the config-only steps apply() will run. Deliberate (panel-posting) and
+    // sequenced (post-removal) steps are intentionally excluded — they are not blocked, just not
+    // part of a bulk config apply.
+    actionable: steps.filter(s => s.status === 'ready'),
+    summary: summarize(steps),
     readiness: await readiness(guild).catch(err => {
       logger.warn(`[Takeover] readiness failed: ${err.message}`);
       return null;
     }),
   };
+}
+
+/**
+ * The one honest status for a step. Order matters: done wins, then a real blocker, then the
+ * intentional non-actionable states, and everything left is genuinely ready to apply now.
+ */
+export function statusOf(s) {
+  if (s.done) return 'done';
+  if (s.blocked) return 'blocked';       // a real problem: missing perms, unreadable state, gone roles
+  if (s.sequenced) return 'sequenced';   // works, but do it after a named event (e.g. OwO removal)
+  if (s.deliberate) return 'deliberate'; // ready, but posts to the guild — its own explicit action
+  if (s.needsInput) return 'needs-input';// ready once the owner supplies something (a token)
+  if (s.noop) return 'no-op';            // nothing to configure
+  return 'ready';                        // one click away
+}
+
+const STATUS_LABELS = Object.freeze({
+  done: 'done', ready: 'ready to apply', sequenced: 'after removal',
+  deliberate: 'deliberate action', 'needs-input': 'needs your input', 'no-op': 'no setup needed',
+  blocked: 'blocked',
+});
+
+/** Roll the per-step statuses up into counts, so the UI can lead with an honest headline. */
+function summarize(steps) {
+  const counts = {};
+  for (const s of steps) counts[s.status] = (counts[s.status] ?? 0) + 1;
+  return { counts, labels: STATUS_LABELS };
 }
 
 // ── Applying ─────────────────────────────────────────────────────────────────
@@ -586,8 +632,12 @@ export async function apply(guild, planned, only) {
 
   for (const step of planned.steps) {
     if (!wanted.has(step.key)) continue;
-    if (step.done) { results.push({ ...step, outcome: 'already-done' }); continue; }
-    if (step.blocked) { results.push({ ...step, outcome: 'blocked' }); continue; }
+    const status = step.status ?? statusOf(step);
+    if (status === 'done') { results.push({ ...step, outcome: 'already-done' }); continue; }
+    // Only 'ready' steps are config-applies. Everything else is intentionally hand-driven:
+    // 'deliberate' posts via postPanels(), 'sequenced' waits for OwO's removal, 'needs-input'
+    // waits on the owner, 'no-op' needs nothing, 'blocked' is a real problem.
+    if (status !== 'ready') { results.push({ ...step, outcome: status }); continue; }
 
     try {
       await runStep(guild, step);

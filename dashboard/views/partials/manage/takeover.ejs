@@ -116,6 +116,20 @@
   #takeoverPage .to-ready .warn { color:#c9a227; }
   #takeoverPage .to-ready ul { margin:.4rem 0 0; padding-left:1.05rem; font-size:.82rem; color:#c9d1d9; }
   #takeoverPage .to-ready li { margin-bottom:.2rem; }
+  #takeoverPage .to-tag.rdy { color:#5865F2; border-color:#3a3f7a; }
+  #takeoverPage .to-tag.seq { color:#8b93a7; border-color:#3a3f4a; }
+  #takeoverPage .to-sum { padding:.8rem .9rem; border:1px solid #2c2f3a; border-radius:8px; background:#14161c; margin-bottom:.7rem; font-size:.9rem; }
+  #takeoverPage .to-sum .good { color:#57F287; }
+  #takeoverPage .to-sum .bad { color:#ED4245; }
+  #takeoverPage .to-sum-chips { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.55rem; }
+  #takeoverPage .to-sum-chip { font-size:.74rem; padding:.2rem .5rem; border-radius:999px; border:1px solid #2c2f3a; color:#c9d1d9; }
+  #takeoverPage .to-sum-chip.ok { color:#57F287; border-color:#2f6f4a; }
+  #takeoverPage .to-sum-chip.rdy { color:#8f9bff; border-color:#3a3f7a; }
+  #takeoverPage .to-sum-chip.seq { color:#a9b1c2; border-color:#3a3f4a; }
+  #takeoverPage .to-sum-chip.warn { color:#c9a227; border-color:#6f5f2f; }
+  #takeoverPage .to-sum-chip.no { color:#ED4245; border-color:#6f2f2f; }
+  #takeoverPage .to-step.to-st-blocked { border-color:#6f2f2f; }
+  #takeoverPage .to-step.to-st-ready { border-color:#3a3f7a; }
 </style>
 
 <script>
@@ -286,20 +300,53 @@
       ((r.notes||[]).length ? `<ul>${r.notes.map(n=>`<li class="to-muted">${esc(n)}</li>`).join('')}</ul>` : '');
   }
 
+  // One badge class + wording per honest status. Only 'blocked' is a problem; the rest are fine.
+  const STATUS_META = {
+    done:          { cls:'ok',   text:'done' },
+    ready:         { cls:'rdy',  text:'ready to apply' },
+    sequenced:     { cls:'seq',  text:'after OwO removal' },
+    deliberate:    { cls:'seq',  text:'deliberate action' },
+    'needs-input': { cls:'warn', text:'needs your input' },
+    'no-op':       { cls:'ok',   text:'no setup needed' },
+    blocked:       { cls:'no',   text:'blocked' },
+  };
+  // The reason line comes from whichever intent field is set — not always `blocked`.
+  const stepReason = (s) => s.blocked || s.sequenced || s.deliberate || s.needsInput || s.noop || null;
+
+  function renderHeadline(p) {
+    const c = p.summary?.counts || {};
+    const order = ['done','ready','deliberate','sequenced','needs-input','no-op','blocked'];
+    const chips = order.filter(k => c[k]).map(k => {
+      const m = STATUS_META[k];
+      return `<span class="to-sum-chip ${m.cls}">${c[k]} ${esc(m.text)}</span>`;
+    }).join('');
+    const blocked = c.blocked || 0;
+    const lead = blocked
+      ? `<strong class="bad">${blocked} real blocker${blocked>1?'s':''}</strong> — everything else is done, ready, or working as intended.`
+      : `<strong class="good">No blockers.</strong> Everything is done, one click away, or intentionally hand-driven.`;
+    return `<div class="to-sum">${lead}<div class="to-sum-chips">${chips}</div></div>`;
+  }
+
   function renderSteps(p) {
     renderReadiness(p.readiness);
-    $('toSteps').innerHTML = p.steps.map(s => `
-      <div class="to-step">
-        <input type="checkbox" data-step="${esc(s.key)}" ${s.done || s.blocked ? 'disabled' : 'checked'}>
+    const headline = renderHeadline(p);
+    $('toSteps').innerHTML = headline + (p.steps.map(s => {
+      const st = s.status || (s.done ? 'done' : s.blocked ? 'blocked' : 'ready');
+      const m = STATUS_META[st] || STATUS_META.ready;
+      const reason = stepReason(s);
+      const applyable = st === 'ready';
+      return `
+      <div class="to-step to-st-${st}">
+        <input type="checkbox" data-step="${esc(s.key)}" ${applyable ? 'checked' : 'disabled'}>
         <div>
           <strong>${esc(s.label)}</strong>
-          ${s.done ? '<span class="to-tag ok">done</span>' : ''}
-          ${s.blocked ? `<span class="to-tag no">blocked</span>` : ''}
+          <span class="to-tag ${m.cls}">${esc(m.text)}</span>
           ${s.replaces ? `<span class="to-muted"> — replaces ${esc(s.replaces)}</span>` : ''}
           ${s.note ? `<div class="to-muted">${esc(s.note)}</div>` : ''}
-          ${s.blocked ? `<div class="to-muted">${esc(s.blocked)}</div>` : ''}
+          ${reason ? `<div class="to-muted">${esc(reason)}</div>` : ''}
         </div>
-      </div>`).join('') || '<div class="to-muted">Nothing to do.</div>';
+      </div>`;
+    }).join('') || '<div class="to-muted">Nothing to do.</div>');
     $('toApply').disabled = !p.actionable.length;
   }
 
