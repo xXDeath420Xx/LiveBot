@@ -56,6 +56,18 @@ emoji from a guild *it* is in, so once Carl-bot leaves we can neither react with
 on a button. They must be re-hosted here first (step 6). The guild has 68 free static emoji slots
 and no name collisions; all five source images are still on the CDN.
 
+<a id="analyzer"></a>
+**The analyzer was blind to Components V2** *(fixed, `602dc6d`)*. A CV2 message carries its entire
+text inside `components[]`, with an **empty `content` and empty `embeds`**. `templateOf()` read only
+`content`, `embeds`, and one flat level of button labels — so a CV2 message reduced to the empty
+string and was silently dropped. **99 messages in this guild were invisible**: all **95 FreeStuff**
+posts (which is exactly why it scanned with *zero* templates), **OwO's guild boss**, and 3 OwO
+level-ups. A bot cannot be cleared for retirement on evidence the scanner cannot see. `templateOf`
+now walks the component tree recursively; re-verified against the live guild — **99 CV2 messages, 0
+still blank.** FreeStuff's real output turned out to be Steam/Epic giveaways *and free weekends* plus
+a Prime-Gaming opt-in panel; our `free-games-manager` covers Epic, Steam, GOG **and** Prime including
+free weekends, so its retirement still stands — but now on actual evidence rather than on silence.
+
 ---
 
 ## 3. Progress — what survives
@@ -144,9 +156,44 @@ REST-GET only, dry-run by default. **Not lost:** gems, lootboxes, crates, weapon
 **Lost:** cowoncy (never printed), her pre-channel zoo (OwO's economy is global, so the imported zoo
 is a floor), and each weapon's rolled qualities (type and count exact, stats re-roll).
 
-**There are no guild bosses.** OwO has no such feature and none appear anywhere in the channel.
+### Guild bosses DO exist, and we don't have them (gap)
 
-**So only Cat Bot still truly resets.**
+I previously wrote that OwO has no guild bosses. **That was wrong**, and the reason it was wrong is
+worth keeping: the boss post is a **Components V2** message — empty `content`, empty `embeds`, all of
+its text nested inside `components` — and the analyzer only read `content` + `embeds`. It reduced to
+an empty string and got dropped. Fixed in `602dc6d`; see §Analyzer below.
+
+One boss has spawned here, message `1509192313501520044` in `#owo-game`:
+
+```
+# 🐉 A Guild Boss Appeared!
+### Top 10 Damage Dealt
+**__`Rank`__ __`Damage`__ __`Username`__**
+**`1   `** ` 7,174` @karabi420
+### Rewards
+-# ⏳ runs away <t:1779893486:R>   ⚔️ 1 fighters   💀 0 defeated
+[Inspect] [Leaderboard] [Fight!]
+```
+
+**It ran away undefeated** — one fighter, zero kills. So there is no boss progress to carry over and
+nothing was lost. But the *feature* is a real parity gap: if we retire OwO, bosses stop spawning.
+
+The boss command source is **not** in the vendored repo (it postdates it — the message is CV2 and
+links `owobot.com/battle-log`). The **schema is**, in `secret/CREATE-OWO-TABLES.sql`, and it pins the
+mechanics exactly:
+
+| table | tells us |
+|---|---|
+| `guild_boss(gid, active, created, boss_animal, boss_lvl, boss_hp, boss_wp)` | one boss per guild — an **animal** at a level, with HP and weapon points |
+| `boss_weapon(gid, wid, stat, avg)` | it wields a **real weapon** from the weapon table |
+| `boss_weapon_passive(gid, pcount, wpid, stat)` | …with passives |
+| `user_boss(gid, uid, total_dmg)` | cumulative damage per user — exactly the "Top 10 Damage Dealt" board |
+
+So a boss is an ordinary battle enemy built from the systems we already have (animals, weapons,
+passives, teams), fought with your battle team, accumulating `total_dmg` per user, and despawning on
+a timer if the guild doesn't finish it. **Decision needed: build it, or accept the gap.**
+
+**So Cat Bot still truly resets, and guild bosses are unbuilt.**
 
 ---
 
