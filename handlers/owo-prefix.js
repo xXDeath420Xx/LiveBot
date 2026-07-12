@@ -21,6 +21,11 @@ import {
 } from '../core/owo/teams-service.js';
 import { simulateBattle, generateCpuTeam } from '../core/owo/battle-engine.js';
 import { renderHunt, renderCrateDrop } from '../core/owo/hunt-text.js';
+import {
+    spawnBoss, setBossMessage, getActiveBoss, fightBoss, getLeaderboard as getBossBoard, getBossStats,
+    FIGHT_COOLDOWN_MS,
+} from '../core/owo/guildboss-service.js';
+import { renderBoss } from '../core/owo/guildboss-text.js';
 import { getLevel } from '../core/owo/pet-levels.js';
 import { rollDailyDrop } from '../core/owo/daily-drop.js';
 import * as lootbox from '../core/owo/lootbox-service.js';
@@ -83,6 +88,85 @@ export async function handleHunt(ctx) {
     // Plain text, not an embed — a hunt is a one-line result and the bot we replace prints it
     // that way. See core/owo/hunt-text.js.
     await ctx.editReply(renderHunt(ctx.user.username, result));
+
+    // Hunting is what draws a guild boss out. Small chance, and never a second one while one is up.
+    await maybeSpawnBoss(ctx).catch(() => {});
+}
+
+/** Odds a hunt summons a guild boss. Low, so a boss is an event, not a nuisance. */
+const BOSS_SPAWN_CHANCE = 0.015;
+
+/**
+ * Roll to spawn a guild boss off the back of a hunt. If it lands, post the announcement to the same
+ * channel and remember the message so its buttons can keep it live. Best-effort — a failure here
+ * must never break the hunt that triggered it.
+ */
+async function maybeSpawnBoss(ctx, { force = false } = {}) {
+    if (!ctx.guildId || !ctx.channel?.send) return null;
+    if (!force && Math.random() >= BOSS_SPAWN_CHANCE) return null;
+    if (await getActiveBoss(ctx.guildId)) return null; // one at a time
+
+    const boss = await spawnBoss(ctx.guildId, { channelId: ctx.channel.id });
+    if (!boss?.isNew) return null;
+
+    const msg = await ctx.channel.send(await renderBoss(boss, 'active')).catch(() => null);
+    if (msg) await setBossMessage(ctx.guildId, ctx.channel.id, msg.id).catch(() => {});
+    return boss;
+}
+
+/**
+ * `owo boss` — show the current boss (or say there isn't one). `owo boss fight` swings your team at
+ * it from chat; the announcement's Fight! button does the same thing. `owo boss spawn` is an
+ * admin/owner escape hatch for testing.
+ */
+export async function handleBoss(ctx, action) {
+    if (!(await gate(ctx, 'boss'))) return;
+    await ctx.deferReply();
+    const sub = (action || ctx.options?.getString?.('action') || '').toLowerCase();
+
+    if (sub === 'spawn') {
+        const isAdmin = ctx.memberPermissions?.has?.('ManageGuild') || ctx.member?.permissions?.has?.('ManageGuild');
+        if (!isAdmin) return ctx.editReply('❌ Only a manager can force a boss to spawn.');
+        if (await getActiveBoss(ctx.guildId)) return ctx.editReply('A guild boss is already here — `owo boss`.');
+        const boss = await maybeSpawnBoss(ctx, { force: true });
+        return ctx.editReply(boss ? '🐉 A guild boss has been summoned!' : '❌ Could not spawn a boss right now.');
+    }
+
+    if (sub === 'fight' || sub === 'f') {
+        const result = await fightBoss(ctx.guildId, ctx.user.id);
+        if (!result.ok) {
+            const msg = {
+                'no-boss': 'There is no guild boss right now.',
+                'defeated': 'Your team was already wiped by this boss.',
+                'no-team': "You have no battle team — `owo team add <animal>` first.",
+                'cooldown': `Catch your breath — try again in ${Math.ceil((result.retryMs ?? FIGHT_COOLDOWN_MS) / 1000)}s.`,
+            }[result.reason] ?? 'You cannot fight the boss right now.';
+            return ctx.editReply(msg);
+        }
+        // Keep the pinned announcement in sync if we can find it.
+        await refreshBossMessage(ctx).catch(() => {});
+        const parts = [`⚔️ You dealt **${result.damage.toLocaleString()}** damage! Your total: **${result.yourTotal.toLocaleString()}**.`];
+        if (result.defeated) parts.push('💀 The boss wiped your team.');
+        if (result.killed) {
+            const you = result.rewards?.payouts?.find(p => p.userId === ctx.user.id);
+            parts.push(`💥 **Boss defeated!**${you ? ` You earned **${you.amount.toLocaleString()}** 💵.` : ''}`);
+        }
+        return ctx.editReply(parts.join(' '));
+    }
+
+    const boss = await getActiveBoss(ctx.guildId);
+    if (!boss) return ctx.editReply('🕊️ No guild boss right now. Keep hunting — one may appear.');
+    return ctx.editReply(await renderBoss(boss, 'active'));
+}
+
+/** Re-render the boss announcement message in place after a chat-driven fight. */
+async function refreshBossMessage(ctx) {
+    const boss = await getActiveBoss(ctx.guildId);
+    if (!boss?.messageId || !boss.channelId) return;
+    const channel = ctx.client?.channels?.cache?.get(boss.channelId)
+        ?? await ctx.client?.channels?.fetch(boss.channelId).catch(() => null);
+    const msg = await channel?.messages?.fetch(boss.messageId).catch(() => null);
+    if (msg) await msg.edit(await renderBoss(boss, 'active')).catch(() => {});
 }
 
 export async function handleZoo(ctx) {
@@ -670,6 +754,7 @@ export async function handleOwoRouter(ctx) {
         case 'team-rename':                           return handleTeamRename(ctx);
         case 'equip':                                  return handleEquipPrefix(ctx);
         case 'battle': case 'b': case 'fight':        return handleBattlePrefix(ctx);
+        case 'boss': case 'guildboss':                return handleBoss(ctx);
         case 'quest': case 'quests': case 'q':        return handleQuestPrefix(ctx);
         case 'count': case 'points':                  return handleOwoCount(ctx);
         case 'help':  // falls through to the command list

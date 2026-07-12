@@ -23,6 +23,10 @@ import { handlePollWriteIn } from './buttons/poll_write_in.js';
 import { handleStaffIntroButton } from './buttons/staff_intro.js';
 import { handleSuggestionFormButton, handleBugReportFormButton } from './buttons/forum_submit.js';
 import { handleVerifyAccept } from './buttons/verify_accept.js';
+import { handleTreeGrow, handleTreeRefresh } from './buttons/tree_grow.js';
+import { handleCatGameButton, handleCatQuestButton } from './buttons/catbot_game.js';
+import { handleGuildBossButton } from './buttons/owo_guildboss.js';
+import { handleTakeoverButton } from '../commands/admin/takeover.js';
 import { handleStreamSignupAdd } from './buttons/stream_signup_add.js';
 import { handlePvpAct } from './buttons/pvp_act.js';
 import { handleStreamSignupSubmit } from './modals/stream_signup_submit.js';
@@ -55,6 +59,8 @@ import { handleBirthdayAdminUserSelect } from './select-menus/birthday_admin_use
 import { handleBirthdayAdminStart } from './buttons/birthday_admin.js';
 import { handleBirthdaySetModal } from './modals/birthday_set.js';
 import { handleCinemaButton, handleCinemaSeekModal, handleCinemaSelect, handleCinemaStart } from '../handlers/cinema/panel.js';
+import { handleFishAgain, handleFishSellAll, handleFishInv } from './buttons/fish_actions.js';
+import { handleSoundboardPlay, handleSoundboardPage } from './buttons/soundboard_play.js';
 
 /**
  * Button handler registry
@@ -108,6 +114,19 @@ export const buttonHandlers = {
 
   // Verification button (rules-accept gate)
   'verify_accept': handleVerifyAccept,
+  // Static ids: the tree is resolved from the guild, so old messages keep working.
+  'tree_grow': handleTreeGrow,
+  'tree_refresh': handleTreeRefresh,
+
+  // Cat Bot: cbg:<game>:<action> tables, cbq:<claim|season> battlepass.
+  'cbg:': handleCatGameButton,
+  'cbq:': handleCatQuestButton,
+
+  // OwO guild boss: guildboss_fight | guildboss_leaderboard | guildboss_inspect (static ids).
+  'guildboss_': handleGuildBossButton,
+
+  // Takeover plan confirm/cancel (tko:apply | tko:cancel)
+  'tko:': handleTakeoverButton,
 
   // Stream signup button
   'stream_signup_add': handleStreamSignupAdd,
@@ -136,7 +155,16 @@ export const buttonHandlers = {
   'cinema_resume': handleCinemaButton,
   'cinema_seek': handleCinemaButton,
   'cinema_stop': handleCinemaButton,
-  'cinema_start:': handleCinemaStart
+  'cinema_start:': handleCinemaStart,
+
+  // Fishing minigame buttons
+  'fish_again': handleFishAgain,
+  'fish_sellall': handleFishSellAll,
+  'fish_inv': handleFishInv,
+
+  // Soundboard panel buttons (sb_play:<soundId>) + pagination (sb_page:<n>)
+  'sb_play:': handleSoundboardPlay,
+  'sb_page:': handleSoundboardPage,
 };
 
 /**
