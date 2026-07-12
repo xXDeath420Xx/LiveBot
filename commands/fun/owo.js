@@ -24,6 +24,7 @@ import {
 } from '../../core/owo/teams-service.js';
 import { simulateBattle, generateCpuTeam } from '../../core/owo/battle-engine.js';
 import { renderHunt, renderCrateDrop } from '../../core/owo/hunt-text.js';
+import { getLevel } from '../../core/owo/pet-levels.js';
 import { rollDailyDrop } from '../../core/owo/daily-drop.js';
 import * as lootboxService from '../../core/owo/lootbox-service.js';
 import { listOwned, getActive, use as useGems, gemName } from '../../core/owo/gems-service.js';
@@ -448,7 +449,8 @@ async function handleUseGemSlash(interaction) {
 function rosterField(team) {
     const lines = (team.animals ?? []).map(a => {
         const label = a.nickname || prettyName(a.name);
-        return `${a.emoji ?? ''} ${label}${a.hp ? ` — ${a.hp} HP` : ''}`.trim();
+        const lvl = getLevel(a.xp ?? 0).level;
+        return `L. ${lvl} ${a.emoji ?? ''} ${label}${a.hp ? ` — ${a.hp} HP` : ''}`.trim();
     });
     return lines.length ? lines.join('\n').slice(0, 1020) : '—';
 }
