@@ -1,0 +1,789 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-paw"></i>
+                <span>OwO Hunt &amp; Zoo</span>
+            </div>
+            <div class="page-section-subtitle">
+                Animal-hunting mini-game with 6-tier rarity progression. Rewards feed your server's existing
+                <strong>economy</strong> and <strong>leveling</strong> systems — no separate currency silo.
+            </div>
+        </div>
+    </div>
+
+    <!-- License notice (non-commercial only) -->
+    <div style="background: rgba(245, 158, 11, 0.07); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-md); padding: var(--spacing-3) var(--spacing-4); margin-bottom: var(--spacing-4); font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.55;">
+        <i class="fas fa-info-circle" style="color: #F59E0B;"></i>
+        <strong>Licensing:</strong> This module is inspired by
+        <a href="https://github.com/ChristopherBThai/Discord-OwO-Bot" target="_blank" rel="noopener" style="color: var(--color-primary-400);">OwO Bot</a>
+        (CC-BY-NC-SA-4.0). Non-commercial use only — see <code>LICENSE-OWO-NOTICE.md</code>.
+    </div>
+
+    <!-- 1. Module Status -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-power-off"></i> 1. Module Status</h3>
+        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-2);">
+            <input type="checkbox" id="owoEnabled" class="form-check-input" style="width: 20px; height: 20px;">
+            <label for="owoEnabled" class="form-label" style="margin: 0; cursor: pointer;">Enable OwO hunt in this server</label>
+        </div>
+        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+            <input type="checkbox" id="owoAnnounceRare" class="form-check-input" style="width: 20px; height: 20px;">
+            <label for="owoAnnounceRare" class="form-label" style="margin: 0; cursor: pointer;">Emit <code>owoRareCatch</code> log event on Epic+ catches</label>
+        </div>
+        <div class="form-help">Members can use <code>/owo hunt</code>, <code>/owo zoo</code>, <code>/owo leaderboard</code>, etc. Hunt rewards use your server's currency (Economy page) and XP (Leveling page).</div>
+        <button type="button" class="btn btn-primary owo-save-btn" data-section="status"><i class="fas fa-save"></i> Save</button>
+        <span class="owo-save-status" data-section="status"></span>
+    </div>
+
+    <!-- 2. Stats Overview -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-chart-bar"></i> 2. Stats Overview</h3>
+        <div class="grid grid-cols-4" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+            <div class="owo-stat-tile"><div class="owo-stat-label">Active Hunters</div><div class="owo-stat-value" id="stat-hunters">0</div></div>
+            <div class="owo-stat-tile"><div class="owo-stat-label">Unique Catches</div><div class="owo-stat-value" id="stat-unique" style="color: var(--color-success);">0</div></div>
+            <div class="owo-stat-tile"><div class="owo-stat-label">Total Catches</div><div class="owo-stat-value" id="stat-total" style="color: var(--color-primary-400);">0</div></div>
+            <div class="owo-stat-tile"><div class="owo-stat-label">Last 24h</div><div class="owo-stat-value" id="stat-24h" style="color: #F59E0B;">0</div></div>
+        </div>
+        <div id="stat-rank-bars" class="owo-rank-bars"></div>
+    </div>
+
+    <!-- 3. Hunt Configuration -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-crosshairs"></i> 3. Hunt Configuration</h3>
+        <div class="owo-form-row">
+            <label class="form-label" for="owoCooldown">Hunt cooldown (seconds)</label>
+            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                <input type="range" id="owoCooldown" min="1" max="300" step="1" style="flex: 1;">
+                <input type="number" id="owoCooldownNum" min="1" max="3600" style="width: 100px;">
+            </div>
+            <div class="form-help">1–3600. Default 15.</div>
+        </div>
+        <div class="owo-form-row">
+            <label class="form-label" for="owoCurMul">Currency reward multiplier</label>
+            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                <input type="range" id="owoCurMul" min="0.1" max="10" step="0.1" style="flex: 1;">
+                <input type="number" id="owoCurMulNum" min="0.1" max="10" step="0.1" style="width: 100px;">
+            </div>
+        </div>
+        <h4 class="owo-subh">Effective rewards per rank (after multipliers)</h4>
+        <table class="owo-table">
+            <thead><tr><th>Rank</th><th>Drop %</th><th>Currency</th></tr></thead>
+            <tbody id="owoEffectiveRewards"></tbody>
+        </table>
+        <button type="button" class="btn btn-primary owo-save-btn" data-section="hunt"><i class="fas fa-save"></i> Save</button>
+        <span class="owo-save-status" data-section="hunt"></span>
+    </div>
+
+    <!-- 4. Sell & Sacrifice -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-dollar-sign"></i> 4. Sell &amp; Sacrifice</h3>
+        <div class="owo-form-row">
+            <label class="form-label" for="owoSellMul">Sell price multiplier <span class="form-help" style="font-weight: normal;">(fraction of hunt points — default 0.5)</span></label>
+            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                <input type="range" id="owoSellMul" min="0.1" max="10" step="0.05" style="flex: 1;">
+                <input type="number" id="owoSellMulNum" min="0.1" max="10" step="0.05" style="width: 100px;">
+            </div>
+        </div>
+        <div class="owo-form-row">
+            <label class="form-label" for="owoSacMul">Sacrifice essence multiplier <span class="form-help" style="font-weight: normal;">(OwO essence, not server XP — default 1.0)</span></label>
+            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                <input type="range" id="owoSacMul" min="0.1" max="10" step="0.05" style="flex: 1;">
+                <input type="number" id="owoSacMulNum" min="0.1" max="10" step="0.05" style="width: 100px;">
+            </div>
+        </div>
+        <div class="form-help">Sell always keeps 1 of each species. Raising the multipliers makes the conversion more generous.</div>
+        <button type="button" class="btn btn-primary owo-save-btn" data-section="sellsac"><i class="fas fa-save"></i> Save</button>
+        <span class="owo-save-status" data-section="sellsac"></span>
+    </div>
+
+    <!-- 5. Subcommand Toggles -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-toggle-on"></i> 5. Subcommand Toggles</h3>
+        <div class="form-help" style="margin-bottom: var(--spacing-3);">Turn off any subcommand to disable it for members. <code>toggle</code> is always available to admins.</div>
+        <div class="grid grid-cols-3" style="gap: var(--spacing-4);">
+            <div>
+                <div class="owo-subh">Actions</div>
+                <div id="owoSubActions"></div>
+            </div>
+            <div>
+                <div class="owo-subh">Economy</div>
+                <div id="owoSubEconomy"></div>
+            </div>
+            <div>
+                <div class="owo-subh">Viewers</div>
+                <div id="owoSubViewers"></div>
+            </div>
+        </div>
+        <button type="button" class="btn btn-primary owo-save-btn" data-section="subs" style="margin-top: var(--spacing-4);"><i class="fas fa-save"></i> Save</button>
+        <span class="owo-save-status" data-section="subs"></span>
+    </div>
+
+    <!-- 6. Access Control -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-shield-alt"></i> 6. Access Control</h3>
+        <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+            <div>
+                <label class="form-label">Allowed channels <span class="form-help" style="font-weight: normal;">(leave empty for all channels)</span></label>
+                <select id="owoAllowedChannels" multiple size="8" class="form-control"></select>
+                <div class="form-help">Hold Ctrl/⌘ to select multiple. Applies only to <code>/owo hunt</code>.</div>
+            </div>
+            <div>
+                <label class="form-label">Blocked roles <span class="form-help" style="font-weight: normal;">(members with any of these can't use OwO)</span></label>
+                <select id="owoBlockedRoles" multiple size="8" class="form-control"></select>
+                <div class="form-help">Use this to exempt bots' roles or a timeout role.</div>
+            </div>
+        </div>
+        <button type="button" class="btn btn-primary owo-save-btn" data-section="access" style="margin-top: var(--spacing-4);"><i class="fas fa-save"></i> Save</button>
+        <span class="owo-save-status" data-section="access"></span>
+    </div>
+
+    <!-- 7. Animal Catalog -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-book"></i> 7. Animal Catalog</h3>
+        <div id="owoCatalogTabs" class="owo-tabs"></div>
+        <div id="owoCatalogBody" class="owo-catalog-body"></div>
+    </div>
+
+    <!-- 8. Command Reference -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-terminal"></i> 8. Command Reference</h3>
+        <div class="form-help" style="margin-bottom: var(--spacing-3);">Slash commands mirror the prefix versions. Prefix aliases work with the server's configured prefix.</div>
+        <table class="owo-table">
+            <thead><tr><th>Name</th><th>Slash</th><th>Prefix</th><th>Aliases</th><th>Category</th><th>Enabled</th></tr></thead>
+            <tbody id="owoCommandsBody"></tbody>
+        </table>
+    </div>
+
+    <!-- 9. Admin Tools -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-user-shield"></i> 9. Admin Tools</h3>
+
+        <h4 class="owo-subh">Inspect / reset a user</h4>
+        <div style="display: flex; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+            <input type="text" id="owoLookupUserId" class="form-control" placeholder="User ID (17–20 digit snowflake)" style="flex: 1;">
+            <button type="button" id="owoLookupBtn" class="btn btn-secondary"><i class="fas fa-search"></i> Look up</button>
+        </div>
+        <div id="owoUserResult" class="owo-user-result"></div>
+
+        <h4 class="owo-subh">Grant an animal</h4>
+        <div style="display: grid; grid-template-columns: 2fr 2fr 1fr auto; gap: var(--spacing-2); margin-bottom: var(--spacing-3);">
+            <input type="text" id="owoGrantUserId" class="form-control" placeholder="User ID">
+            <select id="owoGrantAnimal" class="form-control"><option value="">— animal —</option></select>
+            <input type="number" id="owoGrantCount" class="form-control" value="1" min="-100" max="100">
+            <button type="button" id="owoGrantBtn" class="btn btn-secondary"><i class="fas fa-gift"></i> Grant</button>
+        </div>
+        <div id="owoGrantResult" class="owo-grant-result"></div>
+
+        <h4 class="owo-subh" style="color: #F44336;">Reset this guild's entire OwO zoo</h4>
+        <div class="form-help" style="margin-bottom: var(--spacing-2);">This wipes every member's zoo + cooldowns in this server. Type the exact guild name to confirm.</div>
+        <div style="display: flex; gap: var(--spacing-3);">
+            <input type="text" id="owoResetConfirm" class="form-control" placeholder="Type guild name exactly" style="flex: 1;">
+            <button type="button" id="owoResetGuildBtn" class="btn btn-danger" disabled><i class="fas fa-skull"></i> Reset Guild Zoo</button>
+        </div>
+        <div id="owoResetResult" class="owo-grant-result"></div>
+    </div>
+
+    <!-- 10. Top Hunters + logging note -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-trophy"></i> 10. Top Hunters</h3>
+        <div id="owoTopHunters" class="owo-top-list"></div>
+        <div style="margin-top: var(--spacing-4); padding: var(--spacing-3); background: rgba(79, 70, 229, 0.08); border-left: 3px solid var(--color-primary-400); border-radius: var(--radius-sm); font-size: var(--font-size-sm);">
+            <i class="fas fa-info-circle"></i>
+            <strong>Audit logging:</strong> Enable <code>owoRareCatch</code> and <code>owoAdminAction</code> on the
+            <a href="?page=logging" style="color: var(--color-primary-400);">Logging page</a> to route rare catches and admin actions to a log channel.
+        </div>
+    </div>
+
+    <!-- 11. Module Snapshot — guild-wide engagement -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-chart-line"></i> 11. Guild Engagement Snapshot</h3>
+        <div id="owoSnapshot" class="grid grid-cols-4" style="gap: var(--spacing-3);"></div>
+    </div>
+
+    <!-- 12. Leaderboards — battle / wealth / hunters -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-medal"></i> 12. Leaderboards</h3>
+        <div class="owo-tabs" id="owoLbTabs">
+            <div class="owo-tab active" data-kind="hunters">🐾 Hunters</div>
+            <div class="owo-tab" data-kind="battle">⚔️ Battle</div>
+            <div class="owo-tab" data-kind="wealth">💰 Wealth</div>
+        </div>
+        <div id="owoLbBody" class="owo-top-list"></div>
+    </div>
+
+    <!-- 13. Admin — grant shards + currency + deeper user inspector -->
+    <div class="owo-card">
+        <h3 class="owo-h"><i class="fas fa-user-cog"></i> 13. Economy + Full User Inspector</h3>
+
+        <h4 class="owo-subh">Grant shards or currency</h4>
+        <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto auto; gap: var(--spacing-2); margin-bottom: var(--spacing-3);">
+            <input type="text" id="owoGrantEconUser" class="form-control" placeholder="User ID">
+            <input type="number" id="owoGrantEconAmount" class="form-control" placeholder="Amount (+/-)">
+            <select id="owoGrantEconKind" class="form-control">
+                <option value="currency">💰 Currency</option>
+                <option value="shards">💠 Shards</option>
+                <option value="crate">📦 Crates</option>
+            </select>
+            <button type="button" id="owoGrantEconBtn" class="btn btn-secondary"><i class="fas fa-paper-plane"></i> Grant</button>
+        </div>
+        <div id="owoGrantEconResult" class="owo-grant-result"></div>
+
+        <h4 class="owo-subh">Full user snapshot</h4>
+        <div style="display: flex; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+            <input type="text" id="owoFullUserId" class="form-control" placeholder="User ID" style="flex: 1;">
+            <button type="button" id="owoFullLookupBtn" class="btn btn-secondary"><i class="fas fa-id-card"></i> Load</button>
+        </div>
+        <div id="owoFullSnapshot" class="owo-user-result"></div>
+    </div>
+</div>
+
+<style>
+.owo-card { background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-5); margin-bottom: var(--spacing-5); }
+.owo-h { font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4); }
+.owo-subh { font-size: var(--font-size-md); font-weight: var(--font-weight-bold); color: var(--color-text-secondary); margin: var(--spacing-3) 0 var(--spacing-2); }
+.owo-stat-tile { background: var(--color-dark-700); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); }
+.owo-stat-label { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1); }
+.owo-stat-value { font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); }
+.owo-rank-bars { display: flex; flex-direction: column; gap: var(--spacing-2); }
+.owo-rank-bar-row { display: grid; grid-template-columns: 140px 1fr 100px; align-items: center; gap: var(--spacing-3); font-size: var(--font-size-sm); }
+.owo-rank-bar-outer { height: 16px; background: var(--color-dark-700); border-radius: 8px; overflow: hidden; }
+.owo-rank-bar-inner { height: 100%; border-radius: 8px; }
+.owo-form-row { margin-bottom: var(--spacing-4); }
+.owo-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.owo-table th, .owo-table td { padding: var(--spacing-2) var(--spacing-3); border-bottom: 1px solid var(--color-dark-400); text-align: left; }
+.owo-table th { color: var(--color-text-muted); font-weight: var(--font-weight-bold); }
+.owo-save-btn { margin-top: var(--spacing-3); }
+.owo-save-status { margin-left: var(--spacing-3); color: var(--color-success); display: none; }
+.owo-save-status.show { display: inline-block; }
+.owo-save-status.err { color: var(--color-danger); }
+.owo-tabs { display: flex; gap: var(--spacing-2); flex-wrap: wrap; margin-bottom: var(--spacing-3); }
+.owo-tab { padding: var(--spacing-2) var(--spacing-3); background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-sm); }
+.owo-tab.active { background: var(--color-primary-600); color: #fff; border-color: var(--color-primary-400); }
+.owo-catalog-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--spacing-2); }
+.owo-catalog-item { background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-size: var(--font-size-sm); display: flex; align-items: center; gap: var(--spacing-2); }
+.owo-top-list { display: flex; flex-direction: column; gap: var(--spacing-2); }
+.owo-top-row { display: flex; justify-content: space-between; padding: var(--spacing-2) var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-sm); }
+.owo-user-result, .owo-grant-result { margin-top: var(--spacing-2); font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+</style>
+
+<script>
+(function() {
+    const guildId = '<%= guild.id %>';
+    const guildName = <%- JSON.stringify(guild.name) %>;
+    const baseUrl = '/api/guilds/' + guildId + '/owo';
+    const coreUrl = '/api/guilds/' + guildId + '/core';
+
+    // Escape any string that will be interpolated into innerHTML. Channel/role
+    // names, Discord tags, and (defensively) animal catalog strings all flow
+    // through this. Numeric values and hardcoded UI strings do not need it,
+    // but it's cheap — err on the side of always escaping.
+    function esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[ch]));
+    }
+    // For strings going inside an HTML attribute (e.g., value="..."). Same
+    // character set as esc() handles both text + attribute contexts safely.
+    const attr = esc;
+
+    let config = null;
+    let catalog = null;
+    let channels = [];
+    let roles = [];
+    let commands = [];
+
+    function $(id) { return document.getElementById(id); }
+
+    function showStatus(section, ok, message) {
+        const el = document.querySelector('.owo-save-status[data-section="' + section + '"]');
+        if (!el) return;
+        el.textContent = ok ? (message || '✓ Saved') : (message || '✗ Failed');
+        el.classList.toggle('err', !ok);
+        el.classList.add('show');
+        setTimeout(() => el.classList.remove('show'), 2500);
+    }
+
+    async function api(path, opts) {
+        const res = await fetch(baseUrl + path, Object.assign({
+            headers: { 'Content-Type': 'application/json' },
+        }, opts || {}));
+        return res.json().catch(() => ({ success: false, error: 'Invalid JSON response' }));
+    }
+
+    async function loadAll() {
+        try {
+            const [cfgR, statsR, catR, cmdR, chR, rR] = await Promise.all([
+                fetch(baseUrl + '/config').then(r => r.json()).catch(() => ({})),
+                fetch(baseUrl + '/stats').then(r => r.json()).catch(() => ({})),
+                fetch(baseUrl + '/catalog').then(r => r.json()).catch(() => ({})),
+                fetch(baseUrl + '/commands').then(r => r.json()).catch(() => ({})),
+                fetch(coreUrl + '/channels').then(r => r.json()).catch(() => ({})),
+                fetch(coreUrl + '/roles').then(r => r.json()).catch(() => ({})),
+            ]);
+            config = cfgR.config || {};
+            catalog = catR.catalog || [];
+            commands = cmdR.commands || [];
+            channels = chR.channels || [];
+            roles = rR.roles || [];
+            hydrateStatus();
+            hydrateStats(statsR.stats || {});
+            hydrateHuntConfig();
+            hydrateSellSac();
+            hydrateSubcommands();
+            hydrateAccessControl();
+            hydrateCatalog();
+            hydrateCommands();
+            hydrateGrantSelect();
+            hydrateTopHunters(statsR.stats || {});
+        } catch (e) {
+            console.error('[OwO] loadAll failed', e);
+        }
+    }
+
+    // ── 1. Status ─────────────────────────────────────────────────
+    function hydrateStatus() {
+        $('owoEnabled').checked = !!config.enabled;
+        $('owoAnnounceRare').checked = config.announce_rare_catches !== 0;
+    }
+
+    // ── 2. Stats ──────────────────────────────────────────────────
+    function hydrateStats(s) {
+        $('stat-hunters').textContent = (s.hunters || 0).toLocaleString();
+        $('stat-unique').textContent = (s.uniqueCatches || 0).toLocaleString();
+        $('stat-total').textContent = (s.totalCatches || 0).toLocaleString();
+        $('stat-24h').textContent = (s.last24hCatches || 0).toLocaleString();
+
+        const total = Math.max(1, s.totalCatches || 0);
+        const byRank = Object.fromEntries((s.byRank || []).map(r => [r.rank, r.total]));
+        const rankColors = { legendary: '#F44336', mythical: '#FF9800', epic: '#9C27B0', rare: '#2196F3', uncommon: '#4CAF50', common: '#9E9E9E' };
+        const rankEmoji = { legendary: '👑', mythical: '🌟', epic: '💎', rare: '🥇', uncommon: '🥈', common: '🥉' };
+        const order = ['legendary', 'mythical', 'epic', 'rare', 'uncommon', 'common'];
+        $('stat-rank-bars').innerHTML = order.map(r => {
+            const n = byRank[r] || 0;
+            const pct = (n / total) * 100;
+            return '<div class="owo-rank-bar-row">' +
+                '<div>' + rankEmoji[r] + ' <strong>' + r + '</strong></div>' +
+                '<div class="owo-rank-bar-outer"><div class="owo-rank-bar-inner" style="width:' + pct.toFixed(1) + '%;background:' + rankColors[r] + ';"></div></div>' +
+                '<div style="text-align:right;">' + n.toLocaleString() + '</div>' +
+                '</div>';
+        }).join('');
+    }
+
+    // ── 3. Hunt Configuration ─────────────────────────────────────
+    function hydrateHuntConfig() {
+        syncPair('owoCooldown', 'owoCooldownNum', config.hunt_cooldown_seconds ?? 15);
+        syncPair('owoCurMul', 'owoCurMulNum', config.reward_currency_multiplier ?? 1.0);
+
+        const ranks = [
+            ['🥉 Common',    'common',    58.85, 1,     1],
+            ['🥈 Uncommon',  'uncommon',  30.00, 5,     10],
+            ['🥇 Rare',      'rare',      10.00, 20,    20],
+            ['💎 Epic',      'epic',       1.00, 250,   400],
+            ['🌟 Mythical',  'mythical',   0.10, 3000,  1000],
+            ['👑 Legendary', 'legendary',  0.05, 10000, 2000],
+        ];
+        renderEffectiveTable(ranks);
+        ['owoCurMulNum'].forEach(id => $(id).addEventListener('input', () => renderEffectiveTable(ranks)));
+    }
+
+    function renderEffectiveTable(ranks) {
+        const cur = Number($('owoCurMulNum').value) || 1;
+        $('owoEffectiveRewards').innerHTML = ranks.map(([label, , pct, basePts]) => {
+            return '<tr><td>' + label + '</td><td>' + pct + '%</td>' +
+                '<td>' + Math.max(1, Math.floor(basePts * cur)).toLocaleString() + '</td></tr>';
+        }).join('');
+    }
+
+    function syncPair(rangeId, numId, value) {
+        const r = $(rangeId), n = $(numId);
+        r.value = value; n.value = value;
+        r.addEventListener('input', () => { n.value = r.value; });
+        n.addEventListener('input', () => { r.value = n.value; });
+    }
+
+    // ── 4. Sell & Sacrifice ──────────────────────────────────────
+    function hydrateSellSac() {
+        syncPair('owoSellMul', 'owoSellMulNum', config.sell_multiplier ?? 0.5);
+        syncPair('owoSacMul', 'owoSacMulNum', config.sacrifice_xp_multiplier ?? 1.0);
+    }
+
+    // ── 5. Subcommands ───────────────────────────────────────────
+    function hydrateSubcommands() {
+        const groups = { Actions: [], Economy: [], Viewers: [] };
+        commands.forEach(c => { if (groups[c.category]) groups[c.category].push(c); });
+        const render = (arr) => arr.map(c =>
+            '<div style="display:flex;align-items:center;gap:var(--spacing-2);margin-bottom:var(--spacing-2);">' +
+                '<input type="checkbox" class="form-check-input owo-sub-cb" data-name="' + attr(c.name) + '" ' + (c.enabled ? 'checked' : '') + '>' +
+                '<label style="cursor:pointer;">' + esc(c.slash) +
+                (c.aliases.length ? ' <span class="form-help" style="font-weight:normal;">(' + esc(c.aliases.join(', ')) + ')</span>' : '') +
+                '</label>' +
+            '</div>'
+        ).join('');
+        $('owoSubActions').innerHTML = render(groups.Actions);
+        $('owoSubEconomy').innerHTML = render(groups.Economy);
+        $('owoSubViewers').innerHTML = render(groups.Viewers);
+    }
+
+    // ── 6. Access Control ────────────────────────────────────────
+    function hydrateAccessControl() {
+        const ch = $('owoAllowedChannels');
+        ch.innerHTML = channels.map(c => '<option value="' + attr(c.id) + '">#' + esc(c.name) + '</option>').join('');
+        const allowed = new Set(config.allowed_channel_ids || []);
+        Array.from(ch.options).forEach(o => { o.selected = allowed.has(o.value); });
+
+        const r = $('owoBlockedRoles');
+        r.innerHTML = roles.filter(x => !x.managed).map(x =>
+            '<option value="' + attr(x.id) + '">' + esc(x.name) + '</option>'
+        ).join('');
+        const blocked = new Set(config.blocked_role_ids || []);
+        Array.from(r.options).forEach(o => { o.selected = blocked.has(o.value); });
+    }
+
+    // ── 7. Catalog ───────────────────────────────────────────────
+    function hydrateCatalog() {
+        const ranks = catalog.map(c => c.rank);
+        $('owoCatalogTabs').innerHTML = ranks.map((r, i) =>
+            '<div class="owo-tab ' + (i === 0 ? 'active' : '') + '" data-rank="' + attr(r) + '">' +
+                esc(catalog[i].emoji) + ' ' + esc(r) + ' <span class="form-help" style="font-weight:normal;">(' + catalog[i].animals.length + ')</span>' +
+            '</div>'
+        ).join('');
+        renderCatalogBody(ranks[0]);
+        document.querySelectorAll('#owoCatalogTabs .owo-tab').forEach(t => t.addEventListener('click', () => {
+            document.querySelectorAll('#owoCatalogTabs .owo-tab').forEach(x => x.classList.remove('active'));
+            t.classList.add('active');
+            renderCatalogBody(t.dataset.rank);
+        }));
+    }
+    function renderCatalogBody(rank) {
+        const tier = catalog.find(c => c.rank === rank);
+        if (!tier) return;
+        $('owoCatalogBody').innerHTML = tier.animals.map(a =>
+            '<div class="owo-catalog-item"><span style="font-size:1.3em;">' + esc(a.emoji) + '</span>' +
+                '<div><div>' + esc(a.name) + '</div>' +
+                '<div class="form-help" style="font-weight:normal;font-size:11px;">' + esc(a.key) + '</div></div></div>'
+        ).join('');
+    }
+
+    // ── 8. Command Reference ─────────────────────────────────────
+    function hydrateCommands() {
+        $('owoCommandsBody').innerHTML = commands.map(c =>
+            '<tr>' +
+                '<td><strong>' + esc(c.name) + '</strong></td>' +
+                '<td><code>' + esc(c.slash) + '</code></td>' +
+                '<td><code>' + esc(c.prefix) + '</code></td>' +
+                '<td>' + esc(c.aliases.join(', ') || '—') + '</td>' +
+                '<td>' + esc(c.category) + '</td>' +
+                '<td>' + (c.enabled ? '<span style="color:var(--color-success);">✓ Enabled</span>' : '<span style="color:var(--color-danger);">✗ Disabled</span>') + '</td>' +
+            '</tr>'
+        ).join('');
+    }
+
+    // ── 9. Admin: grant select populate ──────────────────────────
+    function hydrateGrantSelect() {
+        const opts = ['<option value="">— animal —</option>'];
+        catalog.forEach(tier => {
+            opts.push('<optgroup label="' + attr(tier.emoji + ' ' + tier.rank) + '">');
+            tier.animals.forEach(a => opts.push(
+                '<option value="' + attr(a.key) + '">' + esc(a.emoji) + ' ' + esc(a.name) + '</option>'
+            ));
+            opts.push('</optgroup>');
+        });
+        $('owoGrantAnimal').innerHTML = opts.join('');
+    }
+
+    // ── 10. Top hunters (pulled from /stats) ─────────────────────
+    function hydrateTopHunters(stats) {
+        const arr = stats.topHunters || [];
+        const medals = ['🥇', '🥈', '🥉'];
+        $('owoTopHunters').innerHTML = arr.length
+            ? arr.map((h, i) => '<div class="owo-top-row">' +
+                '<span>' + (medals[i] || '#' + (i + 1)) + ' <code>' + esc(h.userId) + '</code></span>' +
+                '<span style="color:var(--color-text-muted);">' + h.total.toLocaleString() + ' catches · ' + h.uniqueAnimals + ' unique</span>' +
+            '</div>').join('')
+            : '<div class="form-help">No hunters yet.</div>';
+    }
+
+    // ── Save handlers (per-section) ──────────────────────────────
+    async function saveSection(section) {
+        const body = {};
+        if (section === 'status') {
+            body.enabled = $('owoEnabled').checked;
+            body.announce_rare_catches = $('owoAnnounceRare').checked;
+        } else if (section === 'hunt') {
+            body.hunt_cooldown_seconds = Number($('owoCooldownNum').value);
+            body.reward_currency_multiplier = Number($('owoCurMulNum').value);
+        } else if (section === 'sellsac') {
+            body.sell_multiplier = Number($('owoSellMulNum').value);
+            body.sacrifice_xp_multiplier = Number($('owoSacMulNum').value);
+        } else if (section === 'subs') {
+            body.disabled_subcommands = Array.from(document.querySelectorAll('.owo-sub-cb'))
+                .filter(cb => !cb.checked).map(cb => cb.dataset.name);
+        } else if (section === 'access') {
+            body.allowed_channel_ids = Array.from($('owoAllowedChannels').selectedOptions).map(o => o.value);
+            body.blocked_role_ids = Array.from($('owoBlockedRoles').selectedOptions).map(o => o.value);
+        }
+
+        const result = await api('/config', { method: 'PUT', body: JSON.stringify(body) });
+        if (result.success) {
+            config = result.config;
+            showStatus(section, true);
+            if (section === 'subs') {
+                const res = await api('/commands');
+                commands = res.commands || commands;
+                hydrateCommands();
+            }
+        } else {
+            showStatus(section, false, '✗ ' + (result.error || 'Failed'));
+        }
+    }
+
+    document.querySelectorAll('.owo-save-btn').forEach(btn => {
+        btn.addEventListener('click', () => saveSection(btn.dataset.section));
+    });
+
+    // ── Admin: lookup user ──────────────────────────────────────
+    function renderError(targetId, msg) {
+        const el = $(targetId);
+        el.textContent = '';
+        const span = document.createElement('span');
+        span.style.color = 'var(--color-danger)';
+        span.textContent = msg;
+        el.appendChild(span);
+    }
+
+    $('owoLookupBtn').addEventListener('click', async () => {
+        const userId = $('owoLookupUserId').value.trim();
+        if (!/^\d{15,25}$/.test(userId)) { renderError('owoUserResult', 'Invalid user ID.'); return; }
+        $('owoUserResult').textContent = 'Loading…';
+        const res = await fetch(baseUrl + '/user-zoo/' + encodeURIComponent(userId)).then(r => r.json()).catch(() => ({}));
+        if (!res.success) { renderError('owoUserResult', res.error || 'Failed'); return; }
+        renderUserZoo(userId, res);
+    });
+
+    function renderUserZoo(userId, res) {
+        const zoo = res.zoo || {};
+        const profile = res.profile || {};
+        const grouped = zoo.grouped || {};
+        const order = ['legendary', 'mythical', 'epic', 'rare', 'uncommon', 'common'];
+        const lines = order.filter(r => grouped[r]?.length).map(r => {
+            const items = grouped[r].map(a => esc(a.emoji) + '×' + esc(String(a.count))).join(' ');
+            return '<div><strong>' + esc(r) + '</strong> — ' + items + '</div>';
+        }).join('');
+        const heading = profile.tag
+            ? '<strong>' + esc(profile.tag) + '</strong> <span class="form-help" style="font-weight:normal;">' + esc(userId) + '</span>'
+            : '<code>' + esc(userId) + '</code> <span class="form-help" style="font-weight:normal;">(not in cache)</span>';
+        $('owoUserResult').innerHTML =
+            '<div style="background:var(--color-dark-700);padding:var(--spacing-3);border-radius:var(--radius-sm);">' +
+                '<div style="margin-bottom:var(--spacing-2);">' + heading + ' — ' +
+                    (zoo.uniqueAnimals || 0) + '/' + (zoo.catalogSize || 58) + ' unique · ' + (zoo.totalCatches || 0) + ' total' +
+                '</div>' +
+                (lines || '<div class="form-help">No animals yet.</div>') +
+                '<button type="button" class="btn btn-danger" style="margin-top:var(--spacing-3);" id="owoResetUserBtn">' +
+                    '<i class="fas fa-trash"></i> Reset this user\'s zoo</button>' +
+            '</div>';
+        $('owoResetUserBtn').addEventListener('click', async () => {
+            if (!confirm('Reset ' + userId + "'s zoo? This cannot be undone.")) return;
+            const r = await api('/reset-user', { method: 'POST', body: JSON.stringify({ userId }) });
+            if (r.success) {
+                $('owoUserResult').textContent = '';
+                const span = document.createElement('span');
+                span.style.color = 'var(--color-success)';
+                span.textContent = 'Reset complete — ' + r.zooRowsRemoved + ' zoo rows, ' + r.cooldownsRemoved + ' cooldowns removed.';
+                $('owoUserResult').appendChild(span);
+            } else {
+                renderError('owoUserResult', r.error || 'Failed');
+            }
+        });
+    }
+
+    // ── Admin: grant ─────────────────────────────────────────────
+    $('owoGrantBtn').addEventListener('click', async () => {
+        const userId = $('owoGrantUserId').value.trim();
+        const animalKey = $('owoGrantAnimal').value;
+        const count = Number($('owoGrantCount').value);
+        if (!/^\d{15,25}$/.test(userId)) { renderError('owoGrantResult', 'Invalid user ID.'); return; }
+        if (!animalKey) { renderError('owoGrantResult', 'Pick an animal.'); return; }
+        const r = await api('/grant-animal', { method: 'POST', body: JSON.stringify({ userId, animalKey, count }) });
+        if (r.success) {
+            $('owoGrantResult').textContent = '';
+            const span = document.createElement('span');
+            span.style.color = 'var(--color-success)';
+            span.textContent = 'Granted — ' + animalKey + ' (' + r.rank + ') now at count ' + r.newCount + '.';
+            $('owoGrantResult').appendChild(span);
+        } else {
+            renderError('owoGrantResult', r.error || 'Failed');
+        }
+    });
+
+    // ── Admin: reset guild (type-to-confirm) ─────────────────────
+    $('owoResetConfirm').addEventListener('input', (e) => {
+        $('owoResetGuildBtn').disabled = e.target.value !== guildName;
+    });
+    $('owoResetGuildBtn').addEventListener('click', async () => {
+        if ($('owoResetConfirm').value !== guildName) return;
+        if (!confirm('Wipe EVERY zoo in this server? This cannot be undone.')) return;
+        const r = await api('/reset-guild', { method: 'POST', body: JSON.stringify({ confirm: true }) });
+        if (r.success) {
+            $('owoResetResult').textContent = '';
+            const span = document.createElement('span');
+            span.style.color = 'var(--color-success)';
+            span.textContent = 'Guild zoo reset — ' + r.zooRowsRemoved + ' zoo rows, ' + r.cooldownsRemoved + ' cooldowns removed.';
+            $('owoResetResult').appendChild(span);
+            $('owoResetConfirm').value = '';
+            $('owoResetGuildBtn').disabled = true;
+        } else {
+            renderError('owoResetResult', r.error || 'Failed');
+        }
+    });
+
+    // ── 11. Module snapshot (engagement rollup) ──────────────────
+    async function loadSnapshot() {
+        const res = await fetch(baseUrl + '/module-snapshot').then(r => r.json()).catch(() => ({}));
+        if (!res.success) return;
+        const tiles = [
+            ['Hunters',           res.snapshot.hunters],
+            ['Weapon owners',     res.snapshot.weaponOwners],
+            ['Teams',             res.snapshot.teamOwners],
+            ['Battles fought',    res.snapshot.battlesFought],
+            ['Autohunt active',   res.snapshot.autohuntActive],
+            ['Quest holders',     res.snapshot.questHolders],
+            ['Crates unopened',   res.snapshot.cratesUnopened],
+            ['Total shards',      res.snapshot.totalShards],
+        ];
+        $('owoSnapshot').innerHTML = tiles.map(([label, n]) =>
+            '<div class="owo-stat-tile">' +
+                '<div class="owo-stat-label">' + esc(label) + '</div>' +
+                '<div class="owo-stat-value" style="font-size:var(--font-size-xl);">' + (Number(n) || 0).toLocaleString() + '</div>' +
+            '</div>'
+        ).join('');
+    }
+
+    // ── 12. Leaderboards ─────────────────────────────────────────
+    async function loadLeaderboard(kind) {
+        const res = await fetch(baseUrl + '/leaderboard/' + encodeURIComponent(kind)).then(r => r.json()).catch(() => ({}));
+        if (!res.success) { $('owoLbBody').innerHTML = '<div class="form-help">Failed to load.</div>'; return; }
+        const rows = res.leaderboard || [];
+        if (!rows.length) { $('owoLbBody').innerHTML = '<div class="form-help">Empty — no data yet.</div>'; return; }
+        const medals = ['🥇', '🥈', '🥉'];
+        const lines = rows.map((r, i) => {
+            const badge = medals[i] || '#' + (i + 1);
+            let meta = '';
+            if (kind === 'hunters')      meta = (r.total || 0).toLocaleString() + ' catches · ' + (r.legendary || 0) + 'L / ' + (r.mythical || 0) + 'M / ' + (r.epic || 0) + 'E';
+            else if (kind === 'battle')  meta = (r.wins || 0) + 'W / ' + (r.losses || 0) + 'L · streak ' + (r.streak || 0) + ' (best ' + (r.highestStreak || 0) + ')';
+            else if (kind === 'wealth')  meta = (r.wallet || 0).toLocaleString();
+            return '<div class="owo-top-row"><span>' + badge + ' <code>' + esc(r.userId) + '</code></span><span style="color:var(--color-text-muted);">' + esc(meta) + '</span></div>';
+        });
+        $('owoLbBody').innerHTML = lines.join('');
+    }
+    document.querySelectorAll('#owoLbTabs .owo-tab').forEach(t => t.addEventListener('click', () => {
+        document.querySelectorAll('#owoLbTabs .owo-tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        loadLeaderboard(t.dataset.kind);
+    }));
+
+    // ── 13. Admin — grant + full inspector ───────────────────────
+    $('owoGrantEconBtn').addEventListener('click', async () => {
+        const userId = $('owoGrantEconUser').value.trim();
+        const amount = Number($('owoGrantEconAmount').value);
+        const kind = $('owoGrantEconKind').value;
+        if (!/^\d{15,25}$/.test(userId)) { renderError('owoGrantEconResult', 'Invalid user ID.'); return; }
+        if (!Number.isFinite(amount) || amount === 0) { renderError('owoGrantEconResult', 'Amount must be non-zero.'); return; }
+        let endpoint, body;
+        if (kind === 'currency')    { endpoint = '/grant-currency'; body = { userId, amount }; }
+        else if (kind === 'shards') { endpoint = '/grant-shards';   body = { userId, amount }; }
+        else if (kind === 'crate')  { endpoint = '/grant-animal';   body = null; }
+        if (kind === 'crate') {
+            // Use the weapons-service crate grant via a small shim — reuse /reset-user? No — expose via a fresh call.
+            // We can route through adminGrantCrate via /grant-shards's sibling; implement minimal: POST /grant-crate {userId, count}
+            const r = await fetch(baseUrl + '/grant-crate', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId, count: amount }),
+            }).then(r => r.json()).catch(() => ({ error: 'Failed' }));
+            if (r.success) {
+                $('owoGrantEconResult').innerHTML = '<span style="color:var(--color-success);">Granted ' + amount + ' crate(s). Total: ' + r.total + '.</span>';
+            } else {
+                renderError('owoGrantEconResult', r.error || 'Failed');
+            }
+            return;
+        }
+        const r = await api(endpoint, { method: 'POST', body: JSON.stringify(body) });
+        if (r.success) {
+            const label = kind === 'currency' ? '💰 currency' : '💠 shards';
+            $('owoGrantEconResult').innerHTML = '<span style="color:var(--color-success);">Granted ' + esc(String(amount)) + ' ' + label + '. New total: ' + esc(String(r.total)) + '.</span>';
+        } else {
+            renderError('owoGrantEconResult', r.error || 'Failed');
+        }
+    });
+
+    $('owoFullLookupBtn').addEventListener('click', async () => {
+        const userId = $('owoFullUserId').value.trim();
+        if (!/^\d{15,25}$/.test(userId)) { renderError('owoFullSnapshot', 'Invalid user ID.'); return; }
+        $('owoFullSnapshot').textContent = 'Loading…';
+        const res = await fetch(baseUrl + '/user-full/' + encodeURIComponent(userId)).then(r => r.json()).catch(() => ({}));
+        if (!res.success) { renderError('owoFullSnapshot', res.error || 'Failed'); return; }
+        renderFullSnapshot(userId, res);
+    });
+
+    function renderFullSnapshot(userId, r) {
+        const weaponsTop = (r.weapons?.top || []).slice(0, 5)
+            .map(w => '<li>' + esc(w.rank) + ' ' + esc(w.name) + ' <code>#' + esc(String(w.uwid)) + '</code>' + (w.favorite ? ' ⭐' : '') + '</li>')
+            .join('');
+        const teamsLine = (r.teams || []).map(t =>
+            '<li>' + esc(t.tname) + ' <code>(pgid ' + esc(String(t.pgid)) + ')</code> · ' + t.win + 'W/' + t.lose + 'L · streak ' + t.streak + (t.active ? ' 🎯 active' : '') + '</li>'
+        ).join('');
+        const activeTeam = r.activeTeam
+            ? (r.activeTeam.animals || []).map(a =>
+                '<li>pos' + esc(String(a.pos)) + ' ' + esc(a.name) + (a.nickname ? ' (' + esc(a.nickname) + ')' : '') + ' [' + esc(a.rank) + ']' +
+                (a.weapon ? ' ⚔️ ' + esc(a.weapon.rank) + ' ' + esc(a.weapon.name) : '') + '</li>')
+                .join('')
+            : '<li>*none*</li>';
+        const quests = (r.quests || []).map(q =>
+            '<li><code>' + esc(String(q.qid)) + '</code> ' + esc(q.qname) + ' ' + q.count + '/' + q.target +
+            (q.complete ? ' ✅' : '') + ' → ' + q.reward + ' ' + esc(q.prize) + '</li>').join('');
+        const header = r.profile?.tag
+            ? '<strong>' + esc(r.profile.tag) + '</strong> <span class="form-help" style="font-weight:normal;">' + esc(userId) + '</span>'
+            : '<code>' + esc(userId) + '</code>';
+        $('owoFullSnapshot').innerHTML =
+            '<div style="background:var(--color-dark-700);padding:var(--spacing-4);border-radius:var(--radius-sm);">' +
+                '<div style="margin-bottom:var(--spacing-3);">' + header +
+                    ' · 💰 ' + (r.wallet || 0).toLocaleString() +
+                    ' · 💠 ' + (r.shards || 0).toLocaleString() + ' shards' +
+                    ' · 🎰 ' + (r.luck?.lifetimeRolls || 0) + ' luck rolls' +
+                '</div>' +
+                '<div class="grid grid-cols-2" style="gap:var(--spacing-3);">' +
+                    '<div><div class="owo-subh">Zoo</div>' +
+                        (r.zoo ? (r.zoo.uniqueAnimals + '/' + r.zoo.catalogSize + ' unique · ' + r.zoo.totalCatches + ' total · ' + (r.zoo.completionPct || 0).toFixed(1) + '%') : '—') +
+                    '</div>' +
+                    '<div><div class="owo-subh">Weapons</div>' +
+                        'Total: ' + (r.weapons?.total || 0) +
+                        '<ul style="margin:var(--spacing-2) 0 0;padding-left:1.2em;">' + (weaponsTop || '<li>—</li>') + '</ul>' +
+                    '</div>' +
+                    '<div><div class="owo-subh">Teams</div>' +
+                        '<ul style="margin:0;padding-left:1.2em;">' + (teamsLine || '<li>—</li>') + '</ul>' +
+                    '</div>' +
+                    '<div><div class="owo-subh">Active team roster</div>' +
+                        '<ul style="margin:0;padding-left:1.2em;">' + activeTeam + '</ul>' +
+                    '</div>' +
+                    '<div><div class="owo-subh">Autohunt</div>' +
+                        (r.autohunt?.enabled
+                            ? 'On · queued ' + r.autohunt.queued + '/' + r.autohunt.queuedCap +
+                              ' · next in ' + r.autohunt.nextInMinutes + 'm · lifetime ' + r.autohunt.totalLifetime
+                            : 'Off') +
+                    '</div>' +
+                    '<div><div class="owo-subh">Ranch</div>' +
+                        (r.ranch?.hasTeam
+                            ? r.ranch.hourlyRate + '/hr · ' + r.ranch.hoursAccrued + 'h pending = ' + r.ranch.pendingPayout
+                            : 'No team') +
+                    '</div>' +
+                    '<div style="grid-column: span 2;"><div class="owo-subh">Active quests</div>' +
+                        '<ul style="margin:0;padding-left:1.2em;">' + (quests || '<li>—</li>') + '</ul>' +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+    }
+
+    // Kick off loading of phase-9 sections after initial page hydration
+    loadAll().then(() => { loadSnapshot(); loadLeaderboard('hunters'); });
+})();
+</script>
