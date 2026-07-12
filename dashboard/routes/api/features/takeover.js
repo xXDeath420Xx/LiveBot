@@ -17,7 +17,7 @@ import {
     startScan, resumeScan, cancelScan, isScanning,
     getScan, getLatestScan, getBots, getTemplates, attribute, scannableChannels,
 } from '../../../../core/guild-analyzer.js';
-import { plan, apply, postPanels, KNOWN_BOTS, WEBHOOK_ONLY } from '../../../../core/takeover-manager.js';
+import { plan, apply, postPanels, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
 import { evaluate, retire, autoAttribute, acknowledgeExtraction, DATA_HOLDERS, DEFAULT_SOAK_HOURS } from '../../../../core/bot-retirement.js';
 
 const router = express.Router({ mergeParams: true });
@@ -52,6 +52,8 @@ router.get('/', async (req, res) => {
         const scan = await getLatestScan(guild.id);
         const bots = scan ? await getBots(scan.id) : [];
         const { skipped } = scannableChannels(guild);
+        const selfId = req.botClient?.user?.id ?? null;
+        const presentNames = presentBotNames(bots);
 
         const [retired] = await pool.execute(
             'SELECT bot_id, retired_at, method FROM guild_retire_state WHERE guild_id = ? AND retired_at IS NOT NULL',
@@ -69,12 +71,19 @@ router.get('/', async (req, res) => {
                 pct: scan.channels_total ? Math.round((scan.channels_done / scan.channels_total) * 100) : 0,
             },
             bots: bots.map(b => {
-                const meta = KNOWN_BOTS[b.bot_id] ?? null;
+                // resolveBotMeta also matches webhook personas (`wh:<name>`) and flags our own bot.
+                const meta = resolveBotMeta(b.bot_id, b.name, selfId);
                 return {
                     ...b,
                     channels: safeJson(b.channels, []),
                     known: !!meta,
                     feature: meta?.feature ?? null,
+                    // 'self' | 'full' | 'partial' | 'none'. Defaults to full when a feature is set,
+                    // so an entry that simply omits it is never mislabelled as unreplaceable.
+                    coverage: meta ? (meta.coverage ?? (meta.feature ? 'full' : 'none')) : null,
+                    // Whether this bot's message shapes have to be explained before anything happens.
+                    // False for bots we keep, our own bots, and Discord system personas.
+                    gated: needsEvidence(meta, presentNames),
                     why: meta?.why ?? null,
                     holdsData: DATA_HOLDERS[b.bot_id] ?? null,
                     retired: retired.find(r => r.bot_id === b.bot_id) ?? null,
@@ -137,8 +146,42 @@ router.post('/bots/:botId/auto-attribute', async (req, res) => {
     try {
         const scan = await getLatestScan(req.params.guildId);
         if (!scan) return res.status(404).json({ error: 'Run a scan first.' });
-        res.json(await autoAttribute(scan.id, req.params.botId));
+        const bot = (await getBots(scan.id)).find(b => b.bot_id === req.params.botId);
+        res.json(await autoAttribute(scan.id, req.params.botId, bot?.name ?? null, req.botClient?.user?.id ?? null));
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * Auto-attribute every bot in one pass. The per-bot button already existed, but with ~700 template
+ * shapes across 19 bots that is a lot of clicking to establish something the signatures already
+ * know. Returns what it cleared and, crucially, what it did NOT — the leftovers are the whole point
+ * of the evidence gate and must stay visible.
+ */
+router.post('/auto-attribute-all', async (req, res) => {
+    try {
+        const scan = await getLatestScan(req.params.guildId);
+        if (!scan) return res.status(404).json({ error: 'Run a scan first.' });
+
+        const selfId = req.botClient?.user?.id ?? null;
+        const bots = await getBots(scan.id);
+        const presentNames = presentBotNames(bots);
+        const results = [];
+        for (const b of bots) {
+            const meta = resolveBotMeta(b.bot_id, b.name, selfId);
+            const r = await autoAttribute(scan.id, b.bot_id, b.name, selfId);
+            // Only a bot we intend to REMOVE has to have every shape explained. A bot we keep, one
+            // of ours, or a Discord system persona is not gated on anything, so its leftovers are
+            // not a to-do — counting them just makes a finished takeover look unfinished.
+            results.push({ botId: b.bot_id, name: b.name, ...r, gated: needsEvidence(meta, presentNames) });
+        }
+        const matched = results.reduce((s, r) => s + (r.matched ?? 0), 0);
+        const outstanding = results.filter(r => r.gated && r.remaining > 0);
+        const remaining = outstanding.reduce((s, r) => s + r.remaining, 0);
+        res.json({ success: true, matched, remaining, results: outstanding });
+    } catch (err) {
+        logger.error(`[API takeover] auto-attribute-all failed: ${err.message}`, { stack: err.stack });
         res.status(500).json({ error: err.message });
     }
 });

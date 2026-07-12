@@ -44,11 +44,19 @@
 
     <!-- Phase 2: bots -->
     <div class="to-card">
-        <h3 class="to-h">2 · What we found</h3>
-        <p class="form-help">
-            Every bot and webhook persona that has ever posted. Expand one to see the distinct
-            message shapes it shows — each must be accounted for before it can be removed.
-        </p>
+        <div class="to-head">
+            <div>
+                <h3 class="to-h">2 · What we found</h3>
+                <p class="form-help">
+                    Every bot and webhook persona that has ever posted. Expand one to see the distinct
+                    message shapes it shows — each must be accounted for before it can be removed.
+                </p>
+            </div>
+            <div class="to-actions">
+                <button class="btn btn-secondary" id="toAttrAll">Auto-attribute everything we recognise</button>
+            </div>
+        </div>
+        <div id="toAttrAllResult" class="to-muted" hidden></div>
         <div id="toBots" class="to-list">Run a scan to see results.</div>
     </div>
 
@@ -173,13 +181,17 @@
       : '';
   }
 
+  // A bot we deliberately keep is NOT a failure — it must not read like one. Only an
+  // unrecognised bot (one we have never classified) deserves a warning colour.
   function botTag(b) {
+    if (b.coverage === 'self') return '<span class="to-tag ok">this is our bot</span>';
+    if (b.coverage === 'system') return '<span class="to-tag seq">Discord system — not a bot</span>';
     if (b.retired) return '<span class="to-tag ok">retired</span>';
-    if (b.kind === 'webhook') return '<span class="to-tag warn">webhook</span>';
-    if (!b.present) return '<span class="to-tag">gone</span>';
-    if (!b.known) return '<span class="to-tag warn">unrecognised</span>';
-    if (!b.feature) return '<span class="to-tag no">unreplaceable</span>';
-    return `<span class="to-tag ok">replaces: ${esc(b.feature)}</span>`;
+    if (!b.known) return '<span class="to-tag warn">unrecognised — needs a look</span>';
+    if (b.coverage === 'none') return '<span class="to-tag seq">keep — no equivalent</span>';
+    if (b.coverage === 'partial') return `<span class="to-tag warn">partial: ${esc(b.feature)}</span>`;
+    const via = b.kind === 'webhook' ? ' (webhook)' : !b.present ? ' (already gone)' : '';
+    return `<span class="to-tag ok">we replace this — ${esc(b.feature)}${via}</span>`;
   }
 
   function renderBots(d) {
@@ -374,6 +386,23 @@
 
   $('toPlan').addEventListener('click', async () => {
     try { renderSteps(await req(api('/plan'))); } catch (err) { showError(err.message); }
+  });
+
+  $('toAttrAll').addEventListener('click', async () => {
+    const btn = $('toAttrAll');
+    btn.disabled = true; btn.textContent = 'Attributing…';
+    try {
+      const r = await req(api('/auto-attribute-all'), { method: 'POST' });
+      const el = $('toAttrAllResult');
+      el.hidden = false;
+      el.innerHTML = r.remaining
+        ? `Attributed <strong>${r.matched}</strong> message shape(s). <strong>${r.remaining}</strong> still need a human — ` +
+          r.results.map(x => `${esc(x.name)} (${x.remaining})`).join(', ') +
+          `. Open those bots and tick the ones we cover.`
+        : `Attributed <strong>${r.matched}</strong> message shape(s). <strong>Nothing left unexplained.</strong>`;
+      await load();
+    } catch (err) { showError(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Auto-attribute everything we recognise'; }
   });
 
   $('toApply').addEventListener('click', async () => {
