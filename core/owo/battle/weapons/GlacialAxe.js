@@ -1,0 +1,96 @@
+/*
+ * CC-BY-NC-SA-4.0 derivative. Ported from upstream OwO Bot via
+ * scripts/translate-owo-battle.mjs (2026-04-23).
+ * Original: src/commands/commandList/battle/weapons/GlacialAxe.js
+ * See /LICENSE-OWO-NOTICE.md.
+ */
+import WeaponInterface from '../WeaponInterface.js';
+import Logs from '../util/logUtil.js';
+
+export default class GlacialAxe extends WeaponInterface {
+	init() {
+		this.id = 15;
+		this.name = 'Glacial Axe';
+		this.basicDesc = '';
+		this.emojis = [
+			'<:cgaxe:618389128311996427>',
+			'<:ugaxe:618389128077377547>',
+			'<:rgaxe:618389128517648392>',
+			'<:egaxe:618389128064794646>',
+			'<:mgaxe:618389128949661716>',
+			'<:lgaxe:618389129817882625>',
+			'<:fgaxe:618389128396013598>',
+		];
+		this.pristineEmojis = [
+			'<:pcgaxe:1132239646789750885>',
+			'<:pugaxe:1132239658856751234>',
+			'<:prgaxe:1132239657665560616>',
+			'<:pegaxe:1132239649004335104>',
+			'<:pmgaxe:1132239655207718912>',
+			'<:plgaxe:1132239653743906837>',
+			'<:pfgaxe:1132239650505883718>',
+		];
+		this.defaultEmoji = '<:gaxe:618389128043692043>';
+		this.statDesc =
+			'Deals **?%** of your ' +
+			WeaponInterface.strEmoji +
+			'STR to a random opponent and apply **Freeze** for 2 turns';
+		this.availablePassives = 'all';
+		this.passiveCount = 1;
+		this.qualityList = [[20, 40]];
+		this.manaRange = [280, 180];
+		this.buffList = [5];
+	}
+
+	attackWeapon(me, team, enemy) {
+		if (me.stats.hp[0] <= 0) return;
+
+		/* No mana */
+		if (me.stats.wp[0] < this.manaCost) return this.attackPhysical(me, team, enemy);
+
+		/* Grab an enemy that I'm attacking */
+		let attacking = WeaponInterface.getAttacking(me, team, enemy, {
+			excludeBuff: [this.buffList[0]],
+		});
+		if (!attacking) return;
+
+		if (attacking.buffs.findIndex((buff) => buff.id === this.buffList[0]) >= 0)
+			return this.attackPhysical(me, team, enemy);
+
+		let logs = new Logs();
+
+		/* deplete weapon points*/
+		let mana = WeaponInterface.useMana(me, this.manaCost, me, {
+			me,
+			allies: team,
+			enemies: enemy,
+		});
+		let manaLogs = new Logs();
+		manaLogs.push(`[GAXE] ${me.nickname} used ${mana.amount} WP`, mana.logs);
+
+		/* Calculate damage */
+		let damage = WeaponInterface.getDamage(me.stats.att, this.stats[0] / 100);
+
+		/* Deal damage and freeze*/
+		damage = WeaponInterface.inflictDamage(me, attacking, damage, WeaponInterface.PHYSICAL, {
+			me,
+			allies: team,
+			enemies: enemy,
+		});
+		let buff = this.getBuffs(me)[0];
+		let buffLogs = buff.attemptBind(attacking, 2, {
+			me,
+			allies: team,
+			enemies: enemy,
+		});
+		logs.push(
+			`[GAXE] ${me.nickname} damaged ${attacking.nickname} for ${damage.amount} HP and applied freeze`,
+			damage.logs
+		);
+		logs.addSubLogs(buffLogs);
+
+		logs.addSubLogs(manaLogs);
+
+		return logs;
+	}
+};
