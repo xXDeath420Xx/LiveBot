@@ -134,6 +134,19 @@ export function rollRank(opts = {}) {
         if (meta.conditional && !opts[rank]) continue;
         weights[rank] = meta.rarity;
     }
+
+    // A Lucky gem (tier 1-7) tilts the roll toward the rare end: every rank above `common` gets
+    // its weight scaled up, and `common` is squeezed by the same factor. Rank ORDER is preserved,
+    // so a Fabled hunt is still vanishingly unlikely — it just stops being all bees.
+    const lucky = Number(opts.lucky) || 0;
+    if (lucky > 0) {
+        const boost = 1 + lucky * 0.5;
+        for (const rank of Object.keys(weights)) {
+            if (rank === 'common') weights[rank] /= boost;
+            else weights[rank] *= boost;
+        }
+    }
+
     const total = Object.values(weights).reduce((s, v) => s + v, 0);
     let roll = Math.random() * total;
     for (const [rank, w] of Object.entries(weights)) {

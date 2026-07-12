@@ -204,9 +204,14 @@ export async function claimQuest(guildId, userId, qid) {
                 // owo_shards has rank columns. Tolerate silently for now.
             });
         }
-        // lootbox: not yet wired up — defer to crate semantics for now
+        // A lootbox prize adds real lootboxes. It used to hand out weapon crates instead, because
+        // lootboxes did not exist yet — they do now, so the prize means what it says.
         else if (rewardType === 'lootbox') {
-            await adminGrantCrate(guildId, userId, reward);
+            await pool.execute(
+                `INSERT INTO owo_lootbox (guild_id, id, boxcount) VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE boxcount = boxcount + VALUES(boxcount)`,
+                [guildId, userId, reward]
+            );
         }
     } catch (e) {
         logger.warn('[OwO quests] reward grant partial failure', { err: e.message });

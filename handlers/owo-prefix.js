@@ -20,6 +20,11 @@ import {
     equipWeapon, unequipWeapon, getTeamDetails, renameAnimal,
 } from '../core/owo/teams-service.js';
 import { simulateBattle, generateCpuTeam } from '../core/owo/battle-engine.js';
+import { renderHunt, renderCrateDrop } from '../core/owo/hunt-text.js';
+import { rollDailyDrop } from '../core/owo/daily-drop.js';
+import * as lootbox from '../core/owo/lootbox-service.js';
+import { listOwned, getActive, use as useGems, gemName } from '../core/owo/gems-service.js';
+import { superscript, article } from '../core/owo/gems.js';
 import { addCowoncy } from '../core/owo/cowoncy.js';
 import {
     ensureQuests, listQuests, claimAllComplete, claimQuest, progressQuest,
@@ -74,23 +79,9 @@ export async function handleHunt(ctx) {
     }
     if (result.error) return ctx.editReply(`❌ ${result.error}`);
 
-    const rank = RANKS[result.rank];
-    const display = prettyName(result.animal.name);
-    const qualifier = result.newCount === 1 ? '✨ **New discovery!**' : `You now own **${result.newCount}×** of these.`;
-
-    const embed = new EmbedBuilder()
-        .setColor(result.color)
-        .setAuthor({ name: `${ctx.user.username}'s hunt`, iconURL: ctx.user.displayAvatarURL() })
-        .setTitle(`${result.animal.emoji}  You caught a ${display}!`)
-        .setDescription(
-            `**${result.rank.toUpperCase()}** — ${rank?.rarity ?? '?'}% chance\n` +
-            `+${formatMoney(result.points, { currency_name: result.currencyName, currency_emoji: result.currencyEmoji })}` +
-            `\n\n${qualifier}`
-        );
-    if (result.animal.description) {
-        embed.addFields({ name: 'About', value: result.animal.description.slice(0, 500) });
-    }
-    await ctx.editReply({ embeds: [embed] });
+    // Plain text, not an embed — a hunt is a one-line result and the bot we replace prints it
+    // that way. See core/owo/hunt-text.js.
+    await ctx.editReply(renderHunt(ctx.user.username, result));
 }
 
 export async function handleZoo(ctx) {
@@ -366,6 +357,56 @@ export async function handleTeamView(ctx) {
     await ctx.editReply({ embeds: [embed] });
 }
 
+/**
+ * The rest of `owo team …` from chat. These existed only as slash subcommands, so `owo team
+ * rename` did nothing useful — yet renaming is visible in every battle embed, and people plainly
+ * used it. `owo team <action>` is folded into these by core/owo-natural-prefix.js.
+ */
+export async function handleTeamCreate(ctx) {
+    if (!(await gate(ctx, 'team-create'))) return;
+    await ctx.deferReply();
+    const name = readArg(ctx, 'name', 'text') || null;
+    const r = await createTeam(ctx.guildId, ctx.user.id, name);
+    if (r.error) return ctx.editReply(`❌ ${r.error}`);
+    await ctx.editReply(`✅ Created team **${r.tname}** (id \`${r.pgid}\`).`);
+}
+
+export async function handleTeamRemove(ctx) {
+    if (!(await gate(ctx, 'team-remove'))) return;
+    await ctx.deferReply();
+    const pos = parseInt(readArg(ctx, 'pos', 'rank', 'amount'), 10);
+    if (!Number.isFinite(pos)) return ctx.editReply('Usage: `owo team remove <position>`');
+    const pgid = await ensureDefaultTeam(ctx.guildId, ctx.user.id);
+    const r = await removeAnimalFromTeam(ctx.guildId, ctx.user.id, pgid, pos);
+    if (r.error) return ctx.editReply(`❌ ${r.error}`);
+    await ctx.editReply(`✅ Removed the animal at position **${pos}**.`);
+}
+
+export async function handleTeamSwitch(ctx) {
+    if (!(await gate(ctx, 'team-switch'))) return;
+    await ctx.deferReply();
+    const pgid = parseInt(readArg(ctx, 'pgid', 'rank', 'amount'), 10);
+    if (!Number.isFinite(pgid)) return ctx.editReply('Usage: `owo team switch <team id>`');
+    const r = await setActiveTeam(ctx.guildId, ctx.user.id, pgid);
+    if (r?.error) return ctx.editReply(`❌ ${r.error}`);
+    await ctx.editReply(`✅ Team \`${pgid}\` is now your active team.`);
+}
+
+export async function handleTeamRename(ctx) {
+    if (!(await gate(ctx, 'team-rename'))) return;
+    await ctx.deferReply();
+    // `owo team rename 3 Win ov hg` — first token is the id, the rest is the name (spaces and all).
+    const tokens = (readArg(ctx, 'text') || '').split(/\s+/).filter(Boolean);
+    const pgid = parseInt(tokens[0], 10);
+    const name = tokens.slice(1).join(' ');
+    if (!Number.isFinite(pgid) || !name) {
+        return ctx.editReply('Usage: `owo team rename <team id> <new name>`');
+    }
+    const r = await renameTeam(ctx.guildId, ctx.user.id, pgid, name);
+    if (r?.error) return ctx.editReply(`❌ ${r.error}`);
+    await ctx.editReply(`✅ Team \`${pgid}\` is now **${name}**.`);
+}
+
 export async function handleTeamAdd(ctx) {
     if (!(await gate(ctx, 'team-add'))) return;
     await ctx.deferReply();
@@ -443,9 +484,35 @@ export async function handleBattlePrefix(ctx) {
     if (playerWon) { reward = 25 + Math.floor(Math.random() * 50); try { await addCowoncy(ctx.guildId, ctx.user.id, reward, 'OwO battle win'); } catch {} }
     const color = playerWon ? 0x4CAF50 : (playerLost ? 0xF44336 : 0x9E9E9E);
     const resultLine = playerWon ? `🏆 **Victory!** +${reward} ${econ.currency_emoji || '💰'}` : (playerLost ? '💀 **Defeat.**' : '🤝 **Draw.**');
-    const logText = result.log.join('\n').slice(0, 3800);
-    const embed = new EmbedBuilder().setColor(color).setTitle(isPvP ? `⚔️ ${ctx.user.username} vs ${opponent.username}` : `⚔️ ${ctx.user.username} vs ${enemy.tname}`).setDescription(resultLine + '\n\n' + logText).setFooter({ text: `Turns: ${result.turns}` });
+    const logText = result.log.join('\n').slice(0, 3000);
+
+    // Team-vs-team, the way the bot we replace shows it: the two rosters as side-by-side fields
+    // under a "<name> goes into battle!" author line, rather than buried in the log text.
+    const embed = new EmbedBuilder()
+        .setColor(color)
+        .setAuthor({ name: `${ctx.user.username} goes into battle!`, iconURL: ctx.user.displayAvatarURL() })
+        .setDescription(resultLine + '\n\n' + logText)
+        .addFields(
+            { name: player.tname || `${ctx.user.username}'s Team`, value: rosterField(player), inline: true },
+            { name: enemy.tname || 'Enemy Team', value: rosterField(enemy), inline: true },
+        )
+        .setFooter({ text: `Turns: ${result.turns}` });
+
     await ctx.editReply({ embeds: [embed] });
+
+    // A battle can drop a weapon crate — first one after midnight is guaranteed, then 5%, 3/day.
+    const crate = await rollDailyDrop('crate', ctx.guildId, ctx.user.id);
+    const crateText = renderCrateDrop(ctx.user.username, crate);
+    if (crateText) await ctx.followUp(crateText).catch(() => {});
+}
+
+/** One roster as an embed field: "🐊 Snappy — 120 HP". */
+function rosterField(team) {
+    const lines = (team.animals ?? []).map(a => {
+        const label = a.nickname || prettyName(a.name);
+        return `${a.emoji ?? ''} ${label}${a.hp ? ` — ${a.hp} HP` : ''}`.trim();
+    });
+    return lines.length ? lines.join('\n').slice(0, 1020) : '—';
 }
 
 export async function handleEquipPrefix(ctx) {
@@ -463,6 +530,96 @@ export async function handleEquipPrefix(ctx) {
 }
 
 /** `owo count` — how many times you've said owo/uwu. */
+/**
+ * `owo lootbox [n|all]` — open lootboxes for gems.
+ *
+ * Two messages, as upstream does it: the box shakes, then three seconds later it opens. The
+ * suspense IS the feature; opening instantly reads as a different game.
+ */
+export async function handleLootbox(ctx) {
+    if (!(await gate(ctx, 'lootbox'))) return;
+    await ctx.deferReply();
+
+    const arg = (readArg(ctx, 'count', 'rank') || '').toLowerCase();
+    const all = arg === 'all';
+    const n = parseInt(arg, 10);
+
+    const result = all
+        ? await lootbox.openAll(ctx.guildId, ctx.user.id)
+        : await lootbox.open(ctx.guildId, ctx.user.id, Number.isFinite(n) && n > 0 ? n : 1);
+
+    if (result.error) return ctx.editReply(`❌ ${result.error}`);
+
+    const name = ctx.user.username;
+    const many = result.opened > 1;
+    const opening = many
+        ? `**▫️ | ${name}** opens ${result.opened} lootboxes\n**🫨 |** and finds...`
+        : `**▫️ | ${name}** opens a lootbox\n**🫨 |** and finds a ...`;
+
+    const msg = await ctx.editReply(opening);
+
+    const reveal = many
+        ? `**▫️ | ${name}** opens ${result.opened} lootboxes\n**📭 |** and finds: `
+          + result.gems.map(g => `${g.gem.emoji}${superscript(g.count)}`).join(' ')
+        : (() => {
+            const g = result.gems[0].gem;
+            return `${g.emoji} **| ${name}** opens a lootbox\n`
+                + `**📭 |** and finds ${article(g)} **${gemName(g)}**!`;
+        })();
+
+    setTimeout(() => {
+        (msg?.edit ? msg.edit(reveal) : ctx.editReply(reveal))?.catch?.(() => {});
+    }, 3000);
+}
+
+/** `owo gems` — what you own and what is running. */
+export async function handleGems(ctx) {
+    if (!(await gate(ctx, 'gems'))) return;
+    await ctx.deferReply();
+
+    const [owned, active] = await Promise.all([
+        listOwned(ctx.guildId, ctx.user.id),
+        getActive(ctx.guildId, ctx.user.id),
+    ]);
+
+    const activeLines = Object.values(active)
+        .map(g => `${g.emoji} **${gemName(g)}** — \`[${g.activecount}/${g.length}]\` uses left`);
+    const ownedLines = owned
+        .map(g => `\`${String(g.id).padStart(2)}\` ${g.emoji} **${gemName(g)}** ×${g.count}`);
+
+    const embed = new EmbedBuilder()
+        .setColor(0x8E7CC3)
+        .setAuthor({ name: `${ctx.user.username}'s gems`, iconURL: ctx.user.displayAvatarURL() })
+        .setDescription(
+            (activeLines.length ? `**Active**\n${activeLines.join('\n')}\n\n` : '')
+            + (ownedLines.length ? `**Inventory**\n${ownedLines.join('\n')}` : '*No gems — hunt for lootboxes.*')
+        )
+        .setFooter({ text: 'Activate with: owo use <id> — one gem per type at a time' });
+
+    await ctx.editReply({ embeds: [embed] });
+}
+
+/** `owo use <id> [id...]` — activate gems. */
+export async function handleUseGem(ctx) {
+    if (!(await gate(ctx, 'use'))) return;
+    await ctx.deferReply();
+
+    // `text` carries every token, so `owo use 52 61` activates both; `id` covers the slash path.
+    const raw = (readArg(ctx, 'text') || readArg(ctx, 'id') || '')
+        .split(/[\s,]+/)
+        .map(v => parseInt(v, 10))
+        .filter(Number.isFinite);
+
+    const ids = [...new Set(raw)];
+    const result = await useGems(ctx.guildId, ctx.user.id, ids);
+    if (result.error) return ctx.editReply(`❌ ${result.error}`);
+
+    const list = result.activated
+        .map(g => `${g.emoji} **${gemName(g)}** \`[${g.length}/${g.length}]\``)
+        .join('\n');
+    await ctx.editReply(`✅ Activated:\n${list}`);
+}
+
 export async function handleOwoCount(ctx) {
     const target = ctx.options.getUser?.('user') || ctx.user;
     const c = await getOwoCounts(ctx.guildId, target.id);
@@ -488,7 +645,7 @@ export async function handleOwoRouter(ctx) {
     switch (subcommand) {
         case 'hunt': case 'h': case 'catch':         return handleHunt(ctx);
         case 'zoo':                                   return handleZoo(ctx);
-        case 'leaderboard': case 'lb': case 'top':   return handleLeaderboard(ctx);
+        case 'leaderboard': case 'top':              return handleLeaderboard(ctx);
         case 'catalog': case 'dex':                  return handleCatalog(ctx);
         case 'sell':                                  return handleSell(ctx);
         case 'sacrifice': case 'sac':                return handleSacrifice(ctx);
@@ -499,9 +656,16 @@ export async function handleOwoRouter(ctx) {
         case 'owoify':                                return handleOwoify(ctx);
         case 'weapon': case 'w': case 'weapons': case 'wep': return handleWeapon(ctx);
         case 'crate': case 'weaponcrate': case 'wc': return handleCrate(ctx);
+        case 'lootbox': case 'lb': case 'box':        return handleLootbox(ctx);
+        case 'gems': case 'gem':                      return handleGems(ctx);
+        case 'use':                                   return handleUseGem(ctx);
         case 'grant-crate': case 'grantcrate':        return handleGrantCrate(ctx);
         case 'team': case 'squad':                    return handleTeamView(ctx);
         case 'team-add': case 'teamadd':              return handleTeamAdd(ctx);
+        case 'team-create':                           return handleTeamCreate(ctx);
+        case 'team-remove':                           return handleTeamRemove(ctx);
+        case 'team-switch':                           return handleTeamSwitch(ctx);
+        case 'team-rename':                           return handleTeamRename(ctx);
         case 'equip':                                  return handleEquipPrefix(ctx);
         case 'battle': case 'b': case 'fight':        return handleBattlePrefix(ctx);
         case 'quest': case 'quests': case 'q':        return handleQuestPrefix(ctx);

@@ -23,6 +23,11 @@ import {
     MAX_TEAM_SIZE,
 } from '../../core/owo/teams-service.js';
 import { simulateBattle, generateCpuTeam } from '../../core/owo/battle-engine.js';
+import { renderHunt, renderCrateDrop } from '../../core/owo/hunt-text.js';
+import { rollDailyDrop } from '../../core/owo/daily-drop.js';
+import * as lootboxService from '../../core/owo/lootbox-service.js';
+import { listOwned, getActive, use as useGems, gemName } from '../../core/owo/gems-service.js';
+import { superscript, article } from '../../core/owo/gems.js';
 import pool from '../../utils/db.js';
 import { addCowoncy } from '../../core/owo/cowoncy.js';
 import {
@@ -93,29 +98,42 @@ const data = new SlashCommandBuilder()
         .addIntegerOption(opt => opt.setName('id').setDescription('uwid of a weapon to describe').setRequired(false)))
     .addSubcommand(sub => sub.setName('crate')
         .setDescription('Open a weapon crate to roll a random weapon.'))
+    .addSubcommand(sub => sub.setName('lootbox')
+        .setDescription('Open a lootbox for a gem.')
+        .addStringOption(o => o.setName('count')
+            .setDescription('How many to open: a number, or "all"')))
+    .addSubcommand(sub => sub.setName('gems')
+        .setDescription('Your gems — what you own and what is active.'))
+    .addSubcommand(sub => sub.setName('use')
+        .setDescription('Activate a gem by id (see /owo gems).')
+        .addStringOption(o => o.setName('id')
+            .setDescription('Gem id, or several separated by spaces')
+            .setRequired(true)))
     .addSubcommand(sub => sub.setName('grant-crate')
         .setDescription('[Admin] Grant a weapon crate to a member.')
         .addUserOption(opt => opt.setName('user').setDescription('Recipient').setRequired(true))
         .addIntegerOption(opt => opt.setName('count').setDescription('Crates to grant').setRequired(false).setMinValue(1).setMaxValue(100)))
-    .addSubcommand(sub => sub.setName('team')
-        .setDescription('View your active team, or a specific team by id.')
-        .addIntegerOption(opt => opt.setName('pgid').setDescription('Team id to view').setRequired(false)))
-    .addSubcommand(sub => sub.setName('team-create')
-        .setDescription('Create a new team (max 5).')
-        .addStringOption(opt => opt.setName('name').setDescription('Team name').setRequired(false)))
-    .addSubcommand(sub => sub.setName('team-add')
-        .setDescription('Add an animal from your zoo to your active team.')
-        .addStringOption(opt => opt.setName('animal').setDescription('Shortcode (e.g., :bee:) or bare name').setRequired(true)))
-    .addSubcommand(sub => sub.setName('team-remove')
-        .setDescription('Remove an animal from your active team by position.')
-        .addIntegerOption(opt => opt.setName('pos').setDescription('Position 1-3').setRequired(true).setMinValue(1).setMaxValue(3)))
-    .addSubcommand(sub => sub.setName('team-switch')
-        .setDescription('Make a different team your active team.')
-        .addIntegerOption(opt => opt.setName('pgid').setDescription('Team id').setRequired(true)))
-    .addSubcommand(sub => sub.setName('team-rename')
-        .setDescription('Rename one of your teams.')
-        .addIntegerOption(opt => opt.setName('pgid').setDescription('Team id').setRequired(true))
-        .addStringOption(opt => opt.setName('name').setDescription('New name').setRequired(true)))
+    .addSubcommandGroup(g => g.setName('team')
+        .setDescription('Your battle teams.')
+        .addSubcommand(sub => sub.setName('view')
+            .setDescription('View your active team, or a specific team by id.')
+            .addIntegerOption(opt => opt.setName('pgid').setDescription('Team id to view').setRequired(false)))
+        .addSubcommand(sub => sub.setName('create')
+            .setDescription('Create a new team (max 5).')
+            .addStringOption(opt => opt.setName('name').setDescription('Team name').setRequired(false)))
+        .addSubcommand(sub => sub.setName('add')
+            .setDescription('Add an animal from your zoo to your active team.')
+            .addStringOption(opt => opt.setName('animal').setDescription('Shortcode (e.g., :bee:) or bare name').setRequired(true)))
+        .addSubcommand(sub => sub.setName('remove')
+            .setDescription('Remove an animal from your active team by position.')
+            .addIntegerOption(opt => opt.setName('pos').setDescription('Position 1-3').setRequired(true).setMinValue(1).setMaxValue(3)))
+        .addSubcommand(sub => sub.setName('switch')
+            .setDescription('Make a different team your active team.')
+            .addIntegerOption(opt => opt.setName('pgid').setDescription('Team id').setRequired(true)))
+        .addSubcommand(sub => sub.setName('rename')
+            .setDescription('Rename one of your teams.')
+            .addIntegerOption(opt => opt.setName('pgid').setDescription('Team id').setRequired(true))
+            .addStringOption(opt => opt.setName('name').setDescription('New name').setRequired(true))))
     .addSubcommand(sub => sub.setName('equip')
         .setDescription('Equip a weapon on an animal in your active team.')
         .addIntegerOption(opt => opt.setName('pos').setDescription('Team position 1-3').setRequired(true).setMinValue(1).setMaxValue(3))
@@ -144,6 +162,7 @@ const data = new SlashCommandBuilder()
 
 async function execute(interaction) {
     const sub = interaction.options.getSubcommand();
+    const group = interaction.options.getSubcommandGroup(false);
     const guildId = interaction.guildId;
 
     if (sub === 'toggle') {
@@ -185,6 +204,9 @@ async function execute(interaction) {
     progressQuest(interaction.guildId, interaction.user.id, 'owo', 1).catch(() => {});
 
     if (sub === 'hunt')         return handleHunt(interaction);
+    if (sub === 'lootbox')      return handleLootboxSlash(interaction);
+    if (sub === 'gems')         return handleGemsSlash(interaction);
+    if (sub === 'use')          return handleUseGemSlash(interaction);
     if (sub === 'zoo')          return handleZoo(interaction);
     if (sub === 'leaderboard')  return handleLeaderboard(interaction);
     if (sub === 'catalog')      return handleCatalog(interaction);
@@ -197,12 +219,15 @@ async function execute(interaction) {
     if (sub === 'weapon')       return handleWeapon(interaction);
     if (sub === 'crate')        return handleCrate(interaction);
     if (sub === 'grant-crate')  return handleGrantCrate(interaction);
-    if (sub === 'team')         return handleTeamView(interaction);
-    if (sub === 'team-create')  return handleTeamCreate(interaction);
-    if (sub === 'team-add')     return handleTeamAdd(interaction);
-    if (sub === 'team-remove')  return handleTeamRemove(interaction);
-    if (sub === 'team-switch')  return handleTeamSwitch(interaction);
-    if (sub === 'team-rename')  return handleTeamRename(interaction);
+    // `/owo team …` is a subcommand GROUP, so `sub` here is the leaf (view/create/add/…).
+    if (group === 'team') {
+        if (sub === 'view')     return handleTeamView(interaction);
+        if (sub === 'create')   return handleTeamCreate(interaction);
+        if (sub === 'add')      return handleTeamAdd(interaction);
+        if (sub === 'remove')   return handleTeamRemove(interaction);
+        if (sub === 'switch')   return handleTeamSwitch(interaction);
+        if (sub === 'rename')   return handleTeamRename(interaction);
+    }
     if (sub === 'equip')        return handleEquip(interaction);
     if (sub === 'unequip')      return handleUnequip(interaction);
     if (sub === 'pet-name')     return handlePetName(interaction);
@@ -310,17 +335,122 @@ async function handleBattle(interaction) {
         : (playerLost ? '💀 **Defeat.**' : '🤝 **Draw.**');
 
     // Trim log to fit Discord embed limits (4096 chars).
-    const logText = result.log.join('\n').slice(0, 3800);
+    const logText = result.log.join('\n').slice(0, 3000);
 
+    // Team-vs-team: the two rosters as side-by-side fields under a "<name> goes into battle!"
+    // author line, matching the bot we replace.
     const embed = new EmbedBuilder()
         .setColor(color)
-        .setTitle(isPvP
-            ? `⚔️ ${interaction.user.username} vs ${opponent.username}`
-            : `⚔️ ${interaction.user.username} vs ${enemy.tname}`)
+        .setAuthor({
+            name: `${interaction.user.username} goes into battle!`,
+            iconURL: interaction.user.displayAvatarURL(),
+        })
         .setDescription(resultLine + '\n\n' + logText)
+        .addFields(
+            {
+                name: player.tname || `${interaction.user.username}'s Team`,
+                value: rosterField(player),
+                inline: true,
+            },
+            { name: enemy.tname || 'Enemy Team', value: rosterField(enemy), inline: true },
+        )
         .setFooter({ text: `Turns: ${result.turns}${playerWon ? ' · +1 win streak' : ''}` });
 
     await interaction.editReply({ embeds: [embed] });
+
+    // A battle can drop a weapon crate: guaranteed on the first battle after midnight, then 5%,
+    // three a day.
+    const crate = await rollDailyDrop('crate', interaction.guildId, interaction.user.id);
+    const crateText = renderCrateDrop(interaction.user.username, crate);
+    if (crateText) await interaction.followUp(crateText).catch(() => {});
+}
+
+/** One roster as an embed field: "🐊 Snappy — 120 HP". */
+/**
+ * `/owo lootbox [count]` — open lootboxes for gems. Two beats: the box shakes, then it opens.
+ * Shares every rule with the chat path; only the reply plumbing differs.
+ */
+async function handleLootboxSlash(interaction) {
+    await interaction.deferReply();
+    const { guildId, user } = interaction;
+
+    const arg = (interaction.options.getString('count') || '').toLowerCase();
+    const n = parseInt(arg, 10);
+    const result = arg === 'all'
+        ? await lootboxService.openAll(guildId, user.id)
+        : await lootboxService.open(guildId, user.id, Number.isFinite(n) && n > 0 ? n : 1);
+
+    if (result.error) return interaction.editReply(`❌ ${result.error}`);
+
+    const many = result.opened > 1;
+    await interaction.editReply(many
+        ? `**▫️ | ${user.username}** opens ${result.opened} lootboxes\n**🫨 |** and finds...`
+        : `**▫️ | ${user.username}** opens a lootbox\n**🫨 |** and finds a ...`);
+
+    const reveal = many
+        ? `**▫️ | ${user.username}** opens ${result.opened} lootboxes\n**📭 |** and finds: `
+          + result.gems.map(g => `${g.gem.emoji}${superscript(g.count)}`).join(' ')
+        : (() => {
+            const g = result.gems[0].gem;
+            return `${g.emoji} **| ${user.username}** opens a lootbox\n`
+                + `**📭 |** and finds ${article(g)} **${gemName(g)}**!`;
+        })();
+
+    setTimeout(() => { interaction.editReply(reveal).catch(() => {}); }, 3000);
+}
+
+/** `/owo gems` — inventory and what is currently running. */
+async function handleGemsSlash(interaction) {
+    await interaction.deferReply();
+    const { guildId, user } = interaction;
+
+    const [owned, active] = await Promise.all([
+        listOwned(guildId, user.id),
+        getActive(guildId, user.id),
+    ]);
+
+    const activeLines = Object.values(active)
+        .map(g => `${g.emoji} **${gemName(g)}** — \`[${g.activecount}/${g.length}]\` uses left`);
+    const ownedLines = owned
+        .map(g => `\`${String(g.id).padStart(2)}\` ${g.emoji} **${gemName(g)}** ×${g.count}`);
+
+    const embed = new EmbedBuilder()
+        .setColor(0x8E7CC3)
+        .setAuthor({ name: `${user.username}'s gems`, iconURL: user.displayAvatarURL() })
+        .setDescription(
+            (activeLines.length ? `**Active**\n${activeLines.join('\n')}\n\n` : '')
+            + (ownedLines.length ? `**Inventory**\n${ownedLines.join('\n')}` : '*No gems — hunt for lootboxes.*')
+        )
+        .setFooter({ text: 'Activate with /owo use — one gem per type at a time' });
+
+    await interaction.editReply({ embeds: [embed] });
+}
+
+/** `/owo use <id>` — activate gems. */
+async function handleUseGemSlash(interaction) {
+    await interaction.deferReply();
+    const ids = [...new Set(
+        (interaction.options.getString('id') || '')
+            .split(/[\s,]+/)
+            .map(v => parseInt(v, 10))
+            .filter(Number.isFinite)
+    )];
+
+    const result = await useGems(interaction.guildId, interaction.user.id, ids);
+    if (result.error) return interaction.editReply(`❌ ${result.error}`);
+
+    const list = result.activated
+        .map(g => `${g.emoji} **${gemName(g)}** \`[${g.length}/${g.length}]\``)
+        .join('\n');
+    await interaction.editReply(`✅ Activated:\n${list}`);
+}
+
+function rosterField(team) {
+    const lines = (team.animals ?? []).map(a => {
+        const label = a.nickname || prettyName(a.name);
+        return `${a.emoji ?? ''} ${label}${a.hp ? ` — ${a.hp} HP` : ''}`.trim();
+    });
+    return lines.length ? lines.join('\n').slice(0, 1020) : '—';
 }
 
 function normalizeAnimalArg(s) {
@@ -520,25 +650,10 @@ async function handleHunt(interaction) {
 
     const rank = RANKS[result.rank];
     const display = prettyName(result.animal.name);
-    const qualifier = result.newCount === 1
-        ? '✨ **New discovery!**'
-        : `You now own **${result.newCount}×** of these.`;
 
-    const embed = new EmbedBuilder()
-        .setColor(result.color)
-        .setAuthor({ name: `${user.username}'s hunt`, iconURL: user.displayAvatarURL() })
-        .setTitle(`${result.animal.emoji}  You caught a ${display}!`)
-        .setDescription(
-            `**${result.rank.toUpperCase()}** — ${rank?.rarity ?? '?'}% chance\n` +
-            `+${formatMoney(result.points, { currency_name: result.currencyName, currency_emoji: result.currencyEmoji })}` +
-            `\n\n${qualifier}`
-        );
-
-    if (result.animal.description) {
-        embed.addFields({ name: 'About', value: result.animal.description.slice(0, 500) });
-    }
-
-    await interaction.editReply({ embeds: [embed] });
+    // Plain text, one line — see core/owo/hunt-text.js. Same renderer as the chat path, so `owoh`
+    // and `/owo hunt` cannot drift apart.
+    await interaction.editReply(renderHunt(user.username, result));
 
     if (AUDITABLE_RANKS.has(result.rank) && result.announceRare !== false && interaction.guild) {
         try {

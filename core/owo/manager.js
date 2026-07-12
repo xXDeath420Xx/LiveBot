@@ -26,6 +26,9 @@ import {
     transferCowoncy, claimDailyCowoncy, getCurrencyMeta,
 } from './cowoncy.js';
 import { progressQuest } from './quests-service.js';
+import { getActive as getActiveGems, consumeForHunt as consumeGemsForHunt } from './gems-service.js';
+import { rollDailyDrop } from './daily-drop.js';
+import { getActivePgid } from './teams-service.js';
 
 // ── Config (per-guild tuning — migrations 087 + 088) ─────────────────
 
@@ -162,19 +165,49 @@ export async function hunt(guildId, userId) {
         }
     }
 
-    const result = await catalogRollHunt();
-    if (!result.animal) {
-        return { cooldown: false, error: 'No animal rolled — catalog empty for rank ' + result.rank };
+    // Gems decide how big this hunt is. Upstream's arithmetic exactly:
+    //   base 1, + the Hunting gem's `amount`, then DOUBLED by an Empowering gem, +1 for Patreon.
+    // A Legendary Hunting gem (amount 7) plus any Empowering gem gives (1 + 7) * 2 = 16 animals,
+    // which is exactly what the bot we are replacing was producing in this server.
+    const active = await getActiveGems(guildId, userId);
+    let count = 1;
+    if (active.Hunting) count += active.Hunting.amount;
+    if (active.Empowering) count *= 2;
+    if (active.Patreon) count += 1;
+
+    // A Lucky gem shifts the rank roll toward the rarer end.
+    const rollOpts = active.Lucky ? { lucky: active.Lucky.amount } : {};
+
+    const rolls = [];
+    for (let i = 0; i < count; i++) {
+        const r = await catalogRollHunt(rollOpts);
+        if (r.animal) rolls.push(r);
+    }
+    if (!rolls.length) {
+        return { cooldown: false, error: 'No animal rolled — the catalog is empty.' };
     }
 
-    const points = Math.max(1, Math.floor(result.points * cfg.reward_currency_multiplier));
+    // XP is the plain sum of each animal's rank XP — verified against the real bot's own output.
+    const xp = rolls.reduce((sum, r) => sum + r.xp, 0);
+    const points = rolls.reduce((sum, r) => sum + Math.max(1, Math.floor(r.points * cfg.reward_currency_multiplier)), 0);
     const currency = await getCurrencyMeta(guildId);
 
-    await addCowoncy(guildId, userId, points, `OwO hunt: caught ${result.animal.name}`);
+    await addCowoncy(guildId, userId, points, `OwO hunt: caught ${rolls.length} animal(s)`);
+
+    // Collapse duplicates for both the DB writes and the display, ordered rarest-last the way
+    // upstream lists them.
+    const byAnimal = new Map();
+    for (const r of rolls) {
+        const key = r.animal.name;
+        const e = byAnimal.get(key) ?? { animal: r.animal, rank: r.rank, count: 0, color: r.color };
+        e.count++;
+        byAnimal.set(key, e);
+    }
+    const caught = [...byAnimal.values()]
+        .sort((a, b) => (RANK_META[a.rank]?.order ?? 0) - (RANK_META[b.rank]?.order ?? 0));
 
     // Inventory + count + cooldown in one transaction
     const conn = await pool.getConnection();
-    let newCount = 1;
     try {
         await conn.beginTransaction();
 
@@ -184,30 +217,28 @@ export async function hunt(guildId, userId) {
             [guildId, userId]
         );
 
-        // Upsert into owo_animal (inventory)
-        await conn.execute(
-            `INSERT INTO owo_animal (guild_id, id, name, count, totalcount) VALUES (?, ?, ?, 1, 1)
-             ON DUPLICATE KEY UPDATE count = count + 1, totalcount = totalcount + 1`,
-            [guildId, userId, result.animal.name]
-        );
+        for (const e of caught) {
+            await conn.execute(
+                `INSERT INTO owo_animal (guild_id, id, name, count, totalcount) VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE count = count + VALUES(count), totalcount = totalcount + VALUES(totalcount)`,
+                [guildId, userId, e.animal.name, e.count, e.count]
+            );
 
-        const [[row]] = await conn.execute(
-            'SELECT count FROM owo_animal WHERE guild_id = ? AND id = ? AND name = ?',
-            [guildId, userId, result.animal.name]
-        );
-        newCount = row?.count ?? 1;
-
-        // Upsert into owo_animal_count (aggregate)
-        const rankCol = result.rank;
-        // Dynamic column — validate against known ranks to prevent injection
-        if (!listAllRanks().includes(rankCol)) {
-            throw new Error(`Unknown rank: ${rankCol}`);
+            // Dynamic column — validate against known ranks to prevent injection
+            if (!listAllRanks().includes(e.rank)) throw new Error(`Unknown rank: ${e.rank}`);
+            await conn.execute(
+                `INSERT INTO owo_animal_count (guild_id, id, \`${e.rank}\`) VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE \`${e.rank}\` = \`${e.rank}\` + VALUES(\`${e.rank}\`)`,
+                [guildId, userId, e.count]
+            );
         }
-        await conn.execute(
-            `INSERT INTO owo_animal_count (guild_id, id, \`${rankCol}\`) VALUES (?, ?, 1)
-             ON DUPLICATE KEY UPDATE \`${rankCol}\` = \`${rankCol}\` + 1`,
-            [guildId, userId]
+
+        const [rows] = await conn.execute(
+            `SELECT name, count FROM owo_animal WHERE guild_id = ? AND id = ? AND name IN (${caught.map(() => '?').join(',')})`,
+            [guildId, userId, ...caught.map(e => e.animal.name)]
         );
+        const owned = new Map(rows.map(r => [r.name, Number(r.count)]));
+        for (const e of caught) e.owned = owned.get(e.animal.name) ?? e.count;
 
         await conn.commit();
     } catch (e) {
@@ -217,23 +248,65 @@ export async function hunt(guildId, userId) {
         conn.release();
     }
 
+    // Burn the hunt's uses off the active gems, and hand the XP to the pet team.
+    await consumeGemsForHunt(guildId, userId, rolls.length, active);
+    const team = await giveTeamXp(guildId, userId, xp);
+
+    // The lootbox drop. First hunt after midnight always drops; after that it is 5%, max 3/day.
+    const lootbox = await rollDailyDrop('lootbox', guildId, userId);
+
     // Quest progress: bump the 'hunt' quest. The 'owo' quest is bumped by
     // the top-level slash dispatcher / prefix router so it fires for every
     // /owo subcommand (not just hunt) — don't double-count it here.
     progressQuest(guildId, userId, 'hunt', 1).catch(() => { /* swallow */ });
 
+    // The rarest animal of the hunt is what the rare-catch audit log reports on.
+    const rarest = caught[caught.length - 1];
     return {
         cooldown: false,
-        rank: result.rank,
-        animal: result.animal,
+        caught,                  // [{ animal, rank, count, owned }] rarest last
+        animals: rolls.length,
+        xp,
         points,
-        color: result.color,
-        newCount,
-        isFirstCatch: newCount === 1,
+        gems: active,
+        team,                    // { emojis: [...], xp } or null when no team is set
+        lootbox,                 // { dropped, count, resets }
+        rank: rarest.rank,
+        animal: rarest.animal,
+        color: rarest.color,
+        newCount: rarest.owned,
+        isFirstCatch: rarest.owned === rarest.count,
         currencyName: currency.name,
         currencyEmoji: currency.emoji,
         announceRare: cfg.announce_rare_catches === 1,
     };
+}
+
+/**
+ * Hand a hunt's XP to the animals on the user's active battle team — the
+ * ":crocodile: :tiger2: :elephant: gained **489xp**!" line. No team, no line.
+ */
+async function giveTeamXp(guildId, userId, xp) {
+    if (xp <= 0) return null;
+    const pgid = await getActivePgid(guildId, userId);
+    if (!pgid) return null;
+
+    const [pets] = await pool.execute(
+        `SELECT a.pid, a.name FROM owo_pet_team_animal tpa
+         JOIN owo_animal a ON a.guild_id = tpa.guild_id AND a.pid = tpa.pid
+         WHERE tpa.guild_id = ? AND tpa.pgid = ? ORDER BY tpa.pos`,
+        [guildId, pgid]);
+    if (!pets.length) return null;
+
+    for (const pet of pets) {
+        await pool.execute(
+            'UPDATE owo_animal SET xp = xp + ? WHERE guild_id = ? AND pid = ?',
+            [xp, guildId, pet.pid]);
+    }
+
+    const catalog = await getCatalog();
+    const emojis = pets.map(p => catalog.byName?.[p.name]?.emoji ?? '').filter(Boolean);
+    return { emojis, xp };
 }
 
 // ── Zoo ──────────────────────────────────────────────────────────────
