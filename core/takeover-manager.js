@@ -302,21 +302,51 @@ const GUILD_PROFILES = Object.freeze({
  * retires bots on a guild we know nothing about. It just does not pretend to know what its role
  * panels should say.
  */
-export function profileFor(guildId) {
+export async function profileFor(guildId) {
+  // Tier 1: hand-verified, in code. Kabster's panels carry all 60 emoji-to-role mappings, which a
+  // machine cannot recover — Carl-bot keeps that mapping in its own database and never puts it in
+  // the message. A hand-verified profile therefore always beats a derived one.
   const p = GUILD_PROFILES[guildId];
-  if (!p) return null;
-  // Indirection so the big literals stay readable above rather than nested inside the profile.
-  const TABLES = {
-    PINGCORD_STREAMERS, NIGHTBOT_COMMANDS, NIGHTBOT_AUTORESPONSES, CARLBOT_PANELS, PLATFORM_EMOJI,
-  };
+  if (p) {
+    const TABLES = {
+      PINGCORD_STREAMERS, NIGHTBOT_COMMANDS, NIGHTBOT_AUTORESPONSES, CARLBOT_PANELS, PLATFORM_EMOJI,
+    };
+    return {
+      source: 'hand-verified',
+      selfAssignChannel: p.selfAssignChannel ?? null,
+      birthdayRole: p.birthdayRole ?? null,
+      streamers: TABLES[p.streamers] ?? [],
+      nightbotCommands: TABLES[p.nightbotCommands] ?? [],
+      nightbotAutoresponses: TABLES[p.nightbotAutoresponses] ?? [],
+      panels: TABLES[p.panels] ?? [],
+      platformEmoji: TABLES[p.platformEmoji] ?? [],
+    };
+  }
+
+  // Tier 2: derived from the guild's own history, AND signed off by a human. A `proposed` profile is
+  // deliberately invisible here — derivation guesses, and a guess must never reach something that
+  // writes to somebody's live server.
+  const { getProfile } = await import('./takeover-profile.js');
+  const d = await getProfile(guildId);
+  if (!d || d.status !== 'approved') return null;
+
   return {
-    selfAssignChannel: p.selfAssignChannel ?? null,
-    birthdayRole: p.birthdayRole ?? null,
-    streamers: TABLES[p.streamers] ?? [],
-    nightbotCommands: TABLES[p.nightbotCommands] ?? [],
-    nightbotAutoresponses: TABLES[p.nightbotAutoresponses] ?? [],
-    panels: TABLES[p.panels] ?? [],
-    platformEmoji: TABLES[p.platformEmoji] ?? [],
+    source: 'derived',
+    selfAssignChannel: d.selfAssignChannel?.value ?? null,
+    birthdayRole: d.birthdayRole?.value ?? null,
+    streamers: d.streamers?.value ?? [],
+    // Derivation has no notion of Nightbot's autoresponses (they fire on plain words, so there is no
+    // trigger message to pair a reply with). Recovered custom commands map onto the same step.
+    nightbotCommands: d.customCommands?.value ?? [],
+    nightbotAutoresponses: [],
+    platformEmoji: d.platformEmoji?.value ?? [],
+    // A button whose role we could not resolve is a button that does NOTHING. Dropping it is the
+    // only safe answer: posting it would hand members a panel with dead options and no way to tell.
+    panels: (d.panels?.value ?? []).map(pan => ({
+      name: pan.name,
+      mode: pan.mode ?? 'multiple',
+      roles: pan.options.filter(o => o.roleId).map(o => [o.emoji, o.roleId, o.label]),
+    })).filter(pan => pan.roles.length),
   };
 }
 
@@ -552,7 +582,7 @@ export async function plan(guild, opts = {}) {
 
   // Recovered, guild-specific data. Null for any server we have not studied — every step below that
   // depends on it is skipped entirely rather than offered with another guild's ids in it.
-  const profile = profileFor(guildId);
+  const profile = await profileFor(guildId);
 
   // ── Counting ──
   const countingChannel = opts.countingChannel
@@ -937,7 +967,7 @@ export async function apply(guild, planned, only) {
   // apply() writes. plan() already refuses to OFFER a profile-backed step on an unstudied guild, but
   // apply() must not rely on that — it takes a `planned` object from the caller, and a stale or
   // hand-made one could still carry another server's data in here.
-  const profile = profileFor(guild.id);
+  const profile = await profileFor(guild.id);
   const PROFILE_STEPS = new Set(['streams', 'nightbot_commands', 'nightbot_autoresponses', 'platform_emoji']);
   const wanted = new Set(only ?? planned.actionable.map(s => s.key));
   const results = [];
@@ -1130,7 +1160,7 @@ async function runStep(guild, step) {
  * Idempotent by panel name — a panel we already posted is skipped, so a partial run is repeatable.
  */
 export async function postPanels(guild) {
-  const profile = profileFor(guild.id);
+  const profile = await profileFor(guild.id);
   if (!profile?.panels.length) {
     throw new Error('we have no recovered role panels for this server — scan it and add a profile first');
   }
