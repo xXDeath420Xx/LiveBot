@@ -1,0 +1,201 @@
+<%# Initialize Bot — end-to-end setup wizard.
+    API-driven; needs `guild` and `channels` in locals. Every step's `done` flag is derived
+    from the same rows the runtime reads, so the checklist can never claim something is set
+    up when it isn't. %>
+<div class="page-section" id="initWizard" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-wand-magic-sparkles"></i>
+                <span>Initialize Bot</span>
+            </div>
+            <div class="page-section-subtitle">
+                Everything a new server needs, in order. Each step checks your live settings —
+                nothing here is remembered as "done" unless it really is.
+            </div>
+        </div>
+    </div>
+
+    <div id="initError" class="alert alert-danger" hidden></div>
+
+    <!-- Progress -->
+    <div class="init-card">
+        <div class="init-progress-head">
+            <div>
+                <h3 class="init-h" id="initBotName">Setup progress</h3>
+                <p class="form-help" id="initProgressText">Loading…</p>
+            </div>
+            <div class="init-pct" id="initPct">—</div>
+        </div>
+        <div class="init-bar"><div class="init-bar-fill" id="initBarFill" style="width:0%"></div></div>
+    </div>
+
+    <!-- Permissions -->
+    <div class="init-card">
+        <h3 class="init-h"><i class="fas fa-key"></i> Bot permissions</h3>
+        <p class="form-help">
+            If a permission is missing, the feature that needs it will fail quietly. Fix these first.
+        </p>
+        <div id="initPerms" class="init-perms">Loading…</div>
+    </div>
+
+    <!-- Steps -->
+    <div id="initGroups"></div>
+</div>
+
+<style>
+  #initWizard .init-card { background: var(--card-bg, #1e2028); border: 1px solid var(--border, #2c2f3a);
+    border-radius: 10px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
+  #initWizard .init-h { margin: 0 0 .35rem; font-size: 1rem; font-weight: 600; }
+  #initWizard .init-progress-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+  #initWizard .init-pct { font-size: 1.6rem; font-weight: 700; }
+  #initWizard .init-bar { height: 8px; border-radius: 999px; background: #2c2f3a; margin-top: .75rem; overflow: hidden; }
+  #initWizard .init-bar-fill { height: 100%; background: linear-gradient(90deg,#5865F2,#57F287); transition: width .4s ease; }
+  #initWizard .init-perms { display: grid; gap: .4rem; }
+  #initWizard .init-perm { display:flex; align-items:center; gap:.6rem; font-size:.9rem; }
+  #initWizard .init-perm .why { color:#8b8f9e; }
+  #initWizard .init-group-title { margin: 1.4rem 0 .6rem; font-size: .78rem; letter-spacing: .08em;
+    text-transform: uppercase; color: #8b8f9e; font-weight: 600; }
+  #initWizard .init-step { display:flex; gap:.9rem; align-items:flex-start; padding:.9rem 1rem;
+    border:1px solid #2c2f3a; border-radius:10px; margin-bottom:.6rem; background:#1e2028; }
+  #initWizard .init-step.done { border-color:#2f6f4a; }
+  #initWizard .init-icon { flex:0 0 1.6rem; font-size:1.1rem; line-height:1.4; }
+  #initWizard .init-body { flex:1; min-width:0; }
+  #initWizard .init-title { font-weight:600; }
+  #initWizard .init-desc { color:#8b8f9e; font-size:.88rem; margin-top:.15rem; }
+  #initWizard .init-detail { font-size:.82rem; margin-top:.3rem; color:#c9a227; }
+  #initWizard .init-actions { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-top:.6rem; }
+  #initWizard select.init-chan { background:#14161c; border:1px solid #2c2f3a; color:#e7e9ee;
+    border-radius:6px; padding:.35rem .5rem; font-size:.85rem; max-width:16rem; }
+  #initWizard .init-status { font-size:.82rem; color:#57F287; min-height:1em; }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('initWizard');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}${p}`;
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  // Text channels for the one-click steps that need one.
+  const CHANNELS = <%- JSON.stringify((locals.channels || []).filter(c => c.type === 0 || c.type === 'GUILD_TEXT' || c.type === 5).map(c => ({ id: c.id, name: c.name }))) %>;
+
+  const GROUPS = [
+    { key: 'essential',   label: 'Essential' },
+    { key: 'recommended', label: 'Recommended' },
+    { key: 'optional',    label: 'Optional' },
+  ];
+  // Steps the wizard can complete in place. Everything else links to its own page, because a
+  // wizard that guesses at moderation thresholds is worse than one that refuses.
+  const QUICK = { logging: 'channel', welcome: 'channel', leveling: null, prefixes: null };
+
+  async function req(url, options) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (msg) => {
+    const el = document.getElementById('initError');
+    if (!msg) { el.hidden = true; return; }
+    el.textContent = msg; el.hidden = false;
+  };
+
+  function renderPerms(perms) {
+    const el = document.getElementById('initPerms');
+    if (!perms.length) { el.textContent = 'Could not read permissions.'; return; }
+    el.innerHTML = perms.map(p => {
+      const icon = p.granted === null ? '<span style="color:#8b8f9e">•</span>'
+        : p.granted ? '<span style="color:#57F287">✔</span>' : '<span style="color:#ED4245">✕</span>';
+      return `<div class="init-perm">${icon}<strong>${esc(p.flag)}</strong><span class="why">— ${esc(p.why)}</span></div>`;
+    }).join('');
+  }
+
+  function stepHtml(step) {
+    const icon = step.done === null ? '⏳' : step.done ? '✅' : '▫️';
+    const quick = Object.prototype.hasOwnProperty.call(QUICK, step.id) && !step.done;
+    const needsChannel = QUICK[step.id] === 'channel';
+
+    let actions = '';
+    if (quick) {
+      const picker = needsChannel
+        ? `<select class="init-chan" data-chan-for="${step.id}">
+             <option value="">Choose a channel…</option>
+             ${CHANNELS.map(c => `<option value="${c.id}">#${esc(c.name)}</option>`).join('')}
+           </select>`
+        : '';
+      actions += `${picker}<button class="btn btn-sm btn-primary" data-quick="${step.id}">Enable</button>`;
+    }
+    if (step.section) {
+      actions += `<a class="btn btn-sm btn-secondary" href="/manage/${guildId}?section=${step.section}">
+                    ${step.done ? 'Review' : 'Configure'}</a>`;
+    }
+    const detail = step.detail ? `<div class="init-detail">${esc(step.detail)}</div>` : '';
+
+    return `<div class="init-step ${step.done ? 'done' : ''}">
+      <div class="init-icon">${icon}</div>
+      <div class="init-body">
+        <div class="init-title">${esc(step.title)}</div>
+        <div class="init-desc">${esc(step.description)}</div>
+        ${detail}
+        <div class="init-actions">${actions}<span class="init-status" data-status="${step.id}"></span></div>
+      </div>
+    </div>`;
+  }
+
+  function render(data) {
+    document.getElementById('initBotName').textContent = `${data.botName} — setup progress`;
+    const { done, total, optionalDone, optionalTotal } = data.progress;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    document.getElementById('initPct').textContent = `${pct}%`;
+    document.getElementById('initBarFill').style.width = `${pct}%`;
+    document.getElementById('initProgressText').textContent =
+      `${done} of ${total} essential and recommended steps done · ${optionalDone}/${optionalTotal} optional extras enabled.`;
+
+    renderPerms(data.permissions || []);
+
+    document.getElementById('initGroups').innerHTML = GROUPS.map(g => {
+      const steps = data.steps.filter(s => s.group === g.key);
+      if (!steps.length) return '';
+      return `<div class="init-group-title">${g.label}</div>` + steps.map(stepHtml).join('');
+    }).join('');
+  }
+
+  async function load() {
+    try {
+      showError('');
+      render(await req(api('/initialize/status')));
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+
+  root.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-quick]');
+    if (!btn) return;
+    const step = btn.dataset.quick;
+    const status = root.querySelector(`[data-status="${step}"]`);
+    const picker = root.querySelector(`[data-chan-for="${step}"]`);
+
+    if (picker && !picker.value) { status.textContent = 'Pick a channel first.'; status.style.color = '#ED4245'; return; }
+
+    btn.disabled = true;
+    try {
+      await req(api(`/initialize/quick/${step}`), {
+        method: 'POST',
+        body: JSON.stringify(picker ? { channel_id: picker.value } : {}),
+      });
+      status.style.color = '#57F287';
+      status.textContent = 'Enabled.';
+      await load();
+    } catch (err) {
+      status.style.color = '#ED4245';
+      status.textContent = err.message;
+      btn.disabled = false;
+    }
+  });
+
+  load();
+})();
+</script>

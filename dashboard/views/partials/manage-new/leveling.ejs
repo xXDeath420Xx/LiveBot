@@ -126,6 +126,36 @@
                 </div>
             </div>
 
+            <!-- Periodic Reset -->
+            <div class="mt-6 p-4 bg-dark-700 rounded-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <p class="font-medium text-white">Periodic Level Reset</p>
+                        <p class="text-xs text-gray-500">Wipe XP, strip reward roles, and pause sub-level-3 stream subscriptions on a schedule</p>
+                    </div>
+                    <%- include('../../components/forms/toggle', {
+                        name: 'monthly_reset_enabled',
+                        checked: locals.settings?.monthly_reset_enabled || false,
+                        size: 'sm'
+                    }) %>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Reset Interval (days)</label>
+                    <input
+                        type="number"
+                        name="reset_interval_days"
+                        class="form-input w-full md:w-48"
+                        value="<%= locals.settings?.reset_interval_days || 30 %>"
+                        min="7"
+                        max="365"
+                    >
+                    <p class="form-hint">Minimum days between automatic resets (7–365). Only applies when "Periodic Level Reset" is enabled.</p>
+                </div>
+                <% if (locals.settings?.last_reset_at) { %>
+                    <p class="text-xs text-gray-500 mt-2">Last reset: <%= new Date(locals.settings.last_reset_at).toUTCString() %></p>
+                <% } %>
+            </div>
+
             <div class="flex justify-end mt-6 pt-6 border-t border-dark-400">
                 <button type="submit" class="btn btn-primary">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

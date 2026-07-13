@@ -2,6 +2,7 @@ import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import configCache from '../utils/configCache.js';
+import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
 
 /**
  * Global Ban Manager - Shared cross-guild ban database
@@ -80,6 +81,8 @@ class GlobalBanManager {
      */
     async checkMember(member) {
         try {
+            if (isProtectedFromBanCommands(member.id)) return false;
+
             const record = this.banCache.get(member.id);
             if (!record) return false;
 
@@ -109,6 +112,7 @@ class GlobalBanManager {
      */
     async checkMessage(message) {
         if (message.author.bot || !message.guild) return false;
+        if (isProtectedFromBanCommands(message.author.id)) return false;
 
         const record = this.banCache.get(message.author.id);
         if (!record) return false;
@@ -160,6 +164,17 @@ class GlobalBanManager {
      */
     async executeAction(member, record, action, config) {
         const { guild, user } = member;
+
+        if (isProtectedFromBanCommands(user.id)) {
+            logger.warn('[GlobalBan] Refusing to apply enforcement to protected bot owner', {
+                userId: user.id,
+                guildId: guild.id,
+                action,
+                category: record?.category,
+                severity: record?.severity
+            });
+            return;
+        }
 
         // DM the user before action (best effort)
         try {
@@ -368,14 +383,33 @@ class GlobalBanManager {
     }
 
     /**
+     * Resolve a Discord user's current global username via the bot client.
+     * Returns null if unfetchable (deleted account, rate-limited, no client).
+     */
+    async resolveUsername(userId) {
+        if (!userId || !this.client?.users?.fetch) return null;
+        try {
+            const u = await this.client.users.fetch(userId);
+            return u?.username || u?.tag || null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * Promote an approved report to a global ban entry
      */
     async promoteReport(reportId, report) {
         try {
+            const [targetName, reporterName] = await Promise.all([
+                this.resolveUsername(report.target_user_id),
+                this.resolveUsername(report.reporter_id)
+            ]);
+
             const [result] = await pool.execute(
-                `INSERT INTO global_ban_entries (user_id, severity, category, reason, evidence, source, reporter_id, source_guild_id, verified, verification_votes)
-                 VALUES (?, ?, ?, ?, ?, 'manual_report', ?, ?, 1, ?)`,
-                [report.target_user_id, report.severity, report.category, report.reason, report.evidence, report.reporter_id, report.reporter_guild_id, report.votes_approve || 0]
+                `INSERT INTO global_ban_entries (user_id, username, severity, category, reason, evidence, source, reporter_id, reporter_name, source_guild_id, verified, verification_votes)
+                 VALUES (?, ?, ?, ?, ?, ?, 'manual_report', ?, ?, ?, 1, ?)`,
+                [report.target_user_id, targetName, report.severity, report.category, report.reason, report.evidence, report.reporter_id, reporterName, report.reporter_guild_id, report.votes_approve || 0]
             );
 
             const entryId = result.insertId;

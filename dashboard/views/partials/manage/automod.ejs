@@ -717,3 +717,185 @@ document.getElementById('edit-action')?.addEventListener('change', (e) => {
         </form>
     </div>
 </div>
+
+<!-- Automod User Whitelist Section -->
+<div class="page-section" style="margin-top: var(--spacing-6, 24px);">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-shield-alt"></i>
+                <span>Automod Whitelist</span>
+            </div>
+            <div class="page-section-subtitle">
+                Users on this list bypass ALL automod filters (spam, phishing, live promotion, self-promo)
+            </div>
+        </div>
+    </div>
+
+    <div style="background: var(--color-dark-600, #2a2d35); padding: 24px; border-radius: 12px; border: 1px solid var(--color-dark-400, #3a3d45);">
+        <!-- Add User Form -->
+        <form id="whitelist-add-form" data-no-ajax="true" style="margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end;">
+                <div>
+                    <label class="form-label">User ID</label>
+                    <input type="text" class="form-input" name="userId" placeholder="e.g. 123456789012345678" required pattern="[0-9]{17,20}">
+                    <div class="form-help">Discord user ID to whitelist</div>
+                </div>
+                <div>
+                    <label class="form-label">Reason (optional)</label>
+                    <input type="text" class="form-input" name="reason" placeholder="e.g. Technical owner" maxlength="255">
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary" style="padding: 10px 20px;">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        <!-- Whitelist Table -->
+        <div id="whitelist-list" style="min-height: 60px;">
+            <div style="text-align: center; color: var(--color-text-muted, #888); padding: 20px;">
+                <i class="fas fa-spinner fa-spin"></i> Loading whitelist...
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const guildId = '<%= guild.id %>';
+    const whitelistContainer = document.getElementById('whitelist-list');
+    const addForm = document.getElementById('whitelist-add-form');
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.textContent;
+    }
+
+    function buildWhitelistTable(whitelist) {
+        // Clear container safely
+        whitelistContainer.textContent = '';
+
+        if (!whitelist.length) {
+            const empty = document.createElement('div');
+            empty.style.cssText = 'text-align: center; color: var(--color-text-muted, #888); padding: 20px;';
+            empty.textContent = 'No whitelisted users';
+            whitelistContainer.appendChild(empty);
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.style.cssText = 'width: 100%; border-collapse: collapse;';
+
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        headerRow.style.borderBottom = '2px solid var(--color-dark-400, #3a3d45)';
+        ['User', 'Reason', 'Added', ''].forEach(text => {
+            const th = document.createElement('th');
+            th.style.cssText = 'text-align: left; padding: 10px; color: var(--color-text-muted, #888); font-size: 0.85rem; text-transform: uppercase;';
+            if (text === '') th.style.textAlign = 'right';
+            th.textContent = text;
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        whitelist.forEach(entry => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--color-dark-400, #3a3d45)';
+
+            const tdUser = document.createElement('td');
+            tdUser.style.cssText = 'padding: 12px 10px; font-weight: 600; color: var(--color-text-primary, #fff);';
+            tdUser.textContent = entry.user_id;
+            tr.appendChild(tdUser);
+
+            const tdReason = document.createElement('td');
+            tdReason.style.cssText = 'padding: 12px 10px; color: var(--color-text-secondary, #aaa);';
+            tdReason.textContent = entry.reason || 'No reason';
+            tr.appendChild(tdReason);
+
+            const tdDate = document.createElement('td');
+            tdDate.style.cssText = 'padding: 12px 10px; color: var(--color-text-muted, #888); font-size: 0.9rem;';
+            tdDate.textContent = new Date(entry.created_at).toLocaleDateString();
+            tr.appendChild(tdDate);
+
+            const tdAction = document.createElement('td');
+            tdAction.style.cssText = 'padding: 12px 10px; text-align: right;';
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'btn btn-sm btn-danger';
+            removeBtn.textContent = 'Remove';
+            removeBtn.addEventListener('click', function() { removeWhitelistUser(entry.user_id); });
+            tdAction.appendChild(removeBtn);
+            tr.appendChild(tdAction);
+
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        whitelistContainer.appendChild(table);
+    }
+
+    async function loadWhitelist() {
+        try {
+            const res = await fetch('/api/guilds/' + guildId + '/automod/whitelist', { credentials: 'include' });
+            const data = await res.json();
+            buildWhitelistTable(data.success ? data.whitelist : []);
+        } catch (err) {
+            whitelistContainer.textContent = '';
+            const errDiv = document.createElement('div');
+            errDiv.style.cssText = 'color: #e74c3c; padding: 10px;';
+            errDiv.textContent = 'Failed to load whitelist';
+            whitelistContainer.appendChild(errDiv);
+        }
+    }
+
+    async function removeWhitelistUser(userId) {
+        if (!confirm('Remove this user from the automod whitelist?')) return;
+        try {
+            const res = await fetch('/api/guilds/' + guildId + '/automod/whitelist/' + userId, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+            const data = await res.json();
+            if (data.success) {
+                if (typeof showToast === 'function') showToast('User removed from whitelist', 'success');
+                loadWhitelist();
+            } else {
+                if (typeof showToast === 'function') showToast(data.error || 'Failed to remove', 'error');
+            }
+        } catch (err) {
+            if (typeof showToast === 'function') showToast('Network error', 'error');
+        }
+    }
+
+    addForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var userId = this.userId.value.trim();
+        var reason = this.reason.value.trim();
+        if (!userId) return;
+
+        try {
+            var res = await fetch('/api/guilds/' + guildId + '/automod/whitelist', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ userId: userId, reason: reason || null })
+            });
+            var data = await res.json();
+            if (data.success) {
+                if (typeof showToast === 'function') showToast('User added to whitelist', 'success');
+                this.reset();
+                loadWhitelist();
+            } else {
+                if (typeof showToast === 'function') showToast(data.error || 'Failed to add', 'error');
+            }
+        } catch (err) {
+            if (typeof showToast === 'function') showToast('Network error', 'error');
+        }
+    });
+
+    loadWhitelist();
+})();
+</script>

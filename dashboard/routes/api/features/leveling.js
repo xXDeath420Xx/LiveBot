@@ -38,7 +38,10 @@ router.get('/config', async (req, res) => {
                 level_up_message: 'Congratulations {user}! You reached level {level}!',
                 ignored_channels: [],
                 ignored_roles: [],
-                multiplier_roles: {}
+                multiplier_roles: {},
+                monthly_reset_enabled: false,
+                reset_interval_days: 30,
+                last_reset_at: null
             },
             rewards
         });
@@ -64,14 +67,24 @@ router.put('/config', async (req, res) => {
             ignored_channels,
             ignored_roles,
             multiplier_roles,
-            stack_rewards
+            stack_rewards,
+            monthly_reset_enabled,
+            reset_interval_days
         } = req.body;
+
+        if (reset_interval_days !== undefined) {
+            const n = Number(reset_interval_days);
+            if (!Number.isInteger(n) || n < 7 || n > 365) {
+                return res.status(400).json({ error: 'Reset interval must be an integer between 7 and 365 days' });
+            }
+        }
 
         await pool.execute(`
             INSERT INTO level_config
                 (guild_id, enabled, xp_per_message, xp_cooldown_seconds, level_up_channel_id,
-                 level_up_message, ignored_channels, ignored_roles, multiplier_roles, stack_rewards)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 level_up_message, ignored_channels, ignored_roles, multiplier_roles, stack_rewards,
+                 monthly_reset_enabled, reset_interval_days)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 enabled = VALUES(enabled),
                 xp_per_message = VALUES(xp_per_message),
@@ -81,7 +94,9 @@ router.put('/config', async (req, res) => {
                 ignored_channels = VALUES(ignored_channels),
                 ignored_roles = VALUES(ignored_roles),
                 multiplier_roles = VALUES(multiplier_roles),
-                stack_rewards = VALUES(stack_rewards)
+                stack_rewards = VALUES(stack_rewards),
+                monthly_reset_enabled = VALUES(monthly_reset_enabled),
+                reset_interval_days = VALUES(reset_interval_days)
         `, [
             guildId,
             enabled ? 1 : 0,
@@ -92,7 +107,9 @@ router.put('/config', async (req, res) => {
             JSON.stringify(ignored_channels || []),
             JSON.stringify(ignored_roles || []),
             JSON.stringify(multiplier_roles || {}),
-            stack_rewards ? 1 : 0
+            stack_rewards ? 1 : 0,
+            monthly_reset_enabled ? 1 : 0,
+            reset_interval_days !== undefined ? Number(reset_interval_days) : 30
         ]);
 
         socketService.configSaved(guildId, 'leveling', req.body);

@@ -419,10 +419,38 @@ export async function handleSelfPromoMessage(message) {
         return false;
     }
 
-    // Helper to delete the user's message
-    const deleteMessage = () => message.delete().catch(err =>
-        logger.error('[SelfPromo] Failed to delete message', { error: err.message, userId: member.id })
-    );
+    // `keep_message` makes this a real self-promo channel rather than a signup box: the member's
+    // post stays up, and nothing they write is ever deleted. Auto-tracking still happens, but it
+    // becomes a silent bonus confirmed by a reaction instead of a vanishing message.
+    const keepMessage = !!config.keep_message;
+
+    // Helper to delete the user's message. A no-op when the channel allows self-posting.
+    const deleteMessage = async () => {
+        if (keepMessage) return;
+        await message.delete().catch(err =>
+            logger.error('[SelfPromo] Failed to delete message', { error: err.message, userId: member.id })
+        );
+    };
+
+    /**
+     * Tell the member what happened. A DM is the quietest channel, but DMs are closed often
+     * enough that a silent failure would look like the bot ignoring them — so when the DM
+     * bounces we say it in-channel instead, and clean that up after a minute.
+     */
+    const notify = async (text, { react = null } = {}) => {
+        if (react) await message.react(react).catch(() => {});
+        try {
+            await member.send(text);
+            return;
+        } catch {
+            logger.debug('[SelfPromo] DM blocked, replying in channel', { userId: member.id });
+        }
+        const reply = await message.reply({
+            content: text,
+            allowedMentions: { repliedUser: false },
+        }).catch(() => null);
+        if (reply) setTimeout(() => reply.delete().catch(() => {}), 60_000);
+    };
 
     // Parse the URL from the message
     const parsed = parseStreamUrl(message.content);
@@ -471,6 +499,18 @@ export async function handleSelfPromoMessage(message) {
             guildId, userId: member.id, platform: parsed.platform, username: parsed.username
         });
         await deleteMessage();
+        // The post is allowed to stay, but silently not tracking it would look like the bot
+        // ignored them. Instagram lands here by design — Meta's API cannot detect a Live.
+        if (keepMessage) {
+            await notify(
+                parsed.platform === 'instagram'
+                    ? `Your post is up. Heads-up: I can't track **Instagram** go-lives (their API doesn't ` +
+                      `expose them), so it won't be announced automatically. Post a Twitch, Kick, YouTube, ` +
+                      `TikTok, Trovo, Rumble or Facebook link and I'll add you to the tracker.`
+                    : `Your post is up, but I couldn't verify **${parsed.username}** on **${parsed.platform}**, ` +
+                      `so I haven't added it to the stream tracker. Double-check the link, or ask a moderator.`
+            );
+        }
         return true;
     }
 
@@ -488,16 +528,12 @@ export async function handleSelfPromoMessage(message) {
         await deleteMessage();
 
         if (config.dm_on_already_tracked) {
-            try {
-                const channelMention = trackedChannelId ? `<#${trackedChannelId}>` : 'the announcement channel';
-                await member.send(
-                    `Your **${parsed.platform}** account **${validated.canonicalUsername}** is already being tracked! ` +
-                    `The bot automatically posts go-live notifications for you in ${channelMention}. ` +
-                    `No need to post again — it's all handled for you.`
-                );
-            } catch {
-                logger.debug('[SelfPromo] Could not DM user about existing tracking', { userId: member.id });
-            }
+            const channelMention = trackedChannelId ? `<#${trackedChannelId}>` : 'the announcement channel';
+            await notify(
+                `Your **${parsed.platform}** account **${validated.canonicalUsername}** is already being tracked! ` +
+                `The bot automatically posts go-live notifications for you in ${channelMention}.`,
+                { react: keepMessage ? '✅' : null }
+            );
         }
 
         return true;
@@ -512,18 +548,23 @@ export async function handleSelfPromoMessage(message) {
             discordDisplayName: member.displayName
         });
         await deleteMessage();
-        try {
-            await member.send(
-                `The **${parsed.platform}** link you posted (\`${validated.canonicalUsername}\`) ` +
-                `doesn't look like your own channel — this channel is for **self**-promotion only, ` +
-                `please don't post other people's stream links here. ` +
-                `If \`${validated.canonicalUsername}\` actually IS yours, ask a moderator to link it ` +
-                `manually (your Discord name doesn't match the channel name closely enough for the ` +
-                `bot to verify automatically).`
-            );
-        } catch {
-            logger.debug('[SelfPromo] Could not DM rejection notice', { userId: member.id });
-        }
+
+        // When the channel allows self-posting, a name we cannot verify is not a reason to
+        // punish the member — the post stays. We simply do not auto-track a channel we cannot
+        // confirm is theirs, and tell them how to get it linked.
+        await notify(
+            keepMessage
+                ? `Your post is up — but I couldn't auto-add **${validated.canonicalUsername}** ` +
+                  `(${parsed.platform}) to the stream tracker, because your Discord name doesn't ` +
+                  `closely match the channel name, so I can't confirm it's yours. ` +
+                  `Ask a moderator to link it and you'll get automatic go-live announcements.`
+                : `The **${parsed.platform}** link you posted (\`${validated.canonicalUsername}\`) ` +
+                  `doesn't look like your own channel — this channel is for **self**-promotion only, ` +
+                  `please don't post other people's stream links here. ` +
+                  `If \`${validated.canonicalUsername}\` actually IS yours, ask a moderator to link it ` +
+                  `manually (your Discord name doesn't match the channel name closely enough for the ` +
+                  `bot to verify automatically).`
+        );
         return true;
     }
 
@@ -557,22 +598,39 @@ export async function handleSelfPromoMessage(message) {
         announcementChannelId
     });
 
-    // Always delete in self-promo channel
+    // Signup-box mode deletes the post now that the subscription exists. In self-posting mode
+    // this is a no-op and the promo stays up.
     await deleteMessage();
 
-    // DM the user if configured
-    if (created && config.dm_on_track) {
-        const channelMention = `<#${config.channel_id}>`;
-        try {
-            await member.send(
-                `Your **${parsed.platform}** stream link has been received! ` +
-                `You've been automatically added to our stream tracker in ${channelMention}. ` +
-                `When you go live, the bot will post a notification for you automatically. ` +
-                `No need to post manually anymore!`
-            );
-        } catch {
-            logger.debug('[SelfPromo] Could not DM user about auto-tracking', { userId: member.id });
-        }
+    if (!created) {
+        logger.error('[SelfPromo] subscription was NOT created', {
+            guildId, userId: member.id, platform: parsed.platform, username: validated.canonicalUsername
+        });
+        // Never claim success we did not achieve.
+        await notify(
+            `Something went wrong adding **${validated.canonicalUsername}** (${parsed.platform}) to the ` +
+            `stream tracker. Please let a moderator know.`
+        );
+        return true;
+    }
+
+    if (config.dm_on_track) {
+        // Team members route to the team's channel, which is resolved later and is not a value
+        // we hold here — so name it rather than render a bogus <#null> mention.
+        const announceMention = announcementChannelId
+            ? `<#${announcementChannelId}>`
+            : "your team's announcement channel";
+        await notify(
+            keepMessage
+                ? `You're all set — **${validated.canonicalUsername}** (${parsed.platform}) has been added ` +
+                  `to the stream tracker. When you go live, I'll announce it in ${announceMention} automatically. ` +
+                  `Your post stays up, and you're welcome to keep promoting yourself here.`
+                : `Your **${parsed.platform}** stream link has been received! ` +
+                  `You've been automatically added to our stream tracker in ${announceMention}. ` +
+                  `When you go live, the bot will post a notification for you automatically. ` +
+                  `No need to post manually anymore!`,
+            { react: keepMessage ? '✅' : null }
+        );
     }
 
     return true;

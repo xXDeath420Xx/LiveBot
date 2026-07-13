@@ -2,18 +2,58 @@ import { SlashCommandBuilder } from 'discord.js';
 // discord-player re-exports @discordjs/voice (the SAME instance it uses), so importing
 // from here shares its voice registry — no dual-connection conflict.
 import {
-  joinVoiceChannel, createAudioPlayer, createAudioResource, StreamType,
+  joinVoiceChannel, getVoiceConnection, createAudioPlayer, createAudioResource, StreamType,
 } from 'discord-player';
 import { parseSpotifyUrl } from '../../core/spotify-resolver.js';
 import {
   getSessionForUser, acquire, release, play as glrPlay, pause as glrPause,
-  resume as glrResume, stop as glrStop, getStatus, openPcmStream,
+  resume as glrResume, stop as glrStop, next as glrNext, getStatus, openPcmStream,
   startLink, finishLink, unlink, isLinked, isOwnerUser,
 } from '../../core/spotify-connect-manager.js';
 import logger from '../../utils/logger.js';
 
 // guildId -> { connection, player, ff, session, channelId }
 const live = new Map();
+
+// Nudge the music panel to re-render (spotify-direct has no discord-player events).
+function refreshPanel(guildId) {
+  try { global.musicPanelManager?.get(guildId)?.updatePanel(); } catch { /* no panel */ }
+}
+
+// ── Control/state API consumed by the music panel (core/music-panel.js) ──
+export function hasSpotifyDirect(guildId) { return live.has(guildId); }
+
+export async function getSpotifyDirectState(guildId) {
+  const s = live.get(guildId);
+  if (!s) return null;
+  const st = await getStatus(s.session).catch(() => null);
+  return { track: st?.track || null, paused: s.player?.state?.status === 'paused' };
+}
+
+export async function spotifyDirectToggle(guildId) {
+  const s = live.get(guildId);
+  if (!s) return null;
+  const paused = s.player?.state?.status === 'paused';
+  if (paused) { await glrResume(s.session).catch(() => {}); try { s.player.unpause(); } catch {} }
+  else        { await glrPause(s.session).catch(() => {});  try { s.player.pause(); } catch {} }
+  refreshPanel(guildId);
+  return !paused;
+}
+
+export async function spotifyDirectSkip(guildId) {
+  const s = live.get(guildId);
+  if (!s) return false;
+  await glrNext(s.session).catch(() => {});
+  setTimeout(() => refreshPanel(guildId), 800); // let go-librespot advance, then re-render
+  return true;
+}
+
+export async function spotifyDirectStop(guildId) {
+  if (!live.has(guildId)) return false;
+  await teardown(guildId);
+  refreshPanel(guildId);
+  return true;
+}
 
 // Resolve once the voice connection reaches 'ready' (string status avoids needing the
 // VoiceConnectionStatus enum, which discord-player doesn't re-export).
@@ -35,9 +75,13 @@ async function teardown(guildId) {
   const s = live.get(guildId);
   if (!s) return;
   live.delete(guildId);
+  try { if (s.onStateChange) s.connection?.off('stateChange', s.onStateChange); } catch {}
+  try { s.subscription?.unsubscribe(); } catch {}
   try { s.player?.stop(true); } catch {}
   try { s.ff?.kill('SIGKILL'); } catch {}
-  try { s.connection?.destroy(); } catch {}
+  // Only destroy the connection if WE created it — never tear down a 24/7
+  // voice-camp connection we merely borrowed.
+  if (s.ownsConnection) { try { s.connection?.destroy(); } catch {} }
   if (s.session) { await glrStop(s.session).catch(() => {}); release(s.session, guildId); }
 }
 
@@ -63,9 +107,9 @@ export default {
     const sub = interaction.options.getSubcommand();
     const guildId = interaction.guildId;
 
-    if (sub === 'stop')   { await teardown(guildId); return interaction.reply({ content: '⏹️ Stopped Spotify playback.', ephemeral: true }); }
-    if (sub === 'pause')  { const s = live.get(guildId); if (s) { await glrPause(s.session); s.player.pause(); } return interaction.reply({ content: '⏸️ Paused.', ephemeral: true }); }
-    if (sub === 'resume') { const s = live.get(guildId); if (s) { await glrResume(s.session); s.player.unpause(); } return interaction.reply({ content: '▶️ Resumed.', ephemeral: true }); }
+    if (sub === 'stop')   { await teardown(guildId); refreshPanel(guildId); return interaction.reply({ content: '⏹️ Stopped Spotify playback.', ephemeral: true }); }
+    if (sub === 'pause')  { const s = live.get(guildId); if (s) { await glrPause(s.session); s.player.pause(); } refreshPanel(guildId); return interaction.reply({ content: '⏸️ Paused.', ephemeral: true }); }
+    if (sub === 'resume') { const s = live.get(guildId); if (s) { await glrResume(s.session); s.player.unpause(); } refreshPanel(guildId); return interaction.reply({ content: '▶️ Resumed.', ephemeral: true }); }
     if (sub === 'nowplaying') {
       const s = live.get(guildId);
       if (!s) return interaction.reply({ content: 'Nothing playing via Spotify-direct here.', ephemeral: true });
@@ -131,17 +175,39 @@ export default {
       const ff = openPcmStream(session);
       const resource = createAudioResource(ff.stdout, { inputType: StreamType.Raw });
       const player = createAudioPlayer();
-      const connection = joinVoiceChannel({
-        channelId: vc.id, guildId, adapterCreator: interaction.guild.voiceAdapterCreator, selfDeaf: true,
-      });
-      try { await waitReady(connection, 20000); }
-      catch (e) { await teardown(guildId); return interaction.editReply('Couldn\'t connect to the voice channel.'); }
 
-      connection.subscribe(player);
+      // If the bot is already in voice here (24/7 voice-camp holds a discord-player
+      // connection), REUSE it. discord-player v7 runs on discord-voip and registers
+      // its connection under a non-default group (the bot's id), so a fresh
+      // joinVoiceChannel() opens a SECOND, conflicting connection that never reaches
+      // 'ready' (bot's already in-channel → no new voice handshake) and times out —
+      // which is the "couldn't connect" error in camped guilds. Reuse avoids it.
+      const campConn = global.player?.nodes?.get(guildId)?.connection
+        || getVoiceConnection(guildId, interaction.client.user?.id)
+        || getVoiceConnection(guildId);
+      let connection, ownsConnection;
+      if (campConn && campConn.state?.status !== 'destroyed') {
+        connection = campConn;
+        ownsConnection = false;
+        // Follow the requester if the camp is parked in a different channel.
+        if (connection.joinConfig?.channelId !== vc.id) {
+          try { connection.rejoin({ channelId: vc.id, selfDeaf: true, selfMute: false }); } catch {}
+        }
+      } else {
+        connection = joinVoiceChannel({
+          channelId: vc.id, guildId, adapterCreator: interaction.guild.voiceAdapterCreator, selfDeaf: true,
+        });
+        ownsConnection = true;
+      }
+      try { await waitReady(connection, 20000); }
+      catch (e) { if (ownsConnection) await teardown(guildId); return interaction.editReply('Couldn\'t connect to the voice channel.'); }
+
+      const subscription = connection.subscribe(player);
       player.play(resource);
       player.on('error', err => logger.error(`[SpotifyConnect] player error in ${guildId}: ${err.message}`));
-      connection.on('stateChange', (_o, ns) => { if (ns.status === 'disconnected' || ns.status === 'destroyed') teardown(guildId); });
-      live.set(guildId, { connection, player, ff, session, channelId: vc.id });
+      const onStateChange = (_o, ns) => { if (ns.status === 'disconnected' || ns.status === 'destroyed') teardown(guildId); };
+      connection.on('stateChange', onStateChange);
+      live.set(guildId, { connection, player, ff, session, channelId: vc.id, ownsConnection, subscription, onStateChange });
 
       // Start playback. go-librespot's /player/play returns HTTP 500 EVEN ON SUCCESS,
       // so we ignore the code and confirm via the player STATE instead.
@@ -157,6 +223,7 @@ export default {
         return interaction.editReply('Spotify wouldn\'t start that link (is it valid/public?).');
       }
       const t = st.track;
+      refreshPanel(guildId); // reflect the new Spotify-direct track on the music panel
       return interaction.editReply(`🎧 **Spotify-direct** now playing **${t.name}** — ${(t.artist_names || []).join(', ')}\n_Real Spotify audio. \`/spotify stop\` to end._`);
     } catch (err) {
       logger.error(`[SpotifyConnect] play failed in ${guildId}: ${err.message}`);

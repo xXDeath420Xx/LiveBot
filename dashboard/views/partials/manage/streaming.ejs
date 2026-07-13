@@ -1,0 +1,2224 @@
+<%
+const announcementSettings = settings || {};
+const defaultChannelId = announcementSettings.announcement_channel_id || '';
+const defaultLiveRoleId = announcementSettings.live_role_id || '';
+const defaultMessage = announcementSettings.announcement_message || '{streamer} is now live on {platform}! {url}';
+const useWebhookPersona = announcementSettings.use_webhook_persona === 1;
+const ignoredRoles = announcementSettings.stream_ignored_roles || [];
+const seSubscriptions = typeof streamEndedSubs !== 'undefined' ? streamEndedSubs : [];
+const atConfigs = typeof autoTrackConfigs !== 'undefined' ? autoTrackConfigs : [];
+const atRoles = typeof roles !== 'undefined' ? roles : [];
+const atChannels = typeof channels !== 'undefined' ? channels : [];
+const syncs = twitchScheduleSyncs || [];
+const twitchStreamers = consolidatedStreamers ? consolidatedStreamers.filter(s => s.platforms?.includes('twitch')) : [];
+
+// Build a lookup map: subscription_id -> edit_on_end
+const editOnEndMap = {};
+seSubscriptions.forEach(sub => {
+    editOnEndMap[sub.subscription_id] = !!sub.edit_on_end;
+});
+%>
+
+<style>
+/* =============================================
+   STREAMING UNIFIED DASHBOARD STYLES
+   ============================================= */
+
+/* Tab Navigation */
+.streaming-tab-nav {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    background: rgba(255,255,255,0.03);
+    padding: 4px;
+    border-radius: 10px;
+    border: 1px solid rgba(167,139,250,0.15);
+}
+.streaming-tab-btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: rgba(255,255,255,0.6);
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.streaming-tab-btn:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.05);
+}
+.streaming-tab-btn.active {
+    background: rgba(167,139,250,0.2);
+    color: #a78bfa;
+    border: 1px solid rgba(167,139,250,0.3);
+}
+.streaming-tab-btn .tab-count {
+    background: rgba(255,255,255,0.1);
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+.streaming-tab-btn.active .tab-count {
+    background: rgba(167,139,250,0.3);
+    color: #c4b5fd;
+}
+.streaming-tab-content {
+    display: none;
+}
+.streaming-tab-content.active {
+    display: block;
+}
+
+/* ---- Global Defaults Card ---- */
+.global-defaults-card {
+    background: rgba(167, 139, 250, 0.05);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+.global-defaults-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px;
+    background: rgba(167, 139, 250, 0.08);
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+}
+.global-defaults-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+}
+.global-defaults-title i { color: #a78bfa; }
+.global-defaults-body {
+    padding: 20px;
+}
+
+/* ---- Streamers Stats Grid ---- */
+.streamers-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.stat-card-compact {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.2s ease;
+}
+.stat-card-compact:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(167, 139, 250, 0.3);
+}
+.stat-card-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+.stat-card-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #a78bfa;
+}
+.stat-card-value.success { color: #10b981; }
+.stat-card-value.warning { color: #f59e0b; }
+
+/* ---- Settings Grid ---- */
+.settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+.settings-grid-full {
+    grid-column: span 2;
+}
+
+/* ---- Warning Banner ---- */
+.warning-banner {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.05));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 10px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.warning-banner i { color: #f59e0b; font-size: 1.1rem; }
+.warning-banner-text { font-size: 0.85rem; color: rgba(255, 255, 255, 0.9); }
+.warning-banner-text strong { color: #f59e0b; }
+
+/* ---- Streamers Table ---- */
+.streamers-table-wrapper {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.streamers-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.streamers-table thead {
+    background: rgba(167, 139, 250, 0.08);
+}
+.streamers-table thead th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.2);
+}
+.streamers-table tbody tr {
+    transition: background 0.15s;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.08);
+}
+.streamers-table tbody tr:last-child { border-bottom: none; }
+.streamers-table tbody tr:hover { background: rgba(167, 139, 250, 0.06); }
+.streamers-table tbody td {
+    padding: 12px 16px;
+    color: rgba(255, 255, 255, 0.85);
+}
+.streamer-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(96, 165, 250, 0.2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    flex-shrink: 0;
+}
+.streamer-name { font-weight: 600; color: #ffffff; font-size: 0.9rem; }
+.streamer-meta {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.platform-badges { display: flex; gap: 4px; flex-wrap: wrap; }
+.platform-badge {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+.subscription-badge {
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    color: #a78bfa;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.status-badge {
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.status-badge.active { background: rgba(67, 181, 129, 0.15); color: #43b581; }
+.status-badge.blacklisted { background: rgba(237, 66, 69, 0.15); color: #ed4245; }
+
+/* ---- Search Bar ---- */
+.search-wrapper { position: relative; margin-bottom: 16px; }
+.search-input {
+    width: 100%;
+    padding: 10px 16px 10px 40px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+.search-input:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+.search-input::placeholder { color: rgba(255, 255, 255, 0.4); }
+.search-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.85rem;
+}
+
+/* ---- Empty State ---- */
+.empty-state-modern {
+    text-align: center;
+    padding: 48px 24px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+}
+.empty-state-icon-modern { font-size: 2.5rem; color: rgba(167, 139, 250, 0.3); margin-bottom: 16px; }
+.empty-state-title-modern { font-size: 1.1rem; font-weight: 600; color: rgba(255, 255, 255, 0.9); margin-bottom: 8px; }
+.empty-state-description-modern { font-size: 0.85rem; color: rgba(255, 255, 255, 0.5); margin-bottom: 20px; }
+
+/* ---- Action Buttons ---- */
+.action-buttons { display: flex; gap: 6px; justify-content: flex-end; }
+.btn-action {
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    color: #a78bfa;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.btn-action:hover { background: rgba(167, 139, 250, 0.15); border-color: rgba(167, 139, 250, 0.5); }
+
+/* ---- Edit on End Toggle (inline in streamers table) ---- */
+.eoe-toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    display: inline-block;
+    cursor: pointer;
+}
+.eoe-toggle input { opacity: 0; width: 0; height: 0; }
+.eoe-toggle-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    transition: 0.2s;
+}
+.eoe-toggle-dot {
+    position: absolute;
+    top: 2px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+
+/* ---- Teams Styles ---- */
+.teams-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.team-stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.2s ease;
+}
+.team-stat-card:hover { background: rgba(255, 255, 255, 0.06); border-color: rgba(167, 139, 250, 0.3); }
+.team-stat-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+.team-stat-value { font-size: 1.5rem; font-weight: 700; color: #a78bfa; }
+.teams-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+.team-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+.team-card:hover { border-color: rgba(167, 139, 250, 0.35); }
+.team-card-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.team-card-title { display: flex; align-items: center; gap: 10px; }
+.team-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(96, 165, 250, 0.2));
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+}
+.team-icon i { font-size: 0.9rem; color: #a78bfa; }
+.team-name { font-size: 1rem; font-weight: 600; color: #ffffff; margin: 0; }
+.team-subtitle { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
+.team-actions { display: flex; gap: 8px; }
+.team-card-body { padding: 14px 16px; }
+.team-info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.team-info-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+.team-info-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.45);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+.team-info-label i { color: #a78bfa; font-size: 0.7rem; }
+.team-info-value { font-size: 0.85rem; font-weight: 600; color: #ffffff; }
+.btn-team-settings {
+    padding: 6px 12px;
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 6px;
+    color: #a78bfa;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.btn-team-settings:hover { background: rgba(167, 139, 250, 0.25); border-color: rgba(167, 139, 250, 0.5); }
+.btn-team-delete {
+    padding: 6px 10px;
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: 6px;
+    color: #f87171;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.btn-team-delete:hover { background: rgba(248, 113, 113, 0.2); }
+.teams-empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(167, 139, 250, 0.2);
+    border-radius: 12px;
+}
+.teams-empty-icon { font-size: 2.5rem; color: rgba(167, 139, 250, 0.3); margin-bottom: 16px; }
+.teams-empty-title { font-size: 1.1rem; font-weight: 600; color: rgba(255, 255, 255, 0.9); margin-bottom: 8px; }
+.teams-empty-description {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 20px;
+    max-width: 350px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* ---- Auto-Track Styles ---- */
+.at-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(251, 146, 60, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+.at-card-header {
+    background: rgba(251, 146, 60, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(251, 146, 60, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.at-card-header i { font-size: 1rem; color: #fb923c; }
+.at-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #fff; margin: 0; }
+.at-card-body { padding: 18px; }
+.at-callout {
+    background: rgba(251, 146, 60, 0.08);
+    border: 1px solid rgba(251, 146, 60, 0.2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+}
+.at-callout strong { color: #fb923c; }
+.at-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.at-badge-on { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.at-badge-off { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.at-btn {
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.at-btn:hover { opacity: 0.85; }
+.at-btn-save { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.at-btn-toggle { background: rgba(251, 146, 60, 0.15); color: #fb923c; }
+.at-btn-delete { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.at-btn-add {
+    background: linear-gradient(135deg, #fb923c, #f97316);
+    color: #fff;
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.at-btn-add:hover { opacity: 0.9; }
+.at-form-group { margin-bottom: 16px; }
+.at-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
+.at-form-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-top: 4px; }
+.at-form-select {
+    width: 100%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #fff;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+}
+.at-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.at-empty { text-align: center; padding: 24px; color: rgba(255, 255, 255, 0.4); font-size: 0.85rem; }
+.at-status-msg {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    display: none;
+}
+.at-status-msg.success { display: block; background: rgba(251, 146, 60, 0.15); color: #fdba74; border: 1px solid rgba(251, 146, 60, 0.3); }
+.at-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+.at-mapping-card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.at-mapping-card:last-child { margin-bottom: 0; }
+.at-mapping-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.at-mapping-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.at-mapping-actions { display: flex; gap: 6px; }
+
+/* ---- Schedules Styles ---- */
+.sched-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+}
+.sched-stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.2s ease;
+}
+.sched-stat-card:hover { background: rgba(255, 255, 255, 0.06); border-color: rgba(167, 139, 250, 0.3); }
+.sched-add-card, .sched-list-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.sched-card-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 6px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.sched-card-title i { color: #a78bfa; }
+.sched-card-subtitle { color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-bottom: 16px; }
+.sched-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid rgba(167,139,250,0.15);
+    border-radius: 10px;
+}
+.sched-table { width: 100%; border-collapse: collapse; }
+.sched-table thead { background: rgba(167,139,250,0.08); }
+.sched-table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid rgba(167,139,250,0.2);
+}
+.sched-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(167,139,250,0.08);
+    color: rgba(255,255,255,0.85);
+}
+.sched-table tbody tr:last-child td { border-bottom: none; }
+.sched-table tbody tr:hover { background: rgba(167,139,250,0.06); }
+
+/* ---- Edit on End status message ---- */
+.eoe-status-msg {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    display: none;
+}
+.eoe-status-msg.success { display: block; background: rgba(167, 139, 250, 0.15); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.3); }
+.eoe-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+/* ---- Form Styling ---- */
+.form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+.form-help {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+    margin-top: 4px;
+}
+.form-control, .form-select {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #fff;
+    font-size: 0.85rem;
+    width: 100%;
+}
+.form-control:focus, .form-select:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+
+/* ---- Checkbox styling for webhook persona ---- */
+.form-check-inline {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+}
+.form-check-inline input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #a78bfa;
+    cursor: pointer;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1200px) {
+    .streamers-stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .sched-stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .settings-grid { grid-template-columns: 1fr; }
+    .settings-grid-full { grid-column: span 1; }
+}
+@media (max-width: 768px) {
+    .streamers-stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px; }
+    .sched-stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px; }
+    .settings-grid { grid-template-columns: 1fr !important; }
+    .settings-grid-full { grid-column: span 1 !important; }
+    .streamers-table .mobile-hide { display: none !important; }
+    .streamers-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .streamers-table thead th, .streamers-table tbody td { padding: 8px 10px !important; }
+    .streaming-tab-nav { flex-wrap: wrap; }
+    .streaming-tab-btn { flex: 1; min-width: 0; text-align: center; justify-content: center; padding: 8px 12px; font-size: 0.8rem; }
+    .teams-stats-grid { grid-template-columns: 1fr; }
+    .teams-grid { grid-template-columns: 1fr; }
+    .team-info-grid { grid-template-columns: 1fr; }
+    .team-card-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+    .at-form-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+<!-- ========================================
+     PAGE HEADER
+     ======================================== -->
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-video"></i>
+                <span>Streaming</span>
+            </div>
+            <div class="page-section-subtitle">
+                Manage all streaming features: announcements, streamers, teams, auto-track, and schedules
+            </div>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-streamer-modal">
+            <i class="fas fa-plus"></i>
+            <span>Add Streamer</span>
+        </button>
+    </div>
+
+    <!-- ========================================
+         WARNING BANNER (no default channel)
+         ======================================== -->
+    <% if (!defaultChannelId) { %>
+        <div class="warning-banner">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div class="warning-banner-text">
+                <strong>No default announcement channel configured.</strong> Streamers using "Server Default" won't post announcements until you set one below.
+            </div>
+        </div>
+    <% } %>
+
+    <!-- ========================================
+         GLOBAL DEFAULTS (always visible)
+         ======================================== -->
+    <div class="global-defaults-card">
+        <div class="global-defaults-header">
+            <div class="global-defaults-title">
+                <i class="fas fa-bullhorn"></i>
+                Global Defaults
+            </div>
+            <span class="settings-status-badge <%= defaultChannelId ? 'configured' : 'not-configured' %>" style="padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; <%= defaultChannelId ? 'background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3);' : 'background: rgba(245,158,11,0.15); color: #f59e0b; border: 1px solid rgba(245,158,11,0.3);' %>">
+                <%= defaultChannelId ? 'Configured' : 'Not Set' %>
+            </span>
+        </div>
+        <div class="global-defaults-body">
+            <form action="/manage/<%= guild.id %>/update-announcements" method="POST">
+                <div class="settings-grid">
+                    <div>
+                        <label class="form-label">Default Channel</label>
+                        <select class="form-select" name="announcement_channel_id">
+                            <option value="">Disabled</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>" <%= defaultChannelId === channel.id ? 'selected' : '' %>>
+                                    #<%= channel.name %>
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">Channel for streamers using "Server Default"</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Live Role</label>
+                        <select class="form-select" name="live_role_id">
+                            <option value="">No Role</option>
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>" <%= defaultLiveRoleId === role.id ? 'selected' : '' %>>
+                                    <%= role.name %>
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">Auto-assigned when Discord users go live</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Use Webhook Persona</label>
+                        <div class="form-check-inline">
+                            <input type="checkbox" name="use_webhook_persona" value="1" id="webhook-persona-check" <%= useWebhookPersona ? 'checked' : '' %>>
+                            <label for="webhook-persona-check" style="font-size: 0.85rem; color: rgba(255,255,255,0.7); cursor: pointer;">
+                                Post announcements as the streamer's persona via webhook
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <!-- Spacer for grid alignment -->
+                    </div>
+                    <div class="settings-grid-full">
+                        <label class="form-label">Message Template</label>
+                        <textarea class="form-control" name="announcement_message" rows="2" style="font-family: monospace; font-size: 0.8rem;"><%= defaultMessage %></textarea>
+                        <div class="form-help">Variables: {streamer}, {platform}, {game}, {url}, {title}, {everyone}</div>
+                    </div>
+                    <div class="settings-grid-full">
+                        <label class="form-label">Ignored Roles</label>
+                        <select class="form-select" name="stream_ignored_roles" multiple size="3" style="min-height: 80px;" id="ignored-roles-select-streaming">
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"
+                                    <%= ignoredRoles.includes(role.id) ? 'selected' : '' %>>
+                                    <%= role.name %>
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">
+                            Streamers with any of these roles won't trigger live notifications (Ctrl+Click to select multiple)
+                            <span id="ignored-roles-count-streaming" style="color: #a78bfa; font-weight: 600;"></span>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
+                    <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.85rem;">
+                        <i class="fas fa-save"></i> Save Defaults
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB NAVIGATION
+         ======================================== -->
+    <div class="streaming-tab-nav">
+        <button class="streaming-tab-btn" data-tab="streamers" onclick="switchStreamingTab('streamers')">
+            <i class="fas fa-video"></i>
+            <span>Streamers</span>
+            <span class="tab-count"><%= consolidatedStreamers?.length || 0 %></span>
+        </button>
+        <button class="streaming-tab-btn" data-tab="teams" onclick="switchStreamingTab('teams')">
+            <i class="fas fa-users-cog"></i>
+            <span>Teams</span>
+            <span class="tab-count"><%= teamSubscriptions?.length || 0 %></span>
+        </button>
+        <button class="streaming-tab-btn" data-tab="auto-track" onclick="switchStreamingTab('auto-track')">
+            <i class="fas fa-satellite-dish"></i>
+            <span>Auto-Track</span>
+            <span class="tab-count"><%= atConfigs.length %></span>
+        </button>
+        <button class="streaming-tab-btn" data-tab="schedules" onclick="switchStreamingTab('schedules')">
+            <i class="fab fa-twitch"></i>
+            <span>Schedules</span>
+            <span class="tab-count"><%= syncs.length %></span>
+        </button>
+        <button class="streaming-tab-btn" data-tab="role-sync" onclick="switchStreamingTab('role-sync')">
+            <i class="fas fa-sync-alt"></i>
+            <span>Role Sync</span>
+            <span class="tab-count"><%= typeof twitchRoleSyncConfig !== 'undefined' && twitchRoleSyncConfig ? '1' : '0' %></span>
+        </button>
+    </div>
+
+    <!-- ========================================
+         TAB: STREAMERS
+         ======================================== -->
+    <div class="streaming-tab-content" data-tab="streamers">
+
+        <!-- Stats Overview -->
+        <div class="streamers-stats-grid">
+            <div class="stat-card-compact">
+                <div class="stat-card-label">Streamers</div>
+                <div class="stat-card-value"><%= consolidatedStreamers?.length || 0 %></div>
+            </div>
+            <div class="stat-card-compact">
+                <div class="stat-card-label">Subscriptions</div>
+                <div class="stat-card-value"><%= consolidatedStreamers?.reduce((sum, s) => sum + (s.subscriptions?.length || 0), 0) || 0 %></div>
+            </div>
+            <div class="stat-card-compact">
+                <div class="stat-card-label">Platforms</div>
+                <div class="stat-card-value"><%= new Set(consolidatedStreamers?.flatMap(s => s.platforms || []) || []).size %></div>
+            </div>
+            <div class="stat-card-compact">
+                <div class="stat-card-label">Discord Linked</div>
+                <div class="stat-card-value success"><%= consolidatedStreamers?.filter(s => s.discord_user_id).length || 0 %></div>
+            </div>
+        </div>
+
+        <!-- Edit on End status message -->
+        <div id="eoe-status" class="eoe-status-msg"></div>
+
+        <!-- Search + Bulk Actions Bar -->
+        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
+            <div class="search-wrapper" style="flex: 1; margin-bottom: 0;">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="streamerSearch" class="search-input" placeholder="Search streamers...">
+            </div>
+            <button class="btn btn-secondary" id="bulk-actions-btn" style="display: none; white-space: nowrap;"
+                    data-bs-toggle="modal" data-bs-target="#bulk-actions-modal">
+                <i class="fas fa-layer-group"></i>
+                <span>Bulk Actions (<span id="bulk-count">0</span>)</span>
+            </button>
+        </div>
+
+        <!-- Streamers Table -->
+        <% if (consolidatedStreamers && consolidatedStreamers.length > 0) { %>
+            <div class="streamers-table-wrapper">
+                <table class="streamers-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;" class="mobile-hide">
+                                <input type="checkbox" id="select-all-streamers" class="form-check-input" title="Select All">
+                            </th>
+                            <th>Streamer</th>
+                            <th>Platforms</th>
+                            <th class="mobile-hide">Subscriptions</th>
+                            <th class="mobile-hide">Status</th>
+                            <th class="mobile-hide">Edit on End</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="streamersTableBody">
+                        <% consolidatedStreamers.forEach(streamer => {
+                            // Get the first subscription for the edit_on_end toggle
+                            const firstSub = streamer.subscriptions && streamer.subscriptions.length > 0 ? streamer.subscriptions[0] : null;
+                            const firstSubId = firstSub ? (firstSub.id || firstSub.subscription_id) : null;
+                            const firstSubEditOnEnd = firstSubId ? (editOnEndMap[firstSubId] || false) : false;
+                        %>
+                            <tr class="streamer-row" data-streamer-name="<%= (streamer.name || '').toLowerCase() %>" data-platforms="<%= ((streamer.platforms || []).join(' ')).toLowerCase() %>" data-subscription-ids="<%= (streamer.subscriptions || []).map(s => s.id || s.subscription_id).filter(Boolean).join(',') %>">
+                                <td class="mobile-hide">
+                                    <input type="checkbox" class="form-check-input streamer-checkbox">
+                                </td>
+                                <td>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <div class="streamer-avatar">
+                                            <i class="fas fa-video" style="color: #a78bfa; font-size: 0.9rem;"></i>
+                                        </div>
+                                        <div>
+                                            <div class="streamer-name"><%= streamer.name %></div>
+                                            <% if (streamer.discord_user_id) { %>
+                                                <div class="streamer-meta">
+                                                    <i class="fab fa-discord"></i> Linked
+                                                </div>
+                                            <% } %>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="platform-badges">
+                                        <% streamer.platforms.forEach(platform => {
+                                            const colors = {
+                                                twitch: '#9146FF',
+                                                youtube: '#FF0000',
+                                                kick: '#53FC18',
+                                                tiktok: '#000',
+                                                trovo: '#1BC981',
+                                                facebook: '#1877F2',
+                                                instagram: '#E4405F'
+                                            };
+                                            const color = colors[platform.toLowerCase()] || '#6B7280';
+                                        %>
+                                            <span class="platform-badge" style="background: <%= color %>; color: white;"><%= platform %></span>
+                                        <% }); %>
+                                    </div>
+                                </td>
+                                <td class="mobile-hide">
+                                    <span class="subscription-badge"><%= streamer.subscriptions.length %></span>
+                                </td>
+                                <td class="mobile-hide">
+                                    <span class="status-badge <%= streamer.is_blacklisted ? 'blacklisted' : 'active' %>">
+                                        <%= streamer.is_blacklisted ? 'Blocked' : 'Active' %>
+                                    </span>
+                                </td>
+                                <td class="mobile-hide">
+                                    <% if (firstSubId) { %>
+                                        <label class="eoe-toggle" title="Toggle edit-on-end for this streamer's first subscription">
+                                            <input type="checkbox"
+                                                data-sub-id="<%= firstSubId %>"
+                                                <%= firstSubEditOnEnd ? 'checked' : '' %>
+                                                onchange="toggleEoeInline(this)">
+                                            <span class="eoe-toggle-track" style="background: <%= firstSubEditOnEnd ? '#a78bfa' : 'rgba(255,255,255,0.1)' %>;"></span>
+                                            <span class="eoe-toggle-dot" style="left: <%= firstSubEditOnEnd ? '18px' : '2px' %>;"></span>
+                                        </label>
+                                    <% } else { %>
+                                        <span style="color: rgba(255,255,255,0.3); font-size: 0.75rem;">-</span>
+                                    <% } %>
+                                </td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button class="btn-action edit-streamer-btn"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#edit-streamer-modal"
+                                                data-streamer="<%- JSON.stringify(streamer).replace(/"/g, '&quot;') %>">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state-modern">
+                <div class="empty-state-icon-modern">
+                    <i class="fas fa-video"></i>
+                </div>
+                <div class="empty-state-title-modern">No Streamers Yet</div>
+                <div class="empty-state-description-modern">
+                    Add your first streamer to start receiving live notifications across 7 platforms
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-streamer-modal">
+                    <i class="fas fa-plus"></i>
+                    <span>Add First Streamer</span>
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- ========================================
+         TAB: TEAMS
+         ======================================== -->
+    <div class="streaming-tab-content" data-tab="teams">
+
+        <!-- Stats Overview -->
+        <div class="teams-stats-grid">
+            <div class="team-stat-card">
+                <div class="team-stat-label">Total Teams</div>
+                <div class="team-stat-value"><%= teamSubscriptions?.length || 0 %></div>
+            </div>
+            <div class="team-stat-card">
+                <div class="team-stat-label">Active Channels</div>
+                <div class="team-stat-value"><%= teamSubscriptions?.filter(t => t.announcement_channel_id).length || 0 %></div>
+            </div>
+            <div class="team-stat-card">
+                <div class="team-stat-label">With Live Role</div>
+                <div class="team-stat-value"><%= teamSubscriptions?.filter(t => t.live_role_id).length || 0 %></div>
+            </div>
+        </div>
+
+        <% if (teamSubscriptions && teamSubscriptions.length > 0) { %>
+            <div class="teams-grid">
+                <% teamSubscriptions.forEach(team => { %>
+                    <div class="team-card">
+                        <div class="team-card-header">
+                            <div class="team-card-title">
+                                <div class="team-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div>
+                                    <h3 class="team-name"><%= team.team_name %></h3>
+                                    <div class="team-subtitle">Team Subscription</div>
+                                </div>
+                            </div>
+                            <div class="team-actions">
+                                <button class="btn-team-settings edit-team-btn"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#teamSettingsModal"
+                                        data-team='<%= JSON.stringify(team) %>'>
+                                    <i class="fas fa-cog"></i>
+                                    <span>Settings</span>
+                                </button>
+                                <form action="/manage/<%= guild.id %>/delete-team" method="POST" class="d-inline" onsubmit="return confirm('Are you sure? This will remove all associated streamers.');">
+                                    <input type="hidden" name="teamId" value="<%= team.id %>">
+                                    <button type="submit" class="btn-team-delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="team-card-body">
+                            <div class="team-info-grid">
+                                <div class="team-info-item">
+                                    <div class="team-info-label">
+                                        <i class="fas fa-hashtag"></i>
+                                        <span>Announcement Channel</span>
+                                    </div>
+                                    <div class="team-info-value">
+                                        #<%= channels.find(c => c.id === team.announcement_channel_id)?.name || 'Default' %>
+                                    </div>
+                                </div>
+                                <div class="team-info-item">
+                                    <div class="team-info-label">
+                                        <i class="fas fa-at"></i>
+                                        <span>Live Role</span>
+                                    </div>
+                                    <div class="team-info-value">
+                                        @<%= roles.find(r => r.id === team.live_role_id)?.name || 'None' %>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <% }) %>
+            </div>
+        <% } else { %>
+            <div class="teams-empty-state">
+                <div class="teams-empty-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="teams-empty-title">No Team Subscriptions</div>
+                <div class="teams-empty-description">
+                    Subscribe to streaming teams to automatically track all team members and receive live notifications
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addTeamModal">
+                    <i class="fas fa-plus"></i>
+                    <span>Add First Team</span>
+                </button>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- ========================================
+         TAB: AUTO-TRACK
+         ======================================== -->
+    <div class="streaming-tab-content" data-tab="auto-track">
+
+        <div class="at-callout">
+            <strong>Fallback System:</strong> Auto-Track detects when guild members start streaming on Twitch
+            (via Discord presence) and automatically creates a streamer subscription. Members already tracked
+            by <strong>Self-Promo</strong>, <strong>Teams</strong>, or <strong>manual subscriptions</strong>
+            are automatically skipped to prevent duplicate announcements.
+        </div>
+
+        <div id="at-status" class="at-status-msg"></div>
+
+        <!-- Existing Mappings -->
+        <div class="at-card">
+            <div class="at-card-header">
+                <i class="fas fa-list"></i>
+                <h3>Active Mappings</h3>
+            </div>
+            <div class="at-card-body">
+                <% if (atConfigs.length === 0) { %>
+                    <div class="at-empty">No auto-track mappings configured yet. Add one below.</div>
+                <% } else { %>
+                    <% atConfigs.forEach((config, index) => {
+                        const deleteOnEnd = config.delete_on_end !== undefined ? config.delete_on_end : 1;
+                        const editOnEnd = config.edit_on_end !== undefined ? config.edit_on_end : 0;
+                        let streamEndVal = 'delete';
+                        if (deleteOnEnd && editOnEnd) streamEndVal = 'edit';
+                        else if (!deleteOnEnd && !editOnEnd) streamEndVal = 'keep';
+                    %>
+                        <div class="at-mapping-card" data-auto-id="<%= config.auto_id %>">
+                            <div class="at-mapping-header">
+                                <div class="at-mapping-title">
+                                    <span class="at-badge <%= config.enabled ? 'at-badge-on' : 'at-badge-off' %>">
+                                        <%= config.enabled ? 'Enabled' : 'Disabled' %>
+                                    </span>
+                                    Mapping #<%= index + 1 %>
+                                </div>
+                                <div class="at-mapping-actions">
+                                    <button class="at-btn at-btn-save" onclick="atEdit(<%= config.auto_id %>)">
+                                        <i class="fas fa-save"></i> Save
+                                    </button>
+                                    <button class="at-btn at-btn-toggle" onclick="atToggle(<%= config.auto_id %>)">
+                                        <%= config.enabled ? 'Disable' : 'Enable' %>
+                                    </button>
+                                    <button class="at-btn at-btn-delete" onclick="atDelete(<%= config.auto_id %>)">Delete</button>
+                                </div>
+                            </div>
+                            <div class="at-form-grid">
+                                <div class="at-form-group">
+                                    <label class="at-form-label">Role</label>
+                                    <select id="at-role-<%= config.auto_id %>" class="at-form-select">
+                                        <option value="" <%= !config.role_id ? 'selected' : '' %>>Any Member</option>
+                                        <% atRoles.forEach(role => { %>
+                                            <option value="<%= role.id %>" <%= config.role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                                        <% }); %>
+                                    </select>
+                                </div>
+                                <div class="at-form-group">
+                                    <label class="at-form-label">Announcement Channel</label>
+                                    <select id="at-channel-<%= config.auto_id %>" class="at-form-select">
+                                        <% atChannels.forEach(ch => { %>
+                                            <option value="<%= ch.id %>" <%= config.announcement_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                                        <% }); %>
+                                    </select>
+                                </div>
+                                <div class="at-form-group">
+                                    <label class="at-form-label">Live Role</label>
+                                    <select id="at-liverole-<%= config.auto_id %>" class="at-form-select">
+                                        <option value="" <%= !config.live_role_id ? 'selected' : '' %>>Guild Default</option>
+                                        <% atRoles.forEach(role => { %>
+                                            <option value="<%= role.id %>" <%= config.live_role_id === role.id ? 'selected' : '' %>>@<%= role.name %></option>
+                                        <% }); %>
+                                    </select>
+                                </div>
+                                <div class="at-form-group">
+                                    <label class="at-form-label">When Stream Ends</label>
+                                    <select id="at-streamend-<%= config.auto_id %>" class="at-form-select">
+                                        <option value="delete" <%= streamEndVal === 'delete' ? 'selected' : '' %>>Delete message</option>
+                                        <option value="edit" <%= streamEndVal === 'edit' ? 'selected' : '' %>>Edit to "Stream Ended"</option>
+                                        <option value="keep" <%= streamEndVal === 'keep' ? 'selected' : '' %>>Keep as-is</option>
+                                    </select>
+                                    <div class="at-form-hint">What happens to the announcement when the stream ends</div>
+                                </div>
+                            </div>
+                        </div>
+                    <% }); %>
+                <% } %>
+            </div>
+        </div>
+
+        <!-- Add Mapping -->
+        <div class="at-card">
+            <div class="at-card-header">
+                <i class="fas fa-plus-circle"></i>
+                <h3>Add Mapping</h3>
+            </div>
+            <div class="at-card-body">
+                <form id="at-add-form">
+                    <div class="at-form-grid">
+                        <div class="at-form-group">
+                            <label class="at-form-label">Role</label>
+                            <select name="role_id" class="at-form-select">
+                                <option value="">Any Member</option>
+                                <% atRoles.forEach(role => { %>
+                                    <option value="<%= role.id %>"><%= role.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="at-form-hint">Select "Any Member" to track all streaming members</div>
+                        </div>
+                        <div class="at-form-group">
+                            <label class="at-form-label">Announcement Channel</label>
+                            <select name="announcement_channel_id" class="at-form-select" required>
+                                <option value="">Select a channel...</option>
+                                <% atChannels.forEach(ch => { %>
+                                    <option value="<%= ch.id %>">#<%= ch.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="at-form-hint">Where auto-tracked stream announcements will be posted</div>
+                        </div>
+                        <div class="at-form-group">
+                            <label class="at-form-label">Live Role</label>
+                            <select name="live_role_id" class="at-form-select">
+                                <option value="">Guild Default</option>
+                                <% atRoles.forEach(role => { %>
+                                    <option value="<%= role.id %>">@<%= role.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="at-form-hint">Role assigned when streamer goes live (leave empty for guild default)</div>
+                        </div>
+                        <div class="at-form-group">
+                            <label class="at-form-label">When Stream Ends</label>
+                            <select name="stream_end" class="at-form-select">
+                                <option value="delete">Delete message</option>
+                                <option value="edit">Edit to "Stream Ended"</option>
+                                <option value="keep">Keep as-is</option>
+                            </select>
+                            <div class="at-form-hint">What happens to the announcement when the stream ends</div>
+                        </div>
+                    </div>
+                    <button type="submit" class="at-btn-add">
+                        <i class="fas fa-plus"></i> Add Mapping
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================
+         TAB: SCHEDULES
+         ======================================== -->
+    <div class="streaming-tab-content" data-tab="schedules">
+
+        <!-- Stats Overview -->
+        <div class="sched-stats-grid">
+            <div class="sched-stat-card">
+                <div class="stat-card-label">Active Syncs</div>
+                <div class="stat-card-value"><%= syncs.length %></div>
+            </div>
+            <div class="sched-stat-card">
+                <div class="stat-card-label">Twitch Streamers</div>
+                <div class="stat-card-value" style="color: #9146FF;"><%= twitchStreamers.length %></div>
+            </div>
+            <div class="sched-stat-card">
+                <div class="stat-card-label">Channels Used</div>
+                <div class="stat-card-value"><%= new Set(syncs.map(s => s.channel_id)).size %></div>
+            </div>
+            <div class="sched-stat-card">
+                <div class="stat-card-label">Auto-Update</div>
+                <div class="stat-card-value success" style="font-size: 1.2rem;">
+                    <i class="fas fa-check-circle"></i> Enabled
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Schedule Sync -->
+        <div class="sched-add-card">
+            <h3 class="sched-card-title">
+                <i class="fas fa-calendar-plus"></i>
+                Add Schedule Sync
+            </h3>
+            <div class="sched-card-subtitle">
+                Sync a Twitch streamer's schedule to automatically post updates
+            </div>
+            <form action="/manage/<%= guild.id %>/twitch-schedules/sync" method="POST">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                        <label class="form-label">Twitch Streamer</label>
+                        <select class="form-select" name="streamerId" required>
+                            <option value="">Select streamer</option>
+                            <% twitchStreamers.forEach(streamer => { %>
+                                <% const twitchSub = streamer.subscriptions?.find(sub => sub.platform === 'twitch'); %>
+                                <% if (twitchSub) { %>
+                                    <option value="<%= twitchSub.streamer_id %>"><%= twitchSub.platform_username || streamer.name %></option>
+                                <% } %>
+                            <% }) %>
+                        </select>
+                        <div class="form-help">Must be a Twitch streamer</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Post Schedule In</label>
+                        <select class="form-select" name="channelId" required>
+                            <option value="">Select channel</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                            <% }) %>
+                        </select>
+                        <div class="form-help">Where to post updates</div>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end;">
+                    <div>
+                        <label class="form-label">Update Interval (minutes)</label>
+                        <input class="form-input" type="number" name="syncIntervalMinutes" min="15" max="10080" value="360">
+                        <div class="form-help">How often the bot checks for changes. 15–10080 (1 week). Default: 360 (6 hr).</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Weekly Fresh Post</label>
+                        <label style="display: flex; align-items: center; gap: 8px; padding: 10px 0; cursor: pointer;">
+                            <input type="checkbox" name="weeklyRefresh" style="width: 16px; height: 16px;">
+                            <span style="color: rgba(255,255,255,0.8); font-size: 0.9rem;">Delete old embed + post new every 7 days</span>
+                        </label>
+                    </div>
+                    <div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 10px 20px;">
+                            <i class="fas fa-save"></i>
+                            <span>Create Sync</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Existing Syncs -->
+        <div class="sched-list-card">
+            <h3 class="sched-card-title">
+                <i class="fas fa-calendar-check"></i>
+                Active Schedule Syncs
+            </h3>
+            <div class="sched-card-subtitle">
+                Manage your configured schedule synchronizations
+            </div>
+
+            <% if (syncs.length > 0) { %>
+                <div class="sched-table-wrapper">
+                    <table class="sched-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 24%;">Streamer</th>
+                                <th style="width: 22%;">Channel</th>
+                                <th style="width: 12%;">Interval</th>
+                                <th style="width: 14%;">Mode</th>
+                                <th style="width: 28%;" class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% syncs.forEach(sync => { %>
+                                <% const channel = channels.find(c => c.id === sync.channel_id); %>
+                                <% const intervalMin = sync.sync_interval_minutes || 360; %>
+                                <% const intervalLabel = intervalMin >= 60 ? (intervalMin / 60) + ' hr' : intervalMin + ' min'; %>
+                                <tr>
+                                    <td>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <i class="fab fa-twitch" style="color: #9146FF; font-size: 1.1rem;"></i>
+                                            <a href="https://twitch.tv/<%= sync.twitch_username || '' %>" target="_blank" style="font-weight: 600; color: #9146FF; text-decoration: none;">
+                                                <%= sync.twitch_username || 'Unknown Streamer' %>
+                                            </a>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <i class="fas fa-hashtag" style="color: rgba(255,255,255,0.4); font-size: 0.85rem;"></i>
+                                            <span style="color: rgba(255,255,255,0.7);">
+                                                <%= channel ? channel.name : 'Unknown Channel' %>
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span style="color: rgba(255,255,255,0.75); font-size: 0.85rem;"><%= intervalLabel %></span>
+                                    </td>
+                                    <td>
+                                        <% if (sync.weekly_refresh) { %>
+                                            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: rgba(145,70,255,0.15); color: #b18fff;">
+                                                <i class="fas fa-sync-alt"></i> Weekly fresh
+                                            </span>
+                                        <% } else { %>
+                                            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);">
+                                                <i class="fas fa-edit"></i> Edit in place
+                                            </span>
+                                        <% } %>
+                                    </td>
+                                    <td class="text-end">
+                                        <div style="display: inline-flex; gap: 6px;">
+                                            <button type="button" class="btn-action" style="color: #60a5fa; border-color: rgba(96,165,250,0.3);"
+                                                onclick="openTwitchSchedEdit('<%= sync.id %>', <%= intervalMin %>, <%= sync.weekly_refresh ? 'true' : 'false' %>)">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </button>
+                                            <form action="/manage/<%= guild.id %>/twitch-schedules/force-sync" method="POST" style="display: inline;">
+                                                <input type="hidden" name="syncId" value="<%= sync.id %>">
+                                                <button type="submit" class="btn-action" style="color: #34d399; border-color: rgba(52,211,153,0.3);" title="Force sync now">
+                                                    <i class="fas fa-bolt"></i> Sync
+                                                </button>
+                                            </form>
+                                            <form action="/manage/<%= guild.id %>/twitch-schedules/delete" method="POST" style="display: inline;">
+                                                <input type="hidden" name="syncId" value="<%= sync.id %>">
+                                                <button type="submit" class="btn-action" style="color: #f87171; border-color: rgba(248,113,113,0.3);" onclick="return confirm('Remove this schedule sync?');">
+                                                    <i class="fas fa-trash"></i> Remove
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Edit Modal (inline, shared for all rows) -->
+                <div id="twitch-sched-edit-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; align-items:center; justify-content:center;">
+                    <div style="background:#1a1c2b; border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:24px; max-width:480px; width:90%;">
+                        <h3 style="margin:0 0 16px; color:white;">Edit Schedule Sync</h3>
+                        <form id="twitch-sched-edit-form" action="/manage/<%= guild.id %>/twitch-schedules/edit" method="POST">
+                            <input type="hidden" name="syncId" id="twitch-sched-edit-id">
+                            <div style="margin-bottom:16px;">
+                                <label class="form-label">Update Interval (minutes)</label>
+                                <input class="form-input" type="number" name="syncIntervalMinutes" id="twitch-sched-edit-interval" min="15" max="10080">
+                                <div class="form-help">15–10080 (1 week). Default: 360 (6 hr).</div>
+                            </div>
+                            <div style="margin-bottom:20px;">
+                                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                    <input type="checkbox" name="weeklyRefresh" id="twitch-sched-edit-weekly" style="width:16px; height:16px;">
+                                    <span style="color:rgba(255,255,255,0.8);">Weekly Fresh Post (delete old + post new every 7 days)</span>
+                                </label>
+                            </div>
+                            <div style="display:flex; gap:8px; justify-content:flex-end;">
+                                <button type="button" class="btn btn-secondary" onclick="closeTwitchSchedEdit()">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Save</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                <script>
+                function openTwitchSchedEdit(id, interval, weekly) {
+                    document.getElementById('twitch-sched-edit-id').value = id;
+                    document.getElementById('twitch-sched-edit-interval').value = interval;
+                    document.getElementById('twitch-sched-edit-weekly').checked = !!weekly;
+                    document.getElementById('twitch-sched-edit-modal').style.display = 'flex';
+                }
+                function closeTwitchSchedEdit() {
+                    document.getElementById('twitch-sched-edit-modal').style.display = 'none';
+                }
+                </script>
+            <% } else { %>
+                <div class="empty-state-modern">
+                    <div class="empty-state-icon-modern">
+                        <i class="fab fa-twitch"></i>
+                    </div>
+                    <div class="empty-state-title-modern">No Schedule Syncs</div>
+                    <div class="empty-state-description-modern">
+                        Create a schedule sync to automatically post Twitch stream schedules
+                    </div>
+                </div>
+            <% } %>
+        </div>
+    </div>
+
+</div><!-- end page-section -->
+
+    <!-- ========================================
+         TAB: ROLE SYNC
+         ======================================== -->
+    <div class="streaming-tab-content" data-tab="role-sync">
+        <div class="at-card" style="margin-bottom: 20px;">
+            <div class="at-card-header">
+                <i class="fas fa-sync-alt" style="color: #a78bfa;"></i>
+                <h3>Twitch Role Sync</h3>
+            </div>
+            <div class="at-card-body">
+                <p style="color: var(--color-text-muted); font-size: 0.9rem; margin-bottom: 20px;">
+                    Automatically sync Twitch VIP and Moderator status to Discord roles. The broadcaster must connect their Twitch account to grant access.
+                </p>
+
+                <!-- Broadcaster Connection -->
+                <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(167,139,250,0.2); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                        <div>
+                            <div style="font-size: 0.85rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">
+                                <i class="fab fa-twitch" style="color: #9146FF; margin-right: 6px;"></i>
+                                Broadcaster Account
+                            </div>
+                            <% if (typeof twitchRoleSyncConfig !== 'undefined' && twitchRoleSyncConfig) { %>
+                                <div style="font-size: 0.8rem; color: var(--accent-green);">
+                                    <i class="fas fa-check-circle"></i> Connected: <strong><%= twitchRoleSyncConfig.broadcaster_twitch_username %></strong>
+                                </div>
+                            <% } else { %>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);">Not connected — broadcaster needs to authorize</div>
+                            <% } %>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <% if (typeof twitchRoleSyncConfig !== 'undefined' && twitchRoleSyncConfig) { %>
+                                <form action="/manage/<%= guild.id %>/twitch-role-sync/disconnect" method="POST" style="margin:0;" onsubmit="return confirm('Disconnect broadcaster account? This will stop role sync.')">
+                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-unlink"></i> Disconnect</button>
+                                </form>
+                            <% } %>
+                            <a href="/auth/twitch/broadcaster/<%= guild.id %>" class="btn btn-sm btn-primary" style="background: #9146FF;">
+                                <i class="fab fa-twitch"></i> <%= (typeof twitchRoleSyncConfig !== 'undefined' && twitchRoleSyncConfig) ? 'Reconnect' : 'Connect Twitch Account' %>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <% if (typeof twitchRoleSyncConfig !== 'undefined' && twitchRoleSyncConfig) { %>
+                <!-- Role Mapping & Settings -->
+                <form action="/manage/<%= guild.id %>/twitch-role-sync/settings" method="POST">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div>
+                            <label class="form-label">VIP Role</label>
+                            <select name="vip_role_id" class="form-select">
+                                <option value="">None</option>
+                                <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>" <%= twitchRoleSyncConfig.vip_role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="form-help">Discord role for Twitch VIPs</div>
+                        </div>
+                        <div>
+                            <label class="form-label">Mod Role</label>
+                            <select name="mod_role_id" class="form-select">
+                                <option value="">None</option>
+                                <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>" <%= twitchRoleSyncConfig.mod_role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="form-help">Discord role for Twitch Moderators</div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 16px;">
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;">
+                            <input type="checkbox" name="remove_vip_on_leave" value="1" <%= twitchRoleSyncConfig.remove_vip_on_leave ? 'checked' : '' %>>
+                            Auto-remove Twitch VIP when member leaves Discord
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;">
+                            <input type="checkbox" name="enabled" value="1" <%= twitchRoleSyncConfig.enabled ? 'checked' : '' %>>
+                            Enable sync
+                        </label>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">
+                            <% if (twitchRoleSyncConfig.last_synced) { %>
+                                Last synced: <%= new Date(twitchRoleSyncConfig.last_synced).toLocaleString() %>
+                            <% } else { %>
+                                Never synced
+                            <% } %>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-save"></i> Save Settings</button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Manual Sync -->
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06);">
+                    <form action="/manage/<%= guild.id %>/twitch-role-sync/sync-now" method="POST" style="display: inline;">
+                        <button type="submit" class="btn btn-sm btn-secondary"><i class="fas fa-sync"></i> Sync Now</button>
+                    </form>
+                </div>
+
+                <!-- ===========================================
+                     Twitch Mod / VIP Mapping (the live source of truth)
+                     =========================================== -->
+                <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+                        <h4 style="font-size:0.9rem;font-weight:600;color:var(--text-primary);margin:0;">Twitch Mods &amp; VIPs (live)</h4>
+                        <div style="display:flex;gap:6px;">
+                            <button type="button" id="trs-autolink-btn" class="btn btn-sm btn-primary" style="display:none;" title="Apply all suggestions with score ≥ 90"><i class="fas fa-wand-magic-sparkles"></i> Auto-link high-confidence</button>
+                            <button type="button" id="trs-refresh-btn" class="btn btn-sm btn-secondary"><i class="fas fa-sync"></i> Refresh</button>
+                        </div>
+                    </div>
+                    <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px;">
+                        Pulled directly from Twitch via the connected broadcaster account. Use the dropdown to link unmatched mods/VIPs to a Discord user — the next sync grants the role automatically.
+                    </div>
+                    <div id="trs-mods-vips-summary" style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:8px;">Loading…</div>
+                    <div id="trs-mods-vips-list" style="max-height:420px;overflow-y:auto;border:1px solid rgba(255,255,255,0.06);border-radius:8px;"></div>
+                </div>
+
+                <!-- Hidden datalist for Discord-user autocomplete -->
+                <datalist id="trs-discord-members">
+                    <% (typeof guildMembers !== 'undefined' ? guildMembers : []).forEach(m => { %>
+                    <option value="<%= m.id %>" label="<%= m.username %>"><%= m.username %><% if (m.display && m.display !== m.username) { %> · <%= m.display %><% } %></option>
+                    <% }); %>
+                </datalist>
+
+                <!-- Linked Members -->
+                <% const syncMembers = typeof twitchRoleSyncMembers !== 'undefined' ? twitchRoleSyncMembers : []; %>
+                <% if (syncMembers.length > 0) { %>
+                <div style="margin-top: 20px;">
+                    <h4 style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary); margin-bottom: 10px;">
+                        Synced Members (<%= syncMembers.length %>)
+                    </h4>
+                    <div style="max-height: 300px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px;">
+                        <% syncMembers.forEach(m => { %>
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 0.8rem;">
+                            <div>
+                                <span style="color: var(--text-secondary);"><%= m.discord_user_id %></span>
+                                <span style="color: var(--text-muted); margin: 0 6px;">→</span>
+                                <span style="color: #9146FF; font-weight: 600;"><%= m.twitch_username %></span>
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <% if (m.is_vip) { %>
+                                <span style="background: rgba(251,191,36,0.15); color: #fbbf24; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">VIP</span>
+                                <% } %>
+                                <% if (m.is_mod) { %>
+                                <span style="background: rgba(96,165,250,0.15); color: #60a5fa; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600;">MOD</span>
+                                <% } %>
+                                <% if (!m.is_vip && !m.is_mod) { %>
+                                <span style="color: var(--text-muted); font-size: 0.7rem;">—</span>
+                                <% } %>
+                            </div>
+                        </div>
+                        <% }); %>
+                    </div>
+                </div>
+                <% } %>
+                <% } %>
+            </div>
+        </div>
+    </div>
+
+<!-- ========================================
+     MODAL INCLUDES
+     ======================================== -->
+<%- include('partials/manage/add-streamer', { guild, roles, channels }) %>
+<%- include('partials/manage/edit-streamer-modal', { guild, roles, channels }) %>
+<%- include('partials/manage/bulk-actions-modal', { channels, roles }) %>
+<%- include('partials/add-team-modal', { guild, channels, roles }) %>
+<%- include('partials/manage-team-modal', { guild, channels, roles }) %>
+
+<!-- ========================================
+     JAVASCRIPT
+     ======================================== -->
+<script>
+/* =============================================
+   TAB SWITCHING
+   ============================================= */
+function switchStreamingTab(tabName) {
+    document.querySelectorAll('.streaming-tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
+    document.querySelectorAll('.streaming-tab-content').forEach(el => el.classList.toggle('active', el.dataset.tab === tabName));
+    // Update URL without reload
+    const url = new URL(window.location);
+    url.searchParams.set('tab', tabName);
+    history.replaceState(null, '', url);
+    // Lazy-load the Twitch mods/VIPs mapping panel when the role-sync tab is opened
+    if (tabName === 'role-sync') trsLoadModsVips();
+}
+
+/* =============================================
+   TWITCH ROLE-SYNC: live mod/VIP mapping panel
+   All DOM constructed with createElement/textContent (no innerHTML)
+   to avoid XSS even though every external value goes through validation.
+   ============================================= */
+const TRS_GUILD_ID = '<%= guild.id %>';
+
+function trsEl(tag, attrs = {}, ...children) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+        else if (k === 'dataset' && typeof v === 'object') Object.assign(e.dataset, v);
+        else if (k === 'onClick') e.addEventListener('click', v);
+        else if (k === 'className') e.className = v;
+        else if (k === 'text') e.textContent = v;
+        else e.setAttribute(k, v);
+    }
+    for (const c of children.flat()) {
+        if (c == null || c === false) continue;
+        e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    }
+    return e;
+}
+
+async function trsLoadModsVips() {
+    const summary = document.getElementById('trs-mods-vips-summary');
+    const list    = document.getElementById('trs-mods-vips-list');
+    if (!summary || !list) return;
+    summary.textContent = 'Loading…';
+    list.replaceChildren();
+    try {
+        const resp = await fetch(`/manage/${TRS_GUILD_ID}/twitch-role-sync/mods-vips`, { headers: { 'Accept': 'application/json' } });
+        const data = await resp.json();
+        if (data.error) {
+            summary.replaceChildren(trsEl('span', { style: { color: '#fb923c' } }, `Cannot fetch from Twitch: `, trsEl('code', { text: data.error }), data.message ? ' — ' + data.message : ''));
+            return;
+        }
+        const all = [...data.mods, ...data.vips];
+        const linked   = all.filter(x => x.discord_user_id).length;
+        const bots     = all.filter(x => x.is_known_bot).length;
+        const unlinked = all.length - linked - bots;
+
+        summary.replaceChildren(
+            trsEl('strong', { text: String(data.counts.mods_total) }), ' Twitch mods, ',
+            trsEl('strong', { text: String(data.counts.vips_total) }), ' VIPs',
+            ' · ', trsEl('span', { style: { color: '#22c55e' }, text: `${linked} linked` }),
+            ' · ', trsEl('span', { style: { color: '#fbbf24' }, text: `${unlinked} unlinked` }),
+            ' · ', trsEl('span', { style: { color: 'var(--text-muted)' }, text: `${bots} bot(s)` }),
+            ' · broadcaster ', trsEl('strong', { text: data.broadcaster.twitch_username }),
+        );
+
+        if (all.length === 0) {
+            list.appendChild(trsEl('div', { style: { padding: '14px', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.85rem' }, text: 'No mods or VIPs returned by Twitch.' }));
+        } else {
+            for (const row of all) list.appendChild(trsBuildRow(row));
+        }
+
+        // Reveal auto-link button only when there are high-confidence suggestions to apply
+        const autoBtn = document.getElementById('trs-autolink-btn');
+        if (autoBtn) {
+            const candidates = all.filter(r => !r.discord_user_id && !r.is_known_bot && r.suggestion?.score >= 90);
+            if (candidates.length > 0) {
+                autoBtn.style.display = '';
+                autoBtn.textContent = '';
+                autoBtn.appendChild(trsEl('i', { className: 'fas fa-wand-magic-sparkles' }));
+                autoBtn.appendChild(document.createTextNode(` Auto-link ${candidates.length} high-confidence match${candidates.length === 1 ? '' : 'es'}`));
+                autoBtn.onclick = () => trsAutoLinkAll(candidates);
+            } else {
+                autoBtn.style.display = 'none';
+            }
+        }
+    } catch (err) {
+        summary.replaceChildren(trsEl('span', { style: { color: '#ef4444' }, text: 'Fetch failed: ' + err.message }));
+    }
+}
+
+async function trsAutoLinkAll(candidates) {
+    if (!confirm(`Auto-link ${candidates.length} Twitch mods/VIPs using high-confidence username matches?\n\nEach match has a score of 90 or higher (case-insensitive exact match, normalized exact match, or edit-distance ≤ 1). You can unlink any individual row afterward if a match is wrong.`)) return;
+    const btn = document.getElementById('trs-autolink-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Linking…'; }
+    let succeeded = 0, failed = 0;
+    for (const row of candidates) {
+        try {
+            const r = await fetch(`/manage/${TRS_GUILD_ID}/twitch-role-sync/link`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    twitch_user_id: row.twitch_user_id,
+                    twitch_username: row.twitch_username,
+                    discord_user_id: row.suggestion.discord_user_id,
+                }),
+            });
+            const j = await r.json();
+            if (j.success) succeeded++; else failed++;
+        } catch { failed++; }
+    }
+    alert(`Auto-link finished — ${succeeded} linked, ${failed} failed.`);
+    trsLoadModsVips();
+}
+
+function trsBuildRow(row) {
+    const badge = row.type === 'mod'
+        ? trsEl('span', { style: { background: 'rgba(96,165,250,0.18)', color: '#60a5fa', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: '600' }, text: 'MOD' })
+        : trsEl('span', { style: { background: 'rgba(251,191,36,0.18)', color: '#fbbf24', padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: '600' }, text: 'VIP' });
+
+    const twitchCell = trsEl('div',
+        { style: { display: 'flex', alignItems: 'center', gap: '8px', minWidth: '200px' } },
+        badge,
+        trsEl('span', { style: { color: '#9146FF', fontWeight: '600' }, text: row.twitch_display_name || row.twitch_username }),
+        trsEl('span', { style: { color: 'var(--text-muted)', fontSize: '0.7rem' }, text: '@' + row.twitch_username }),
+    );
+
+    let action;
+    if (row.is_known_bot) {
+        action = trsEl('span', { style: { color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.75rem' }, text: 'Known Twitch bot — no Discord mapping' });
+    } else if (row.discord_user_id) {
+        const children = [
+            trsEl('span', { style: { fontSize: '0.75rem', color: '#22c55e' } },
+                trsEl('i', { className: 'fas fa-link' }), ' linked to ',
+                trsEl('code', { text: row.discord_user_id })),
+            trsEl('span', { style: { fontSize: '0.65rem', color: 'var(--text-muted)' }, text: 'via ' + row.link_source }),
+        ];
+        if (row.link_source === 'community_twitch_links') {
+            const unlinkBtn = trsEl('button',
+                { className: 'btn btn-sm btn-secondary', style: { padding: '2px 8px', fontSize: '0.7rem' }, dataset: { discordId: row.discord_user_id }, onClick: (e) => trsUnlink(e.currentTarget) },
+                trsEl('i', { className: 'fas fa-times' })
+            );
+            children.push(unlinkBtn);
+        }
+        action = trsEl('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, ...children);
+    } else {
+        const input = trsEl('input',
+            { list: 'trs-discord-members', type: 'text', className: 'form-input form-input-sm',
+              placeholder: 'Pick or paste Discord user ID…',
+              style: { fontSize: '0.75rem', padding: '4px 8px', width: '240px' },
+              dataset: { trsInput: 'discord_id' } }
+        );
+        // Pre-fill input with suggestion if confident enough
+        if (row.suggestion?.score >= 60) input.value = row.suggestion.discord_user_id;
+
+        const linkBtn = trsEl('button',
+            { className: 'btn btn-sm btn-primary',
+              style: { padding: '2px 10px', fontSize: '0.75rem' },
+              dataset: { twitchId: row.twitch_user_id, twitchUsername: row.twitch_username },
+              onClick: (e) => trsLink(e.currentTarget) },
+            trsEl('i', { className: 'fas fa-link' }), ' Link'
+        );
+
+        const children = [input, linkBtn];
+
+        // Suggestion badge — color-coded by confidence
+        if (row.suggestion) {
+            const s = row.suggestion;
+            const color = s.score >= 90 ? '#22c55e' : s.score >= 75 ? '#84cc16' : '#fbbf24';
+            const badge = trsEl('span',
+                { style: { fontSize: '0.7rem', color, marginLeft: '6px', whiteSpace: 'nowrap' },
+                  title: s.reason },
+                trsEl('i', { className: 'fas fa-wand-magic-sparkles' }),
+                ` ${s.discord_username}`,
+                trsEl('span', { style: { color: 'var(--text-muted)', marginLeft: '4px' }, text: `(${s.score})` }),
+            );
+            children.push(badge);
+        }
+        action = trsEl('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } }, ...children);
+    }
+
+    return trsEl('div',
+        { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.04)' } },
+        twitchCell, action,
+    );
+}
+
+async function trsLink(btn) {
+    const row = btn.closest('div');
+    const input = row?.querySelector('input[data-trs-input="discord_id"]');
+    const discord_user_id = input?.value?.trim();
+    if (!discord_user_id || !/^\d{15,21}$/.test(discord_user_id)) {
+        alert('Pick a Discord user from the dropdown (or paste a numeric user ID).');
+        return;
+    }
+    btn.disabled = true;
+    try {
+        const r = await fetch(`/manage/${TRS_GUILD_ID}/twitch-role-sync/link`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                twitch_user_id: btn.dataset.twitchId,
+                twitch_username: btn.dataset.twitchUsername,
+                discord_user_id,
+            }),
+        });
+        const j = await r.json();
+        if (j.success) trsLoadModsVips();
+        else { alert(`Link failed: ${j.error || 'unknown'} ${j.message || ''}`); btn.disabled = false; }
+    } catch (err) {
+        alert('Link failed: ' + err.message);
+        btn.disabled = false;
+    }
+}
+
+async function trsUnlink(btn) {
+    if (!confirm('Remove this Twitch ↔ Discord link?')) return;
+    btn.disabled = true;
+    try {
+        const r = await fetch(`/manage/${TRS_GUILD_ID}/twitch-role-sync/unlink`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ discord_user_id: btn.dataset.discordId }),
+        });
+        const j = await r.json();
+        if (j.success) trsLoadModsVips();
+        else { alert(`Unlink failed: ${j.error}`); btn.disabled = false; }
+    } catch (err) {
+        alert('Unlink failed: ' + err.message);
+        btn.disabled = false;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('trs-refresh-btn');
+    if (btn) btn.addEventListener('click', trsLoadModsVips);
+});
+
+/* =============================================
+   STREAMERS TAB JS
+   ============================================= */
+function waitForBootstrap(callback, maxAttempts = 50) {
+    let attempts = 0;
+    function check() {
+        if (typeof bootstrap !== 'undefined') {
+            callback();
+        } else if (attempts < maxAttempts) {
+            attempts++;
+            setTimeout(check, 50);
+        } else {
+            callback();
+        }
+    }
+    check();
+}
+
+// Run immediately — partial is rendered after DOM is ready
+(function() {
+    // Init tab from URL param
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab') || 'streamers';
+    switchStreamingTab(tab);
+
+    waitForBootstrap(() => {
+        const modal = document.getElementById('edit-streamer-modal');
+        if (!modal) return;
+
+        document.querySelectorAll('.edit-streamer-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const modalEl = document.getElementById('edit-streamer-modal');
+                if (!modalEl) return;
+
+                const streamerData = btn.getAttribute('data-streamer');
+
+                if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                    try {
+                        const bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                        modalEl._streamerData = streamerData;
+                        modalEl._triggerButton = btn;
+                        bsModal.show();
+                    } catch (err) {
+                        openModalManually(modalEl, btn);
+                    }
+                } else {
+                    openModalManually(modalEl, btn);
+                }
+            });
+        });
+    });
+
+    function openModalManually(modalEl, btn) {
+        modalEl._triggerButton = btn;
+
+        let backdrop = document.querySelector('.modal-backdrop');
+        if (!backdrop) {
+            backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop fade show';
+            document.body.appendChild(backdrop);
+        }
+
+        modalEl.classList.add('show');
+        modalEl.style.display = 'block';
+        modalEl.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+
+        const event = new CustomEvent('show.bs.modal', {
+            bubbles: true,
+            detail: { relatedTarget: btn }
+        });
+        modalEl.dispatchEvent(event);
+
+        backdrop.onclick = () => closeModalManually(modalEl);
+
+        modalEl.querySelectorAll('[data-bs-dismiss="modal"]').forEach(closeBtn => {
+            closeBtn.addEventListener('click', () => closeModalManually(modalEl));
+        });
+
+        document.addEventListener('keydown', function escHandler(e) {
+            if (e.key === 'Escape') {
+                closeModalManually(modalEl);
+                document.removeEventListener('keydown', escHandler);
+            }
+        });
+    }
+
+    function closeModalManually(modalEl) {
+        modalEl.classList.remove('show');
+        modalEl.style.display = 'none';
+        modalEl.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+        document.querySelector('.modal-backdrop')?.remove();
+    }
+
+    // Search functionality
+    const searchInput = document.getElementById('streamerSearch');
+    const tableBody = document.getElementById('streamersTableBody');
+
+    if (searchInput && tableBody) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const rows = tableBody.querySelectorAll('.streamer-row');
+
+            rows.forEach(row => {
+                const name = row.dataset.streamerName;
+                const platforms = row.dataset.platforms;
+
+                if (name.includes(query) || platforms.includes(query)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+
+    // Ignored roles count
+    const ignoredSelect = document.getElementById('ignored-roles-select-streaming');
+    const ignoredCount = document.getElementById('ignored-roles-count-streaming');
+    if (ignoredSelect && ignoredCount) {
+        function updateIgnoredCount() {
+            const count = ignoredSelect.selectedOptions.length;
+            ignoredCount.textContent = count > 0 ? ` \u2014 ${count} role(s) selected` : '';
+        }
+        updateIgnoredCount();
+        ignoredSelect.addEventListener('change', updateIgnoredCount);
+    }
+})();
+
+/* ---- Bulk selection logic ---- */
+function updateBulkSelection() {
+    const checked = document.querySelectorAll('.streamer-checkbox:checked');
+    const bulkBtn = document.getElementById('bulk-actions-btn');
+    const bulkCount = document.getElementById('bulk-count');
+    const selectAll = document.getElementById('select-all-streamers');
+
+    if (bulkBtn) bulkBtn.style.display = checked.length > 0 ? '' : 'none';
+    if (bulkCount) bulkCount.textContent = checked.length;
+
+    const subIds = [];
+    checked.forEach(cb => {
+        const row = cb.closest('tr');
+        const ids = (row?.dataset.subscriptionIds || '').split(',').filter(Boolean);
+        subIds.push(...ids);
+    });
+    window._bulkSelectedSubscriptionIds = subIds;
+
+    const countEl = document.getElementById('bulk-selection-count');
+    if (countEl) countEl.textContent = checked.length + ' streamer(s) selected (' + subIds.length + ' subscription(s))';
+
+    const allCheckboxes = document.querySelectorAll('.streamer-checkbox');
+    if (selectAll && allCheckboxes.length > 0) {
+        selectAll.checked = checked.length === allCheckboxes.length;
+        selectAll.indeterminate = checked.length > 0 && checked.length < allCheckboxes.length;
+    }
+}
+
+document.getElementById('select-all-streamers')?.addEventListener('change', function() {
+    document.querySelectorAll('.streamer-checkbox').forEach(cb => { cb.checked = this.checked; });
+    updateBulkSelection();
+});
+
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('streamer-checkbox')) updateBulkSelection();
+});
+
+/* ---- Edit on End inline toggle ---- */
+async function toggleEoeInline(checkbox) {
+    const subId = checkbox.dataset.subId;
+    const editOnEnd = checkbox.checked;
+    const status = document.getElementById('eoe-status');
+    const track = checkbox.parentElement.querySelector('.eoe-toggle-track');
+    const dot = checkbox.parentElement.querySelector('.eoe-toggle-dot');
+
+    try {
+        const res = await fetch('/api/guilds/<%= guild.id %>/stream-ended/subscriptions/' + subId, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ edit_on_end: editOnEnd })
+        });
+        const data = await res.json();
+        if (data.success) {
+            track.style.background = editOnEnd ? '#a78bfa' : 'rgba(255,255,255,0.1)';
+            dot.style.left = editOnEnd ? '18px' : '2px';
+            status.textContent = 'Edit-on-end updated!';
+            status.className = 'eoe-status-msg success';
+        } else {
+            checkbox.checked = !editOnEnd;
+            status.textContent = data.error || 'Failed to update';
+            status.className = 'eoe-status-msg error';
+        }
+    } catch (err) {
+        checkbox.checked = !editOnEnd;
+        status.textContent = 'Network error';
+        status.className = 'eoe-status-msg error';
+    }
+    setTimeout(() => { status.className = 'eoe-status-msg'; }, 3000);
+}
+
+/* =============================================
+   TEAMS TAB JS
+   ============================================= */
+(function() {
+    const teamSettingsModal = document.getElementById('teamSettingsModal');
+    if (teamSettingsModal) {
+        teamSettingsModal.addEventListener('show.bs.modal', event => {
+            const button = event.relatedTarget || teamSettingsModal._triggerButton;
+            if (!button) return;
+
+            const team = JSON.parse(button.getAttribute('data-team'));
+
+            document.getElementById('modal-team-name').textContent = team.team_name;
+            document.getElementById('edit-team-subscription-id').value = team.id;
+            document.getElementById('edit-team-channel-id').value = team.announcement_channel_id || '';
+            document.getElementById('edit-team-live-role-id').value = team.live_role_id || '';
+            document.getElementById('edit-team-webhook-name').value = team.webhook_name || '';
+            document.getElementById('edit-team-webhook-avatar-url').value = team.webhook_avatar_url || '';
+        });
+    }
+})();
+
+/* =============================================
+   AUTO-TRACK TAB JS
+   ============================================= */
+const atGuildId = '<%= guild.id %>';
+
+function atShowStatus(msg, type) {
+    const el = document.getElementById('at-status');
+    el.textContent = msg;
+    el.className = 'at-status-msg ' + type;
+    setTimeout(() => { el.className = 'at-status-msg'; }, 4000);
+}
+
+function atParseStreamEnd(val) {
+    if (val === 'edit') return { delete_on_end: true, edit_on_end: true };
+    if (val === 'keep') return { delete_on_end: false, edit_on_end: false };
+    return { delete_on_end: true, edit_on_end: false };
+}
+
+document.getElementById('at-add-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const streamEnd = atParseStreamEnd(e.target.stream_end.value);
+    const body = {
+        role_id: e.target.role_id.value || null,
+        announcement_channel_id: e.target.announcement_channel_id.value,
+        live_role_id: e.target.live_role_id.value || null,
+        delete_on_end: streamEnd.delete_on_end,
+        edit_on_end: streamEnd.edit_on_end
+    };
+    if (!body.announcement_channel_id) {
+        atShowStatus('Please select a channel.', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(`/api/guilds/${atGuildId}/auto-track/configs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            try { const data = JSON.parse(text); atShowStatus(data.error || `Error ${res.status}`, 'error'); }
+            catch { atShowStatus(`Server error ${res.status}`, 'error'); }
+            return;
+        }
+        const data = await res.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            atShowStatus(data.error || 'Failed to add mapping', 'error');
+        }
+    } catch (err) {
+        atShowStatus('Error: ' + err.message, 'error');
+    }
+});
+
+async function atEdit(autoId) {
+    try {
+        const streamEnd = atParseStreamEnd(document.getElementById(`at-streamend-${autoId}`).value);
+        const body = {
+            role_id: document.getElementById(`at-role-${autoId}`).value || null,
+            announcement_channel_id: document.getElementById(`at-channel-${autoId}`).value,
+            live_role_id: document.getElementById(`at-liverole-${autoId}`).value || null,
+            delete_on_end: streamEnd.delete_on_end,
+            edit_on_end: streamEnd.edit_on_end
+        };
+        const res = await fetch(`/api/guilds/${atGuildId}/auto-track/configs/${autoId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+            const text = await res.text();
+            try { const data = JSON.parse(text); atShowStatus(data.error || `Error ${res.status}`, 'error'); }
+            catch { atShowStatus(`Server error ${res.status}: ${text.substring(0, 100)}`, 'error'); }
+            return;
+        }
+        const data = await res.json();
+        if (data.success) {
+            atShowStatus('Mapping updated successfully', 'success');
+        } else {
+            atShowStatus(data.error || 'Failed to update mapping', 'error');
+        }
+    } catch (err) {
+        atShowStatus('Error: ' + err.message, 'error');
+    }
+}
+
+async function atToggle(autoId) {
+    try {
+        const res = await fetch(`/api/guilds/${atGuildId}/auto-track/configs/${autoId}/toggle`, { method: 'PATCH' });
+        if (!res.ok) {
+            const text = await res.text();
+            try { const data = JSON.parse(text); atShowStatus(data.error || `Error ${res.status}`, 'error'); }
+            catch { atShowStatus(`Server error ${res.status}`, 'error'); }
+            return;
+        }
+        const data = await res.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            atShowStatus(data.error || 'Failed to toggle mapping', 'error');
+        }
+    } catch (err) {
+        atShowStatus('Error: ' + err.message, 'error');
+    }
+}
+
+async function atDelete(autoId) {
+    if (!confirm('Remove this auto-track mapping?')) return;
+    try {
+        const res = await fetch(`/api/guilds/${atGuildId}/auto-track/configs/${autoId}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const text = await res.text();
+            try { const data = JSON.parse(text); atShowStatus(data.error || `Error ${res.status}`, 'error'); }
+            catch { atShowStatus(`Server error ${res.status}`, 'error'); }
+            return;
+        }
+        const data = await res.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            atShowStatus(data.error || 'Failed to delete mapping', 'error');
+        }
+    } catch (err) {
+        atShowStatus('Error: ' + err.message, 'error');
+    }
+}
+</script>

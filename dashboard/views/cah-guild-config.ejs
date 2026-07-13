@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>CAH Guild Config — CertiFried MultiTool</title>
+<%- include('components/cah-shell-head') %>
+<style>
+    .hero { padding: 2rem 0 1rem; }
+    .hero h1 { font-size: 1.8rem; font-weight: 800; }
+    .hero p { color: var(--text-secondary); margin-top: 0.3rem; font-size: 0.9rem; }
+    .hero code { background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 0.15rem 0.5rem; border-radius: 5px; font-size: 0.85rem; font-family: ui-monospace, monospace; }
+
+    .config-card { max-width: 720px; }
+    .config-card h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 1.5rem 0 0.75rem; }
+    .config-card h3:first-child { margin-top: 0; }
+
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-row .label { display: flex; flex-direction: column; gap: 0.15rem; }
+    .toggle-row .label .title { font-weight: 500; font-size: 0.95rem; }
+    .toggle-row .label .desc { color: var(--text-muted); font-size: 0.8rem; }
+
+    .toggle-switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-switch .slider {
+        position: absolute; cursor: pointer; inset: 0;
+        background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 24px;
+        transition: background 0.2s;
+    }
+    .toggle-switch .slider::before {
+        content: ""; position: absolute; height: 18px; width: 18px;
+        left: 2px; bottom: 2px; background: var(--text-secondary); border-radius: 50%;
+        transition: transform 0.2s, background 0.2s;
+    }
+    .toggle-switch input:checked + .slider { background: var(--accent-purple-dim); border-color: var(--accent-purple); }
+    .toggle-switch input:checked + .slider::before { transform: translateX(20px); background: var(--accent-purple); }
+
+    .field-row { display: grid; grid-template-columns: 1fr 120px; gap: 1rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--border-color); }
+    .field-row:last-child { border-bottom: none; }
+    .field-row .label .title { font-weight: 500; font-size: 0.95rem; }
+    .field-row .label .desc { color: var(--text-muted); font-size: 0.8rem; }
+    .field-row input { padding: 0.5rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; text-align: center; font-family: inherit; }
+    .field-row input:focus { outline: none; border-color: var(--accent-purple); }
+
+    #toast { display: none; margin-top: 1rem; }
+</style>
+</head>
+<body>
+<%- include('components/cah-shell-nav', { user, page: 'config' }) %>
+<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'CAH' }, { label: 'Guild Config' }] }) %>
+
+<div class="container">
+    <section class="hero">
+        <h1>🃏 CAH Guild Config</h1>
+        <p>Per-guild rules and defaults · Guild: <code><%= guildId %></code></p>
+    </section>
+
+    <form class="card config-card" onsubmit="return save(event)">
+        <h3>Permissions</h3>
+        <div class="toggle-row">
+            <div class="label">
+                <span class="title">Allow NSFW decks</span>
+                <span class="desc">Hosts can still opt in or out per game.</span>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="nsfw_allowed" <%= cfg.nsfw_allowed ? 'checked' : '' %>>
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="toggle-row">
+            <div class="label">
+                <span class="title">Allow blank cards</span>
+                <span class="desc">Lets hosts add write-your-own white cards.</span>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="blank_cards_allowed" <%= cfg.blank_cards_allowed ? 'checked' : '' %>>
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="toggle-row">
+            <div class="label">
+                <span class="title">Allow CrCast imports</span>
+                <span class="desc">Any guild member can <code>/cah decks add</code>.</span>
+            </div>
+            <label class="toggle-switch">
+                <input type="checkbox" id="allow_public_imports" <%= cfg.allow_public_imports ? 'checked' : '' %>>
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <h3>Game Defaults</h3>
+        <div class="field-row">
+            <div class="label">
+                <span class="title">Max blank cards / game</span>
+                <span class="desc">Cap on host-requested ✍️ blanks.</span>
+            </div>
+            <input type="number" id="max_blank_cards" min="0" max="50" value="<%= cfg.max_blank_cards %>">
+        </div>
+        <div class="field-row">
+            <div class="label">
+                <span class="title">Default points to win</span>
+                <span class="desc">Used when host doesn't override.</span>
+            </div>
+            <input type="number" id="default_points" min="3" max="30" value="<%= cfg.default_points %>">
+        </div>
+        <div class="field-row">
+            <div class="label">
+                <span class="title">Default max rounds</span>
+                <span class="desc">Round cap before game ends.</span>
+            </div>
+            <input type="number" id="default_max_rounds" min="3" max="50" value="<%= cfg.default_max_rounds %>">
+        </div>
+        <div class="field-row">
+            <div class="label">
+                <span class="title">Default round timeout</span>
+                <span class="desc">Seconds before AFK kick fires.</span>
+            </div>
+            <input type="number" id="default_timeout_secs" min="30" max="600" value="<%= cfg.default_timeout_secs %>">
+        </div>
+
+        <div style="margin-top: 1.5rem; display: flex; gap: 0.75rem; align-items: center;">
+            <button class="btn btn-primary btn-lg" type="submit">Save Config</button>
+            <div id="toast" class="toast"></div>
+        </div>
+    </form>
+</div>
+
+<script>
+    async function save(e) {
+        e.preventDefault();
+        const body = {
+            nsfw_allowed: document.getElementById('nsfw_allowed').checked,
+            blank_cards_allowed: document.getElementById('blank_cards_allowed').checked,
+            allow_public_imports: document.getElementById('allow_public_imports').checked,
+            max_blank_cards: document.getElementById('max_blank_cards').value,
+            default_points: document.getElementById('default_points').value,
+            default_max_rounds: document.getElementById('default_max_rounds').value,
+            default_timeout_secs: document.getElementById('default_timeout_secs').value
+        };
+        const res = await cfetch(location.pathname, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        const toast = document.getElementById('toast');
+        toast.className = 'toast ' + (data.ok ? 'ok' : 'err');
+        toast.textContent = data.ok ? '✅ Saved' : '⚠️ ' + data.reason;
+        toast.style.display = 'inline-block';
+        setTimeout(() => toast.style.display = 'none', 2500);
+        return false;
+    }
+</script>
+</body>
+</html>

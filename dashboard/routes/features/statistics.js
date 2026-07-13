@@ -53,7 +53,7 @@ router.get('/manage/:guildId/serverstats', async (req, res) => {
     );
 
     // Get top message senders
-    const [topMessagers] = await pool.execute(
+    const [topMessagersRaw] = await pool.execute(
       `SELECT user_id, SUM(message_count) as total_messages
        FROM message_stats
        WHERE guild_id = ? AND ${statDateCondition}
@@ -64,7 +64,7 @@ router.get('/manage/:guildId/serverstats', async (req, res) => {
     );
 
     // Get channel activity
-    const [channelActivity] = await pool.execute(
+    const [channelActivityRaw] = await pool.execute(
       `SELECT channel_id, SUM(message_count) as total_messages
        FROM message_stats
        WHERE guild_id = ? AND ${statDateCondition}
@@ -73,6 +73,30 @@ router.get('/manage/:guildId/serverstats', async (req, res) => {
        LIMIT 10`,
       [guildId]
     );
+
+    // Resolve user and channel names from Discord cache
+    const botClient = global.botManager?.getClientForGuild(guildId) || req.app?.locals?.client;
+    const guild = botClient?.guilds?.cache?.get(guildId);
+
+    const topMessagers = await Promise.all(topMessagersRaw.map(async (row) => {
+      let username = null;
+      if (guild) {
+        try {
+          const member = guild.members.cache.get(row.user_id) || await guild.members.fetch(row.user_id).catch(() => null);
+          username = member?.displayName || member?.user?.username || null;
+        } catch { /* ignore */ }
+      }
+      return { ...row, username };
+    }));
+
+    const channelActivity = channelActivityRaw.map(row => {
+      let channel_name = null;
+      if (guild) {
+        const channel = guild.channels.cache.get(row.channel_id);
+        channel_name = channel?.name || null;
+      }
+      return { ...row, channel_name };
+    });
 
     // Get peak activity hours (heatmap data)
     const [peakHours] = await pool.execute(
@@ -155,7 +179,7 @@ router.get('/manage/:guildId/emojistats', async (req, res) => {
     );
 
     // Get top emoji users
-    const [topUsers] = await pool.execute(
+    const [topUsersRaw] = await pool.execute(
       `SELECT user_id, SUM(usage_count) as total_emoji_uses
        FROM emoji_usage
        WHERE guild_id = ? AND ${dateCondition.replace('used_at', 'stat_date')}
@@ -164,6 +188,20 @@ router.get('/manage/:guildId/emojistats', async (req, res) => {
        LIMIT 10`,
       [guildId]
     );
+
+    // Resolve usernames
+    const eBotClient = global.botManager?.getClientForGuild(guildId) || req.app?.locals?.client;
+    const eGuild = eBotClient?.guilds?.cache?.get(guildId);
+    const topUsers = await Promise.all(topUsersRaw.map(async (row) => {
+      let username = null;
+      if (eGuild) {
+        try {
+          const member = eGuild.members.cache.get(row.user_id) || await eGuild.members.fetch(row.user_id).catch(() => null);
+          username = member?.displayName || member?.user?.username || null;
+        } catch { /* ignore */ }
+      }
+      return { ...row, username };
+    }));
 
     // Get emoji usage over time (daily)
     const [dailyUsage] = await pool.execute(
@@ -196,6 +234,71 @@ router.get('/manage/:guildId/emojistats', async (req, res) => {
   } catch (error) {
     logger.error('[Dashboard] Error fetching emoji stats:', { error: error.message });
     res.status(500).json({ error: 'Failed to fetch emoji stats' });
+  }
+});
+
+// Audit log — paginated, filterable
+router.get('/manage/:guildId/audit-logs', async (req, res) => {
+  try {
+    const { guildId } = req.params;
+    const { page = 1, limit = 50, type, user } = req.query;
+    const offset = (Math.max(1, parseInt(page)) - 1) * parseInt(limit);
+
+    let where = 'WHERE guild_id = ?';
+    const params = [guildId];
+
+    if (type) { where += ' AND event_type = ?'; params.push(type); }
+    if (user) { where += ' AND (user_id = ? OR target_id = ? OR moderator_id = ?)'; params.push(user, user, user); }
+
+    const [[{ total }]] = await pool.execute(`SELECT COUNT(*) as total FROM audit_logs ${where}`, params);
+
+    const [logs] = await pool.execute(
+      `SELECT * FROM audit_logs ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
+
+    // Resolve usernames
+    const botClient = global.botManager?.getClientForGuild(guildId) || req.app?.locals?.client;
+    const guild = botClient?.guilds?.cache?.get(guildId);
+    const userCache = new Map();
+
+    async function resolveName(userId) {
+      if (!userId) return null;
+      if (userCache.has(userId)) return userCache.get(userId);
+      let name = null;
+      if (guild) {
+        try {
+          const m = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+          name = m?.displayName || m?.user?.username || null;
+        } catch {}
+      }
+      if (!name) {
+        try { const u = await botClient.users.fetch(userId).catch(() => null); name = u?.username || null; } catch {}
+      }
+      userCache.set(userId, name);
+      return name;
+    }
+
+    const enriched = await Promise.all(logs.map(async log => ({
+      ...log,
+      userName: await resolveName(log.user_id),
+      targetName: await resolveName(log.target_id),
+      moderatorName: await resolveName(log.moderator_id)
+    })));
+
+    // Get available event types for filter dropdown
+    const [types] = await pool.execute('SELECT DISTINCT event_type FROM audit_logs WHERE guild_id = ? ORDER BY event_type', [guildId]);
+
+    res.json({
+      logs: enriched,
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / parseInt(limit)),
+      eventTypes: types.map(t => t.event_type)
+    });
+  } catch (error) {
+    logger.error('[Dashboard] Error fetching audit logs:', { error: error.message });
+    res.status(500).json({ error: 'Failed to fetch audit logs' });
   }
 });
 

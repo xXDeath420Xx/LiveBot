@@ -121,7 +121,12 @@ export async function handleList(interaction) {
         try {
             const user = await interaction.client.users.fetch(birthday.userId).catch(() => null);
             const username = user ? user.username : 'Unknown User';
-            const dateStr = `${monthNames[birthday.month - 1]} ${birthday.day}`;
+            let dateStr = `${monthNames[birthday.month - 1]} ${birthday.day}`;
+            // The year is optional — only shown by members who chose to give one.
+            if (birthday.year) {
+                dateStr += `, ${birthday.year}`;
+                if (birthday.turningAge) dateStr += ` — turning ${birthday.turningAge}`;
+            }
             const daysText = birthday.daysUntil === 0 ? 'Today!' :
                             birthday.daysUntil === 1 ? 'Tomorrow' :
                             `in ${birthday.daysUntil} days`;

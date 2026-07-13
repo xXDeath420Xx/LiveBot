@@ -57,6 +57,7 @@ function req(session, method, path, body) {
 export async function play(session, uri)   { return req(session, 'POST', '/player/play', { uri }); }
 export async function pause(session)        { return req(session, 'POST', '/player/pause'); }
 export async function resume(session)       { return req(session, 'POST', '/player/resume'); }
+export async function next(session)         { return req(session, 'POST', '/player/next').catch(() => {}); }
 export async function stop(session)         { return req(session, 'POST', '/player/pause').catch(() => {}); }
 export async function getStatus(session)    { const r = await req(session, 'GET', '/status'); try { return JSON.parse(r.body); } catch { return null; } }
 

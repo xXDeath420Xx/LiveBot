@@ -7,8 +7,10 @@ import logger from './logger.js';
 
 class PlatformCache {
   constructor(options = {}) {
-    // Default TTL: 30 seconds (stream status doesn't need real-time updates)
-    this.ttl = options.ttl || 30000;
+    // Default TTL: 90 seconds — must survive the full stream-check cycle
+    // (default bot + all custom bots can take 60+ seconds total)
+    // This ensures all bots in a cycle see the same API result and don't race.
+    this.ttl = options.ttl || 90000;
     // Cache storage: Map<cacheKey, { data, timestamp }>
     this.cache = new Map();
     // Max cache size to prevent memory issues

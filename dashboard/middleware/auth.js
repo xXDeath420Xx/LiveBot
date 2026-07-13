@@ -32,6 +32,38 @@ export async function checkAuth(req, res, next) {
 }
 
 /**
+ * Soft authentication — sets req.user if logged in, but lets unauth'd users
+ * through. Use for routes that have a logged-in experience AND a public
+ * (read-only / browse) experience. Views should defensively handle `user`
+ * being undefined.
+ */
+export function optionalAuth(req, res, next) {
+    if (req.isAuthenticated && req.isAuthenticated()) {
+        req.user.isSuperAdmin = isSuperAdmin(req.user.id);
+    }
+    return next();
+}
+
+/**
+ * Authenticated OR guest identity. For CAH public play — accepts a Discord
+ * user OR a session-stored guest identity (set via POST /cah/guest/identity).
+ * Sets req.identity = { id, displayName, kind: 'discord' | 'guest' }.
+ * Use on routes that need *some* identity but don't care which.
+ */
+export function authOrGuest(req, res, next) {
+    if (req.isAuthenticated && req.isAuthenticated()) {
+        req.identity = { id: req.user.id, displayName: req.user.username || req.user.global_name || 'Player', kind: 'discord' };
+        return next();
+    }
+    const guest = req.session?.cahGuest;
+    if (guest?.id && guest.displayName) {
+        req.identity = { id: guest.id, displayName: guest.displayName, kind: 'guest' };
+        return next();
+    }
+    return res.status(401).json({ ok: false, reason: 'identity_required', message: 'Pick a username first (POST /cah/guest/identity).' });
+}
+
+/**
  * Check if user has admin permissions for the guild
  * Also sets req.guildObject with the Discord.js guild object
  */
@@ -51,10 +83,8 @@ export function checkGuildAdmin(req, res, next) {
             }
 
             if (!guildObject) {
-                return res.status(403).render('error', {
-                    user: req.user,
-                    error: 'The bot is not in this server.'
-                });
+                const botClientId = process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
+                return res.redirect(`https://discord.com/oauth2/authorize?client_id=${botClientId}&permissions=8&scope=bot+applications.commands&guild_id=${req.params.guildId}&disable_guild_select=true`);
             }
 
             req.guildObject = guildObject;
@@ -82,10 +112,8 @@ export function checkGuildAdmin(req, res, next) {
         }
 
         if (!guildObject) {
-            return res.status(403).render('error', {
-                user: req.user,
-                error: 'The bot is not in this server.'
-            });
+            const botClientId = process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
+            return res.redirect(`https://discord.com/oauth2/authorize?client_id=${botClientId}&permissions=8&scope=bot+applications.commands&guild_id=${req.params.guildId}&disable_guild_select=true`);
         }
 
         req.guildObject = guildObject;

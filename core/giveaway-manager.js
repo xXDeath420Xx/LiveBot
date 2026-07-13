@@ -10,6 +10,11 @@ class GiveawayManager {
 
   async checkGiveaways() {
     try {
+      // Cleanup stale giveaways that no bot could end (e.g., bot left guild)
+      await pool.execute(
+        'UPDATE giveaways SET is_active = 0 WHERE is_active = 1 AND ends_at <= DATE_SUB(NOW(), INTERVAL 7 DAY)'
+      );
+
       const [activeGiveaways] = await pool.execute(
         'SELECT * FROM giveaways WHERE is_active = 1 AND ends_at <= NOW()'
       );
@@ -35,31 +40,22 @@ class GiveawayManager {
       const guild = this.client.guilds.cache.get(guildId);
 
       if (!guild) {
-        logger.warn(`[GiveawayManager] Guild not found for giveaway ${giveaway.id}. Marking as inactive.`, {
-          guildId
-        });
-        await pool.execute('UPDATE giveaways SET is_active = 0 WHERE id = ?', [giveaway.id]);
-        return;
+        logger.debug(`[GiveawayManager] Guild ${guildId} not in cache for bot — skipping giveaway ${giveaway.id}`);
+        return; // Don't mark inactive — another bot may handle this guild
       }
 
       const channel = await guild.channels.fetch(giveaway.channel_id).catch(() => null);
 
       if (!channel) {
-        logger.warn(`[GiveawayManager] Channel not found for giveaway ${giveaway.id}. Marking as inactive.`, {
-          guildId
-        });
-        await pool.execute('UPDATE giveaways SET is_active = 0 WHERE id = ?', [giveaway.id]);
-        return;
+        logger.debug(`[GiveawayManager] Channel not found for giveaway ${giveaway.id} in guild ${guildId} — skipping`);
+        return; // Don't mark inactive — channel may be accessible to another bot
       }
 
       const message = await channel.messages.fetch(giveaway.message_id).catch(() => null);
 
       if (!message) {
-        logger.warn(`[GiveawayManager] Message not found for giveaway ${giveaway.id}. Marking as inactive.`, {
-          guildId
-        });
-        await pool.execute('UPDATE giveaways SET is_active = 0 WHERE id = ?', [giveaway.id]);
-        return;
+        logger.debug(`[GiveawayManager] Message not found for giveaway ${giveaway.id} in guild ${guildId} — skipping`);
+        return; // Don't mark inactive — message may be accessible to another bot
       }
 
       const reaction = message.reactions.cache.get('🎉');

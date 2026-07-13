@@ -1,9 +1,15 @@
 import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
 import pool from '../../utils/db.js';
+import logger from '../../utils/logger.js';
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const GOOGLE_CSE_ID = process.env.GOOGLE_CSE_ID;
+
+// Track Google API health so we skip it entirely after a hard fail (403 etc.)
+// until the process restarts. Avoids burning every /fun animals call on a
+// dead API.
+let googleDisabledUntilRestart = false;
 
 const animalEmojis = {
   dog: '🐕', cat: '🐱', fox: '🦊', bird: '🐦', rabbit: '🐰', panda: '🐼',
@@ -32,7 +38,7 @@ function getAnimalEmoji(animal) {
 }
 
 async function searchGoogleImages(animalName, imageType = 'photo', count = 10) {
-  if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID) return [];
+  if (!GOOGLE_API_KEY || !GOOGLE_CSE_ID || googleDisabledUntilRestart) return [];
   try {
     const params = {
       key: GOOGLE_API_KEY, cx: GOOGLE_CSE_ID,
@@ -47,9 +53,82 @@ async function searchGoogleImages(animalName, imageType = 'photo', count = 10) {
       return response.data.items.map(item => ({ url: item.link, title: item.title, source: item.displayLink, isGif: imageType === 'gif' }));
     }
   } catch (error) {
-    console.error('[Animal Command] Google Search error:', error.response?.data?.error?.message || error.message);
+    const status = error.response?.status;
+    const reason = error.response?.data?.error?.errors?.[0]?.reason;
+    const msg = error.response?.data?.error?.message || error.message;
+    // Kill-switch on hard configuration/quota errors so we don't keep hammering.
+    if (status === 403 || status === 429 || reason === 'accessNotConfigured' || reason === 'quotaExceeded') {
+      googleDisabledUntilRestart = true;
+      logger.warn(`[Animal Command] Google CSE disabled for session (${status}/${reason}): ${String(msg).slice(0, 200)}`);
+    } else {
+      logger.warn(`[Animal Command] Google Search error: ${String(msg).slice(0, 200)}`);
+    }
   }
   return [];
+}
+
+// Free fallback — Wikimedia Commons. No key, unlimited, has every animal.
+// Returns image URLs via the File: namespace (ns 6). Fetches MORE than count
+// then filters out any URLs that fail a HEAD check, so broken thumbnails don't
+// slip into the embed.
+async function searchWikimediaImages(animalName, imageType = 'photo', count = 10) {
+  try {
+    const searchQuery = imageType === 'gif' ? `${animalName} animation` : `${animalName} animal`;
+    const searchRes = await axios.get('https://commons.wikimedia.org/w/api.php', {
+      params: {
+        action: 'query', format: 'json', origin: '*',
+        generator: 'search',
+        gsrsearch: `filetype:bitmap|drawing ${searchQuery}`,
+        gsrnamespace: 6, gsrlimit: Math.max(count * 2, 20), // over-fetch so we can discard broken URLs
+        prop: 'imageinfo', iiprop: 'url|mime|size',
+        iiurlwidth: 800,
+      },
+      headers: { 'User-Agent': 'CertiFriedUtility-Bot/2.0 (discord bot; contact admin)' },
+      timeout: 15000,
+    });
+
+    const pages = searchRes.data?.query?.pages;
+    if (!pages) return [];
+    const candidates = [];
+    for (const page of Object.values(pages)) {
+      const info = page.imageinfo?.[0];
+      if (!info?.url) continue;
+      const mime = info.mime || '';
+      if (imageType === 'gif' && !/gif|webm|apng/.test(mime)) continue;
+      if (imageType !== 'gif' && !/jpeg|jpg|png|webp/.test(mime)) continue;
+      const url = info.thumburl || info.url;
+      // Discord ignores URLs without an explicit image extension. Wikimedia
+      // thumbnails end in the source extension so this holds for normal files.
+      if (!/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(url)) continue;
+      // Filter out SVG-derived PNG thumbs that commonly 404 at some widths.
+      if (/\/thumb\/.*\.svg\//i.test(url)) continue;
+      candidates.push({
+        url, title: page.title, source: 'Wikimedia Commons', isGif: imageType === 'gif',
+      });
+    }
+
+    // HEAD-check concurrently and keep only URLs that return 200 + image mime.
+    const checks = await Promise.all(candidates.map(c =>
+      axios.head(c.url, {
+        timeout: 5000,
+        headers: { 'User-Agent': 'CertiFriedUtility-Bot/2.0' },
+        validateStatus: s => s === 200,
+      }).then(r => (r.headers['content-type'] || '').startsWith('image/') ? c : null)
+        .catch(() => null)
+    ));
+    const good = checks.filter(Boolean);
+    return good.slice(0, count);
+  } catch (error) {
+    logger.warn(`[Animal Command] Wikimedia fallback error: ${error.message?.slice(0, 200)}`);
+    return [];
+  }
+}
+
+async function searchAnimalImages(animalName, imageType, count) {
+  // Primary: Google CSE. Fallback: Wikimedia Commons.
+  const viaGoogle = await searchGoogleImages(animalName, imageType, count);
+  if (viaGoogle.length) return viaGoogle;
+  return searchWikimediaImages(animalName, imageType, count);
 }
 
 async function getUserSeenImages(userId, animalName) {
@@ -86,7 +165,7 @@ export async function handleSearch(interaction) {
 
   await interaction.deferReply();
 
-  const images = await searchGoogleImages(animalName, imageType, 10);
+  const images = await searchAnimalImages(animalName, imageType, 10);
   if (images.length === 0) {
     return interaction.editReply({ content: `😔 Sorry, I couldn't find any pictures of "${animalName}". Try a different search term!` });
   }

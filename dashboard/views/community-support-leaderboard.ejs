@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/tokes-bot.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         .rank-badge {
             display: inline-flex;
@@ -409,6 +410,7 @@
                                                             <th class="hide-mobile">Status</th>
                                                             <th>Pts</th>
                                                             <th>Proof</th>
+                                                            <% if (typeof isAdmin !== 'undefined' && isAdmin) { %><th>Admin</th><% } %>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -432,6 +434,19 @@
                                                             <td>
                                                                 <a href="<%= e.messageLink %>" target="_blank" rel="noopener" class="proof-link">View</a>
                                                             </td>
+                                                            <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
+                                                            <td class="admin-actions">
+                                                                <button class="admin-btn admin-btn-edit" onclick="editEntry(<%= e.id %>, '<%= e.target %>', '<%= e.targetTwitchId %>', <%= e.isAffiliate %>, <%= e.points %>, '<%= e.type %>')" title="Edit">
+                                                                    <i class="fas fa-edit"></i>
+                                                                </button>
+                                                                <button class="admin-btn admin-btn-repost" onclick="repostEntry(<%= e.id %>)" title="Repost bot response in Discord">
+                                                                    <i class="fas fa-sync-alt"></i>
+                                                                </button>
+                                                                <button class="admin-btn admin-btn-delete" onclick="deleteEntry(<%= e.id %>)" title="Delete">
+                                                                    <i class="fas fa-trash"></i>
+                                                                </button>
+                                                            </td>
+                                                            <% } %>
                                                         </tr>
                                                         <% }); %>
                                                     </tbody>
@@ -480,13 +495,207 @@
         </div>
     </main>
 
+    <style>
+    .admin-actions { white-space: nowrap; }
+    .admin-btn {
+        background: none; border: none; cursor: pointer; padding: 4px 6px;
+        border-radius: 4px; font-size: 0.75rem; transition: background 0.2s;
+    }
+    .admin-btn-edit { color: #a78bfa; }
+    .admin-btn-edit:hover { background: rgba(167,139,250,0.15); }
+    .admin-btn-repost { color: #22d3ee; }
+    .admin-btn-repost:hover { background: rgba(34,211,238,0.15); }
+    .admin-btn-delete { color: #f87171; }
+    .admin-btn-delete:hover { background: rgba(248,113,113,0.15); }
+    .edit-modal-overlay {
+        display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+        z-index: 9999; align-items: center; justify-content: center;
+    }
+    .edit-modal-overlay.open { display: flex; }
+    .edit-modal {
+        background: #1a1d21; border: 1px solid rgba(167,139,250,0.3); border-radius: 12px;
+        padding: 24px; width: 400px; max-width: 90vw;
+    }
+    .edit-modal h3 { margin: 0 0 16px; color: #fff; font-size: 1.1rem; }
+    .edit-modal label { display: block; font-size: 0.8rem; color: rgba(255,255,255,0.7); margin: 8px 0 4px; }
+    .edit-modal input, .edit-modal select {
+        width: 100%; padding: 8px 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 6px; color: #fff; font-size: 0.85rem;
+    }
+    .edit-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .edit-modal-btn {
+        padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600;
+        font-size: 0.85rem; cursor: pointer;
+    }
+    .edit-modal-save { background: #a78bfa; color: #fff; }
+    .edit-modal-cancel { background: rgba(255,255,255,0.1); color: #fff; }
+    .admin-status-msg {
+        position: fixed; top: 20px; right: 20px; padding: 10px 20px; border-radius: 8px;
+        font-size: 0.85rem; z-index: 10000; display: none;
+    }
+    .admin-status-msg.success { display: block; background: rgba(35,245,107,0.15); color: #23f56b; border: 1px solid rgba(35,245,107,0.3); }
+    .admin-status-msg.error { display: block; background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+    </style>
+
+    <div id="admin-status" class="admin-status-msg"></div>
+
+    <div id="edit-modal" class="edit-modal-overlay">
+        <div class="edit-modal">
+            <h3>Edit Support Entry</h3>
+            <input type="hidden" id="edit-entry-id">
+            <label>Streamer Username</label>
+            <input type="text" id="edit-target-username">
+            <label>Twitch ID</label>
+            <input type="text" id="edit-target-twitch-id">
+            <label>Type</label>
+            <select id="edit-entry-type">
+                <option value="raid">Raid</option>
+                <option value="support">Support</option>
+            </select>
+            <label>Affiliate</label>
+            <select id="edit-is-affiliate">
+                <option value="1">Affiliate</option>
+                <option value="0">Non-Affiliate</option>
+            </select>
+            <label>Points</label>
+            <input type="number" id="edit-points" min="0">
+            <div class="edit-modal-actions">
+                <button class="edit-modal-btn edit-modal-cancel" onclick="closeEditModal()">Cancel</button>
+                <button class="edit-modal-btn edit-modal-save" onclick="saveEntry()">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+    const GUILD_ID = '<%= guild ? guild.id : "" %>';
+
     function toggleDetail(idx) {
         const row = document.getElementById('detail-' + idx);
         const icon = document.getElementById('expand-icon-' + idx);
         if (!row) return;
         row.classList.toggle('open');
         if (icon) icon.classList.toggle('open');
+    }
+
+    function showStatus(msg, type) {
+        const el = document.getElementById('admin-status');
+        if (!el) return;
+        el.textContent = msg;
+        el.className = 'admin-status-msg ' + type;
+        setTimeout(() => { el.className = 'admin-status-msg'; }, 4000);
+    }
+
+    var _originalUsername = '';
+    function editEntry(id, target, twitchId, isAffiliate, points, type) {
+        _originalUsername = target;
+        document.getElementById('edit-entry-id').value = id;
+        document.getElementById('edit-target-username').value = target;
+        document.getElementById('edit-target-twitch-id').value = twitchId || '';
+        document.getElementById('edit-entry-type').value = type;
+        document.getElementById('edit-is-affiliate').value = isAffiliate ? '1' : '0';
+        document.getElementById('edit-points').value = points;
+        document.getElementById('edit-modal').classList.add('open');
+    }
+
+    function closeEditModal() {
+        document.getElementById('edit-modal').classList.remove('open');
+    }
+
+    async function saveEntry() {
+        var id = document.getElementById('edit-entry-id').value;
+        var newUsername = document.getElementById('edit-target-username').value.trim();
+        var body = {
+            target_username: newUsername,
+            target_twitch_id: document.getElementById('edit-target-twitch-id').value,
+            entry_type: document.getElementById('edit-entry-type').value,
+            target_is_affiliate: document.getElementById('edit-is-affiliate').value === '1',
+            points_awarded: parseInt(document.getElementById('edit-points').value)
+        };
+
+        // Check if username changed — offer bulk rename
+        if (newUsername.toLowerCase() !== _originalUsername.toLowerCase()) {
+            var doRenameAll = confirm('Username changed from "' + _originalUsername + '" to "' + newUsername + '".\n\nRename ALL entries with "' + _originalUsername + '" to "' + newUsername + '"?\n(This will also edit Discord messages)\n\nClick OK to rename all, Cancel to update this entry only.');
+            if (doRenameAll) {
+                try {
+                    showStatus('Renaming all entries and editing Discord messages...', 'success');
+                    var resp = await fetch('/supporters/' + GUILD_ID + '/rename-streamer', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            old_username: _originalUsername,
+                            new_username: newUsername,
+                            new_twitch_id: document.getElementById('edit-target-twitch-id').value || null,
+                            new_is_affiliate: document.getElementById('edit-is-affiliate').value === '1'
+                        })
+                    });
+                    var data = await resp.json();
+                    if (data.success) {
+                        showStatus('Renamed ' + data.updated + ' entries, edited ' + (data.messagesEdited || 0) + ' Discord messages — refreshing...', 'success');
+                        closeEditModal();
+                        setTimeout(function() { location.reload(); }, 1500);
+                    } else {
+                        showStatus(data.error || 'Rename failed', 'error');
+                    }
+                } catch (err) {
+                    showStatus('Network error during rename', 'error');
+                }
+                return;
+            }
+        }
+
+        try {
+            var res2 = await fetch('/api/guilds/' + GUILD_ID + '/community-support/entries/' + id, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            var data2 = await res2.json();
+            if (data2.success) {
+                showStatus('Entry updated — refreshing...', 'success');
+                closeEditModal();
+                setTimeout(function() { location.reload(); }, 1000);
+            } else {
+                showStatus(data2.error || 'Failed to update', 'error');
+            }
+        } catch (err) {
+            showStatus('Network error', 'error');
+        }
+    }
+
+    async function repostEntry(id) {
+        try {
+            showStatus('Reposting...', 'success');
+            const res = await fetch('/api/guilds/' + GUILD_ID + '/community-support/entries/' + id + '/repost', {
+                method: 'POST'
+            });
+            const data = await res.json();
+            if (data.success) {
+                showStatus(data.message, 'success');
+            } else {
+                showStatus(data.error || 'Failed to repost', 'error');
+            }
+        } catch (err) {
+            showStatus('Network error', 'error');
+        }
+    }
+
+    async function deleteEntry(id) {
+        if (!confirm('Delete this support entry? This cannot be undone.')) return;
+        try {
+            const res = await fetch('/api/guilds/' + GUILD_ID + '/community-support/entries/' + id, {
+                method: 'DELETE'
+            });
+            const data = await res.json();
+            if (data.success) {
+                showStatus('Entry deleted — refreshing...', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showStatus(data.error || 'Failed to delete', 'error');
+            }
+        } catch (err) {
+            showStatus('Network error', 'error');
+        }
     }
     </script>
 

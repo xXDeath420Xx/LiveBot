@@ -1,0 +1,71 @@
+<h2>Unified Streaming Page — Layout Options</h2>
+<p class="subtitle">Consolidating 6 scattered pages into one. Which structure feels right?</p>
+
+<div class="options">
+  <div class="option" data-choice="tabs" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Tabbed Sections</h3>
+      <p>Horizontal tabs at top: <strong>Defaults</strong> | <strong>Streamers</strong> | <strong>Teams</strong> | <strong>Auto-Track</strong> | <strong>Schedules</strong></p>
+      <p>Each tab is a self-contained section. "Defaults" holds Live Role, announcement channel, webhook persona, ignored roles, cleanup behavior. "Streamers" is the existing table with stream-ended toggles inline. Clean separation, familiar pattern.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Clean mental model — one tab per concept</li><li>Familiar Discord dashboard pattern</li><li>Easy to add more tabs later</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can't see defaults while editing streamers</li><li>More clicks to switch between related settings</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="accordion" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Collapsible Accordion Sections</h3>
+      <p>Single scrollable page with collapsible sections: <strong>Global Defaults</strong> → <strong>Streamers</strong> → <strong>Teams</strong> → <strong>Auto-Track</strong> → <strong>Schedules</strong></p>
+      <p>All on one page, expand what you need. "Global Defaults" starts open. Streamers section shows the table with inline stream-ended toggles. Everything visible in context.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Everything on one page — no tab switching</li><li>Can keep defaults visible while scrolling to streamers</li><li>Natural top-to-bottom setup flow</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can get long for guilds with many streamers</li><li>Less visual separation between sections</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="hybrid" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Hybrid — Sticky Defaults + Tabs Below</h3>
+      <p>Global Defaults always visible at top (compact card). Below that, tabs for: <strong>Streamers</strong> | <strong>Teams</strong> | <strong>Auto-Track</strong> | <strong>Schedules</strong></p>
+      <p>Best of both — you always see your channel/role/webhook settings while managing individual streamers below. Stream-ended behavior is inline per-streamer in the table.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Defaults always in view — never lost</li><li>Clean tab separation for the detail views</li><li>Natural "configure once, manage many" flow</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Slightly more complex layout</li><li>Less vertical space for streamer table</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem; padding: 1.5rem; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);">
+  <h3 style="margin-top:0">What's being consolidated</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 14px;">
+    <div>
+      <p class="label">Currently 6 separate pages:</p>
+      <ul style="line-height: 1.8">
+        <li><strong>Core Settings</strong> → Live Role</li>
+        <li><strong>Announcements</strong> → Channel, webhook, message template, ignored roles</li>
+        <li><strong>Streamers</strong> → Add/edit/delete subscriptions</li>
+        <li><strong>Stream-Ended</strong> → Delete/edit-on-end per subscription</li>
+        <li><strong>Teams</strong> → Twitch team subscriptions</li>
+        <li><strong>Auto-Track</strong> → Role-based auto-tracking</li>
+        <li><strong>Twitch Schedules</strong> → Schedule syncs</li>
+      </ul>
+    </div>
+    <div>
+      <p class="label">Becomes 1 page with sections:</p>
+      <ul style="line-height: 1.8">
+        <li><strong>Global Defaults</strong> — Live Role, announcement channel, webhook persona, message template, ignored roles</li>
+        <li><strong>Streamers</strong> — Full table with inline stream-ended toggle per row</li>
+        <li><strong>Teams</strong> — Team subscription management</li>
+        <li><strong>Auto-Track</strong> — Role-based auto-tracking rules</li>
+        <li><strong>Schedules</strong> — Twitch schedule syncs</li>
+      </ul>
+    </div>
+  </div>
+</div>

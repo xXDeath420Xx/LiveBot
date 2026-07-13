@@ -478,6 +478,10 @@ const categories = locals.categories || [];
                     <i class="fas fa-smile"></i>
                     <span>Emoji Stats</span>
                 </a>
+                <a href="/manage/<%= guild.id %>?page=emoji-manager" class="manage-nav-link">
+                    <i class="fas fa-icons"></i>
+                    <span>Emoji Manager</span>
+                </a>
             </div>
 
             <div class="manage-nav-section">
@@ -594,7 +598,7 @@ const categories = locals.categories || [];
             'announcements': { partial: 'announcements', data: { guild, settings, channels, roles } },
             'utilities': { partial: 'utilities', data: { guild, settings, autoPublisher: autoPublisherConfig, autoroles: autorolesConfig, tempChannels: tempChannelConfig, roles, channels, categories } },
             'custom-commands': { partial: 'custom-commands', data: { guild, commands: customCommands, roles } },
-            'commands': { partial: 'commands', data: { guild, commands: typeof commandSettings !== 'undefined' ? commandSettings : [] } },
+            'commands': { partial: 'commands', data: { guild, commands: typeof commandSettings !== 'undefined' ? commandSettings : [], commandRestrictions: typeof commandRestrictions !== 'undefined' ? commandRestrictions : {}, guildId: guild.id } },
             'forms': { partial: 'forms', data: { guild, forms: typeof forms !== 'undefined' ? forms : [], channels } },
             'tickets': { partial: 'tickets', data: { guild, ticketConfig, forms: typeof ticketFormsList !== 'undefined' ? ticketFormsList : [], categories, roles } },
             'backups': { partial: 'backups', data: { guild, backups: typeof backups !== 'undefined' ? backups : [] } },
@@ -606,6 +610,7 @@ const categories = locals.categories || [];
             'achievements': { partial: 'achievements', data: { guild } },
             'serverstats': { partial: 'serverstats', data: { guild } },
             'emojistats': { partial: 'emojistats', data: { guild } },
+            'emoji-manager': { partial: 'emoji-manager', data: { guild } },
             'confessions': { partial: 'confessions', data: { guild, channels } },
             'timecapsules': { partial: 'timecapsules', data: { guild } },
             'automemes': { partial: 'automemes', data: { guild, channels } },

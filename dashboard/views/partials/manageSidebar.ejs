@@ -14,6 +14,7 @@ const sections = [
         items: [
             { id: 'overview', label: 'Overview', icon: 'home', href: `/manage/${guildId}` },
             { id: 'core', label: 'Core Settings', icon: 'cog', href: `/manage/${guildId}?section=core` },
+            { id: 'command-center', label: 'Command Center', icon: 'terminal', href: `/manage/${guildId}?section=command-center` },
             { id: 'appearance', label: 'Appearance', icon: 'palette', href: `/manage/${guildId}?section=appearance` }
         ]
     },
@@ -33,6 +34,7 @@ const sections = [
             { id: 'leveling', label: 'Leveling', icon: 'trending-up', href: `/manage/${guildId}?section=leveling` },
             { id: 'rankcard', label: 'Rank Card', icon: 'id-card', href: `/manage/${guildId}?section=rankcard` },
             { id: 'economy', label: 'Economy', icon: 'coins', href: `/manage/${guildId}?section=economy` },
+            { id: 'owo', label: 'OwO Hunt', icon: 'paw', href: `/manage/${guildId}?page=owo` },
             { id: 'reaction-roles', label: 'Reaction Roles', icon: 'tag', href: `/manage/${guildId}?section=reaction-roles` }
         ]
     },
@@ -50,19 +52,22 @@ const sections = [
             { id: 'tickets', label: 'Tickets', icon: 'ticket', href: `/manage/${guildId}?section=tickets` },
             { id: 'suggestions', label: 'Suggestions', icon: 'lightbulb', href: `/manage/${guildId}?section=suggestions` },
             { id: 'polls', label: 'Polls', icon: 'chart-bar', href: `/manage/${guildId}?section=polls` },
-            { id: 'giveaways', label: 'Giveaways', icon: 'gift', href: `/manage/${guildId}?section=giveaways` }
+            { id: 'giveaways', label: 'Giveaways', icon: 'gift', href: `/manage/${guildId}?section=giveaways` },
+            { id: 'throne', label: 'Throne Wishlists', icon: 'gift', href: `/manage/${guildId}?section=throne` },
         ]
     },
     {
         title: 'Games & Fun',
         items: [
             { id: 'games', label: 'Games', icon: 'gamepad', href: `/manage/${guildId}?section=games` },
-            { id: 'music', label: 'Music', icon: 'music', href: `/manage/${guildId}?section=music` }
+            { id: 'music', label: 'Music', icon: 'music', href: `/manage/${guildId}?section=music` },
+            { id: 'soundboard', label: 'Soundboard', icon: 'volume-high', href: `/manage/${guildId}?section=soundboard` }
         ]
     }
 ];
 
 const icons = {
+    'terminal': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M4 19h16a1 1 0 001-1V6a1 1 0 00-1-1H4a1 1 0 00-1 1v12a1 1 0 001 1z"/>',
     'home': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>',
     'cog': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>',
     'palette': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/>',
@@ -83,7 +88,13 @@ const icons = {
     'gift': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/>',
     'gamepad': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>',
     'music': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>',
-    'id-card': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>'
+    'id-card': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"/>',
+    'paw': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>',
+    'crosshair': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v3m0 12v3M3 12h3m12 0h3M12 8a4 4 0 100 8 4 4 0 000-8z"/>',
+    'sparkles': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>',
+    'mug': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8h12v6a4 4 0 01-4 4H7a4 4 0 01-4-4V8zm12 1h2a3 3 0 010 6h-2M3 21h14"/>',
+    'hash': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>',
+    'dice': '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6z"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/>'
 };
 %>
 

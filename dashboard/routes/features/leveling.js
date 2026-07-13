@@ -24,7 +24,10 @@ router.get('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res) 
         level_up_message: 'Congrats {user}! You reached **Level {level}**!',
         level_up_channel_id: null,
         xp_multiplier_weekends: 1.0,
-        xp_multiplier_events: 1.0
+        xp_multiplier_events: 1.0,
+        monthly_reset_enabled: false,
+        reset_interval_days: 30,
+        last_reset_at: null
       });
     }
 
@@ -46,7 +49,9 @@ router.patch('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res
       level_up_message,
       level_up_channel_id,
       xp_multiplier_weekends,
-      xp_multiplier_events
+      xp_multiplier_events,
+      monthly_reset_enabled,
+      reset_interval_days
     } = req.body;
 
     // Validate inputs
@@ -70,6 +75,13 @@ router.patch('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res
       return res.status(400).json({ error: 'Event multiplier must be between 0.1 and 10' });
     }
 
+    if (reset_interval_days !== undefined) {
+      const n = Number(reset_interval_days);
+      if (!Number.isInteger(n) || n < 7 || n > 365) {
+        return res.status(400).json({ error: 'Reset interval must be an integer between 7 and 365 days' });
+      }
+    }
+
     // Check if config exists
     const [existing] = await pool.execute(
       'SELECT * FROM level_config WHERE guild_id = ?',
@@ -82,8 +94,9 @@ router.patch('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res
         `INSERT INTO level_config (
           guild_id, xp_per_message, xp_cooldown_seconds, xp_per_voice_minute,
           voice_xp_enabled, level_up_message, level_up_channel_id,
-          xp_multiplier_weekends, xp_multiplier_events
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          xp_multiplier_weekends, xp_multiplier_events,
+          monthly_reset_enabled, reset_interval_days
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           req.guildId,
           xp_per_message || 15,
@@ -93,7 +106,9 @@ router.patch('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res
           level_up_message || 'Congrats {user}! You reached **Level {level}**!',
           level_up_channel_id || null,
           xp_multiplier_weekends || 1.0,
-          xp_multiplier_events || 1.0
+          xp_multiplier_events || 1.0,
+          monthly_reset_enabled ? 1 : 0,
+          reset_interval_days !== undefined ? Number(reset_interval_days) : 30
         ]
       );
     } else {
@@ -132,6 +147,14 @@ router.patch('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res
       if (xp_multiplier_events !== undefined) {
         updates.push('xp_multiplier_events = ?');
         values.push(xp_multiplier_events);
+      }
+      if (monthly_reset_enabled !== undefined) {
+        updates.push('monthly_reset_enabled = ?');
+        values.push(monthly_reset_enabled ? 1 : 0);
+      }
+      if (reset_interval_days !== undefined) {
+        updates.push('reset_interval_days = ?');
+        values.push(Number(reset_interval_days));
       }
 
       if (updates.length > 0) {

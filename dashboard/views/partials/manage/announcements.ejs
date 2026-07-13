@@ -95,10 +95,26 @@ const useWebhookPersona = announcementSettings.use_webhook_persona === 1;
                         <div class="form-help">When enabled, announcements appear as the streamer with their name and avatar. When off, announcements post as the bot.</div>
                     </div>
 
-                    <div>
+                    <div style="margin-bottom: var(--spacing-4);">
                         <label class="form-label">Custom Message Template</label>
                         <textarea class="form-control" name="announcement_message" rows="6" placeholder="Enter your custom announcement message" style="font-family: var(--font-family-mono); font-size: var(--font-size-sm);"><%= defaultMessage %></textarea>
                         <div class="form-help">Customize the message sent when streamers go live</div>
+                    </div>
+
+                    <div>
+                        <label class="form-label">Ignored Roles</label>
+                        <select class="form-select" name="stream_ignored_roles" multiple size="4" style="min-height: 100px;" id="ignored-roles-select">
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"
+                                    <%= (announcementSettings.stream_ignored_roles || []).includes(role.id) ? 'selected' : '' %>>
+                                    <%= role.name %>
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">
+                            Streamers with any of these roles won't trigger live notifications (Ctrl+Click to select multiple)
+                            <span id="ignored-roles-count" style="color: var(--color-primary-400); font-weight: var(--font-weight-semibold);"></span>
+                        </div>
                     </div>
                 </div>
 
@@ -178,6 +194,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
             preview.textContent = message || 'Preview will appear here...';
         });
+    }
+
+    // Show selected count for ignored roles multi-select
+    const ignoredSelect = document.getElementById('ignored-roles-select');
+    const ignoredCount = document.getElementById('ignored-roles-count');
+    if (ignoredSelect && ignoredCount) {
+        function updateCount() {
+            const count = ignoredSelect.selectedOptions.length;
+            ignoredCount.textContent = count > 0 ? `— ${count} role(s) selected` : '';
+        }
+        updateCount();
+        ignoredSelect.addEventListener('change', updateCount);
     }
 });
 </script>

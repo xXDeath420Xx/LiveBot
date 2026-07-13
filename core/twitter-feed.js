@@ -76,27 +76,39 @@ async function processTwitterFeed(feed, client) {
             return;
         }
 
-        // Post new tweets
+        // Post new tweets — track last SUCCESSFUL post so we don't skip tweets
+        // if posting fails (missing emoji access, rate limits, perm issues, etc.)
+        let lastSuccessId = null;
+        let successCount = 0;
+        let failCount = 0;
         for (const tweet of newTweets) {
             try {
                 await postTweetEmbed(channel, tweet, feed, avatar);
+                lastSuccessId = tweet.id;
+                successCount++;
                 // Small delay between posts
                 await new Promise(resolve => setTimeout(resolve, 500));
             } catch (postError) {
-                logger.error(`[TwitterFeed] Error posting tweet:`, postError);
+                failCount++;
+                logger.error(`[TwitterFeed] Error posting tweet ${tweet.id} for @${username} in #${channel.name}:`, postError);
             }
         }
 
-        // Update last tweet ID (use the most recent tweet)
-        const latestTweetId = filteredTweets[0]?.id;
-        if (latestTweetId) {
+        // Only advance the high-water mark if at least one post succeeded.
+        // If all posts failed (e.g. invalid emoji, channel perms), leave
+        // last_tweet_id alone so the next cycle retries.
+        if (lastSuccessId) {
             await pool.execute(
                 'UPDATE twitter_feeds SET last_tweet_id = ? WHERE id = ?',
-                [latestTweetId, feed.id]
+                [lastSuccessId, feed.id]
             );
         }
 
-        logger.info(`[TwitterFeed] Posted ${newTweets.length} new tweet(s) from @${username} to #${channel.name}`);
+        if (failCount > 0) {
+            logger.warn(`[TwitterFeed] @${username} → #${channel.name}: ${successCount} posted, ${failCount} failed (last_tweet_id ${lastSuccessId ? 'advanced to ' + lastSuccessId : 'left unchanged for retry'})`);
+        } else {
+            logger.info(`[TwitterFeed] Posted ${successCount} new tweet(s) from @${username} to #${channel.name}`);
+        }
 
     } catch (error) {
         logger.warn(`[TwitterFeed] Failed to process feed for @${feed.twitter_username}:`, error.message);
@@ -172,10 +184,10 @@ async function postTweetEmbed(channel, tweet, feed, avatar) {
     const row = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
-                .setLabel('View on Twitter')
+                .setLabel('View on X')
                 .setStyle(ButtonStyle.Link)
                 .setURL(tweetUrl)
-                .setEmoji('1263655741992898663') // Twitter emoji or use default
+                .setEmoji('🐦')
         );
 
     // Build message content

@@ -1,0 +1,368 @@
+<style>
+.throne-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(124, 58, 237, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+.throne-card-header {
+    background: rgba(124, 58, 237, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(124, 58, 237, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.throne-card-header i { font-size: 1rem; color: #7c3aed; }
+.throne-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
+.throne-card-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
+.throne-card-body { padding: 18px; }
+.throne-track-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    margin-bottom: 8px;
+}
+.throne-track-row:hover { border-color: rgba(124, 58, 237, 0.3); }
+.throne-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.throne-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(124, 58, 237, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(124, 58, 237, 0.25);
+}
+.throne-badge.off { opacity: 0.4; text-decoration: line-through; }
+.throne-empty {
+    text-align: center;
+    padding: 32px;
+    color: rgba(255, 255, 255, 0.4);
+}
+.throne-empty i { font-size: 2rem; margin-bottom: 8px; display: block; opacity: 0.3; }
+.throne-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.throne-form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+.throne-input {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: #fff;
+    font-size: 0.85rem;
+    width: 100%;
+}
+.throne-input:focus { border-color: #7c3aed; outline: none; }
+.throne-input::placeholder { color: rgba(255, 255, 255, 0.3); }
+.throne-btn {
+    background: #7c3aed;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.throne-btn:hover { background: #6d28d9; }
+.throne-btn.danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+.throne-btn.danger:hover { background: rgba(239, 68, 68, 0.3); }
+.throne-btn.small { padding: 4px 10px; font-size: 0.75rem; }
+</style>
+
+<%
+const guildId = guild.id;
+const notifications = typeof throneNotifications !== 'undefined' ? throneNotifications : [];
+const featured = typeof throneGuildConfig !== 'undefined' ? throneGuildConfig : null;
+%>
+
+<!-- Guild Settings -->
+<div class="throne-card">
+    <div class="throne-card-header">
+        <i class="fas fa-cog"></i>
+        <div>
+            <h3>Throne Settings</h3>
+            <p>Configure which features are enabled (all off by default)</p>
+        </div>
+    </div>
+    <div class="throne-card-body" id="throneSettingsBody">
+        <div style="text-align: center; color: rgba(255,255,255,0.4); padding: 16px;">Loading settings...</div>
+    </div>
+</div>
+
+<!-- Tracked Users -->
+<div class="throne-card">
+    <div class="throne-card-header">
+        <i class="fas fa-bell"></i>
+        <div>
+            <h3>Throne Notification Tracking</h3>
+            <p>Get alerts when tracked Throne users receive gifts or add new wishlist items</p>
+        </div>
+    </div>
+    <div class="throne-card-body">
+        <!-- Add Form -->
+        <form id="throneAddForm" onsubmit="addThroneTracking(event)" style="margin-bottom: 16px;">
+            <div class="throne-form-row">
+                <input type="text" class="throne-input" id="throneUsername" placeholder="Throne username" required>
+                <select class="throne-input" id="throneChannel" required>
+                    <option value="">Select channel...</option>
+                    <% channels.forEach(ch => { %>
+                        <option value="<%= ch.id %>"><%= ch.name %></option>
+                    <% }) %>
+                </select>
+            </div>
+            <div class="throne-form-row three" style="margin-bottom: 12px;">
+                <label style="display: flex; align-items: center; gap: 8px; color: #d1d5db; font-size: 0.85rem;">
+                    <input type="checkbox" id="throneItems" checked> New Items
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; color: #d1d5db; font-size: 0.85rem;">
+                    <input type="checkbox" id="throneGifts" checked> Gift Alerts
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; color: #d1d5db; font-size: 0.85rem;">
+                    <input type="checkbox" id="throneContributions" checked> Contributions
+                </label>
+            </div>
+            <button type="submit" class="throne-btn"><i class="fas fa-plus" style="margin-right: 6px;"></i>Add Tracking</button>
+        </form>
+
+        <!-- List -->
+        <% if (notifications.length > 0) { %>
+            <% notifications.forEach(n => { %>
+                <div class="throne-track-row" id="throne-row-<%= n.throne_username %>">
+                    <div>
+                        <div style="font-weight: 600; color: #fff; font-size: 0.9rem;">
+                            <a href="https://throne.com/<%= n.throne_username %>" target="_blank" style="color: #a78bfa; text-decoration: none;"><%= n.throne_username %></a>
+                        </div>
+                        <div style="font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-top: 2px;">
+                            Channel: <span style="color: #818cf8;">#<%= channels.find(c => c.id === n.channel_id)?.name || n.channel_id %></span>
+                        </div>
+                        <div class="throne-badges" style="margin-top: 6px;">
+                            <span class="throne-badge <%= n.notify_new_items ? '' : 'off' %>">Items</span>
+                            <span class="throne-badge <%= n.notify_gifts ? '' : 'off' %>">Gifts</span>
+                            <span class="throne-badge <%= n.notify_contributions ? '' : 'off' %>">Contributions</span>
+                        </div>
+                    </div>
+                    <button onclick="removeThroneTracking('<%= n.throne_username %>')" class="throne-btn danger small">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            <% }) %>
+        <% } else { %>
+            <div class="throne-empty">
+                <i class="fas fa-crown"></i>
+                <p>No Throne users tracked yet</p>
+                <p style="font-size: 0.75rem; margin-top: 4px;">Add a Throne username above to start receiving notifications</p>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Featured Wishlist -->
+<div class="throne-card">
+    <div class="throne-card-header">
+        <i class="fas fa-star"></i>
+        <div>
+            <h3>Featured Wishlist</h3>
+            <p>Set a featured Throne wishlist for your server</p>
+        </div>
+    </div>
+    <div class="throne-card-body">
+        <form id="throneFeaturedForm" onsubmit="updateFeatured(event)">
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <input type="text" class="throne-input" id="throneFeaturedUsername" placeholder="Throne username" value="<%= featured?.featured_username || '' %>" style="flex: 1;">
+                <button type="submit" class="throne-btn">Save</button>
+                <% if (featured) { %>
+                    <button type="button" onclick="clearFeatured()" class="throne-btn danger">Clear</button>
+                <% } %>
+            </div>
+            <% if (featured) { %>
+                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-top: 8px;">
+                    Currently featuring <a href="https://throne.com/<%= featured.featured_username %>" target="_blank" style="color: #a78bfa;"><%= featured.featured_username %></a>
+                </p>
+            <% } %>
+        </form>
+    </div>
+</div>
+
+<script>
+const throneGuildId = '<%= guildId %>';
+
+async function throneApi(method, path, body) {
+    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(`/api/guilds/${throneGuildId}/throne${path}`, opts);
+    return res.json();
+}
+
+async function addThroneTracking(e) {
+    e.preventDefault();
+    const username = document.getElementById('throneUsername').value.trim();
+    const channel_id = document.getElementById('throneChannel').value;
+    if (!username || !channel_id) return;
+
+    const result = await throneApi('POST', '/notifications', {
+        throne_username: username,
+        channel_id,
+        notify_new_items: document.getElementById('throneItems').checked,
+        notify_gifts: document.getElementById('throneGifts').checked,
+        notify_contributions: document.getElementById('throneContributions').checked
+    });
+
+    if (result.success) {
+        location.reload();
+    } else {
+        alert(result.error || 'Failed to add tracking');
+    }
+}
+
+async function removeThroneTracking(username) {
+    if (!confirm(`Stop tracking ${username}?`)) return;
+    const result = await throneApi('DELETE', `/notifications/${username}`);
+    if (result.success) {
+        const row = document.getElementById(`throne-row-${username}`);
+        if (row) row.remove();
+    } else {
+        alert(result.error || 'Failed to remove tracking');
+    }
+}
+
+async function updateFeatured(e) {
+    e.preventDefault();
+    const username = document.getElementById('throneFeaturedUsername').value.trim();
+    const result = await throneApi('PUT', '/featured', { featured_username: username || null });
+    if (result.success) {
+        location.reload();
+    } else {
+        alert(result.error || 'Failed to update featured');
+    }
+}
+
+async function clearFeatured() {
+    const result = await throneApi('PUT', '/featured', { featured_username: null });
+    if (result.success) {
+        location.reload();
+    } else {
+        alert(result.error || 'Failed to clear featured');
+    }
+}
+
+// ─── Settings ───────────────────────────────
+async function loadSettings() {
+    const result = await throneApi('GET', '/settings');
+    const s = result.settings || {};
+
+    const body = document.getElementById('throneSettingsBody');
+    body.innerHTML = `
+        <div style="margin-bottom: 16px;">
+            <h4 style="color: #a78bfa; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;">Notification Types</h4>
+            <div class="throne-form-row">
+                ${settingToggle('notify_item_added', 'New Items Added', s.notify_item_added)}
+                ${settingToggle('notify_item_removed', 'Items Removed', s.notify_item_removed)}
+            </div>
+            <div class="throne-form-row">
+                ${settingToggle('notify_gift_received', 'Gifts Received', s.notify_gift_received)}
+                ${settingToggle('notify_contribution', 'Contributions', s.notify_contribution)}
+            </div>
+            <div class="throne-form-row">
+                ${settingToggle('notify_price_change', 'Price Changes', s.notify_price_change)}
+                ${settingToggle('notify_milestone', 'Milestones', s.notify_milestone)}
+            </div>
+            <div class="throne-form-row">
+                ${settingToggle('notify_gift_thankyou', 'Gift Thank-Yous', s.notify_gift_thankyou)}
+            </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            <h4 style="color: #a78bfa; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;">Features</h4>
+            <div class="throne-form-row">
+                ${settingToggle('auto_embed_links', 'Auto-Embed Throne Links', s.auto_embed_links)}
+                ${settingToggle('birthday_reminder', 'Birthday Reminders', s.birthday_reminder)}
+            </div>
+            <div class="throne-form-row">
+                ${settingToggle('monthly_spotlight', 'Monthly Spotlight', s.monthly_spotlight)}
+                ${settingToggle('wishlist_role_enabled', 'Wishlist Role', s.wishlist_role_enabled)}
+            </div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+            <h4 style="color: #a78bfa; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;">Channels & Settings</h4>
+            <div class="throne-form-row">
+                <div>
+                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Notification Channel</label>
+                    <select class="throne-input" id="setting_notification_channel_id" onchange="saveSetting('notification_channel_id', this.value)">
+                        <option value="">None</option>
+                        ${generateChannelOptions(s.notification_channel_id)}
+                    </select>
+                </div>
+                <div>
+                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Birthday Channel</label>
+                    <select class="throne-input" id="setting_birthday_channel_id" onchange="saveSetting('birthday_channel_id', this.value)">
+                        <option value="">None</option>
+                        ${generateChannelOptions(s.birthday_channel_id)}
+                    </select>
+                </div>
+            </div>
+            <div class="throne-form-row">
+                <div>
+                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Spotlight Channel</label>
+                    <select class="throne-input" id="setting_spotlight_channel_id" onchange="saveSetting('spotlight_channel_id', this.value)">
+                        <option value="">None</option>
+                        ${generateChannelOptions(s.spotlight_channel_id)}
+                    </select>
+                </div>
+                <div>
+                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Birthday Reminder (days before)</label>
+                    <input type="number" class="throne-input" value="${s.birthday_reminder_days || 3}" min="1" max="14" onchange="saveSetting('birthday_reminder_days', this.value)">
+                </div>
+            </div>
+            <div class="throne-form-row">
+                <div>
+                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Price Change Threshold (%)</label>
+                    <input type="number" class="throne-input" value="${s.price_change_threshold || 10}" min="1" max="50" onchange="saveSetting('price_change_threshold', this.value)">
+                </div>
+                <div>
+                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Wishlist Role</label>
+                    <select class="throne-input" id="setting_wishlist_role_id" onchange="saveSetting('wishlist_role_id', this.value)">
+                        <option value="">None</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function settingToggle(name, label, value) {
+    const checked = value ? 'checked' : '';
+    return `
+        <label style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+               onmouseenter="this.style.borderColor='rgba(124,58,237,0.3)'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.06)'">
+            <input type="checkbox" ${checked} onchange="saveSetting('${name}', this.checked ? 1 : 0)" style="accent-color: #7c3aed; width: 16px; height: 16px;">
+            <span style="color: #d1d5db; font-size: 0.85rem;">${label}</span>
+        </label>
+    `;
+}
+
+function generateChannelOptions(selectedId) {
+    const channels = <%= JSON.stringify(channels.map(c => ({ id: c.id, name: c.name }))) %>;
+    return channels.map(c =>
+        '<option value="' + c.id + '"' + (c.id === selectedId ? ' selected' : '') + '>#' + c.name + '</option>'
+    ).join('');
+}
+
+async function saveSetting(key, value) {
+    await throneApi('PUT', '/settings', { [key]: value });
+}
+
+// Load settings on page load
+loadSettings();
+</script>

@@ -99,6 +99,20 @@
                 </div>
             </div>
 
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">
+                    <i class="fas fa-bell" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
+                    Alert Channel
+                </label>
+                <select class="form-select" name="alert_channel_id">
+                    <option value="">No alerts (use logging settings)</option>
+                    <% if (typeof channels !== 'undefined') { channels.forEach(ch => { %>
+                        <option value="<%= ch.id %>" <%= antiRaid && antiRaid.alert_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                    <% }); } %>
+                </select>
+                <div class="form-help">Send raid alerts to this channel when action is taken. Leave blank to use your unified logging settings instead.</div>
+            </div>
+
             <button type="submit" class="btn btn-primary">
                 <i class="fas fa-save"></i>
                 <span>Save Anti-Raid Settings</span>
@@ -134,6 +148,20 @@
                     <li style="margin-bottom: var(--spacing-1);">Mass bans (more than 5 in 10 seconds)</li>
                     <li style="margin-bottom: var(--spacing-1);">Webhook spam (more than 5 created in 10 seconds)</li>
                 </ul>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">
+                    <i class="fas fa-bell" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
+                    Alert Channel
+                </label>
+                <select class="form-select" name="alert_channel_id">
+                    <option value="">No alerts (use logging settings)</option>
+                    <% if (typeof channels !== 'undefined') { channels.forEach(ch => { %>
+                        <option value="<%= ch.id %>" <%= antiNuke && antiNuke.alert_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                    <% }); } %>
+                </select>
+                <div class="form-help">Send nuke alerts to this channel when destructive actions are detected.</div>
             </div>
 
             <button type="submit" class="btn btn-primary">

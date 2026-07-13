@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Havendock Mods - Installation Guide</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0e0e0e; color: #eee; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; line-height: 1.7; }
+
+        a { color: #2980b9; text-decoration: none; }
+        a:hover { color: #3498db; text-decoration: underline; }
+
+        .header { background: linear-gradient(135deg, #141414 0%, #1a2a1a 100%); border-bottom: 1px solid #27ae60; padding: 32px 0; text-align: center; }
+        .header h1 { font-size: 2rem; font-weight: 800; letter-spacing: 2px; }
+        .header h1 span { color: #27ae60; }
+        .header p { color: #888; font-size: 1rem; margin-top: 6px; }
+        .header nav { margin-top: 16px; }
+        .header nav a { color: #27ae60; margin: 0 12px; font-weight: 600; font-size: 0.95rem; }
+        .header nav a:hover { color: #2ecc71; text-decoration: none; }
+
+        .container { max-width: 860px; margin: 0 auto; padding: 40px 20px 60px; }
+
+        h2 { font-size: 1.5rem; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #333; color: #eee; }
+        h2 span { color: #27ae60; }
+        h3 { font-size: 1.15rem; margin: 28px 0 10px; color: #ddd; }
+
+        p { color: #bbb; margin-bottom: 14px; }
+
+        .step-list { counter-reset: step; list-style: none; padding: 0; }
+        .step-list > li { counter-increment: step; position: relative; padding: 18px 20px 18px 70px; background: #1a1a1a; border: 1px solid #252525; border-radius: 10px; margin-bottom: 12px; }
+        .step-list > li::before { content: counter(step); position: absolute; left: 18px; top: 16px; width: 36px; height: 36px; background: #27ae60; color: #fff; font-weight: 800; font-size: 1.1rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .step-list > li strong { color: #eee; }
+
+        code { background: #252525; padding: 2px 8px; border-radius: 4px; font-size: 0.9rem; color: #27ae60; font-family: 'Consolas', 'Courier New', monospace; }
+
+        .code-block { background: #141414; border: 1px solid #333; border-radius: 8px; padding: 16px 20px; margin: 12px 0 16px; overflow-x: auto; font-family: 'Consolas', monospace; font-size: 0.9rem; color: #ccc; line-height: 1.6; }
+        .code-block .comment { color: #555; }
+        .code-block .path { color: #27ae60; }
+
+        .callout { background: #1e1e1e; border-left: 4px solid #27ae60; border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 16px 0; }
+        .callout.warning { border-left-color: #f39c12; }
+        .callout.info { border-left-color: #2980b9; }
+        .callout strong { color: #eee; }
+
+        .method-card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 24px; margin: 16px 0; }
+        .method-card h3 { margin-top: 0; color: #27ae60; }
+
+        .key-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+        .key-table th { text-align: left; padding: 10px 14px; background: #1a1a1a; color: #888; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #333; }
+        .key-table td { padding: 10px 14px; border-bottom: 1px solid #1e1e1e; }
+        .key-table td:first-child { color: #eee; font-weight: 600; }
+        .key-table td:nth-child(2) { font-family: 'Consolas', monospace; color: #27ae60; }
+        .key-table td:nth-child(3) { color: #888; font-size: 0.9rem; }
+        .key-table tr:hover { background: #151515; }
+
+        .faq dt { color: #eee; font-weight: 600; font-size: 1.05rem; margin: 20px 0 6px; cursor: default; }
+        .faq dd { color: #999; margin-bottom: 12px; padding-left: 16px; border-left: 2px solid #333; }
+
+        .footer { text-align: center; padding: 24px; color: #555; font-size: 0.85rem; border-top: 1px solid #222; }
+
+        @media (max-width: 600px) { .step-list > li { padding-left: 58px; } .step-list > li::before { left: 12px; width: 30px; height: 30px; font-size: 0.95rem; } }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>HAVENDOCK <span>MODS</span></h1>
+    <p>Complete Installation &amp; Usage Guide</p>
+    <nav>
+        <a href="./">Downloads</a>
+        <a href="guide.html">Guide</a>
+    </nav>
+</div>
+
+<div class="container">
+
+    <!-- ============================================================ -->
+    <h2><span>1.</span> Prerequisites</h2>
+
+    <p>Before installing any mods, you just need the game. The Mod Manager handles everything else automatically.</p>
+
+    <ul class="step-list">
+        <li><strong>Own Havendock</strong> on Steam. Mods are tested against the current Steam release. Epic/GOG may work but are untested.</li>
+        <li><strong>Download the Mod Manager</strong> from the <a href="./">downloads page</a>. Extract and run <code>HavendockModManager.exe</code>.</li>
+        <li><strong>BepInEx installs automatically.</strong> On first launch, if the mod loader (BepInEx) isn't detected, the Mod Manager will prompt you to install it with one click. It downloads and sets up everything for you — no manual file copying needed.</li>
+    </ul>
+
+    <div class="callout info">
+        <strong>Where is my game folder?</strong> Right-click Havendock in Steam &rarr; Manage &rarr; Browse Local Files. Typical path: <code>E:\SteamLibrary\steamapps\common\Havendock</code>
+    </div>
+
+    <h3>BepInEx Installation</h3>
+    <div class="code-block">
+<span class="comment"># Your game folder should look like this after BepInEx install:</span>
+<span class="path">Havendock/</span>
+├── <span class="path">BepInEx/</span>
+│   ├── <span class="path">core/</span>          <span class="comment"># BepInEx framework files</span>
+│   ├── <span class="path">config/</span>        <span class="comment"># Mod settings (.cfg files)</span>
+│   └── <span class="path">plugins/</span>       <span class="comment"># Mods go here!</span>
+├── Havendock_Data/
+├── Havendock.exe
+├── doorstop_config.ini    <span class="comment"># Created by BepInEx</span>
+└── winhttp.dll            <span class="comment"># Created by BepInEx</span>
+    </div>
+
+    <!-- ============================================================ -->
+    <h2><span>2.</span> Installing Mods</h2>
+
+    <p>There are three ways to install mods. Pick whichever suits you best.</p>
+
+    <div class="method-card">
+        <h3>Method A: Mod Manager (Recommended)</h3>
+        <p>The easiest way. The mod manager handles everything: BepInEx setup, downloading, installing, toggling, and configuring mods.</p>
+        <ol class="step-list">
+            <li><strong>Download the Mod Manager</strong> from the <a href="./">downloads page</a> and extract the zip anywhere (Desktop, Documents, wherever).</li>
+            <li><strong>Run <code>HavendockModManager.exe</code></strong>. It auto-detects your Havendock install and installs BepInEx if needed.</li>
+            <li>Click <strong>"Browse &amp; Install"</strong> in the sidebar. The mod catalog loads from our server.</li>
+            <li><strong>Click "Install"</strong> on any mod you want, or <strong>"Install All"</strong> for everything.</li>
+            <li>Use the <strong>"Installed Mods"</strong> page to toggle mods on/off and edit their settings.</li>
+            <li>Use <strong>"Play Modded"</strong> or <strong>"Play Vanilla"</strong> to launch with or without mods.</li>
+        </ol>
+    </div>
+
+    <div class="method-card">
+        <h3>Method B: Download Individual Mods (Manual)</h3>
+        <p>Download only the mods you want from the <a href="./">downloads page</a>. Requires BepInEx installed manually.</p>
+        <div class="callout warning">
+            <strong>BepInEx required first!</strong> Methods B and C require you to install BepInEx yourself before mods will work. Download <a href="https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.Mono-win-x64-6.0.0-be.755%2B3fab71a.zip" target="_blank">BepInEx 6.0.0-be.755 (Unity Mono x64)</a> and extract the contents directly into your Havendock game folder (so <code>winhttp.dll</code> sits next to <code>Havendock.exe</code>). Run the game once to generate the <code>BepInEx/plugins/</code> folder.
+        </div>
+        <ol class="step-list">
+            <li><strong>Install BepInEx</strong> into your Havendock game folder (see above).</li>
+            <li><strong>Download</strong> any mod zip from the downloads page.</li>
+            <li><strong>Extract the folder</strong> (e.g., <code>AudioToggles/</code>) into <code>Havendock/BepInEx/plugins/</code></li>
+            <li><strong>Launch the game.</strong> The mod loads automatically.</li>
+        </ol>
+        <div class="code-block">
+<span class="comment"># Example: Installing AudioToggles manually</span>
+<span class="path">Havendock/</span>
+├── winhttp.dll              <span class="comment"># From BepInEx zip</span>
+├── doorstop_config.ini      <span class="comment"># From BepInEx zip</span>
+├── Havendock.exe
+└── <span class="path">BepInEx/</span>
+    └── <span class="path">plugins/</span>
+        └── <span class="path">AudioToggles/</span>
+            └── AudioToggles.dll
+        </div>
+    </div>
+
+    <div class="method-card">
+        <h3>Method C: All Mods Pack (Manual)</h3>
+        <p>Get everything at once. Also requires BepInEx installed manually.</p>
+        <div class="callout warning">
+            <strong>BepInEx required first!</strong> Same as Method B — install <a href="https://builds.bepinex.dev/projects/bepinex_be/755/BepInEx-Unity.Mono-win-x64-6.0.0-be.755%2B3fab71a.zip" target="_blank">BepInEx 6.0.0-be.755 (Unity Mono x64)</a> into your game folder before extracting mods.
+        </div>
+        <ol class="step-list">
+            <li><strong>Install BepInEx</strong> into your Havendock game folder.</li>
+            <li><strong>Download "All 31 Mods"</strong> from the <a href="./">downloads page</a>.</li>
+            <li><strong>Extract</strong> into <code>Havendock/BepInEx/plugins/</code>. You should see 31 folders, one per mod.</li>
+            <li><strong>Launch the game.</strong> All mods load. Disable any you don't want by deleting the folder.</li>
+        </ol>
+    </div>
+
+    <div class="callout info">
+        <strong>Tip:</strong> Method A (Mod Manager) is strongly recommended — it handles BepInEx installation, mod downloads, toggling, configuration, and even vanilla/modded launch switching all in one app. Methods B and C are for users who prefer manual control.
+    </div>
+
+    <!-- ============================================================ -->
+    <h2><span>3.</span> Using the Mod Manager</h2>
+
+    <h3>Installed Mods Page</h3>
+    <p>Shows all mods currently in your <code>BepInEx/plugins/</code> folder. Check/uncheck the box next to each mod to enable or disable it (this renames the .dll so BepInEx skips it). Click a mod to see its description, hotkeys, and live settings editor.</p>
+
+    <h3>Browse &amp; Install Page</h3>
+    <p>Connects to <code>certifriedmultitool.com</code> to fetch the latest mod catalog. You can search, filter by category, and install/remove mods with one click. Hit "Install All" to grab everything, or pick and choose.</p>
+
+    <h3>Settings Editor</h3>
+    <p>When you select an installed mod, its BepInEx config file is parsed and displayed as editable controls:</p>
+    <ul style="color: #bbb; padding-left: 24px; margin-bottom: 16px;">
+        <li><strong>Checkboxes</strong> for on/off toggles (e.g., EnableAutoReplant)</li>
+        <li><strong>Sliders</strong> for numbers with ranges (e.g., SeagullCap: 1-200)</li>
+        <li><strong>Dropdowns</strong> for key bindings and enum values</li>
+        <li><strong>Text fields</strong> for everything else</li>
+    </ul>
+    <p>Changes save automatically. Restart the game for them to take effect.</p>
+
+    <h3>Profiles</h3>
+    <p>Save different mod configurations as profiles. Use the toolbar at the top to Save, create New, or Delete profiles. Useful if you want different mod sets for different playstyles (e.g., "Chill Build" with visual mods only, "Full QoL" with everything).</p>
+
+    <div class="callout">
+        <strong>Config files location:</strong> <code>Havendock/BepInEx/config/com.havendock.*.cfg</code> — You can also edit these with any text editor if you prefer.
+    </div>
+
+    <!-- ============================================================ -->
+    <h2><span>4.</span> Hotkey Reference</h2>
+
+    <p>All hotkeys are configurable via the mod manager or BepInEx config files. These are the defaults:</p>
+
+    <table class="key-table">
+        <thead><tr><th>Mod</th><th>Key</th><th>Action</th></tr></thead>
+        <tbody>
+            <tr><td>Audio Toggles</td><td>;</td><td>Toggle music on/off</td></tr>
+            <tr><td>Audio Toggles</td><td>'</td><td>Toggle sound effects on/off</td></tr>
+            <tr><td>Bulk Storage</td><td>=</td><td>Fill all storage slots with selected item</td></tr>
+            <tr><td>Resource Reserves</td><td>-</td><td>Open reserve config panel</td></tr>
+            <tr><td>Island Compass</td><td>`</td><td>Toggle compass (boat only)</td></tr>
+            <tr><td>Speed Toggle</td><td>.</td><td>Cycle speed: 1x &rarr; 2x &rarr; 5x &rarr; 10x</td></tr>
+            <tr><td>Batch Craft</td><td>]</td><td>Increment craft queue</td></tr>
+            <tr><td>Batch Craft</td><td>[</td><td>Decrement craft queue</td></tr>
+            <tr><td>Auto Sell Surplus</td><td>\</td><td>Open surplus config panel</td></tr>
+            <tr><td>Production Stats</td><td>F3</td><td>Toggle production overlay</td></tr>
+            <tr><td>Storage Overview</td><td>F4</td><td>Toggle storage totals panel</td></tr>
+            <tr><td>Settler Status</td><td>F5</td><td>Toggle settler table</td></tr>
+            <tr><td>Research Planner</td><td>F6</td><td>Toggle research tree viewer</td></tr>
+            <tr><td>Blueprint System</td><td>F7</td><td>Open blueprint panel</td></tr>
+            <tr><td>Blueprint System</td><td>F8</td><td>Place selected blueprint</td></tr>
+            <tr><td>Smart Delivery</td><td>F8</td><td>Toggle delivery diagnostics</td></tr>
+            <tr><td>Crop Alert</td><td>F9</td><td>Toggle idle farm warnings</td></tr>
+            <tr><td>Ship Presets</td><td>F10</td><td>Toggle ship loadout panel</td></tr>
+            <tr><td>Screenshot+</td><td>F12</td><td>Enhanced screenshot mode</td></tr>
+            <tr><td>Custom Time</td><td>PgUp</td><td>Toggle time lock panel</td></tr>
+            <tr><td>Weather Control</td><td>PgDn</td><td>Cycle weather: Auto / No Rain / Rain</td></tr>
+            <tr><td>Undo Last Build</td><td>End</td><td>Undo last building (5s window)</td></tr>
+            <tr><td>Mass Delete</td><td>ScrollLock + drag</td><td>Area-select buildings to delete</td></tr>
+            <tr><td>Expedition Log</td><td>Insert</td><td>Toggle expedition history</td></tr>
+            <tr><td>Loot Radar</td><td>/</td><td>Highlight floating debris</td></tr>
+            <tr><td>Building Skins</td><td>\</td><td>Color picker for hovered building</td></tr>
+            <tr><td>Spell Quick Cast</td><td>6 / 7 / 8 / 9</td><td>Cast assigned wizard spells</td></tr>
+        </tbody>
+    </table>
+
+    <div class="callout info">
+        <strong>No conflicts:</strong> All default hotkeys were chosen to avoid conflicting with Havendock's built-in controls (WASD, E, R, F, N, Tab, etc. are all avoided).
+    </div>
+
+    <!-- ============================================================ -->
+    <h2><span>5.</span> Mod Details</h2>
+
+    <h3>Auto Replant</h3>
+    <p>Farms automatically refill their internal seed storage after each harvest cycle. By default, seeds are infinite (the farm's <code>currConsumables</code> resets to max). You can change this in settings to pull seeds from storage instead, which requires you to actually have seeds stockpiled.</p>
+
+    <h3>Population Cap</h3>
+    <p>Set a hard cap on seagulls and clownfish via settings (default: 20 seagulls, 10 clownfish). When the count reaches the cap, breeding buildings silently skip spawning. They resume automatically when the population drops below the cap. No need to manually toggle incubators.</p>
+
+    <h3>Resource Reserves</h3>
+    <p>Press <code>-</code> in-game to open the reserve panel. Set a minimum count for any item (e.g., Coffee Bean: 12). When total storage drops to that number, production buildings that consume that item will pause until more is available. The panel shows current storage counts in real-time with red highlighting when reserves are at risk.</p>
+
+    <h3>Island Compass</h3>
+    <p>Only appears when you're in a boat. Shows two navigation aids (configurable in settings):</p>
+    <ul style="color: #bbb; padding-left: 24px; margin-bottom: 16px;">
+        <li><strong>Compass bar</strong> — Skyrim-style horizontal bar at the top showing island markers with directional positioning</li>
+        <li><strong>Minimap</strong> — Circular minimap in the bottom-right showing island positions relative to you</li>
+    </ul>
+    <p>Only discovered islands appear. A cinematic name popup displays when you dock at an island.</p>
+
+    <h3>Blueprint System</h3>
+    <p>Press <code>F7</code> to open the blueprint panel. To save a layout: hold RightShift and drag to select buildings, then name the blueprint. To place: select a blueprint and press <code>F8</code> — buildings place relative to your cursor position. Blueprints are saved as JSON files in <code>BepInEx/config/Blueprints/</code>.</p>
+
+    <h3>Auto Sell Surplus</h3>
+    <p>Press <code>\</code> to configure per-item keep thresholds. When a trader docks, any items exceeding your threshold are automatically donated to the trader, which earns friendship points. This uses the game's barter system — there's no gold involved.</p>
+
+    <!-- ============================================================ -->
+    <h2><span>6.</span> Troubleshooting</h2>
+
+    <dl class="faq">
+        <dt>Mods aren't loading at all</dt>
+        <dd>Make sure BepInEx is installed correctly. You should see a console window briefly when the game launches (or check <code>BepInEx/LogOutput.log</code>). If there's no log file, BepInEx itself isn't loading — reinstall it. Make sure <code>winhttp.dll</code> and <code>doorstop_config.ini</code> are in the game root folder.</dd>
+
+        <dt>A specific mod isn't working</dt>
+        <dd>Check <code>BepInEx/LogOutput.log</code> for errors. Each mod logs its load status. Look for lines like <code>[Audio Toggles] v1.0.0 loaded</code> or <code>FAILED:</code> messages. If a patch fails, it usually means the game updated and the method signature changed — check for mod updates.</dd>
+
+        <dt>The mod manager says "Game not found"</dt>
+        <dd>The manager scans Steam library folders automatically. If your game is on an unusual drive, try moving it to a standard Steam library location, or install mods manually by extracting zips into <code>BepInEx/plugins/</code>.</dd>
+
+        <dt>Config file not found in the mod manager</dt>
+        <dd>Config files are only created after the game runs with a mod loaded for the first time. Enable the mod, launch the game, close the game, then the settings will appear in the mod manager.</dd>
+
+        <dt>Hotkey does nothing in-game</dt>
+        <dd>Make sure you're not typing in a text field (chat, search). Most mods disable hotkeys when a text input is focused. Also check <code>BepInEx/config/com.havendock.*.cfg</code> to confirm the key is set correctly.</dd>
+
+        <dt>Game crashes on startup with mods</dt>
+        <dd>Remove all mods from <code>BepInEx/plugins/</code>, then add them back one at a time to find the culprit. Or use the mod manager to disable all and re-enable individually.</dd>
+
+        <dt>Mod settings reset after game update</dt>
+        <dd>Settings are stored in <code>BepInEx/config/</code> and persist across game updates. If a game update changes the internal class structure, some mods may need to be updated. Check the downloads page for new versions.</dd>
+
+        <dt>Can I use these with multiplayer?</dt>
+        <dd>These are single-player QoL mods. Some (like visual mods, overlays, and audio toggles) should work fine in multiplayer since they only affect your local client. Mods that change game state (auto-replant, population cap, resource reserves) should only be used by the host, as they modify shared game data.</dd>
+    </dl>
+
+    <!-- ============================================================ -->
+    <h2><span>7.</span> Uninstalling</h2>
+
+    <h3>Remove a single mod</h3>
+    <p>Delete its folder from <code>BepInEx/plugins/</code> (e.g., delete <code>plugins/AudioToggles/</code>). Or use the mod manager's Browse page and click "Remove".</p>
+
+    <h3>Remove all mods</h3>
+    <p>Delete everything inside <code>BepInEx/plugins/</code>. Your config files in <code>BepInEx/config/</code> are preserved in case you reinstall later.</p>
+
+    <h3>Remove BepInEx entirely</h3>
+    <p>Delete the <code>BepInEx/</code> folder, <code>winhttp.dll</code>, <code>doorstop_config.ini</code>, and <code>.doorstop_version</code> from your game folder. Or use Steam's "Verify integrity of game files" to restore the original state.</p>
+
+</div>
+
+<div class="footer">
+    <p>Built by <a href="https://certifriedmultitool.com">CertiFried</a> &mdash; <a href="./">Back to Downloads</a></p>
+</div>
+
+</body>
+</html>

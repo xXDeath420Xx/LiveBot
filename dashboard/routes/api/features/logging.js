@@ -45,7 +45,8 @@ router.get('/config', async (req, res) => {
         eventConfigs.forEach(e => {
             events[e.event_type] = {
                 enabled: e.enabled === 1,
-                channel_id: e.log_channel_id
+                channel_id: e.log_channel_id,
+                embed_color: e.embed_color || null
             };
         });
 
@@ -71,32 +72,77 @@ router.get('/config', async (req, res) => {
 router.put('/config', async (req, res) => {
     try {
         const { guildId } = req.params;
-        const { enabled, default_channel_id, events } = req.body;
+        const { enabled, default_channel_id, events, enabled_logs, log_channel_id, log_categories, event_colors } = req.body;
 
-        // Update main config
+        // Update main config (support both form formats)
+        const channelId = log_channel_id || default_channel_id || null;
+        const isEnabled = enabled !== undefined ? (enabled ? 1 : 0) : 1;
+
         await pool.execute(`
             INSERT INTO logging_config (guild_id, enabled, log_channel_id)
             VALUES (?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 enabled = VALUES(enabled),
                 log_channel_id = VALUES(log_channel_id)
-        `, [guildId, enabled ? 1 : 0, default_channel_id || null]);
+        `, [guildId, isEnabled, channelId]);
 
-        // Update event configs
+        // Handle dashboard form format: enabled_logs[] + log_categories{} + event_colors{}
+        if (enabled_logs && Array.isArray(enabled_logs)) {
+            // Update enabled_events in logging_config to match the toggled events
+            await pool.execute(
+                'UPDATE logging_config SET enabled_events = ? WHERE guild_id = ?',
+                [JSON.stringify(enabled_logs), guildId]
+            );
+
+            // Collect all event types that exist in log_event_config
+            const [existingEvents] = await pool.execute(
+                'SELECT event_type FROM log_event_config WHERE guild_id = ?',
+                [guildId]
+            );
+            const existingEventTypes = new Set(existingEvents.map(r => r.event_type));
+
+            // Update/insert per-event configs
+            const allEventKeys = new Set([
+                ...enabled_logs,
+                ...Object.keys(log_categories || {}),
+                ...Object.keys(event_colors || {}),
+                ...existingEventTypes,
+            ]);
+
+            for (const eventType of allEventKeys) {
+                const eventEnabled = enabled_logs.includes(eventType) ? 1 : 0;
+                const eventChannelId = (log_categories && log_categories[eventType]) || null;
+                const eventColor = (event_colors && event_colors[eventType]) || null;
+
+                await pool.execute(`
+                    INSERT INTO log_event_config
+                        (guild_id, event_type, enabled, log_channel_id, embed_color)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        enabled = VALUES(enabled),
+                        log_channel_id = COALESCE(VALUES(log_channel_id), log_channel_id),
+                        embed_color = COALESCE(VALUES(embed_color), embed_color)
+                `, [guildId, eventType, eventEnabled, eventChannelId, eventColor]);
+            }
+        }
+
+        // Handle programmatic API format: events{}
         if (events && typeof events === 'object') {
             for (const [eventType, eventConfig] of Object.entries(events)) {
                 await pool.execute(`
                     INSERT INTO log_event_config
-                        (guild_id, event_type, enabled, log_channel_id)
-                    VALUES (?, ?, ?, ?)
+                        (guild_id, event_type, enabled, log_channel_id, embed_color)
+                    VALUES (?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                         enabled = VALUES(enabled),
-                        log_channel_id = VALUES(log_channel_id)
+                        log_channel_id = VALUES(log_channel_id),
+                        embed_color = VALUES(embed_color)
                 `, [
                     guildId,
                     eventType,
                     eventConfig.enabled ? 1 : 0,
-                    eventConfig.channel_id || null
+                    eventConfig.channel_id || null,
+                    eventConfig.embed_color || null
                 ]);
             }
         }

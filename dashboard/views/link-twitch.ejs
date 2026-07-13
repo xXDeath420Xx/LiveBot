@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Link your Twitch · CertiFried</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background: #0e1015; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+        .card { max-width: 540px; width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 32px 28px; box-shadow: 0 18px 60px rgba(0,0,0,0.4); }
+        .icons { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 22px; font-size: 38px; }
+        .icons .fab.fa-discord { color: #5865f2; }
+        .icons .fab.fa-twitch  { color: #9146ff; }
+        .icons .arrow { color: rgba(255,255,255,0.4); font-size: 22px; }
+        h1 { font-size: 1.4rem; font-weight: 700; margin: 0 0 8px; text-align: center; }
+        p.lead { color: rgba(255,255,255,0.72); font-size: 0.92rem; text-align: center; margin: 0 0 22px; line-height: 1.55; }
+        .row { font-size: 0.85rem; color: rgba(255,255,255,0.72); padding: 12px 14px; background: rgba(255,255,255,0.03); border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+        .row i { color: #9146ff; width: 18px; text-align: center; }
+        .me { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 12px 14px; background: rgba(88,101,242,0.08); border: 1px solid rgba(88,101,242,0.25); border-radius: 8px; }
+        .me img { width: 36px; height: 36px; border-radius: 50%; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; text-decoration: none; border: none; cursor: pointer; transition: opacity 0.15s; }
+        .btn:hover { opacity: 0.88; }
+        .btn-twitch { background: #9146ff; color: white; }
+        .btn-secondary { background: rgba(255,255,255,0.08); color: white; }
+        .alert { padding: 12px 14px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px; }
+        .alert-success { background: rgba(34,197,94,0.1); color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+        .alert-error { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+        .actions { display: flex; justify-content: center; gap: 10px; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icons">
+            <i class="fab fa-discord"></i>
+            <i class="fas fa-arrows-left-right arrow"></i>
+            <i class="fab fa-twitch"></i>
+        </div>
+        <h1>Link your Twitch account</h1>
+        <p class="lead">Connect your Twitch account once and the bot can grant you the right Discord roles (Mod, VIP, Streamer) across every server we both share.</p>
+
+        <% if (already) { %>
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                Successfully linked
+                <% if (typeof guildCount === 'number' && guildCount > 0) { %>
+                    across <strong><%= guildCount %></strong> shared server<%= guildCount === 1 ? '' : 's' %>.
+                <% } else { %>
+                    — but you don't seem to share any servers with the bot yet.
+                <% } %>
+                The role sync runs every 15 minutes; broadcasters can also trigger it manually.
+            </div>
+        <% } %>
+        <% if (error) { %>
+            <div class="alert alert-error">
+                <i class="fas fa-circle-exclamation"></i>
+                Link failed: <code><%= error %></code>. Try again.
+            </div>
+        <% } %>
+
+        <% if (user) { %>
+        <div class="me">
+            <% if (user.avatar) { %>
+                <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="">
+            <% } else { %>
+                <i class="fab fa-discord" style="font-size:36px;color:#5865f2;"></i>
+            <% } %>
+            <div>
+                <div style="font-weight:600;">Logged in as <%= user.username %></div>
+                <div style="font-size:0.75rem;color:rgba(255,255,255,0.5);"><%= user.id %></div>
+            </div>
+        </div>
+        <% } %>
+
+        <div class="row"><i class="fas fa-shield-halved"></i> We only ask for your Twitch login + user ID — no chat or stream control.</div>
+        <div class="row"><i class="fas fa-server"></i> One link covers every shared server. Broadcasters' role sync picks you up automatically.</div>
+        <div class="row"><i class="fas fa-rotate-right"></i> You can re-run this any time to switch Twitch accounts.</div>
+
+        <div class="actions">
+            <a class="btn btn-twitch" href="/link/twitch/start"><i class="fab fa-twitch"></i> Connect Twitch</a>
+            <a class="btn btn-secondary" href="/dashboard"><i class="fas fa-house"></i> Back to dashboard</a>
+        </div>
+    </div>
+</body>
+</html>

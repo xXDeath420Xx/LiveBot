@@ -1,0 +1,333 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-robot"></i>
+                <span>Auto-Responses</span>
+            </div>
+            <div class="page-section-subtitle">
+                Automatically respond to messages matching specific triggers
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-3" style="margin-bottom: 1.5rem;">
+        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--color-primary-500, #a78bfa); border-radius: 4px 12px 12px 4px;">
+            <div style="font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Total</div>
+            <div id="ar-stat-total" style="font-size: 1.5rem; font-weight: 800;">-</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid #23f56b; border-radius: 4px 12px 12px 4px;">
+            <div style="font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Active</div>
+            <div id="ar-stat-active" style="font-size: 1.5rem; font-weight: 800;">-</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid #fb923c; border-radius: 4px 12px 12px 4px;">
+            <div style="font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Total Triggers</div>
+            <div id="ar-stat-triggers" style="font-size: 1.5rem; font-weight: 800;">-</div>
+        </div>
+    </div>
+
+    <!-- Create Form -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <i class="fas fa-plus" style="color: white; font-size: 1.25rem;"></i>
+            </div>
+            <div>
+                <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Create Auto-Response</h4>
+                <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Set a trigger phrase and the bot's response</p>
+            </div>
+        </div>
+
+        <form id="ar-create-form">
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Trigger Text</label>
+                    <input type="text" name="trigger_text" class="form-control" required placeholder="e.g. hello, !info, how do I...">
+                    <div class="form-help">The text that triggers the response</div>
+                </div>
+                <div>
+                    <label class="form-label">Match Type</label>
+                    <select name="match_type" class="form-select">
+                        <option value="contains">Contains</option>
+                        <option value="exact">Exact Match</option>
+                        <option value="starts_with">Starts With</option>
+                        <option value="ends_with">Ends With</option>
+                        <option value="wildcard">Wildcard (*)</option>
+                        <option value="regex">Regex</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">Response Text</label>
+                <textarea name="response_text" class="form-control" required rows="3" placeholder="The bot's response. Variables: {user} {username} {displayname} {server} {channel} {membercount} {#channel-name}"></textarea>
+                <div class="form-help">Supports variables: {user} (mention), {username}, {displayname}, {server}, {channel}, {membercount}, {#channel-name}</div>
+            </div>
+
+            <div class="grid grid-cols-4" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Cooldown (seconds)</label>
+                    <input type="number" name="cooldown_seconds" class="form-control" value="0" min="0" max="86400">
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: center; gap: var(--spacing-2); padding-top: 1.5rem;">
+                    <label style="display: flex; align-items: center; gap: var(--spacing-2); font-size: var(--font-size-sm); cursor: pointer;">
+                        <input type="checkbox" name="reply_to_user" checked> Reply to user
+                    </label>
+                    <label style="display: flex; align-items: center; gap: var(--spacing-2); font-size: var(--font-size-sm); cursor: pointer;">
+                        <input type="checkbox" name="case_sensitive"> Case sensitive
+                    </label>
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: center; gap: var(--spacing-2); padding-top: 1.5rem;">
+                    <label style="display: flex; align-items: center; gap: var(--spacing-2); font-size: var(--font-size-sm); cursor: pointer;">
+                        <input type="checkbox" name="delete_trigger"> Delete trigger msg
+                    </label>
+                    <label style="display: flex; align-items: center; gap: var(--spacing-2); font-size: var(--font-size-sm); cursor: pointer;">
+                        <input type="checkbox" name="cooldown_per_user" checked> Per-user cooldown
+                    </label>
+                </div>
+                <div style="display: flex; align-items: flex-end;">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-plus"></i> Create
+                    </button>
+                </div>
+            </div>
+
+            <!-- Advanced: Channel/Role Restrictions (collapsed) -->
+            <details style="margin-top: var(--spacing-2);">
+                <summary style="font-size: var(--font-size-sm); color: var(--color-text-muted); cursor: pointer; user-select: none;">
+                    <i class="fas fa-cog"></i> Advanced — Channel & Role Restrictions
+                </summary>
+                <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-top: var(--spacing-3);">
+                    <div>
+                        <label class="form-label">Allowed Channels (leave empty = all)</label>
+                        <select name="allowed_channels" class="form-select" multiple style="height: 80px;">
+                            <% channels.filter(c => c.type === 0).forEach(c => { %>
+                                <option value="<%= c.id %>">#<%= c.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Blocked Channels</label>
+                        <select name="blocked_channels" class="form-select" multiple style="height: 80px;">
+                            <% channels.filter(c => c.type === 0).forEach(c => { %>
+                                <option value="<%= c.id %>">#<%= c.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Allowed Roles (leave empty = all)</label>
+                        <select name="allowed_roles" class="form-select" multiple style="height: 80px;">
+                            <% roles.filter(r => r.name !== '@everyone').forEach(r => { %>
+                                <option value="<%= r.id %>"><%= r.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Blocked Roles</label>
+                        <select name="blocked_roles" class="form-select" multiple style="height: 80px;">
+                            <% roles.filter(r => r.name !== '@everyone').forEach(r => { %>
+                                <option value="<%= r.id %>"><%= r.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+            </details>
+        </form>
+    </div>
+
+    <!-- Existing Autoresponders -->
+    <div style="margin-bottom: var(--spacing-4);">
+        <input type="text" id="ar-search" class="form-control" placeholder="Search autoresponders..." style="max-width: 300px;">
+    </div>
+
+    <div style="overflow-x: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Trigger</th>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Match</th>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Response</th>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Uses</th>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="ar-table-body">
+                <tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--color-text-muted);">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function() {
+    var GUILD_ID = '<%= guild.id %>';
+
+    var form = document.getElementById('ar-create-form');
+    var tbody = document.getElementById('ar-table-body');
+    var searchInput = document.getElementById('ar-search');
+    var allData = [];
+
+    async function loadAutoresponders() {
+        try {
+            var res = await fetch('/api/guilds/' + GUILD_ID + '/autoresponders');
+            var data = await res.json();
+            if (!data.success) throw new Error(data.error);
+
+            allData = data.autoresponders;
+
+            document.getElementById('ar-stat-total').textContent = allData.length;
+            document.getElementById('ar-stat-active').textContent = allData.filter(function(a) { return a.enabled; }).length;
+            document.getElementById('ar-stat-triggers').textContent = (data.totalTriggers || 0).toLocaleString();
+
+            renderTable(allData);
+        } catch (err) {
+            tbody.textContent = '';
+            var tr = document.createElement('tr');
+            var td = document.createElement('td');
+            td.colSpan = 5; td.style.cssText = 'text-align:center;padding:2rem;color:#f87171;';
+            td.textContent = 'Error: ' + err.message;
+            tr.appendChild(td); tbody.appendChild(tr);
+        }
+    }
+
+    function renderTable(items) {
+        tbody.textContent = '';
+        if (items.length === 0) {
+            var tr = document.createElement('tr');
+            var td = document.createElement('td');
+            td.colSpan = 5; td.style.cssText = 'text-align:center;padding:2rem;color:var(--color-text-muted);';
+            td.textContent = 'No autoresponders configured';
+            tr.appendChild(td); tbody.appendChild(tr);
+            return;
+        }
+
+        var tdStyle = 'padding:0.6rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;vertical-align:middle;';
+        var matchColors = { exact:'#a78bfa', contains:'#60a5fa', starts_with:'#22d3ee', ends_with:'#fb923c', wildcard:'#fbbf24', regex:'#f87171' };
+
+        items.forEach(function(ar) {
+            var tr = document.createElement('tr');
+            tr.style.transition = 'background 0.15s';
+            tr.onmouseenter = function() { tr.style.background = 'rgba(255,255,255,0.02)'; };
+            tr.onmouseleave = function() { tr.style.background = ''; };
+
+            var td1 = document.createElement('td'); td1.style.cssText = tdStyle + 'font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            td1.textContent = ar.trigger_text;
+            td1.title = ar.trigger_text;
+
+            var td2 = document.createElement('td'); td2.style.cssText = tdStyle;
+            var badge = document.createElement('span');
+            var color = matchColors[ar.match_type] || '#6b7280';
+            badge.style.cssText = 'background:' + color + '20;color:' + color + ';padding:0.15rem 0.4rem;border-radius:4px;font-size:0.65rem;font-weight:600;';
+            badge.textContent = ar.match_type.replace('_', ' ');
+            td2.appendChild(badge);
+            if (!ar.enabled) {
+                var off = document.createElement('span');
+                off.style.cssText = 'background:rgba(248,113,113,0.15);color:#f87171;padding:0.15rem 0.4rem;border-radius:4px;font-size:0.65rem;font-weight:600;margin-left:4px;';
+                off.textContent = 'disabled';
+                td2.appendChild(off);
+            }
+
+            var td3 = document.createElement('td'); td3.style.cssText = tdStyle + 'color:var(--color-text-secondary);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            td3.textContent = ar.response_text || (ar.response_type === 'react' ? '(reactions)' : '(embed)');
+            td3.title = ar.response_text || '';
+
+            var td4 = document.createElement('td'); td4.style.cssText = tdStyle + 'color:var(--color-text-muted);';
+            td4.textContent = (ar.use_count || 0).toLocaleString();
+
+            var td5 = document.createElement('td'); td5.style.cssText = tdStyle + 'text-align:right;';
+            var toggleBtn = document.createElement('button');
+            toggleBtn.className = 'btn btn-sm ' + (ar.enabled ? 'btn-secondary' : 'btn-primary');
+            toggleBtn.textContent = ar.enabled ? 'Disable' : 'Enable';
+            toggleBtn.style.cssText = 'font-size:0.7rem;padding:0.2rem 0.5rem;margin-right:4px;';
+            toggleBtn.onclick = function() { toggleAr(ar.id); };
+
+            var delBtn = document.createElement('button');
+            delBtn.className = 'btn btn-sm btn-danger';
+            delBtn.style.cssText = 'font-size:0.7rem;padding:0.2rem 0.5rem;';
+            delBtn.textContent = 'Delete';
+            delBtn.onclick = function() { if (confirm('Delete autoresponder "' + ar.trigger_text + '"?')) deleteAr(ar.id); };
+
+            td5.appendChild(toggleBtn);
+            td5.appendChild(delBtn);
+
+            tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5);
+            tbody.appendChild(tr);
+        });
+    }
+
+    form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var fd = new FormData(form);
+        var data = {
+            trigger_text: fd.get('trigger_text'),
+            response_text: fd.get('response_text'),
+            match_type: fd.get('match_type'),
+            case_sensitive: form.querySelector('[name="case_sensitive"]').checked,
+            delete_trigger: form.querySelector('[name="delete_trigger"]').checked,
+            reply_to_user: form.querySelector('[name="reply_to_user"]').checked,
+            cooldown_seconds: parseInt(fd.get('cooldown_seconds')) || 0,
+            cooldown_per_user: form.querySelector('[name="cooldown_per_user"]').checked,
+            allowed_channels: getMultiSelectValues('allowed_channels'),
+            blocked_channels: getMultiSelectValues('blocked_channels'),
+            allowed_roles: getMultiSelectValues('allowed_roles'),
+            blocked_roles: getMultiSelectValues('blocked_roles')
+        };
+
+        try {
+            var res = await fetch('/api/guilds/' + GUILD_ID + '/autoresponders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            var result = await res.json();
+            if (result.success) {
+                showToast('Auto-response created!', 'success');
+                form.reset();
+                form.querySelector('[name="reply_to_user"]').checked = true;
+                form.querySelector('[name="cooldown_per_user"]').checked = true;
+                loadAutoresponders();
+            } else {
+                showToast(result.error || 'Failed', 'error');
+            }
+        } catch (err) {
+            showToast('Failed to create: ' + err.message, 'error');
+        }
+    });
+
+    async function toggleAr(id) {
+        try {
+            var res = await fetch('/api/guilds/' + GUILD_ID + '/autoresponders/' + id + '/toggle', { method: 'PUT' });
+            var data = await res.json();
+            if (data.success) loadAutoresponders();
+            else showToast(data.error || 'Failed', 'error');
+        } catch { showToast('Failed to toggle', 'error'); }
+    }
+
+    async function deleteAr(id) {
+        try {
+            var res = await fetch('/api/guilds/' + GUILD_ID + '/autoresponders/' + id, { method: 'DELETE' });
+            var data = await res.json();
+            if (data.success) { showToast('Deleted', 'success'); loadAutoresponders(); }
+            else showToast(data.error || 'Failed', 'error');
+        } catch { showToast('Failed to delete', 'error'); }
+    }
+
+    function getMultiSelectValues(name) {
+        var select = form.querySelector('[name="' + name + '"]');
+        if (!select) return null;
+        var vals = Array.from(select.selectedOptions).map(function(o) { return o.value; });
+        return vals.length ? JSON.stringify(vals) : null;
+    }
+
+    searchInput.addEventListener('input', function() {
+        var q = searchInput.value.toLowerCase();
+        var filtered = allData.filter(function(ar) {
+            return ar.trigger_text.toLowerCase().includes(q) || (ar.response_text || '').toLowerCase().includes(q);
+        });
+        renderTable(filtered);
+    });
+
+    loadAutoresponders();
+})();
+</script>

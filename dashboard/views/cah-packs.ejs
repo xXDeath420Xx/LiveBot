@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Browse Packs — CertiFried CAH</title>
+<%- include('components/cah-shell-head') %>
+<style>
+    .container.cah-wide { max-width: 1400px; }
+    .hero { padding: 2.5rem 0 1.5rem; }
+    .hero h1 { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.025em; }
+    .hero p { color: var(--text-secondary); margin-top: 0.4rem; }
+
+    .filter-bar { display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.6rem; padding: 1rem 1.25rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 1.25rem; align-items: center; }
+    @media (max-width: 800px) { .filter-bar { grid-template-columns: 1fr; } }
+    .filter-bar input, .filter-bar select { padding: 0.6rem 0.8rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.9rem; font-family: inherit; }
+    .filter-bar label { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; font-size: 0.85rem; color: var(--text-secondary); }
+
+    .pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.85rem; padding-bottom: 3rem; }
+    .pack-tile { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.65rem; transition: border-color 0.15s, transform 0.15s; cursor: pointer; }
+    .pack-tile:hover { border-color: var(--accent-purple); transform: translateY(-2px); }
+    .pack-tile .name { font-weight: 700; font-size: 1rem; line-height: 1.3; }
+    .pack-tile .source { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+    .pack-tile .stats { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.3rem; }
+    .pack-tile .desc { color: var(--text-secondary); font-size: 0.82rem; line-height: 1.4; margin-top: 0.25rem; min-height: 2.5em; }
+
+    .result-meta { color: var(--text-muted); font-size: 0.85rem; padding: 0 0.5rem; margin-bottom: 0.6rem; }
+
+    /* Preview modal */
+    .preview-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; z-index: 200; padding: 2rem 1rem; }
+    .preview-mask.open { display: flex; }
+    .preview-box { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; max-width: 600px; width: 100%; max-height: 80vh; overflow: auto; box-shadow: 0 30px 80px rgba(0,0,0,0.6); }
+    .preview-head { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+    .preview-body { padding: 1.25rem 1.5rem; }
+    .preview-cards { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+    .preview-card { padding: 0.7rem 0.9rem; border-radius: 8px; font-size: 0.9rem; line-height: 1.35; }
+    .preview-card.white { background: #f5f5f0; color: #111; font-weight: 500; }
+    .preview-card.black { background: #000; color: #fff; font-weight: 600; }
+    .preview-card .pick { float: right; color: var(--accent-purple); font-size: 0.72rem; font-weight: 700; }
+</style>
+</head>
+<body>
+<%- include('components/cah-shell-nav', { user, page: 'packs' }) %>
+<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'CAH' }, { label: 'Browse Packs' }] }) %>
+
+<div class="container cah-wide">
+    <section class="hero">
+        <h1>🃏 Browse Packs</h1>
+        <p>Click any pack to preview a few of its cards. To use one in a game, copy its code or pick it in the lobby create form.</p>
+    </section>
+
+    <form class="filter-bar" method="GET" action="/cah/packs">
+        <input type="text" name="q" placeholder="🔍 Search packs by name or code…" value="<%= search %>">
+        <select name="sort">
+            <option value="recent" <%= sort === 'recent' ? 'selected' : '' %>>Most recent</option>
+            <option value="name" <%= sort === 'name' ? 'selected' : '' %>>Name (A-Z)</option>
+            <option value="size" <%= sort === 'size' ? 'selected' : '' %>>Most cards</option>
+        </select>
+        <label><input type="checkbox" name="nsfw" value="1" <%= includeNsfw ? 'checked' : '' %>> Include 🔞</label>
+        <label><input type="checkbox" name="lang" value="all" <%= includeNonEn ? 'checked' : '' %>> All languages</label>
+        <button type="submit" class="btn btn-primary btn-sm" style="grid-column: 1 / -1; justify-self: end;">Apply</button>
+    </form>
+
+    <div class="result-meta">Showing <%= packs.length %> of <%= total %> matching packs</div>
+
+    <div class="pack-grid">
+        <% packs.forEach(d => { %>
+            <div class="pack-tile" onclick="preview(<%= d.id %>, <%- JSON.stringify(d.name).replace(/</g, '\\u003c') %>, <%- JSON.stringify(d.cast_id || '').replace(/</g, '\\u003c') %>)">
+                <div class="source"><%= d.source %><% if (d.cast_id) { %> · <%= d.cast_id %><% } %></div>
+                <div class="name"><%= d.name %></div>
+                <div class="desc"><%= (d.description || '').slice(0, 120) %></div>
+                <div class="stats">
+                    <span class="pill pill-purple"><%= d.white_count %>w</span>
+                    <span class="pill"><%= d.black_count %>b</span>
+                    <% if (d.nsfw) { %><span class="pill pill-red">🔞</span><% } %>
+                </div>
+            </div>
+        <% }); %>
+    </div>
+</div>
+
+<div class="preview-mask" id="preview-mask" onclick="if(event.target===this)closePreview()">
+    <div class="preview-box">
+        <div class="preview-head">
+            <div>
+                <h3 id="preview-name" style="margin:0;"></h3>
+                <small style="color:var(--text-muted);" id="preview-code"></small>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="closePreview()">✕</button>
+        </div>
+        <div class="preview-body">
+            <h4 style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:0.4rem;">Sample Black Cards</h4>
+            <div class="preview-cards" id="preview-black"></div>
+            <h4 style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin:1rem 0 0.4rem;">Sample White Cards</h4>
+            <div class="preview-cards" id="preview-white"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function preview(id, name, code) {
+        document.getElementById('preview-name').textContent = name;
+        document.getElementById('preview-code').textContent = code || '';
+        document.getElementById('preview-black').replaceChildren();
+        document.getElementById('preview-white').replaceChildren();
+        document.getElementById('preview-mask').classList.add('open');
+        const res = await cfetch('/cah/packs/' + id + '/preview');
+        const data = await res.json();
+        if (!data.ok) return;
+        for (const b of data.sampleBlack) {
+            const div = document.createElement('div'); div.className = 'preview-card black';
+            const pick = document.createElement('span'); pick.className = 'pick'; pick.textContent = 'PICK ' + b.pick;
+            div.appendChild(pick);
+            div.appendChild(document.createTextNode(b.text.replace(/_____/g, '_______')));
+            document.getElementById('preview-black').appendChild(div);
+        }
+        for (const t of data.sampleWhite) {
+            const div = document.createElement('div'); div.className = 'preview-card white';
+            div.textContent = t;
+            document.getElementById('preview-white').appendChild(div);
+        }
+    }
+    function closePreview() { document.getElementById('preview-mask').classList.remove('open'); }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePreview(); });
+</script>
+</body>
+</html>

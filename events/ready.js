@@ -2,6 +2,8 @@ import { Events, ActivityType } from 'discord.js';
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
 import { scanForActiveStreamers } from './presenceUpdate.js';
+import { seedMessageCache } from '../utils/message-cache.js';
+import { setPrimaryClient } from '../utils/cookie-health-monitor.js';
 
 const DELETE_DELAY_MS = 1200; // ~1.2s between individual deletes to respect rate limits
 
@@ -127,7 +129,8 @@ async function syncGuildNames(client) {
         owner_id = VALUES(owner_id),
         icon_hash = VALUES(icon_hash),
         member_count = VALUES(member_count),
-        last_seen = NOW()
+        last_seen = NOW(),
+        left_at = NULL
     `, values);
 
     logger.info(`[GuildSync] Synced ${guilds.size} guild name(s) to database`);
@@ -137,6 +140,13 @@ async function syncGuildNames(client) {
       guildCount: guilds.size
     });
   }
+
+  // Note: no "kicked while offline" reconciliation here. Each bot client (main
+  // + custom bots) only sees its own subset of guilds, but the `guilds` table
+  // is shared across all of them — a single-client reconciliation would
+  // wrongly mark every guild served by another bot as "left." Rely on the
+  // guildDelete event for live-session losses; if a bot is kicked while
+  // offline, that loss will surface the next time we touch the guild.
 }
 
 export default {
@@ -171,6 +181,15 @@ export default {
     syncGuildNames(client).catch(err => {
       logger.error(`[GuildSync] Unhandled error: ${err.message}`);
     });
+
+    // Seed the message cache with recent messages from all channels
+    // Only run for the default bot — custom bots share the same DB and don't need duplicate seeding
+    if (client.isDefaultBot) {
+      seedMessageCache(client).catch(err => {
+        logger.error(`[MessageCache Seed] Unhandled error: ${err.message}`);
+      });
+      setPrimaryClient(client);
+    }
 
     // Scan for members already streaming (catches transitions missed during restart)
     // Delay slightly to let Discord populate the presence cache

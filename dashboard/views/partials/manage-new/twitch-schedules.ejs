@@ -49,7 +49,7 @@ const twitchStreamers = consolidatedStreamers ? consolidatedStreamers.filter(s =
         </div>
 
         <form id="add-sync-form" class="space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="form-group">
                     <label class="form-label">Twitch Streamer</label>
                     <select name="streamerId" class="form-input w-full" required>
@@ -72,6 +72,21 @@ const twitchStreamers = consolidatedStreamers ? consolidatedStreamers.filter(s =
                         placeholder: 'Select channel...'
                     }) %>
                     <p class="form-hint">Where to post schedule updates</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label">Update Interval (minutes)</label>
+                    <input name="syncIntervalMinutes" type="number" class="form-input w-full" min="15" max="10080" value="360">
+                    <p class="form-hint">How often to check for changes. 15 – 10080 (1 week). Default: 360 (6 hr).</p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Weekly Fresh Post</label>
+                    <label class="flex items-center gap-2 mt-2 cursor-pointer">
+                        <input name="weeklyRefresh" type="checkbox" class="w-4 h-4 rounded">
+                        <span class="text-sm text-gray-300">Delete old embed + post new every 7 days</span>
+                    </label>
+                    <p class="form-hint">When off, the bot edits the existing embed in place.</p>
                 </div>
                 <div class="form-group flex items-end">
                     <button type="submit" class="btn btn-primary w-full">
@@ -106,6 +121,9 @@ const twitchStreamers = consolidatedStreamers ? consolidatedStreamers.filter(s =
                         <tr class="border-b border-dark-400">
                             <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Streamer</th>
                             <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Channel</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Interval</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Mode</th>
+                            <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">View</th>
                             <th class="text-left py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Last Sync</th>
                             <th class="text-right py-3 px-4 text-sm font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -113,8 +131,12 @@ const twitchStreamers = consolidatedStreamers ? consolidatedStreamers.filter(s =
                     <tbody class="divide-y divide-dark-400">
                         <% syncs.forEach(sync => { %>
                             <% const streamer = consolidatedStreamers?.find(s => s.subscriptions?.some(sub => sub.streamer_id === sync.streamer_id)); %>
-                            <% const channel = channels.find(c => c.id === sync.channel_id); %>
-                            <tr class="hover:bg-dark-600 transition-colors">
+                            <% const channelId = sync.discord_channel_id || sync.channel_id; %>
+                            <% const channel = channels.find(c => c.id === channelId); %>
+                            <% const intervalMin = sync.sync_interval_minutes || 360; %>
+                            <% const intervalLabel = intervalMin >= 60 ? (intervalMin / 60) + ' hr' : intervalMin + ' min'; %>
+                            <% const streamerName = streamer ? streamer.name : (sync.username || 'Unknown Streamer'); %>
+                            <tr class="hover:bg-dark-600 transition-colors" data-sync-id="<%= sync.id %>">
                                 <td class="py-3 px-4">
                                     <div class="flex items-center gap-3">
                                         <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
@@ -122,7 +144,7 @@ const twitchStreamers = consolidatedStreamers ? consolidatedStreamers.filter(s =
                                                 <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>
                                             </svg>
                                         </div>
-                                        <span class="font-medium text-white"><%= streamer ? streamer.name : 'Unknown Streamer' %></span>
+                                        <span class="font-medium text-white"><%= streamerName %></span>
                                     </div>
                                 </td>
                                 <td class="py-3 px-4">
@@ -131,16 +153,43 @@ const twitchStreamers = consolidatedStreamers ? consolidatedStreamers.filter(s =
                                         <span class="text-gray-300"><%= channel ? channel.name : 'Unknown Channel' %></span>
                                     </div>
                                 </td>
+                                <td class="py-3 px-4 text-sm text-gray-300"><%= intervalLabel %></td>
+                                <td class="py-3 px-4">
+                                    <% if (sync.weekly_refresh) { %>
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-purple-500/15 text-purple-300">Weekly fresh</span>
+                                    <% } else { %>
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-gray-500/15 text-gray-400">Edit in place</span>
+                                    <% } %>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <% const viewMode = sync.view_mode === 'weekly' ? 'weekly' : 'monthly'; %>
+                                    <% if (viewMode === 'weekly') { %>
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-300">Weekly</span>
+                                    <% } else { %>
+                                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-300">Monthly</span>
+                                    <% } %>
+                                </td>
                                 <td class="py-3 px-4 text-sm text-gray-500">
-                                    <%= sync.last_sync ? new Date(sync.last_sync).toLocaleString() : 'Never' %>
+                                    <%= sync.last_synced ? new Date(sync.last_synced).toLocaleString() : 'Never' %>
                                 </td>
                                 <td class="py-3 px-4 text-right">
-                                    <button onclick="deleteSync('<%= sync.id %>')" class="btn btn-danger btn-sm">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                        </svg>
-                                        Remove
-                                    </button>
+                                    <div class="inline-flex gap-2">
+                                        <button onclick="openEditSyncModal('<%= sync.id %>', <%= intervalMin %>, <%= sync.weekly_refresh ? 'true' : 'false' %>, '<%= viewMode %>')" class="btn btn-ghost btn-sm" title="Edit settings">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                            </svg>
+                                        </button>
+                                        <button onclick="forceSync('<%= sync.id %>')" class="btn btn-ghost btn-sm" title="Force sync now">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                            </svg>
+                                        </button>
+                                        <button onclick="deleteSync('<%= sync.id %>')" class="btn btn-danger btn-sm" title="Remove">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         <% }); %>
@@ -179,13 +228,55 @@ const twitchStreamers = consolidatedStreamers ? consolidatedStreamers.filter(s =
             </li>
             <li class="flex items-start gap-2">
                 <span class="text-purple-400">3.</span>
-                Schedules are updated every hour to stay current
+                Each sync runs on its own configurable interval (15 min – 1 week)
             </li>
             <li class="flex items-start gap-2">
                 <span class="text-purple-400">4.</span>
+                Enable "Weekly Fresh Post" to delete the old embed and post a new one every 7 days
+            </li>
+            <li class="flex items-start gap-2">
+                <span class="text-purple-400">5.</span>
                 Great for keeping your community informed about upcoming streams!
             </li>
         </ul>
+    </div>
+</div>
+
+<!-- Edit Sync Modal -->
+<div id="edit-sync-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60">
+    <div class="card max-w-md w-full mx-4">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-white">Edit Schedule Sync</h3>
+            <button onclick="closeEditSyncModal()" class="text-gray-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <form id="edit-sync-form" class="space-y-4">
+            <input type="hidden" name="syncId">
+            <div class="form-group">
+                <label class="form-label">Update Interval (minutes)</label>
+                <input name="syncIntervalMinutes" type="number" class="form-input w-full" min="15" max="10080">
+                <p class="form-hint">15 – 10080 (1 week). Default: 360 (6 hr).</p>
+            </div>
+            <div class="form-group">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input name="weeklyRefresh" type="checkbox" class="w-4 h-4 rounded">
+                    <span class="text-sm text-gray-300">Weekly Fresh Post (delete old + post new every 7 days)</span>
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Calendar View</label>
+                <select name="viewMode" class="form-input w-full">
+                    <option value="monthly">Monthly — full month grid</option>
+                    <option value="weekly">Weekly — 7-day view</option>
+                </select>
+                <p class="form-hint">Times are always rendered in this server's configured timezone.</p>
+            </div>
+            <div class="flex gap-2 justify-end">
+                <button type="button" onclick="closeEditSyncModal()" class="btn btn-ghost">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -196,7 +287,9 @@ document.getElementById('add-sync-form')?.addEventListener('submit', async funct
 
     const data = {
         streamerId: formData.get('streamerId'),
-        channelId: formData.get('channelId')
+        channelId: formData.get('channelId'),
+        syncIntervalMinutes: parseInt(formData.get('syncIntervalMinutes'), 10) || 360,
+        weeklyRefresh: formData.get('weeklyRefresh') === 'on'
     };
 
     if (!data.streamerId || !data.channelId) {
@@ -240,6 +333,65 @@ async function deleteSync(syncId) {
         }
     } catch (error) {
         showToast('error', 'Failed to remove schedule sync');
+    }
+}
+
+function openEditSyncModal(syncId, intervalMinutes, weeklyRefresh, viewMode) {
+    const modal = document.getElementById('edit-sync-modal');
+    const form = document.getElementById('edit-sync-form');
+    form.elements.syncId.value = syncId;
+    form.elements.syncIntervalMinutes.value = intervalMinutes;
+    form.elements.weeklyRefresh.checked = !!weeklyRefresh;
+    form.elements.viewMode.value = viewMode === 'weekly' ? 'weekly' : 'monthly';
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeEditSyncModal() {
+    const modal = document.getElementById('edit-sync-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+document.getElementById('edit-sync-form')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const syncId = form.elements.syncId.value;
+    const data = {
+        syncIntervalMinutes: parseInt(form.elements.syncIntervalMinutes.value, 10) || 360,
+        weeklyRefresh: form.elements.weeklyRefresh.checked,
+        viewMode: form.elements.viewMode.value === 'weekly' ? 'weekly' : 'monthly'
+    };
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/twitch-schedules/' + encodeURIComponent(syncId), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            showToast('success', 'Schedule sync updated');
+            location.reload();
+        } else {
+            throw new Error('Failed');
+        }
+    } catch {
+        showToast('error', 'Failed to update schedule sync');
+    }
+});
+
+async function forceSync(syncId) {
+    try {
+        const response = await fetch('/api/guilds/<%= guildId %>/twitch-schedules/' + encodeURIComponent(syncId) + '/force-sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (response.ok) {
+            showToast('success', 'Sync triggered — give it a few seconds to post');
+        } else {
+            throw new Error('Failed');
+        }
+    } catch {
+        showToast('error', 'Failed to trigger sync');
     }
 }
 </script>

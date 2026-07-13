@@ -43,6 +43,9 @@ const Colors = {
     RPG_SHOP: 0xDAA520,     // Goldenrod
     RPG_LEVEL: 0x9400D3,    // Dark Violet
 
+    // Platform colors (continued)
+    THRONE: 0x7C3AED,      // Throne Purple
+
     // Neutral
     DEFAULT: 0x36393F,      // Discord Dark
     INVISIBLE: 0x2F3136,    // Discord Embed Background
@@ -73,6 +76,7 @@ const ColorsHex = {
     TROVO: '#21D464',
     GROW: '#228B22',
     HARVEST: '#32CD32',
+    THRONE: '#7C3AED',
     RPG_COMBAT: '#DC143C',
     RPG_QUEST: '#4169E1',
     RPG_SHOP: '#DAA520',

@@ -1,0 +1,246 @@
+<%# Ko-fi supporter roles. API-driven; needs `guild`, `channels`, `roles` in locals. %>
+<div class="page-section" id="kofiPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-mug-hot"></i>
+                <span>Ko-fi</span>
+            </div>
+            <div class="page-section-subtitle">
+                Grant roles automatically when someone tips or subscribes on Ko-fi.
+            </div>
+        </div>
+        <label class="switch" title="Process Ko-fi webhooks">
+            <input type="checkbox" id="kofiEnabled">
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <div id="kofiError" class="alert alert-danger" hidden></div>
+
+    <!-- Connection -->
+    <div class="kofi-card">
+        <h3 class="kofi-h"><i class="fas fa-plug"></i> Connection</h3>
+        <p class="form-help">
+            Open <strong>Ko-fi → Settings → API</strong>. Copy the <em>Verification Token</em> below,
+            save, then paste the webhook URL we give you back into Ko-fi's <em>Webhook URL</em> field.
+        </p>
+
+        <div class="form-group">
+            <label class="form-label">Verification token</label>
+            <input type="password" id="kofiToken" class="form-control" placeholder="Paste from Ko-fi (leave blank to keep the current one)" autocomplete="off">
+            <small class="form-help" id="kofiTokenHint"></small>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Thank-you channel</label>
+            <select id="kofiChannel" class="form-control">
+                <option value="">Don't announce</option>
+                <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).forEach(c => { %>
+                    <option value="<%= c.id %>">#<%= c.name %></option>
+                <% }) %>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Thank-you message <span class="form-help">— {user}, {amount}, {tier}</span></label>
+            <input type="text" id="kofiMessage" class="form-control" maxlength="500"
+                   placeholder="☕ {user} supported us with {amount}. Thank you!">
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">How long a perk lasts</label>
+            <input type="number" id="kofiDays" class="form-control" min="1" max="365" style="max-width:8rem">
+            <small class="form-help">
+                Ko-fi never tells us a membership was cancelled — it just stops sending renewals.
+                Each payment extends the window; when it lapses, the role is removed.
+            </small>
+        </div>
+
+        <div class="kofi-actions">
+            <button class="btn btn-primary" id="kofiSave">Save connection</button>
+            <span class="kofi-status" id="kofiSaveStatus"></span>
+        </div>
+
+        <div class="form-group" id="kofiUrlWrap" hidden>
+            <label class="form-label">Webhook URL — treat this like a password</label>
+            <div class="kofi-url-row">
+                <input type="text" id="kofiUrl" class="form-control" readonly>
+                <button class="btn btn-secondary" id="kofiCopy">Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tiers -->
+    <div class="kofi-card">
+        <h3 class="kofi-h"><i class="fas fa-layer-group"></i> Tiers → roles</h3>
+        <p class="form-help">
+            A <strong>tier name</strong> matches Ko-fi memberships exactly. A <strong>minimum amount</strong>
+            catches one-off tips — the highest amount a payment clears wins, so a $20 tip earns the $20 role.
+        </p>
+
+        <div class="kofi-tier-form">
+            <select id="kofiRole" class="form-control">
+                <option value="">Choose a role…</option>
+                <% (locals.roles || []).filter(r => r.name !== '@everyone').forEach(r => { %>
+                    <option value="<%= r.id %>"><%= r.name %></option>
+                <% }) %>
+            </select>
+            <input type="text" id="kofiTierName" class="form-control" placeholder="Ko-fi tier name (e.g. Gold)">
+            <input type="number" id="kofiMinAmount" class="form-control" min="0" step="0.01" placeholder="or min amount">
+            <button class="btn btn-primary" id="kofiAddTier">Add</button>
+        </div>
+        <span class="kofi-status" id="kofiTierStatus"></span>
+
+        <div id="kofiTiers" class="kofi-list">Loading…</div>
+    </div>
+
+    <!-- Supporters -->
+    <div class="kofi-card">
+        <h3 class="kofi-h"><i class="fas fa-heart"></i> Supporters</h3>
+        <p class="form-help">
+            Members link their Ko-fi with <code>/kofi link</code>, which gives them a one-time code to put
+            in their Ko-fi message. After that, renewals match automatically by email.
+        </p>
+        <div id="kofiSupporters" class="kofi-list">Loading…</div>
+    </div>
+</div>
+
+<style>
+  #kofiPage .kofi-card { background:#1e2028; border:1px solid #2c2f3a; border-radius:10px; padding:1.1rem 1.25rem; margin-bottom:1rem; }
+  #kofiPage .kofi-h { margin:0 0 .35rem; font-size:1rem; font-weight:600; }
+  #kofiPage .kofi-actions { display:flex; align-items:center; gap:.75rem; margin-top:.5rem; }
+  #kofiPage .kofi-status { font-size:.85rem; min-height:1em; color:#57F287; }
+  #kofiPage .kofi-url-row { display:flex; gap:.5rem; }
+  #kofiPage .kofi-tier-form { display:grid; grid-template-columns: 1fr 1fr 9rem auto; gap:.5rem; align-items:center; }
+  @media (max-width: 800px) { #kofiPage .kofi-tier-form { grid-template-columns: 1fr; } }
+  #kofiPage .kofi-list { margin-top:.9rem; display:grid; gap:.45rem; }
+  #kofiPage .kofi-row { display:flex; align-items:center; justify-content:space-between; gap:1rem;
+    padding:.6rem .8rem; border:1px solid #2c2f3a; border-radius:8px; background:#14161c; font-size:.9rem; }
+  #kofiPage .kofi-muted { color:#8b8f9e; }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('kofiPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/kofi${p}`;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  // Resolve role ids to names; a deleted role should say so rather than show a bare snowflake.
+  const ROLES = <%- JSON.stringify(Object.fromEntries((locals.roles || []).map(r => [r.id, r.name]))) %>;
+  const roleName = (id) => ROLES[id] ? `@${ROLES[id]}` : `deleted role (${id})`;
+
+  async function req(url, options) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (msg) => { const el = $('kofiError'); if (!msg) { el.hidden = true; return; } el.textContent = msg; el.hidden = false; };
+  const flash = (el, msg, ok = true) => { el.textContent = msg; el.style.color = ok ? '#57F287' : '#ED4245'; setTimeout(() => { el.textContent = ''; }, 3000); };
+
+  function renderTiers(tiers) {
+    const el = $('kofiTiers');
+    if (!tiers.length) { el.innerHTML = '<div class="kofi-muted">No tiers yet. Nothing will be granted.</div>'; return; }
+    el.innerHTML = tiers.map(t => `
+      <div class="kofi-row">
+        <div>
+          ${t.tier_name
+            ? `Tier <strong>${esc(t.tier_name)}</strong>`
+            : `<strong>${Number(t.min_amount).toFixed(2)}+</strong>`}
+          → <strong>${esc(roleName(t.role_id))}</strong>
+        </div>
+        <button class="btn btn-sm btn-danger" data-del-tier="${esc(t.role_id)}">Remove</button>
+      </div>`).join('');
+  }
+
+  function renderSupporters(rows) {
+    const el = $('kofiSupporters');
+    if (!rows.length) { el.innerHTML = '<div class="kofi-muted">No supporters recorded yet.</div>'; return; }
+    el.innerHTML = rows.map(s => {
+      const who = s.user_id ? `Member ${s.user_id}` : (s.from_name || 'Anonymous');
+      const expires = s.expires_at ? new Date(s.expires_at).toLocaleDateString() : '—';
+      return `<div class="kofi-row">
+        <div><strong>${esc(who)}</strong> ${s.tier_name ? `<span class="kofi-muted">· ${esc(s.tier_name)}</span>` : ''}</div>
+        <div class="kofi-muted">${esc(s.currency || '')} ${Number(s.lifetime_amount).toFixed(2)} · expires ${esc(expires)}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function fill(data) {
+    const c = data.config;
+    $('kofiEnabled').checked = !!c?.enabled;
+    $('kofiEnabled').disabled = !data.configured;
+    $('kofiChannel').value = c?.announce_channel_id || '';
+    $('kofiMessage').value = c?.thank_you_message || '';
+    $('kofiDays').value = c?.role_duration_days ?? data.defaultDurationDays;
+    $('kofiTokenHint').textContent = c?.has_verification_token
+      ? 'A token is saved. Leave blank to keep it.'
+      : 'Required — copy it from Ko-fi.';
+
+    if (c?.webhook_url) {
+      $('kofiUrlWrap').hidden = false;
+      $('kofiUrl').value = c.webhook_url;
+    }
+    renderTiers(data.tiers || []);
+    renderSupporters(data.supporters || []);
+  }
+
+  async function load() {
+    try { showError(''); fill(await req(api('/'))); }
+    catch (err) { showError(err.message); }
+  }
+
+  $('kofiSave').addEventListener('click', async () => {
+    try {
+      const body = {
+        verification_token: $('kofiToken').value.trim() || null,
+        announce_channel_id: $('kofiChannel').value || null,
+        thank_you_message: $('kofiMessage').value.trim() || null,
+        role_duration_days: Number($('kofiDays').value),
+      };
+      await req(api('/config'), { method: 'PUT', body: JSON.stringify(body) });
+      $('kofiToken').value = '';
+      flash($('kofiSaveStatus'), 'Saved.');
+      await load();
+    } catch (err) { flash($('kofiSaveStatus'), err.message, false); }
+  });
+
+  $('kofiEnabled').addEventListener('change', async (e) => {
+    try { await req(api('/toggle'), { method: 'POST', body: JSON.stringify({ enabled: e.target.checked }) }); }
+    catch (err) { showError(err.message); e.target.checked = !e.target.checked; }
+  });
+
+  $('kofiCopy').addEventListener('click', () => {
+    navigator.clipboard?.writeText($('kofiUrl').value);
+    flash($('kofiSaveStatus'), 'Copied.');
+  });
+
+  $('kofiAddTier').addEventListener('click', async () => {
+    try {
+      await req(api('/tiers'), { method: 'POST', body: JSON.stringify({
+        role_id: $('kofiRole').value,
+        tier_name: $('kofiTierName').value.trim() || null,
+        min_amount: Number($('kofiMinAmount').value || 0),
+      }) });
+      $('kofiTierName').value = ''; $('kofiMinAmount').value = '';
+      flash($('kofiTierStatus'), 'Tier added.');
+      await load();
+    } catch (err) { flash($('kofiTierStatus'), err.message, false); }
+  });
+
+  root.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-del-tier]');
+    if (!btn) return;
+    try {
+      await req(api(`/tiers/${btn.dataset.delTier}`), { method: 'DELETE' });
+      await load();
+    } catch (err) { showError(err.message); }
+  });
+
+  load();
+})();
+</script>

@@ -120,9 +120,16 @@ function parseRSSItem(item, username, sourceType) {
     // Extract tweet ID from URL
     const id = extractTweetId(link);
 
-    // Clean and combine text
-    let text = description || title;
-    text = cleanTweetText(text);
+    // Pick the richer text source. Nitter <title> is plaintext with real newlines
+    // preserved; <description> is HTML. Clean both and prefer the longer one so
+    // we keep whatever source has the most content.
+    const cleanedDesc  = cleanTweetText(description);
+    const cleanedTitle = cleanTweetText(title);
+    let text = cleanedTitle.length > cleanedDesc.length ? cleanedTitle : cleanedDesc;
+    // Strip leading "RT by @user:" Nitter-specific prefix so the body shows raw
+    if (text.startsWith('RT by @' + username + ':')) {
+        text = text.replace('RT by @' + username + ':', '').trim();
+    }
 
     // Detect if it's a retweet or reply
     const isRetweet = title.startsWith('RT by') ||
@@ -331,50 +338,91 @@ function extractTweetId(url) {
 function cleanTweetText(html) {
     if (!html) return '';
     return html
+        // Paragraphs/divs → double newline (blank line between blocks)
+        .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
+        .replace(/<p[^>]*>/gi, '')
+        .replace(/<\/p>/gi, '')
+        // Line breaks → single newline
         .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, '$2')
+        // Anchors: if href differs meaningfully from text, emit markdown link.
+        // Rewrite Nitter hashtag-search URLs to x.com so hashtags stay clickable.
+        .replace(/<a[^>]*href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, (_, href, text) => {
+            const cleanHref = href
+                .replace(/^https?:\/\/nitter\.[^/]+\/search\?f=tweets&q=%23/, 'https://x.com/hashtag/')
+                .replace(/^https?:\/\/nitter\.[^/]+\//, 'https://x.com/');
+            // If text already contains the URL (auto-linked in tweet body), just emit bare URL so
+            // Discord's auto-link kicks in with the full `https://` prefix.
+            if (text && cleanHref.toLowerCase().includes(text.toLowerCase().replace(/^https?:\/\//, ''))) {
+                return cleanHref;
+            }
+            return `[${text}](${cleanHref})`;
+        })
+        // Strip any remaining tags
         .replace(/<[^>]+>/g, '')
+        // HTML entities
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
-        .replace(/\s+/g, ' ')
+        // Collapse only horizontal whitespace runs; cap 3+ blank lines at 2
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n[ \t]+/g, '\n')
         .trim();
+}
+
+// Rewrite a Nitter-proxied media URL back to the real Twitter CDN.
+//   https://nitter.net/pic/media%2FHGfHc1PagAEi2Lv.jpg
+//   → https://pbs.twimg.com/media/HGfHc1PagAEi2Lv.jpg
+// Also handles /pic/video/, /pic/orig/, /pic/enc/... patterns by best-effort decoding.
+function rewriteNitterMediaUrl(url) {
+    if (!url || typeof url !== 'string') return url;
+    const m = url.match(/^https?:\/\/nitter\.[^/]+\/pic\/(.+)$/i);
+    if (!m) return url;
+    let decoded = m[1];
+    try { decoded = decodeURIComponent(decoded); } catch { /* keep as-is */ }
+    // decoded now looks like "media/HGfHc1PagAEi2Lv.jpg" or "video/amplify_video_thumb/..."
+    if (decoded.startsWith('media/') || decoded.startsWith('ext_tw_video_thumb/') || decoded.startsWith('amplify_video_thumb/')) {
+        return 'https://pbs.twimg.com/' + decoded;
+    }
+    if (decoded.startsWith('video/')) {
+        // Nitter video proxy: we can only use the thumbnail portion reliably for embeds
+        return 'https://pbs.twimg.com/' + decoded.replace(/^video\//, '');
+    }
+    return url;
 }
 
 function extractMediaFromHtml(html) {
     if (!html) return [];
     const media = [];
+    const seen = new Set();
 
-    // Extract images
-    const imgMatches = html.matchAll(/<img[^>]*src="([^"]*)"[^>]*>/gi);
-    for (const match of imgMatches) {
+    const pushMedia = (type, rawUrl) => {
+        if (!rawUrl) return;
+        const url = rewriteNitterMediaUrl(rawUrl);
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        media.push({ type, url });
+    };
+
+    // Inline <img src="...">
+    for (const match of html.matchAll(/<img[^>]*src="([^"]*)"[^>]*>/gi)) {
         const url = match[1];
-        if (url && !url.includes('emoji') && !url.includes('avatar') && !url.includes('icon')) {
-            media.push({
-                type: 'image',
-                url: url
-            });
+        if (url && !/emoji|avatar|icon|profile_images/.test(url)) {
+            pushMedia('image', url);
         }
     }
 
-    // Extract video thumbnails
-    const videoMatches = html.matchAll(/href="([^"]*\/video\/[^"]*)"/gi);
-    for (const match of videoMatches) {
-        media.push({
-            type: 'video',
-            url: match[1]
-        });
+    // Video thumbnails — Nitter sometimes includes poster URLs
+    for (const match of html.matchAll(/<video[^>]*poster="([^"]*)"[^>]*>/gi)) {
+        pushMedia('video', match[1]);
     }
 
-    // Extract enclosure (media RSS)
-    const enclosureMatches = html.matchAll(/<enclosure[^>]*url="([^"]*)"[^>]*type="image[^"]*"/gi);
-    for (const match of enclosureMatches) {
-        media.push({
-            type: 'image',
-            url: match[1]
-        });
+    // Enclosure (media RSS)
+    for (const match of html.matchAll(/<enclosure[^>]*url="([^"]*)"[^>]*type="(image|video)[^"]*"/gi)) {
+        pushMedia(match[2] === 'video' ? 'video' : 'image', match[1]);
     }
 
     return media;

@@ -362,6 +362,26 @@ class LevelingManager {
         }
       }
 
+      // Auto-resume paused stream subscriptions: when a user first crosses into a level
+      // that qualifies them for shoutouts (currently >= 3, matches stream-signup gate),
+      // unpause any of their paused subs in this guild.
+      if (oldLevel < 3 && newLevel >= 3) {
+        try {
+          const [resumed] = await pool.execute(
+            `UPDATE subscriptions sub
+             JOIN streamers s ON s.streamer_id = sub.streamer_id
+             SET sub.paused = 0
+             WHERE sub.guild_id = ? AND s.discord_user_id = ? AND sub.paused = 1`,
+            [message.guild.id, message.author.id]
+          );
+          if (resumed.affectedRows > 0) {
+            logger.info(`[LevelingManager] Resumed ${resumed.affectedRows} paused subs for ${message.author.tag} at level ${newLevel}`);
+          }
+        } catch (e) {
+          logger.error('[LevelingManager] Failed to resume paused subs on level-up', { error: e.message });
+        }
+      }
+
       // Send to configured channel or current channel
       const channelId = config.level_up_channel_id || message.channel.id;
       const channel = message.guild.channels.cache.get(channelId);

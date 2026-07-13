@@ -121,6 +121,140 @@ export async function handleCustomCommand(interaction) {
   return false;
 }
 
+/** The full set of placeholders a custom-command response may use. */
+export const TEMPLATE_VARIABLES = Object.freeze([
+  { token: '{user.name}', description: "The invoking (or targeted) user's username" },
+  { token: '{user.mention}', description: 'Pings that user' },
+  { token: '{user.id}', description: "That user's ID" },
+  { token: '{user.tag}', description: 'username#0000' },
+  { token: '{channel.name}', description: 'Current channel name' },
+  { token: '{channel.mention}', description: 'Links the current channel' },
+  { token: '{channel.id}', description: 'Current channel ID' },
+  { token: '{server.name}', description: 'This server\'s name' },
+  { token: '{server.id}', description: "This server's ID" },
+  { token: '{random:1-100}', description: 'A random whole number in that range' },
+  { token: '{choice:a|b|c}', description: 'Picks one of the options at random' },
+]);
+
+const RANDOM_RE = /\{random:(-?\d{1,9})-(-?\d{1,9})\}/g;
+const CHOICE_RE = /\{choice:([^{}]{1,300})\}/g;
+
+/**
+ * Fill a response template. Dynamic tokens are resolved per invocation, so `!pp` can answer
+ * with a different number each time — which is what the bots we replace actually do.
+ */
+export function substitute(text, values, rng = Math.random) {
+  let out = text || '';
+  for (const [token, value] of Object.entries(values)) {
+    out = out.split(token).join(value);
+  }
+
+  out = out.replace(RANDOM_RE, (_, lo, hi) => {
+    let a = parseInt(lo, 10), b = parseInt(hi, 10);
+    if (a > b) [a, b] = [b, a];
+    return String(a + Math.floor(rng() * (b - a + 1)));
+  });
+
+  out = out.replace(CHOICE_RE, (_, list) => {
+    const options = list.split('|').map(s => s.trim()).filter(Boolean);
+    return options.length ? options[Math.floor(rng() * options.length)] : '';
+  });
+
+  return out;
+}
+
+/** Look a custom command up (cached) by guild + name. */
+export async function findCustomCommand(guildId, commandName) {
+  const name = String(commandName || '').toLowerCase();
+  const cacheKey = `${guildId}:${name}`;
+  if (commandCache.has(cacheKey)) return commandCache.get(cacheKey);
+
+  const [rows] = await pool.execute(
+    'SELECT * FROM custom_commands WHERE guild_id = ? AND command_name = ?', [guildId, name]);
+  const command = rows[0] || null;
+  if (command) commandCache.set(cacheKey, command);
+  return command;
+}
+
+/**
+ * Run a custom command from a plain chat message (`!rules`).
+ *
+ * Custom commands were previously only reachable through `handleCustomCommand`, which
+ * nothing called and which needed a slash command that was never registered — so they
+ * never ran at all. The prefix bridge is what actually makes them work.
+ *
+ * @returns {Promise<boolean>} true if a custom command with this name ran.
+ */
+export async function handleCustomPrefixCommand(message, commandName) {
+  if (!message.guild) return false;
+
+  let command;
+  try {
+    command = await findCustomCommand(message.guild.id, commandName);
+  } catch (error) {
+    if (error.code !== 'ER_NO_SUCH_TABLE') {
+      logger.error(`[CustomCommand] lookup failed: ${error.message}`);
+    }
+    return false;
+  }
+  if (!command) return false;
+
+  try {
+    const requiredRoles = command.required_roles ? JSON.parse(command.required_roles) : [];
+    if (requiredRoles.length && !message.member?.roles.cache.some(r => requiredRoles.includes(r.id))) {
+      await message.reply({ content: 'You do not have the required role to use this command.' }).catch(() => {});
+      return true;
+    }
+
+    const allowedChannels = command.allowed_channels ? JSON.parse(command.allowed_channels) : [];
+    if (allowedChannels.length && !allowedChannels.includes(message.channelId)) {
+      await message.reply({
+        content: `This command can only be used in: ${allowedChannels.map(id => `<#${id}>`).join(', ')}.`,
+      }).catch(() => {});
+      return true;
+    }
+
+    const targetUser = message.mentions.users.first() || message.author;
+    const targetMember = message.mentions.members?.first() || message.member;
+    const response = substitute(command.response, {
+      '{user.name}': targetUser.username,
+      '{user.mention}': targetUser.toString(),
+      '{user.id}': targetUser.id,
+      '{user.tag}': targetUser.tag,
+      '{channel.name}': message.channel.name ?? 'DM',
+      '{channel.mention}': message.channel.toString(),
+      '{channel.id}': message.channelId,
+      '{server.name}': message.guild.name,
+      '{server.id}': message.guild.id,
+    });
+
+    switch (command.action_type) {
+      case 'add_role':
+      case 'remove_role': {
+        const role = await message.guild.roles.fetch(command.action_content).catch(() => null);
+        if (!role || !role.editable) {
+          await message.reply({ content: 'That role is invalid or I cannot manage it.' }).catch(() => {});
+          return true;
+        }
+        const adding = command.action_type === 'add_role';
+        await targetMember.roles[adding ? 'add' : 'remove'](role);
+        await message.reply({
+          content: `${adding ? 'Added' : 'Removed'} the ${role.name} role ${adding ? 'to' : 'from'} ${targetMember.displayName}.`,
+        }).catch(() => {});
+        return true;
+      }
+      case 'reply':
+      default:
+        if (response) await message.reply({ content: response, allowedMentions: { repliedUser: false } }).catch(() => {});
+        return true;
+    }
+  } catch (error) {
+    logger.error(`[CustomCommand] '${commandName}' failed: ${error.message}`, { guildId: message.guild.id });
+    await message.reply({ content: 'That custom command is not configured correctly.' }).catch(() => {});
+    return true;
+  }
+}
+
 /**
  * Parse variables in text
  * @param {string} text - Text with variables to parse

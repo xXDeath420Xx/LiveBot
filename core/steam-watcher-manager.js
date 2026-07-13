@@ -322,19 +322,25 @@ export default class SteamWatcherManager {
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 
+      // Steam externalpost URLs include the source name as a path segment
+      // (e.g. .../externalpost/PC Gamer/123…), which contains whitespace
+      // that breaks Discord's autolink parser. Encode whitespace so the
+      // link stays clickable.
+      const safeUrl = news.url.replace(/\s/g, '%20');
+
       // Build plain text message
       let message = `**${news.title}**\n\n`;
 
       if (content) {
         // Truncate if too long for Discord (max 2000 chars total)
-        const maxContentLength = 1800 - news.title.length - news.url.length;
+        const maxContentLength = 1800 - news.title.length - safeUrl.length;
         if (content.length > maxContentLength) {
           content = content.substring(0, maxContentLength - 3) + '...';
         }
         message += `${content}\n\n`;
       }
 
-      message += news.url;
+      message += safeUrl;
 
       const mentionContent = this.buildMentionString(watcher);
       const fullMessage = mentionContent ? `${mentionContent}\n${message}` : message;

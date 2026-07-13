@@ -87,6 +87,323 @@
     </form>
 </div>
 
+<!-- Custom Bot Instance Section -->
+<div class="page-section" style="margin-top: var(--spacing-6);">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-robot"></i>
+                <span>Custom Bot Instance</span>
+            </div>
+            <div class="page-section-subtitle">
+                Run your own bot application for this server instead of using the shared CertiFried Utility bot
+            </div>
+        </div>
+    </div>
+
+    <% if (typeof customBotInfo !== 'undefined' && customBotInfo) { %>
+    <!-- Has custom bot — show status card -->
+    <div id="custom-bot-status" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+        <div style="display: flex; align-items: center; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;">
+                <% if (customBotInfo.bot_avatar) { %>
+                    <img src="<%= customBotInfo.bot_avatar %>" alt="Bot Avatar" style="width: 100%; height: 100%; object-fit: cover;">
+                <% } else { %>
+                    <i class="fas fa-robot" style="font-size: 24px; color: var(--color-text-muted);"></i>
+                <% } %>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                    <%= customBotInfo.bot_name %>
+                </div>
+                <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-top: var(--spacing-1);">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: <%= customBotInfo.is_online ? 'var(--accent-green)' : 'var(--color-text-muted)' %>; display: inline-block;"></span>
+                    <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
+                        <%= customBotInfo.is_online ? 'Online' : 'Offline' %>
+                    </span>
+                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-left: var(--spacing-2);">
+                        ID: <%= customBotInfo.bot_id %>
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
+            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Status</div>
+                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: <%= customBotInfo.enabled && customBotInfo.approved ? 'var(--accent-green)' : 'var(--color-warning)' %>;">
+                    <%= customBotInfo.enabled && customBotInfo.approved ? 'Active' : !customBotInfo.approved ? 'Pending Approval' : 'Disabled' %>
+                </div>
+            </div>
+            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Managed By</div>
+                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                    <%= customBotInfo.owner_name || ('User ' + customBotInfo.owner_user_id) %>
+                </div>
+            </div>
+            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Type</div>
+                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                    <%= customBotInfo.self_service ? 'Self-Service' : 'Managed by Bot Manager' %>
+                </div>
+            </div>
+            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3);">
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Assigned</div>
+                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
+                    <%= customBotInfo.assigned_at ? new Date(customBotInfo.assigned_at).toLocaleDateString() : (customBotInfo.created_at ? new Date(customBotInfo.created_at).toLocaleDateString() : 'Unknown') %>
+                </div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: var(--spacing-3); align-items: center; flex-wrap: wrap; margin-bottom: var(--spacing-4);">
+            <button type="button" id="remove-custom-bot-btn" class="btn btn-danger">
+                <i class="fas fa-trash"></i>
+                <span>Remove Custom Bot</span>
+            </button>
+            <div class="form-help" style="margin-top: 0;">Removes this bot and switches the server back to the default CertiFried Utility bot.</div>
+        </div>
+
+        <!-- Replace with own bot -->
+        <details style="border-top: 1px solid var(--color-border); padding-top: var(--spacing-4);">
+            <summary style="cursor: pointer; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); user-select: none;">
+                <i class="fas fa-exchange-alt" style="margin-right: var(--spacing-2);"></i>
+                Replace with a different bot
+            </summary>
+            <div style="margin-top: var(--spacing-4);">
+                <div id="replace-bot-error" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: var(--spacing-3); margin-bottom: var(--spacing-4); color: var(--color-danger); font-size: var(--font-size-sm);"></div>
+                <div style="margin-bottom: var(--spacing-4);">
+                    <label class="form-label">Application ID (Client ID)</label>
+                    <input type="text" class="form-control" id="replace-bot-client-id" placeholder="e.g. 1234567890123456789" maxlength="20">
+                    <div class="form-help">Found on your application's General Information page</div>
+                </div>
+                <div style="margin-bottom: var(--spacing-4);">
+                    <label class="form-label">Bot Token</label>
+                    <div style="position: relative;">
+                        <input type="password" class="form-control" id="replace-bot-token" placeholder="Your bot token" style="padding-right: 40px;">
+                        <button type="button" id="toggle-replace-token" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px;">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="button" id="replace-custom-bot-btn" class="btn btn-primary">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Replace Bot</span>
+                </button>
+            </div>
+        </details>
+    </div>
+
+    <% } else { %>
+    <!-- No custom bot — show setup form -->
+    <div id="custom-bot-setup">
+        <div style="background: rgba(167, 139, 250, 0.05); border: 1px solid rgba(167, 139, 250, 0.15); border-radius: var(--radius-lg); padding: var(--spacing-4); margin-bottom: var(--spacing-6);">
+            <div style="display: flex; gap: var(--spacing-3); align-items: flex-start;">
+                <i class="fas fa-info-circle" style="color: var(--accent-purple); margin-top: 2px;"></i>
+                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.5;">
+                    Set up your own Discord bot application for this server. Your bot will handle all features (announcements, commands, music, etc.) with your own branding.
+                    You'll need to <a href="https://discord.com/developers/applications" target="_blank" style="color: var(--accent-purple);">create a bot in the Discord Developer Portal</a>,
+                    enable the <strong>Server Members</strong>, <strong>Message Content</strong>, and <strong>Presence</strong> privileged intents, then invite it to your server with <strong>bot + applications.commands</strong> scope.
+                </div>
+            </div>
+        </div>
+
+        <div id="custom-bot-error" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: var(--spacing-3); margin-bottom: var(--spacing-4); color: var(--color-danger); font-size: var(--font-size-sm);"></div>
+
+        <div style="margin-bottom: var(--spacing-4);">
+            <label class="form-label">Application ID (Client ID)</label>
+            <input type="text" class="form-control" id="custom-bot-client-id" placeholder="e.g. 1234567890123456789" maxlength="20" pattern="\d{17,20}">
+            <div class="form-help">Found on your application's General Information page in the Developer Portal</div>
+        </div>
+
+        <div style="margin-bottom: var(--spacing-6);">
+            <label class="form-label">Bot Token</label>
+            <div style="position: relative;">
+                <input type="password" class="form-control" id="custom-bot-token" placeholder="Your bot token" style="padding-right: 40px;">
+                <button type="button" id="toggle-token-visibility" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px;">
+                    <i class="fas fa-eye"></i>
+                </button>
+            </div>
+            <div class="form-help">Found on your application's Bot page. Click "Reset Token" if you don't have it saved</div>
+        </div>
+
+        <button type="button" id="setup-custom-bot-btn" class="btn btn-primary">
+            <i class="fas fa-rocket"></i>
+            <span>Set Up Custom Bot</span>
+        </button>
+    </div>
+    <% } %>
+</div>
+
+<script>
+(function() {
+    var guildId = '<%= guild.id %>';
+
+    // Token visibility toggle
+    var toggleBtn = document.getElementById('toggle-token-visibility');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+            var input = document.getElementById('custom-bot-token');
+            var icon = toggleBtn.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fas fa-eye-slash';
+            } else {
+                input.type = 'password';
+                icon.className = 'fas fa-eye';
+            }
+        });
+    }
+
+    // Setup custom bot
+    var setupBtn = document.getElementById('setup-custom-bot-btn');
+    if (setupBtn) {
+        setupBtn.addEventListener('click', function() {
+            var clientId = document.getElementById('custom-bot-client-id').value.trim();
+            var botToken = document.getElementById('custom-bot-token').value.trim();
+            var errorDiv = document.getElementById('custom-bot-error');
+
+            errorDiv.style.display = 'none';
+
+            if (!clientId || !/^\d{17,20}$/.test(clientId)) {
+                errorDiv.textContent = 'Please enter a valid Application ID (17-20 digit number).';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            if (!botToken) {
+                errorDiv.textContent = 'Please enter your bot token.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            setupBtn.disabled = true;
+            setupBtn.querySelector('i').className = 'fas fa-spinner fa-spin';
+            setupBtn.querySelector('span').textContent = 'Validating bot...';
+
+            fetch('/api/guilds/' + guildId + '/custom-bot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ client_id: clientId, bot_token: botToken })
+            })
+            .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+            .then(function(result) {
+                if (!result.ok) {
+                    errorDiv.textContent = result.data.details || result.data.error || 'Failed to set up bot';
+                    errorDiv.style.display = 'block';
+                    setupBtn.disabled = false;
+                    setupBtn.querySelector('i').className = 'fas fa-rocket';
+                    setupBtn.querySelector('span').textContent = 'Set Up Custom Bot';
+                    return;
+                }
+                window.location.reload();
+            })
+            .catch(function() {
+                errorDiv.textContent = 'Network error. Please try again.';
+                errorDiv.style.display = 'block';
+                setupBtn.disabled = false;
+                setupBtn.querySelector('i').className = 'fas fa-rocket';
+                setupBtn.querySelector('span').textContent = 'Set Up Custom Bot';
+            });
+        });
+    }
+
+    // Replace token toggle
+    var toggleReplaceBtn = document.getElementById('toggle-replace-token');
+    if (toggleReplaceBtn) {
+        toggleReplaceBtn.addEventListener('click', function() {
+            var input = document.getElementById('replace-bot-token');
+            var icon = toggleReplaceBtn.querySelector('i');
+            if (input.type === 'password') { input.type = 'text'; icon.className = 'fas fa-eye-slash'; }
+            else { input.type = 'password'; icon.className = 'fas fa-eye'; }
+        });
+    }
+
+    // Replace custom bot
+    var replaceBtn = document.getElementById('replace-custom-bot-btn');
+    if (replaceBtn) {
+        replaceBtn.addEventListener('click', function() {
+            var clientId = document.getElementById('replace-bot-client-id').value.trim();
+            var botToken = document.getElementById('replace-bot-token').value.trim();
+            var errorDiv = document.getElementById('replace-bot-error');
+            errorDiv.style.display = 'none';
+
+            if (!clientId || !/^\d{17,20}$/.test(clientId)) {
+                errorDiv.textContent = 'Please enter a valid Application ID (17-20 digit number).';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            if (!botToken) {
+                errorDiv.textContent = 'Please enter your bot token.';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            if (!confirm('This will replace the current custom bot. Stream announcements will be recreated. Continue?')) return;
+
+            replaceBtn.disabled = true;
+            replaceBtn.querySelector('i').className = 'fas fa-spinner fa-spin';
+            replaceBtn.querySelector('span').textContent = 'Validating...';
+
+            fetch('/api/guilds/' + guildId + '/custom-bot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ client_id: clientId, bot_token: botToken })
+            })
+            .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+            .then(function(result) {
+                if (!result.ok) {
+                    errorDiv.textContent = result.data.details || result.data.error || 'Failed to replace bot';
+                    errorDiv.style.display = 'block';
+                    replaceBtn.disabled = false;
+                    replaceBtn.querySelector('i').className = 'fas fa-exchange-alt';
+                    replaceBtn.querySelector('span').textContent = 'Replace Bot';
+                    return;
+                }
+                window.location.reload();
+            })
+            .catch(function() {
+                errorDiv.textContent = 'Network error. Please try again.';
+                errorDiv.style.display = 'block';
+                replaceBtn.disabled = false;
+                replaceBtn.querySelector('i').className = 'fas fa-exchange-alt';
+                replaceBtn.querySelector('span').textContent = 'Replace Bot';
+            });
+        });
+    }
+
+    // Remove custom bot
+    var removeBtn = document.getElementById('remove-custom-bot-btn');
+    if (removeBtn) {
+        removeBtn.addEventListener('click', function() {
+            if (!confirm('Are you sure you want to remove the custom bot? The server will switch back to the default CertiFried Utility bot. Stream announcements will be recreated.')) {
+                return;
+            }
+
+            removeBtn.disabled = true;
+            removeBtn.querySelector('i').className = 'fas fa-spinner fa-spin';
+            removeBtn.querySelector('span').textContent = 'Removing...';
+
+            fetch('/api/guilds/' + guildId + '/custom-bot', { method: 'DELETE' })
+            .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+            .then(function(result) {
+                if (!result.ok) {
+                    alert(result.data.error || 'Failed to remove bot');
+                    removeBtn.disabled = false;
+                    removeBtn.querySelector('i').className = 'fas fa-trash';
+                    removeBtn.querySelector('span').textContent = 'Remove Custom Bot';
+                    return;
+                }
+                window.location.reload();
+            })
+            .catch(function() {
+                alert('Network error. Please try again.');
+                removeBtn.disabled = false;
+                removeBtn.querySelector('i').className = 'fas fa-trash';
+                removeBtn.querySelector('span').textContent = 'Remove Custom Bot';
+            });
+        });
+    }
+})();
+</script>
+
 <style>
 .form-label {
     display: block;

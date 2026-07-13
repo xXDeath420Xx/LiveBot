@@ -63,6 +63,16 @@ class MusicPanel {
         }
         this.lastUpdate = now;
 
+        // If no discord-player track is active, check for a /spotify-direct session so
+        // the panel can display AND control it (play/pause · skip · stop) too.
+        let spotify = null;
+        if (!queue || !queue.currentTrack) {
+            try {
+                const mod = await import('../commands/music/spotify.js');
+                if (mod.hasSpotifyDirect?.(this.guildId)) spotify = await mod.getSpotifyDirectState(this.guildId);
+            } catch { /* spotify module unavailable */ }
+        }
+
         try {
             // Fetch the message if the channel is not cached
             if (!this.message.channel) {
@@ -70,8 +80,8 @@ class MusicPanel {
                 this.message = await channel.messages.fetch(this.message.id);
             }
 
-            const embed = await this.buildEmbed(queue);
-            const components = this.buildComponents(queue);
+            const embed = await this.buildEmbed(queue, spotify);
+            const components = this.buildComponents(queue, spotify);
             await this.message.edit({ embeds: [embed], components });
         } catch (error) {
             if (error.code === 10008) { // Unknown Message
@@ -81,8 +91,8 @@ class MusicPanel {
                 try {
                     const channel = await this.client.channels.fetch(this.message.channelId);
                     this.message = await channel.messages.fetch(this.message.id);
-                    const embed = await this.buildEmbed(queue);
-                    const components = this.buildComponents(queue);
+                    const embed = await this.buildEmbed(queue, spotify);
+                    const components = this.buildComponents(queue, spotify);
                     await this.message.edit({ embeds: [embed], components });
                 } catch (retryError) {
                     logger.error(`[Music Panel] Failed to update panel after fetch retry:`, { error: retryError.message });
@@ -93,7 +103,7 @@ class MusicPanel {
         }
     }
 
-    async buildEmbed(queue) {
+    async buildEmbed(queue, spotify = null) {
         const isDJMode = queue && queue.metadata && queue.metadata.djMode;
         const embed = new EmbedBuilder()
             .setColor(isDJMode ? "#9B59B6" : "#2B2D31")
@@ -176,6 +186,16 @@ class MusicPanel {
             }
 
             embed.setFooter({ text: `Queue: ${queue.tracks.size} song(s) | Use the controls below.` });
+        } else if (spotify && spotify.track) {
+            const t = spotify.track;
+            embed.setTitle(t.name || 'Spotify')
+                .setDescription(
+                    `**Artist:** ${(t.artist_names || []).join(', ') || '—'}\n` +
+                    `${spotify.paused ? '⏸️ Paused' : '▶️ Playing'} · **Spotify-direct** (real Spotify audio)`
+                )
+                .setFooter({ text: 'Controls: play/pause · skip · stop' });
+            const cover = t.album_cover_url || t.image_url || t.cover_url;
+            if (cover && /^https?:\/\//.test(cover)) embed.setThumbnail(cover);
         } else {
             embed.setTitle("The queue is empty")
                 .setDescription("Add a song using the dropdown menu below to get started.")
@@ -186,9 +206,11 @@ class MusicPanel {
         return embed;
     }
 
-    buildComponents(queue) {
-        const isPlaying = queue && queue.currentTrack;
-        const isPaused = isPlaying && queue.node.isPaused();
+    buildComponents(queue, spotify = null) {
+        const spDirect = !!(spotify && spotify.track);
+        const queuePlaying = !!(queue && queue.currentTrack);
+        const isPlaying = queuePlaying || spDirect;             // play/pause · skip · stop apply to both
+        const isPaused = spDirect ? !!spotify.paused : (queuePlaying && queue.node.isPaused());
         const isLooping = queue && queue.repeatMode !== 0;
         const hasQueue = queue && queue.tracks.size > 0;
 
@@ -198,13 +220,14 @@ class MusicPanel {
                 new ButtonBuilder().setCustomId('music-skip').setLabel('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(!isPlaying),
                 new ButtonBuilder().setCustomId('music-stop').setLabel('⏹️').setStyle(ButtonStyle.Danger).setDisabled(!isPlaying),
                 new ButtonBuilder().setCustomId('music-shuffle').setLabel('🔀').setStyle(ButtonStyle.Secondary).setDisabled(!hasQueue),
-                new ButtonBuilder().setCustomId('music-loop').setLabel(isLooping ? '🔁 On' : '🔁').setStyle(isLooping ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(!isPlaying),
+                // loop/volume are discord-player queue features — not wired for spotify-direct
+                new ButtonBuilder().setCustomId('music-loop').setLabel(isLooping ? '🔁 On' : '🔁').setStyle(isLooping ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(!queuePlaying),
             );
 
         const extrasRow = new ActionRowBuilder()
             .addComponents(
-                new ButtonBuilder().setCustomId('music-vol-down').setLabel('🔉').setStyle(ButtonStyle.Secondary).setDisabled(!isPlaying),
-                new ButtonBuilder().setCustomId('music-vol-up').setLabel('🔊').setStyle(ButtonStyle.Secondary).setDisabled(!isPlaying),
+                new ButtonBuilder().setCustomId('music-vol-down').setLabel('🔉').setStyle(ButtonStyle.Secondary).setDisabled(!queuePlaying),
+                new ButtonBuilder().setCustomId('music-vol-up').setLabel('🔊').setStyle(ButtonStyle.Secondary).setDisabled(!queuePlaying),
                 new ButtonBuilder().setCustomId('music-queue').setLabel('📋 Queue').setStyle(ButtonStyle.Primary).setDisabled(!hasQueue),
                 new ButtonBuilder().setCustomId('music-clear').setLabel('🗑️').setStyle(ButtonStyle.Secondary).setDisabled(!hasQueue),
             );
@@ -252,6 +275,21 @@ class MusicPanel {
             const queue = player?.nodes?.get(interaction.guildId);
 
             if (!queue || !queue.node) {
+                // No discord-player queue — fall back to a /spotify-direct session if one is live.
+                try {
+                    const mod = await import('../commands/music/spotify.js');
+                    if (mod.hasSpotifyDirect?.(interaction.guildId)) {
+                        switch (interaction.customId) {
+                            case 'music-play-pause': await mod.spotifyDirectToggle(interaction.guildId); break;
+                            case 'music-skip':       await mod.spotifyDirectSkip(interaction.guildId); break;
+                            case 'music-stop':       await mod.spotifyDirectStop(interaction.guildId); break;
+                            default: break; // shuffle/loop/vol/queue/clear don't apply to spotify-direct
+                        }
+                        return this.updatePanel(undefined);
+                    }
+                } catch (e) {
+                    logger.error(`[Music Panel] spotify-direct control error: ${e.message}`);
+                }
                 if (interaction.customId !== 'music-add-song' && interaction.customId !== 'music-ai-dj') {
                     try { await interaction.reply({ content: 'Nothing is playing right now.', ephemeral: true }); } catch {}
                 }

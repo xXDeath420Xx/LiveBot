@@ -1,228 +1,490 @@
 <%# Global Ban Database - Guild Management Partial %>
 
-<div class="space-y-6">
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <%- include('../../components/cards/statCard', {
-            title: 'Protection',
-            value: (locals.globalBanConfig && locals.globalBanConfig.enabled) ? 'Active' : 'Disabled',
-            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
-            color: (locals.globalBanConfig && locals.globalBanConfig.enabled) ? 'success' : 'warning'
-        }) %>
-        <%- include('../../components/cards/statCard', {
-            title: 'Active Bans',
-            value: locals.globalBanStats ? locals.globalBanStats.activeEntries : 0,
-            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>',
-            color: 'danger'
-        }) %>
-        <%- include('../../components/cards/statCard', {
-            title: 'Pending Reports',
-            value: locals.globalBanStats ? locals.globalBanStats.pendingReports : 0,
-            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>',
-            color: 'warning'
-        }) %>
-        <%- include('../../components/cards/statCard', {
-            title: 'Guilds Protected',
-            value: locals.globalBanStats ? locals.globalBanStats.enabledGuilds : 0,
-            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>',
-            color: 'primary'
-        }) %>
+<style>
+.gb-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.gb-header {
+    background: rgba(248, 113, 113, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(248, 113, 113, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.gb-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.gb-header-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(248, 113, 113, 0.15);
+    border-radius: 8px;
+}
+
+.gb-header-icon i { font-size: 1rem; color: #f87171; }
+.gb-header-icon.purple { background: rgba(167, 139, 250, 0.15); }
+.gb-header-icon.purple i { color: #a78bfa; }
+
+.gb-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
+.gb-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
+
+.gb-body { padding: 18px; }
+
+/* Stat cards */
+.gb-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+@media (max-width: 768px) {
+    .gb-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+.gb-stat {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.gb-stat-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.gb-stat-icon.green { background: rgba(35, 245, 107, 0.1); }
+.gb-stat-icon.green i { color: #23f56b; }
+.gb-stat-icon.red { background: rgba(248, 113, 113, 0.1); }
+.gb-stat-icon.red i { color: #f87171; }
+.gb-stat-icon.yellow { background: rgba(251, 191, 36, 0.1); }
+.gb-stat-icon.yellow i { color: #fbbf24; }
+.gb-stat-icon.purple { background: rgba(167, 139, 250, 0.1); }
+.gb-stat-icon.purple i { color: #a78bfa; }
+
+.gb-stat-icon i { font-size: 1rem; }
+
+.gb-stat-label { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); }
+.gb-stat-value { font-size: 1.1rem; font-weight: 700; color: #ffffff; }
+
+/* Form grid */
+.gb-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+}
+
+.gb-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+}
+
+@media (max-width: 768px) {
+    .gb-grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .gb-grid-3 { grid-template-columns: 1fr; }
+}
+
+.gb-form-group { margin-bottom: 14px; }
+
+.gb-form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+
+.gb-form-select,
+.gb-form-input {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.gb-form-select:focus,
+.gb-form-input:focus {
+    outline: none;
+    border-color: rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+}
+
+.gb-form-select option { background: #1a1d21; color: #ffffff; }
+
+.gb-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.gb-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.gb-toggle-label { font-size: 0.8rem; color: rgba(255, 255, 255, 0.7); }
+.gb-toggle-hint { font-size: 0.7rem; color: rgba(255, 255, 255, 0.4); }
+
+.gb-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 12px;
+}
+
+.gb-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #a78bfa, #7c3aed);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.gb-save-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(167, 139, 250, 0.3);
+}
+
+.gb-save-btn i { font-size: 0.85rem; }
+
+/* Tables */
+.gb-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.gb-table thead th {
+    padding: 10px 14px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gb-table tbody td {
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.gb-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+
+.gb-table .mono { font-family: 'JetBrains Mono', monospace; color: #ffffff; }
+.gb-table .truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.gb-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.gb-badge.critical { background: rgba(248, 113, 113, 0.2); color: #f87171; }
+.gb-badge.high { background: rgba(251, 146, 60, 0.2); color: #fb923c; }
+.gb-badge.medium { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.gb-badge.low { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
+.gb-badge.action { background: rgba(167, 139, 250, 0.2); color: #a78bfa; }
+
+.gb-search-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.gb-search-row input,
+.gb-search-row select {
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.8rem;
+}
+
+.gb-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+}
+
+.gb-pagination span { font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); }
+
+.gb-pagination-btns {
+    display: flex;
+    gap: 8px;
+}
+
+.gb-pagination-btns button {
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.gb-pagination-btns button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
+.gb-pagination-btns button:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>
+
+<!-- Stats Overview -->
+<div class="gb-stats">
+    <div class="gb-stat">
+        <div class="gb-stat-icon green"><i class="fas fa-globe"></i></div>
+        <div>
+            <div class="gb-stat-label">Protection</div>
+            <div class="gb-stat-value"><%= (locals.globalBanConfig && locals.globalBanConfig.enabled) ? 'Active' : 'Disabled' %></div>
+        </div>
+    </div>
+    <div class="gb-stat">
+        <div class="gb-stat-icon red"><i class="fas fa-ban"></i></div>
+        <div>
+            <div class="gb-stat-label">Active Bans</div>
+            <div class="gb-stat-value"><%= locals.globalBanStats ? locals.globalBanStats.activeEntries : 0 %></div>
+        </div>
+    </div>
+    <div class="gb-stat">
+        <div class="gb-stat-icon yellow"><i class="fas fa-clipboard-list"></i></div>
+        <div>
+            <div class="gb-stat-label">Pending Reports</div>
+            <div class="gb-stat-value"><%= locals.globalBanStats ? locals.globalBanStats.pendingReports : 0 %></div>
+        </div>
+    </div>
+    <div class="gb-stat">
+        <div class="gb-stat-icon purple"><i class="fas fa-shield-alt"></i></div>
+        <div>
+            <div class="gb-stat-label">Guilds Protected</div>
+            <div class="gb-stat-value"><%= locals.globalBanStats ? locals.globalBanStats.enabledGuilds : 0 %></div>
+        </div>
+    </div>
+</div>
+
+<!-- Guild Configuration -->
+<div class="gb-card">
+    <div class="gb-header">
+        <div class="gb-header-left">
+            <div class="gb-header-icon purple"><i class="fas fa-cog"></i></div>
+            <div>
+                <h3>Global Ban Protection</h3>
+                <p>Configure how this server enforces global bans</p>
+            </div>
+        </div>
+        <div class="toggle-switch">
+            <input type="checkbox" id="globalban_enabled" name="globalban_enabled" <%= (locals.globalBanConfig && locals.globalBanConfig.enabled) ? 'checked' : '' %>>
+            <label class="toggle-slider" for="globalban_enabled"></label>
+        </div>
     </div>
 
-    <!-- Guild Configuration -->
-    <div class="card">
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-                <div class="p-2 bg-primary-500/10 rounded-lg">
-                    <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                    </svg>
-                </div>
-                <div>
-                    <h3 class="text-lg font-semibold text-white">Global Ban Protection</h3>
-                    <p class="text-sm text-gray-400">Configure how this server enforces global bans</p>
-                </div>
-            </div>
-            <%- include('../../components/forms/toggle', {
-                name: 'globalban_enabled',
-                id: 'globalban_enabled',
-                checked: locals.globalBanConfig && locals.globalBanConfig.enabled,
-                label: 'Enable',
-                size: 'md'
-            }) %>
-        </div>
-
-        <form id="globalban-config-form" class="space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div class="form-group">
-                    <label class="form-label">Critical Action</label>
-                    <select name="action_critical" class="form-input w-full">
+    <div class="gb-body">
+        <form id="globalban-config-form">
+            <div class="gb-grid-4">
+                <div class="gb-form-group">
+                    <label class="gb-form-label">Critical Action</label>
+                    <select name="action_critical" class="gb-form-select">
                         <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'ban') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Ban</option>
                         <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'kick') ? 'selected' : '' %>>Kick</option>
                         <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'alert') ? 'selected' : '' %>>Alert Only</option>
                         <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'none') ? 'selected' : '' %>>None</option>
                     </select>
-                    <p class="form-hint">Phishing, verified scams</p>
+                    <span class="gb-form-hint">Phishing, verified scams</span>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">High Action</label>
-                    <select name="action_high" class="form-input w-full">
+                <div class="gb-form-group">
+                    <label class="gb-form-label">High Action</label>
+                    <select name="action_high" class="gb-form-select">
                         <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'ban') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Ban</option>
                         <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'kick') ? 'selected' : '' %>>Kick</option>
                         <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'alert') ? 'selected' : '' %>>Alert Only</option>
                         <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'none') ? 'selected' : '' %>>None</option>
                     </select>
-                    <p class="form-hint">Raid organizers, repeat offenders</p>
+                    <span class="gb-form-hint">Raid organizers, repeat offenders</span>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Medium Action</label>
-                    <select name="action_medium" class="form-input w-full">
+                <div class="gb-form-group">
+                    <label class="gb-form-label">Medium Action</label>
+                    <select name="action_medium" class="gb-form-select">
                         <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'ban') ? 'selected' : '' %>>Ban</option>
                         <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'kick') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Kick</option>
                         <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'alert') ? 'selected' : '' %>>Alert Only</option>
                         <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'none') ? 'selected' : '' %>>None</option>
                     </select>
-                    <p class="form-hint">Spam accounts, nuisance</p>
+                    <span class="gb-form-hint">Spam accounts, nuisance</span>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Low Action</label>
-                    <select name="action_low" class="form-input w-full">
+                <div class="gb-form-group">
+                    <label class="gb-form-label">Low Action</label>
+                    <select name="action_low" class="gb-form-select">
                         <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'ban') ? 'selected' : '' %>>Ban</option>
                         <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'kick') ? 'selected' : '' %>>Kick</option>
                         <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'alert') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Alert Only</option>
                         <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'none') ? 'selected' : '' %>>None</option>
                     </select>
-                    <p class="form-hint">Single incident, unverified</p>
+                    <span class="gb-form-hint">Single incident, unverified</span>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="form-group">
-                    <label class="form-label">Alert Channel</label>
-                    <select name="alert_channel_id" class="form-input w-full">
+            <div class="gb-grid-3">
+                <div class="gb-form-group">
+                    <label class="gb-form-label">Alert Channel</label>
+                    <select name="alert_channel_id" class="gb-form-select">
                         <option value="">None</option>
                         <% if (locals.channels) { channels.forEach(ch => { %>
                             <option value="<%= ch.id %>" <%= (locals.globalBanConfig && locals.globalBanConfig.alert_channel_id === ch.id) ? 'selected' : '' %>>#<%= ch.name %></option>
                         <% }); } %>
                     </select>
-                    <p class="form-hint">Channel for ban alert notifications</p>
+                    <span class="gb-form-hint">Channel for ban alert notifications</span>
                 </div>
-                <div class="form-group flex items-end gap-4">
-                    <%- include('../../components/forms/toggle', {
-                        name: 'check_on_message',
-                        id: 'check_on_message',
-                        checked: locals.globalBanConfig && locals.globalBanConfig.check_on_message,
-                        label: 'Check on Message',
-                        hint: 'Also check when users send messages (higher load)',
-                        size: 'md'
-                    }) %>
+                <div class="gb-form-group">
+                    <label class="gb-form-label">Options</label>
+                    <div class="gb-toggle-row">
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="check_on_message" name="check_on_message" <%= (locals.globalBanConfig && locals.globalBanConfig.check_on_message) ? 'checked' : '' %>>
+                            <label class="toggle-slider" for="check_on_message"></label>
+                        </div>
+                        <div>
+                            <span class="gb-toggle-label">Check on Message</span><br>
+                            <span class="gb-toggle-hint">Also check when users send messages</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group flex items-end gap-4">
-                    <%- include('../../components/forms/toggle', {
-                        name: 'auto_aggregate',
-                        id: 'auto_aggregate',
-                        checked: locals.globalBanConfig ? locals.globalBanConfig.auto_aggregate_opt_in : true,
-                        label: 'Auto-Aggregate',
-                        hint: 'Contribute bans to the shared database',
-                        size: 'md'
-                    }) %>
+                <div class="gb-form-group">
+                    <label class="gb-form-label">&nbsp;</label>
+                    <div class="gb-toggle-row">
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="auto_aggregate" name="auto_aggregate" <%= (locals.globalBanConfig ? locals.globalBanConfig.auto_aggregate_opt_in : true) ? 'checked' : '' %>>
+                            <label class="toggle-slider" for="auto_aggregate"></label>
+                        </div>
+                        <div>
+                            <span class="gb-toggle-label">Auto-Aggregate</span><br>
+                            <span class="gb-toggle-hint">Contribute bans to the shared database</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div class="flex justify-end">
-                <button type="submit" class="btn btn-primary">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                    </svg>
-                    Save Settings
-                </button>
+            <div class="gb-actions">
+                <button type="submit" class="gb-save-btn"><i class="fas fa-save"></i> Save Settings</button>
             </div>
         </form>
     </div>
+</div>
 
-    <!-- Ban List -->
-    <div class="card">
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-                <div class="p-2 bg-accent-red/10 rounded-lg">
-                    <svg class="w-5 h-5 text-accent-red" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
-                    </svg>
-                </div>
-                <div>
-                    <h3 class="text-lg font-semibold text-white">Global Ban List</h3>
-                    <p class="text-sm text-gray-400">Users flagged across the CertiFried network</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-2">
-                <input type="text" id="globalban-search" class="form-input w-48" placeholder="Search User ID...">
-                <select id="globalban-severity-filter" class="form-input w-32">
-                    <option value="">All</option>
-                    <option value="critical">Critical</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                </select>
+<!-- Ban List -->
+<div class="gb-card">
+    <div class="gb-header">
+        <div class="gb-header-left">
+            <div class="gb-header-icon"><i class="fas fa-ban"></i></div>
+            <div>
+                <h3>Global Ban List</h3>
+                <p>Users flagged across the CertiFried network</p>
             </div>
         </div>
-
-        <div class="overflow-x-auto">
-            <table class="w-full text-left">
-                <thead>
-                    <tr class="border-b border-white/10">
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">User ID</th>
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Severity</th>
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Category</th>
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Source</th>
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Reason</th>
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Date</th>
-                    </tr>
-                </thead>
-                <tbody id="globalban-entries-body">
-                    <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
-                </tbody>
-            </table>
+        <div class="gb-search-row">
+            <input type="text" id="globalban-search" placeholder="Search User ID...">
+            <select id="globalban-severity-filter">
+                <option value="">All</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+            </select>
         </div>
+    </div>
 
-        <div id="globalban-pagination" class="flex items-center justify-between mt-4 px-4">
-            <span class="text-sm text-gray-400" id="globalban-page-info"></span>
-            <div class="flex gap-2">
-                <button id="globalban-prev" class="btn btn-sm btn-secondary" disabled>Previous</button>
-                <button id="globalban-next" class="btn btn-sm btn-secondary" disabled>Next</button>
+    <div class="gb-body" style="overflow-x: auto;">
+        <table class="gb-table">
+            <thead>
+                <tr>
+                    <th>User ID</th>
+                    <th>Severity</th>
+                    <th>Category</th>
+                    <th>Source</th>
+                    <th>Reason</th>
+                    <th>Evidence</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody id="globalban-entries-body">
+                <tr><td colspan="7" style="text-align: center; padding: 24px; color: rgba(255,255,255,0.4);">Loading...</td></tr>
+            </tbody>
+        </table>
+
+        <div class="gb-pagination">
+            <span id="globalban-page-info"></span>
+            <div class="gb-pagination-btns">
+                <button id="globalban-prev" disabled>Previous</button>
+                <button id="globalban-next" disabled>Next</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Log -->
+<div class="gb-card">
+    <div class="gb-header">
+        <div class="gb-header-left">
+            <div class="gb-header-icon purple"><i class="fas fa-clipboard-list"></i></div>
+            <div>
+                <h3>Action Log</h3>
+                <p>Global ban actions taken in this server</p>
             </div>
         </div>
     </div>
 
-    <!-- Action Log -->
-    <div class="card">
-        <div class="flex items-center gap-3 mb-6">
-            <div class="p-2 bg-primary-500/10 rounded-lg">
-                <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
-                </svg>
-            </div>
-            <div>
-                <h3 class="text-lg font-semibold text-white">Action Log</h3>
-                <p class="text-sm text-gray-400">Global ban actions taken in this server</p>
-            </div>
-        </div>
-
-        <div class="overflow-x-auto">
-            <table class="w-full text-left">
-                <thead>
-                    <tr class="border-b border-white/10">
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Action</th>
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">User</th>
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Details</th>
-                        <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase">Date</th>
-                    </tr>
-                </thead>
-                <tbody id="globalban-log-body">
-                    <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
-                </tbody>
-            </table>
-        </div>
+    <div class="gb-body" style="overflow-x: auto;">
+        <table class="gb-table">
+            <thead>
+                <tr>
+                    <th>Action</th>
+                    <th>User</th>
+                    <th>Details</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody id="globalban-log-body">
+                <tr><td colspan="4" style="text-align: center; padding: 24px; color: rgba(255,255,255,0.4);">Loading...</td></tr>
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -231,23 +493,21 @@
     const guildId = '<%= guild.id %>';
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
 
-    const severityColors = {
-        critical: 'bg-red-500/20 text-red-400',
-        high: 'bg-orange-500/20 text-orange-400',
-        medium: 'bg-yellow-500/20 text-yellow-400',
-        low: 'bg-blue-500/20 text-blue-400'
-    };
-
     let currentPage = 1;
     const pageSize = 15;
 
-    // Load ban entries
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
     async function loadEntries(page = 1) {
         const search = document.getElementById('globalban-search').value.trim();
         const severity = document.getElementById('globalban-severity-filter').value;
-        let url = `/api/guilds/${guildId}/global-ban/entries?page=${page}&limit=${pageSize}`;
-        if (search) url += `&search=${encodeURIComponent(search)}`;
-        if (severity) url += `&severity=${severity}`;
+        let url = '/api/guilds/' + guildId + '/global-ban/entries?page=' + page + '&limit=' + pageSize;
+        if (search) url += '&search=' + encodeURIComponent(search);
+        if (severity) url += '&severity=' + severity;
 
         try {
             const res = await fetch(url);
@@ -255,24 +515,88 @@
             if (!data.success) throw new Error(data.error);
 
             const tbody = document.getElementById('globalban-entries-body');
+            while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
             if (data.entries.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">No entries found</td></tr>';
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 7;
+                td.style.textAlign = 'center';
+                td.style.padding = '24px';
+                td.style.color = 'rgba(255,255,255,0.4)';
+                td.textContent = 'No entries found';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
             } else {
-                tbody.innerHTML = data.entries.map(e => `
-                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
-                        <td class="px-4 py-3 text-sm font-mono text-white">${e.user_id}</td>
-                        <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs font-semibold ${severityColors[e.severity] || ''}">${e.severity.toUpperCase()}</span></td>
-                        <td class="px-4 py-3 text-sm text-gray-300">${e.category}</td>
-                        <td class="px-4 py-3 text-sm text-gray-400">${e.source.replace('_', ' ')}</td>
-                        <td class="px-4 py-3 text-sm text-gray-300 max-w-xs truncate">${e.reason || '-'}</td>
-                        <td class="px-4 py-3 text-sm text-gray-400">${new Date(e.created_at).toLocaleDateString()}</td>
-                    </tr>
-                `).join('');
+                data.entries.forEach(function(e) {
+                    const tr = document.createElement('tr');
+
+                    const tdId = document.createElement('td');
+                    tdId.className = 'mono';
+                    tdId.textContent = e.user_id;
+                    tr.appendChild(tdId);
+
+                    const tdSev = document.createElement('td');
+                    const badge = document.createElement('span');
+                    badge.className = 'gb-badge ' + e.severity;
+                    badge.textContent = e.severity.toUpperCase();
+                    tdSev.appendChild(badge);
+                    tr.appendChild(tdSev);
+
+                    const tdCat = document.createElement('td');
+                    tdCat.textContent = e.category;
+                    tr.appendChild(tdCat);
+
+                    const tdSrc = document.createElement('td');
+                    tdSrc.textContent = e.source.replace('_', ' ');
+                    tr.appendChild(tdSrc);
+
+                    const tdReason = document.createElement('td');
+                    tdReason.className = 'truncate';
+                    tdReason.textContent = e.reason || '-';
+                    tr.appendChild(tdReason);
+
+                    var tdEvidence = document.createElement('td');
+                    if (e.evidence) {
+                        try {
+                            var urls = typeof e.evidence === 'string' ? JSON.parse(e.evidence) : e.evidence;
+                            if (Array.isArray(urls) && urls.length > 0) {
+                                urls.forEach(function(url, i) {
+                                    if (i > 0) tdEvidence.appendChild(document.createTextNode(' '));
+                                    var a = document.createElement('a');
+                                    a.href = url;
+                                    a.target = '_blank';
+                                    a.style.cssText = 'color:#60a5fa;font-size:0.75rem;text-decoration:none;';
+                                    if (url.match(/\.(png|jpg|jpeg|gif|webp)/i)) {
+                                        a.textContent = '[img ' + (i + 1) + ']';
+                                    } else if (url.includes('discord.com/channels/')) {
+                                        a.textContent = '[msg ' + (i + 1) + ']';
+                                    } else {
+                                        a.textContent = '[link ' + (i + 1) + ']';
+                                    }
+                                    tdEvidence.appendChild(a);
+                                });
+                            } else {
+                                tdEvidence.textContent = '-';
+                                tdEvidence.style.color = 'rgba(255,255,255,0.3)';
+                            }
+                        } catch { tdEvidence.textContent = '-'; tdEvidence.style.color = 'rgba(255,255,255,0.3)'; }
+                    } else {
+                        tdEvidence.textContent = '-';
+                        tdEvidence.style.color = 'rgba(255,255,255,0.3)';
+                    }
+                    tr.appendChild(tdEvidence);
+
+                    const tdDate = document.createElement('td');
+                    tdDate.textContent = new Date(e.created_at).toLocaleDateString();
+                    tr.appendChild(tdDate);
+
+                    tbody.appendChild(tr);
+                });
             }
 
-            // Pagination
             currentPage = data.pagination.page;
-            document.getElementById('globalban-page-info').textContent = `Page ${data.pagination.page} of ${data.pagination.pages || 1} (${data.pagination.total} entries)`;
+            document.getElementById('globalban-page-info').textContent = 'Page ' + data.pagination.page + ' of ' + (data.pagination.pages || 1) + ' (' + data.pagination.total + ' entries)';
             document.getElementById('globalban-prev').disabled = data.pagination.page <= 1;
             document.getElementById('globalban-next').disabled = data.pagination.page >= data.pagination.pages;
         } catch (err) {
@@ -280,55 +604,81 @@
         }
     }
 
-    // Load action log
     async function loadActionLog() {
         try {
-            const res = await fetch(`/api/guilds/${guildId}/global-ban/action-log?limit=15`);
+            const res = await fetch('/api/guilds/' + guildId + '/global-ban/action-log?limit=15');
             const data = await res.json();
             if (!data.success) return;
 
             const tbody = document.getElementById('globalban-log-body');
+            while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+
             if (data.logs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">No actions recorded yet</td></tr>';
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 4;
+                td.style.textAlign = 'center';
+                td.style.padding = '24px';
+                td.style.color = 'rgba(255,255,255,0.4)';
+                td.textContent = 'No actions recorded yet';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
             } else {
-                tbody.innerHTML = data.logs.map(l => `
-                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
-                        <td class="px-4 py-3"><span class="px-2 py-1 rounded text-xs font-semibold bg-primary-500/20 text-primary-400">${l.action}</span></td>
-                        <td class="px-4 py-3 text-sm font-mono text-white">${l.user_id}</td>
-                        <td class="px-4 py-3 text-sm text-gray-300 max-w-xs truncate">${l.details || '-'}</td>
-                        <td class="px-4 py-3 text-sm text-gray-400">${new Date(l.created_at).toLocaleString()}</td>
-                    </tr>
-                `).join('');
+                data.logs.forEach(function(l) {
+                    const tr = document.createElement('tr');
+
+                    const tdAction = document.createElement('td');
+                    const badge = document.createElement('span');
+                    badge.className = 'gb-badge action';
+                    badge.textContent = l.action;
+                    tdAction.appendChild(badge);
+                    tr.appendChild(tdAction);
+
+                    const tdUser = document.createElement('td');
+                    tdUser.className = 'mono';
+                    tdUser.textContent = l.user_id;
+                    tr.appendChild(tdUser);
+
+                    const tdDetails = document.createElement('td');
+                    tdDetails.className = 'truncate';
+                    tdDetails.textContent = l.details || '-';
+                    tr.appendChild(tdDetails);
+
+                    const tdDate = document.createElement('td');
+                    tdDate.textContent = new Date(l.created_at).toLocaleString();
+                    tr.appendChild(tdDate);
+
+                    tbody.appendChild(tr);
+                });
             }
         } catch (err) {
             console.error('Failed to load action log:', err);
         }
     }
 
-    // Save config
-    document.getElementById('globalban-config-form')?.addEventListener('submit', async (e) => {
+    document.getElementById('globalban-config-form').addEventListener('submit', async function(e) {
         e.preventDefault();
-        const form = e.target;
-        const body = {
-            enabled: form.querySelector('[name="globalban_enabled"]').checked,
+        var form = e.target;
+        var body = {
+            enabled: document.getElementById('globalban_enabled').checked,
             action_critical: form.querySelector('[name="action_critical"]').value,
             action_high: form.querySelector('[name="action_high"]').value,
             action_medium: form.querySelector('[name="action_medium"]').value,
             action_low: form.querySelector('[name="action_low"]').value,
             alert_channel_id: form.querySelector('[name="alert_channel_id"]').value || null,
             check_on_join: true,
-            check_on_message: form.querySelector('[name="check_on_message"]').checked,
-            auto_aggregate_opt_in: form.querySelector('[name="auto_aggregate"]').checked,
+            check_on_message: document.getElementById('check_on_message').checked,
+            auto_aggregate_opt_in: document.getElementById('auto_aggregate').checked,
             exempt_roles: []
         };
 
         try {
-            const res = await fetch(`/api/guilds/${guildId}/global-ban/config`, {
+            var res = await fetch('/api/guilds/' + guildId + '/global-ban/config', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
                 body: JSON.stringify(body)
             });
-            const data = await res.json();
+            var data = await res.json();
             if (data.success) {
                 showToast('Global ban settings saved', 'success');
             } else {
@@ -339,15 +689,18 @@
         }
     });
 
-    // Search and filter
-    document.getElementById('globalban-search')?.addEventListener('input', debounce(() => loadEntries(1), 500));
-    document.getElementById('globalban-severity-filter')?.addEventListener('change', () => loadEntries(1));
-    document.getElementById('globalban-prev')?.addEventListener('click', () => loadEntries(currentPage - 1));
-    document.getElementById('globalban-next')?.addEventListener('click', () => loadEntries(currentPage + 1));
+    document.getElementById('globalban-search').addEventListener('input', debounce(function() { loadEntries(1); }, 500));
+    document.getElementById('globalban-severity-filter').addEventListener('change', function() { loadEntries(1); });
+    document.getElementById('globalban-prev').addEventListener('click', function() { loadEntries(currentPage - 1); });
+    document.getElementById('globalban-next').addEventListener('click', function() { loadEntries(currentPage + 1); });
 
     function debounce(fn, ms) {
-        let t;
-        return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+        var t;
+        return function() {
+            var args = arguments;
+            clearTimeout(t);
+            t = setTimeout(function() { fn.apply(null, args); }, ms);
+        };
     }
 
     function showToast(msg, type) {
@@ -355,7 +708,6 @@
         alert(msg);
     }
 
-    // Initial load
     loadEntries(1);
     loadActionLog();
 })();

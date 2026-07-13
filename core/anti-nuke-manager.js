@@ -4,6 +4,7 @@ import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { BoundedMap } from '../utils/bounded-map.js';
 import { batchWithRateLimit } from '../utils/rate-limiter.js';
 import { MutexManager } from '../utils/mutex.js';
+import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
 
 /**
  * Anti-Nuke Manager - Tracks and prevents mass destructive actions
@@ -301,6 +302,15 @@ class AntiNukeManager {
      */
     async _executePunishment(member, guild, config, actionType, count) {
         const reason = `Anti-Nuke: ${count} ${actionType}s detected`;
+
+        if (isProtectedFromBanCommands(member?.id)) {
+            logger.warn('[AntiNuke] Refusing to punish protected bot owner', {
+                userId: member.id,
+                guildId: guild.id,
+                actionType
+            });
+            return;
+        }
 
         try {
             switch (config.action_on_trigger) {

@@ -1,24 +1,20 @@
+import * as api from './facebook-api.js';
 import logger from '../logger.js';
 
-// Placeholder Facebook Gaming API
 async function isStreamerLive(username) {
     try {
-        logger.info(`[Facebook API] Checking if ${username} is live`);
-        logger.warn(`[Facebook API] Facebook Gaming live checking not yet implemented`);
-        return false;
+        return await api.isStreamerLive(username);
     } catch (error) {
-        logger.error(`[Facebook API] Error checking live status for ${username}:`, { error });
+        logger.error(`[Facebook] Error checking live status for ${username}:`, { error: error.message });
         return false;
     }
 }
 
 async function getStreamDetails(username) {
     try {
-        logger.info(`[Facebook API] Fetching stream details for ${username}`);
-        logger.warn(`[Facebook API] Facebook Gaming stream details not yet implemented`);
-        return null;
+        return await api.getStreamDetails(username);
     } catch (error) {
-        logger.error(`[Facebook API] Failed to get stream details for ${username}:`, { error });
+        logger.error(`[Facebook] Failed to get stream details for ${username}:`, { error: error.message });
         return null;
     }
 }

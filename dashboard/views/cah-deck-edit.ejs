@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Edit Pack — <%= deck.name %> — CertiFried CAH</title>
+<%- include('components/cah-shell-head') %>
+<style>
+    .hero { padding: 2rem 0 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .hero h1 { font-size: 1.8rem; font-weight: 800; }
+    .hero .share-code { color: var(--text-muted); font-family: ui-monospace, monospace; font-size: 0.85rem; }
+
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; padding-bottom: 3rem; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+    .card-panel { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; }
+    .card-panel h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 0.75rem; }
+    .card-panel .add-row { display: flex; gap: 0.4rem; margin-bottom: 0.75rem; }
+    .card-panel .add-row input { flex: 1; }
+
+    .card-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 480px; overflow-y: auto; padding: 0.4rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; }
+    .card-list .row { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.7rem; background: var(--bg-primary); border-radius: 6px; font-size: 0.88rem; }
+    .card-list .row .text { flex: 1; word-wrap: break-word; line-height: 1.4; }
+    .card-list .row .pick { color: var(--accent-purple); font-weight: 700; font-size: 0.75rem; flex-shrink: 0; }
+    .card-list .row .del { background: none; border: none; color: var(--accent-red); cursor: pointer; padding: 0.3rem; opacity: 0.6; font-size: 0.85rem; }
+    .card-list .row .del:hover { opacity: 1; }
+    .card-list .empty { color: var(--text-muted); text-align: center; padding: 1.5rem; font-style: italic; font-size: 0.85rem; }
+
+    .meta-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .meta-form .full { grid-column: 1 / -1; }
+    .help { color: var(--text-muted); font-size: 0.75rem; margin-top: 0.3rem; line-height: 1.4; }
+    .help code { background: var(--bg-secondary); padding: 0.1rem 0.35rem; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--accent-purple); }
+
+    #save-toast { padding: 0.5rem 0.9rem; }
+
+    .preview-card { background: #fff; color: #111; padding: 0.6rem 0.8rem; border-radius: 6px; margin-top: 0.3rem; min-height: 1.6em; line-height: 1.4; font-weight: 500; font-size: 0.88rem; }
+    .preview-card.black { background: #000; color: #fff; }
+    .preview-card .blank { background: rgba(167, 139, 250, 0.3); padding: 0 0.25rem; border-radius: 3px; color: #c4b0ff; font-weight: 700; }
+</style>
+</head>
+<body>
+<%- include('components/cah-shell-nav', { user, page: 'my-decks' }) %>
+<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'CAH' }, { href: '/cah/my-decks', label: 'My Decks' }, { label: deck.name }] }) %>
+
+<div class="container">
+    <section class="hero">
+        <div>
+            <h1>📝 <span id="deck-name-display"><%= deck.name %></span></h1>
+            <p class="share-code">Share code: <strong><%= deck.share_code %></strong> · Owner only sees draft; public packs appear in everyone's lobby picker.</p>
+        </div>
+        <a href="/cah/my-decks" class="btn btn-outline btn-sm">← My Decks</a>
+    </section>
+
+    <div class="card-panel" style="margin-bottom: 1.25rem;">
+        <h3>Pack Details</h3>
+        <div class="meta-form">
+            <div class="form-group full">
+                <label class="form-label">Name</label>
+                <input class="form-input" id="meta-name" value="<%= deck.name %>" maxlength="60">
+            </div>
+            <div class="form-group full">
+                <label class="form-label">Description</label>
+                <input class="form-input" id="meta-desc" value="<%= deck.description %>" maxlength="120">
+            </div>
+            <label class="form-check">
+                <input type="checkbox" id="meta-public" <%= deck.is_public ? 'checked' : '' %>>
+                <span style="font-size: 0.9rem;">Public — appears in everyone's deck picker</span>
+            </label>
+            <label class="form-check">
+                <input type="checkbox" id="meta-nsfw" <%= deck.nsfw ? 'checked' : '' %>>
+                <span style="font-size: 0.9rem;">🔞 NSFW</span>
+            </label>
+        </div>
+        <div style="margin-top: 0.75rem; display: flex; gap: 0.5rem; align-items: center;">
+            <button class="btn btn-primary btn-sm" onclick="saveMeta()">Save Pack Details</button>
+            <span id="save-toast" class="toast" style="display:none;"></span>
+        </div>
+    </div>
+
+    <div class="layout">
+        <div class="card-panel">
+            <h3>White Cards (Responses) · <span id="white-count"><%= deck.whiteCards.length %></span></h3>
+            <p class="help">The funny answers your players can play.</p>
+            <div class="add-row">
+                <input class="form-input" id="add-white" placeholder="e.g. A surprise pile of Cheetos." maxlength="500" onkeydown="if(event.key==='Enter')addWhite()">
+                <button class="btn btn-primary btn-sm" onclick="addWhite()">+ Add</button>
+            </div>
+            <div class="card-list" id="white-list">
+                <% if (deck.whiteCards.length === 0) { %>
+                    <div class="empty">No white cards yet.</div>
+                <% } else { %>
+                    <% deck.whiteCards.forEach(c => { %>
+                        <div class="row" data-card-id="<%= c.id %>">
+                            <span class="text"><%= c.text %></span>
+                            <button class="del" onclick="deleteCard('white', <%= c.id %>, this)" title="Delete">✕</button>
+                        </div>
+                    <% }); %>
+                <% } %>
+            </div>
+        </div>
+
+        <div class="card-panel">
+            <h3>Black Cards (Prompts) · <span id="black-count"><%= deck.blackCards.length %></span></h3>
+            <p class="help">Use <code>_____</code> (five underscores) wherever a blank should go. Two blanks = Pick 2, three = Pick 3 (gets bonus draws).</p>
+            <div>
+                <textarea class="form-textarea" id="add-black" placeholder="e.g. Why am I broke? Because I spent all my money on _____." maxlength="500" rows="2" style="resize:vertical;" oninput="updateBlackPreview()"></textarea>
+                <div class="preview-card black" id="black-preview" style="display:none;"></div>
+                <div style="display:flex; gap:0.5rem; align-items:center; margin-top:0.4rem;">
+                    <button class="btn btn-primary btn-sm" onclick="addBlack()">+ Add</button>
+                    <span id="pick-hint" style="color: var(--text-muted); font-size: 0.8rem;"></span>
+                </div>
+            </div>
+            <div class="card-list" id="black-list" style="margin-top: 0.75rem;">
+                <% if (deck.blackCards.length === 0) { %>
+                    <div class="empty">No black cards yet.</div>
+                <% } else { %>
+                    <% deck.blackCards.forEach(c => { %>
+                        <div class="row" data-card-id="<%= c.id %>">
+                            <span class="text"><%= c.text %></span>
+                            <span class="pick">PICK&nbsp;<%= c.pick %></span>
+                            <button class="del" onclick="deleteCard('black', <%= c.id %>, this)" title="Delete">✕</button>
+                        </div>
+                    <% }); %>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const DECK_ID = <%- JSON.stringify(deck.id) %>;
+
+    function el(tag, props, ...children) {
+        const e = document.createElement(tag);
+        for (const [k, v] of Object.entries(props || {})) {
+            if (k === 'class') e.className = v;
+            else if (k === 'dataset') Object.assign(e.dataset, v);
+            else if (k === 'on') Object.assign(e, v);
+            else e.setAttribute(k, v);
+        }
+        for (const c of children) {
+            if (c == null || c === false) continue;
+            e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+        }
+        return e;
+    }
+
+    function countBlanks(t) { return ((t || '').match(/_{5,}/g) || []).length; }
+    function updateBlackPreview() {
+        const text = document.getElementById('add-black').value;
+        const preview = document.getElementById('black-preview');
+        const hint = document.getElementById('pick-hint');
+        if (!text.trim()) { preview.style.display = 'none'; hint.textContent = ''; return; }
+        preview.style.display = 'block';
+        preview.replaceChildren();
+        // Render text with the blank markers as styled spans
+        const parts = text.split(/(_{5,})/);
+        for (const p of parts) {
+            if (/^_{5,}$/.test(p)) preview.appendChild(el('span', { class: 'blank' }, '_____'));
+            else if (p) preview.appendChild(document.createTextNode(p));
+        }
+        const blanks = countBlanks(text);
+        const pick = Math.max(1, blanks);
+        const draw = pick >= 3 ? pick - 1 : 0;
+        hint.textContent = blanks === 0 ? 'No blanks → Pick 1 (a blank will be appended on save)' :
+            `${blanks} blank${blanks === 1 ? '' : 's'} → Pick ${pick}${draw ? `, Draw ${draw}` : ''}`;
+    }
+
+    async function addWhite() {
+        const input = document.getElementById('add-white');
+        const text = input.value.trim();
+        if (!text) return;
+        const res = await cfetch(`/cah/my-decks/${DECK_ID}/white`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+        if (!data.ok) { alert('⚠️ ' + data.reason); return; }
+        const list = document.getElementById('white-list');
+        // Remove empty placeholder if present
+        if (list.firstElementChild?.classList.contains('empty')) list.replaceChildren();
+        list.appendChild(el('div', { class: 'row', dataset: { cardId: String(data.cardId) } },
+            el('span', { class: 'text' }, text),
+            el('button', { class: 'del', title: 'Delete', on: { onclick: () => deleteCard('white', data.cardId, null) } }, '✕')
+        ));
+        input.value = '';
+        bumpCount('white-count', 1);
+    }
+
+    async function addBlack() {
+        const input = document.getElementById('add-black');
+        const text = input.value.trim();
+        if (!text) return;
+        const res = await cfetch(`/cah/my-decks/${DECK_ID}/black`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+        });
+        const data = await res.json();
+        if (!data.ok) { alert('⚠️ ' + data.reason); return; }
+        const list = document.getElementById('black-list');
+        if (list.firstElementChild?.classList.contains('empty')) list.replaceChildren();
+        // Use returned pick (server normalizes), and use the original text the user typed
+        const stored = countBlanks(text) === 0 ? text + ' _____' : text;
+        list.appendChild(el('div', { class: 'row', dataset: { cardId: String(data.cardId) } },
+            el('span', { class: 'text' }, stored),
+            el('span', { class: 'pick' }, 'PICK ' + data.pick),
+            el('button', { class: 'del', title: 'Delete', on: { onclick: () => deleteCard('black', data.cardId, null) } }, '✕')
+        ));
+        input.value = '';
+        document.getElementById('black-preview').style.display = 'none';
+        document.getElementById('pick-hint').textContent = '';
+        bumpCount('black-count', 1);
+    }
+
+    async function deleteCard(kind, cardId, btn) {
+        const res = await cfetch(`/cah/my-decks/${DECK_ID}/${kind}/${cardId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!data.ok) { alert('Failed: ' + data.reason); return; }
+        const row = document.querySelector(`#${kind}-list .row[data-card-id="${cardId}"]`);
+        row?.remove();
+        bumpCount(kind + '-count', -1);
+        const list = document.getElementById(kind + '-list');
+        if (!list.children.length) list.appendChild(el('div', { class: 'empty' }, 'No ' + kind + ' cards yet.'));
+    }
+
+    function bumpCount(id, delta) {
+        const el = document.getElementById(id);
+        el.textContent = String((parseInt(el.textContent, 10) || 0) + delta);
+    }
+
+    async function saveMeta() {
+        const body = {
+            name: document.getElementById('meta-name').value.trim(),
+            description: document.getElementById('meta-desc').value.trim(),
+            isPublic: document.getElementById('meta-public').checked,
+            nsfw: document.getElementById('meta-nsfw').checked
+        };
+        const res = await cfetch(`/cah/my-decks/${DECK_ID}/update`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        const toast = document.getElementById('save-toast');
+        toast.className = 'toast ' + (data.ok ? 'ok' : 'err');
+        toast.textContent = data.ok ? '✅ Saved' : '⚠️ ' + (data.reason || 'failed');
+        toast.style.display = 'inline-block';
+        if (data.ok) document.getElementById('deck-name-display').textContent = body.name;
+        setTimeout(() => toast.style.display = 'none', 2500);
+    }
+</script>
+</body>
+</html>

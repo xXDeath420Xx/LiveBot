@@ -352,6 +352,28 @@
         gap: 12px;
         align-items: flex-start;
     }
+
+    /* Touch-friendly inputs */
+    .mod-form-select,
+    .mod-form-input,
+    .mod-save-btn,
+    .mod-add-btn,
+    .mod-delete-btn { min-height: 44px; }
+
+    .mod-delete-btn { width: 100%; justify-content: center; }
+
+    /* Infractions table mobile: hide moderator + date columns */
+    .mod-infractions-table .mobile-hide { display: none !important; }
+
+    .mod-infractions-table td { padding: 10px 12px; }
+
+    /* Reason column allow wrapping */
+    .mod-reason {
+        max-width: none;
+        white-space: normal;
+    }
+
+    .mod-infractions-table { font-size: 0.85rem; }
 }
 </style>
 
@@ -435,10 +457,10 @@
                         <thead>
                             <tr>
                                 <th>User</th>
-                                <th>Moderator</th>
+                                <th class="mobile-hide">Moderator</th>
                                 <th>Type</th>
                                 <th>Reason</th>
-                                <th>Date</th>
+                                <th class="mobile-hide">Date</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -449,7 +471,7 @@
                                             <%= infraction.user_tag || infraction.user_id %>
                                         </div>
                                     </td>
-                                    <td>
+                                    <td class="mobile-hide">
                                         <div class="mod-moderator-info">
                                             <%= infraction.moderator_tag || infraction.moderator_id %>
                                         </div>
@@ -465,7 +487,7 @@
                                             <%= infraction.reason || 'No reason provided' %>
                                         </div>
                                     </td>
-                                    <td>
+                                    <td class="mobile-hide">
                                         <div class="mod-date">
                                             <%= new Date(infraction.created_at).toLocaleDateString() %>
                                         </div>

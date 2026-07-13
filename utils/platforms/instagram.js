@@ -1,24 +1,20 @@
+import * as api from './instagram-api.js';
 import logger from '../logger.js';
 
-// Placeholder Instagram Live API
 async function isStreamerLive(username) {
     try {
-        logger.info(`[Instagram API] Checking if ${username} is live`);
-        logger.warn(`[Instagram API] Instagram live checking not yet implemented`);
-        return false;
+        return await api.isStreamerLive(username);
     } catch (error) {
-        logger.error(`[Instagram API] Error checking live status for ${username}:`, { error });
+        logger.error(`[Instagram] Error checking live status for ${username}:`, { error: error.message });
         return false;
     }
 }
 
 async function getStreamDetails(username) {
     try {
-        logger.info(`[Instagram API] Fetching stream details for ${username}`);
-        logger.warn(`[Instagram API] Instagram stream details not yet implemented`);
-        return null;
+        return await api.getStreamDetails(username);
     } catch (error) {
-        logger.error(`[Instagram API] Failed to get stream details for ${username}:`, { error });
+        logger.error(`[Instagram] Failed to get stream details for ${username}:`, { error: error.message });
         return null;
     }
 }

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Cards | CertiFried</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0b0f11; --card-bg: #141a1e; --border: rgba(255,255,255,0.08); --accent: #a78bfa; --text: #ffffff; --muted: rgba(255,255,255,0.5); --pink: #FF69B4; --gold: #FFD700; --success: #34d399; --danger: #f87171; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        .nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border); }
+        .nav-brand { color: var(--text); text-decoration: none; font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+        .nav-links { display: flex; gap: 20px; align-items: center; }
+        .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.9rem; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--text); }
+
+        .container { max-width: 1000px; margin: 0 auto; padding: 40px 16px 80px; }
+
+        .page-header { margin-bottom: 32px; }
+        .page-header h1 { font-size: 1.8rem; font-weight: 800; margin-bottom: 8px; }
+        .page-header p { color: var(--muted); font-size: 0.95rem; }
+
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+
+        .card-item { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: border-color 0.2s, transform 0.2s; }
+        .card-item:hover { border-color: rgba(167,139,250,0.3); transform: translateY(-2px); }
+
+        .card-cover { height: 120px; background: linear-gradient(135deg, rgba(167,139,250,0.2), rgba(255,105,180,0.15)); position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+        .card-cover.has-image { background: none; }
+        .card-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .card-cover .placeholder-icon { font-size: 2.5rem; color: rgba(255,255,255,0.15); }
+
+        .card-type-badge { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.7); border-radius: 6px; padding: 3px 8px; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card-type-badge.board { color: var(--accent); }
+        .card-type-badge.greeting { color: var(--pink); }
+        .card-type-badge.one-person { color: var(--gold); }
+
+        .card-status { position: absolute; top: 8px; right: 8px; border-radius: 6px; padding: 3px 8px; font-size: 0.65rem; font-weight: 600; }
+        .card-status.active { background: rgba(52,211,153,0.15); color: var(--success); }
+        .card-status.delivered { background: rgba(167,139,250,0.15); color: var(--accent); }
+        .card-status.frozen { background: rgba(248,113,113,0.15); color: var(--danger); }
+        .card-status.scheduled { background: rgba(251,191,36,0.15); color: #fbbf24; }
+
+        .card-body { padding: 16px; }
+        .card-body h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .card-body .recipient { color: var(--muted); font-size: 0.8rem; margin-bottom: 12px; }
+
+        .card-stats { display: flex; gap: 16px; margin-bottom: 14px; }
+        .card-stat { font-size: 0.75rem; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+        .card-stat i { font-size: 0.7rem; color: var(--accent); }
+
+        .card-actions { display: flex; gap: 8px; }
+        .card-actions a, .card-actions button { flex: 1; padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; border: none; transition: all 0.2s; font-family: inherit; }
+        .btn-view { background: rgba(167,139,250,0.1); color: var(--accent); border: 1px solid rgba(167,139,250,0.2); }
+        .btn-view:hover { background: rgba(167,139,250,0.2); }
+        .btn-share { background: rgba(52,211,153,0.1); color: var(--success); border: 1px solid rgba(52,211,153,0.2); }
+        .btn-share:hover { background: rgba(52,211,153,0.2); }
+        .btn-edit { background: rgba(251,191,36,0.1); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+        .btn-edit:hover { background: rgba(251,191,36,0.2); }
+        .btn-danger { background: rgba(248,113,113,0.1); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
+        .btn-danger:hover { background: rgba(248,113,113,0.2); }
+        .btn-settings { background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid var(--border); }
+        .btn-settings:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+        .btn-sign-cta { display: block; text-align: center; margin-top: 8px; padding: 8px; background: linear-gradient(135deg, rgba(167,139,250,0.15), rgba(255,105,180,0.1)); border: 1px dashed rgba(167,139,250,0.3); border-radius: 8px; color: var(--accent); font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s; }
+        .btn-sign-cta:hover { background: linear-gradient(135deg, rgba(167,139,250,0.25), rgba(255,105,180,0.2)); }
+        .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; display: none; z-index: 100; }
+        .toast.show { display: block; }
+        .toast.success { background: var(--success); color: #0b0f11; }
+        .toast.error { background: var(--danger); color: white; }
+
+        .empty-state { text-align: center; padding: 80px 24px; }
+        .empty-state i { font-size: 3rem; color: rgba(255,255,255,0.1); margin-bottom: 16px; }
+        .empty-state h2 { font-size: 1.3rem; margin-bottom: 8px; }
+        .empty-state p { color: var(--muted); margin-bottom: 24px; max-width: 400px; margin-left: auto; margin-right: auto; }
+        .btn-create { display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, var(--accent), var(--pink)); color: white; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 0.95rem; transition: opacity 0.2s; }
+        .btn-create:hover { opacity: 0.9; }
+
+        .share-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+        .share-modal.active { display: flex; }
+        .share-modal-content { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 450px; width: 90%; }
+        .share-modal-content h3 { margin-bottom: 16px; font-size: 1.1rem; }
+        .share-link-box { display: flex; gap: 8px; margin-bottom: 12px; }
+        .share-link-box input { flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--text); font-size: 0.85rem; font-family: monospace; }
+        .share-link-box button { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-weight: 600; font-size: 0.85rem; white-space: nowrap; }
+        .share-options { display: flex; gap: 8px; flex-wrap: wrap; }
+        .share-opt { background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; color: var(--muted); font-size: 0.8rem; text-decoration: none; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .share-opt:hover { border-color: var(--accent); color: var(--text); }
+        .close-modal { position: absolute; top: 16px; right: 16px; background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; }
+
+        .footer { text-align: center; padding: 24px; font-size: 0.75rem; color: rgba(255,255,255,0.3); border-top: 1px solid var(--border); }
+        .footer a { color: var(--muted); text-decoration: none; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand"><i class="fas fa-bolt" style="color: var(--accent);"></i> CertiFried</a>
+        <div class="nav-links">
+            <a href="/cards">Cards</a>
+            <a href="/cards/my-cards" style="color: var(--accent);"><i class="fas fa-folder-open"></i> My Cards</a>
+            <% if (user) { %>
+                <a href="/servers"><i class="fas fa-server"></i> Dashboard</a>
+            <% } else { %>
+                <a href="/auth/discord?returnTo=/cards/my-cards"><i class="fab fa-discord"></i> Login</a>
+            <% } %>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="page-header">
+            <h1><i class="fas fa-folder-open" style="color: var(--accent);"></i> My Cards</h1>
+            <p>
+                <% if (user) { %>
+                    Cards you've created across Discord and the web.
+                <% } else { %>
+                    Cards created from this browser. <a href="/auth/discord?returnTo=/cards/my-cards" style="color: var(--accent);">Log in with Discord</a> to see all your cards.
+                <% } %>
+            </p>
+        </div>
+
+        <% if (cards.length === 0) { %>
+            <div class="empty-state">
+                <i class="fas fa-envelope-open-text"></i>
+                <h2>No cards yet</h2>
+                <p>You haven't created any cards yet. Create your first free group card for any occasion!</p>
+                <a href="/cards/create" class="btn-create"><i class="fas fa-plus"></i> Create a Card</a>
+            </div>
+        <% } else { %>
+            <div class="cards-grid">
+                <% cards.forEach(card => { %>
+                    <%
+                        const typeLabel = card.card_type === 'greeting_card' ? 'Greeting Card' : card.card_type === 'one_person' ? 'One Person' : 'Group Board';
+                        const typeClass = card.card_type === 'greeting_card' ? 'greeting' : card.card_type === 'one_person' ? 'one-person' : 'board';
+                        const statusLabel = card.is_frozen ? 'Frozen' : card.deliver_at && !card.is_posted ? 'Scheduled' : card.is_posted ? 'Delivered' : 'Active';
+                        const statusClass = card.is_frozen ? 'frozen' : card.deliver_at && !card.is_posted ? 'scheduled' : card.is_posted ? 'delivered' : 'active';
+                        const slug = card.slug || card.share_token;
+                        const coverImg = card.ai_cover_url || card.card_background_url || card.board_bg_image_url;
+                    %>
+                    <div class="card-item">
+                        <div class="card-cover <%= coverImg ? 'has-image' : '' %>">
+                            <% if (coverImg) { %>
+                                <img src="<%= coverImg %>" alt="Card cover" loading="lazy">
+                            <% } else { %>
+                                <i class="fas fa-<%= card.occasion === 'birthday' ? 'birthday-cake' : card.occasion === 'wedding' ? 'ring' : card.occasion === 'farewell' ? 'hand-wave' : card.occasion === 'thank-you' ? 'heart' : 'envelope-open-text' %> placeholder-icon"></i>
+                            <% } %>
+                            <span class="card-type-badge <%= typeClass %>"><%= typeLabel %></span>
+                            <span class="card-status <%= statusClass %>"><%= statusLabel %></span>
+                        </div>
+                        <div class="card-body">
+                            <h3><%= card.card_name || 'Untitled Card' %></h3>
+                            <div class="recipient">
+                                <% if (card.recipient_name) { %>For <%= card.recipient_name %><% } %>
+                                <% if (card.occasion) { %> &middot; <%= card.occasion.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) %><% } %>
+                            </div>
+                            <div class="card-stats">
+                                <span class="card-stat"><i class="fas fa-pen-nib"></i> <%= card.sig_count || 0 %> signature<%= (card.sig_count || 0) !== 1 ? 's' : '' %></span>
+                                <% if (card.password_hash) { %><span class="card-stat"><i class="fas fa-lock"></i> Password</span><% } %>
+                                <% if (card.background_music_url) { %><span class="card-stat"><i class="fas fa-music"></i> Music</span><% } %>
+                                <% if (card.deliver_at && !card.is_posted) { %><span class="card-stat"><i class="fas fa-clock"></i> <%= new Date(card.deliver_at).toLocaleDateString() %></span><% } %>
+                            </div>
+                            <div class="card-actions">
+                                <a href="/card/<%= slug %>" class="btn-view"><i class="fas fa-eye"></i> View</a>
+                                <a href="/card/<%= slug %>/edit" class="btn-edit" title="Edit card settings"><i class="fas fa-pen"></i> Edit</a>
+                                <button onclick="shareCard('<%= slug %>', '<%= (card.card_name || 'Card').replace(/'/g, "\\'") %>')" class="btn-share"><i class="fas fa-share"></i></button>
+                                <button onclick="deleteCard('<%= slug %>', '<%= (card.card_name || 'Card').replace(/'/g, "\\'") %>')" class="btn-danger" title="Delete card"><i class="fas fa-trash"></i></button>
+                            </div>
+                            <% if (card.card_type === 'one_person' && (card.sig_count || 0) === 0 && !card.is_frozen) { %>
+                            <a href="/card/<%= slug %>" class="btn-sign-cta"><i class="fas fa-pen-nib"></i> Sign this card</a>
+                            <% } %>
+                        </div>
+                    </div>
+                <% }); %>
+            </div>
+
+            <div style="text-align: center; margin-top: 32px;">
+                <a href="/cards/create" class="btn-create"><i class="fas fa-plus"></i> Create Another Card</a>
+            </div>
+        <% } %>
+    </div>
+
+    <!-- Share Modal -->
+    <div class="share-modal" id="shareModal" onclick="if(event.target===this)this.classList.remove('active')">
+        <div class="share-modal-content" style="position: relative;">
+            <button class="close-modal" onclick="document.getElementById('shareModal').classList.remove('active')">&times;</button>
+            <h3><i class="fas fa-share" style="color: var(--accent);"></i> Share Card</h3>
+            <div class="share-link-box">
+                <input type="text" id="shareLinkInput" readonly>
+                <button onclick="copyShareLink()">Copy</button>
+            </div>
+            <div class="share-options">
+                <a id="shareWhatsApp" href="#" target="_blank" class="share-opt"><i class="fab fa-whatsapp"></i> WhatsApp</a>
+                <a id="shareTelegram" href="#" target="_blank" class="share-opt"><i class="fab fa-telegram"></i> Telegram</a>
+                <a id="shareEmail" href="#" class="share-opt"><i class="fas fa-envelope"></i> Email</a>
+                <a id="shareTwitter" href="#" target="_blank" class="share-opt"><i class="fab fa-twitter"></i> Twitter</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <div class="footer">
+        <a href="/">CertiFried</a> &middot; <a href="/cards">Cards</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a>
+    </div>
+
+    <script>
+    function shareCard(slug, name) {
+        const url = window.location.origin + '/card/' + slug;
+        document.getElementById('shareLinkInput').value = url;
+        const encoded = encodeURIComponent(url);
+        const text = encodeURIComponent('Sign ' + name + '!');
+        document.getElementById('shareWhatsApp').href = 'https://wa.me/?text=' + text + '%20' + encoded;
+        document.getElementById('shareTelegram').href = 'https://t.me/share/url?url=' + encoded + '&text=' + text;
+        document.getElementById('shareEmail').href = 'mailto:?subject=' + text + '&body=' + encoded;
+        document.getElementById('shareTwitter').href = 'https://twitter.com/intent/tweet?text=' + text + '%20' + encoded;
+        document.getElementById('shareModal').classList.add('active');
+    }
+    function copyShareLink() {
+        const input = document.getElementById('shareLinkInput');
+        input.select();
+        navigator.clipboard.writeText(input.value).then(() => {
+            const btn = input.nextElementSibling;
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = 'Copy', 2000);
+        });
+    }
+    function deleteCard(slug, name) {
+        if (!confirm('Delete "' + name + '" and all its signatures? This cannot be undone.')) return;
+        fetch('/card/' + slug, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Card deleted', false);
+                    setTimeout(() => location.reload(), 800);
+                } else {
+                    showToast(data.error || 'Delete failed', true);
+                }
+            })
+            .catch(() => showToast('Network error', true));
+    }
+    function showToast(msg, isError) {
+        const t = document.getElementById('toast');
+        if (!t) return;
+        t.textContent = msg;
+        t.className = 'toast show ' + (isError ? 'error' : 'success');
+        setTimeout(() => t.className = 'toast', 3000);
+    }
+    </script>
+</body>
+</html>

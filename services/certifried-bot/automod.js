@@ -4,10 +4,51 @@
  */
 
 import axios from 'axios';
+import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 
 // Cached bot token info (resolved once via token validation)
 let botTokenInfo = null;
+
+// Per-channel features cache (60s TTL) — keyed by lowercase Twitch channel_name.
+// `checkAutomod` runs on every chat line, so a per-message DB hit would be wasteful.
+const FEATURES_TTL_MS = 60_000;
+const channelFeaturesCache = new Map();
+
+async function getChannelFeatures(channelName) {
+    const key = channelName.toLowerCase();
+    const cached = channelFeaturesCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+        return cached.features;
+    }
+
+    try {
+        const [[row]] = await pool.execute(
+            `SELECT features_enabled FROM tokes_channels
+             WHERE platform = 'twitch' AND LOWER(channel_name) = ?
+             LIMIT 1`,
+            [key]
+        );
+        const raw = row?.features_enabled ?? null;
+        const features = raw
+            ? (typeof raw === 'string' ? JSON.parse(raw) : raw)
+            : null;
+        channelFeaturesCache.set(key, { features, expiresAt: Date.now() + FEATURES_TTL_MS });
+        return features;
+    } catch (error) {
+        logger.warn(`[Automod] Failed to load channel features for ${key}`, { error: error.message });
+        return null;
+    }
+}
+
+/**
+ * Drop the cached features entry for a channel so the next message picks up
+ * the fresh DB value. Called by the dashboard PATCH route after a save.
+ */
+export function clearChannelFeaturesCache(channelName) {
+    if (!channelName) return;
+    channelFeaturesCache.delete(channelName.toLowerCase());
+}
 
 /**
  * Validate the bot's OAuth token and cache the client_id + user_id.
@@ -108,6 +149,14 @@ export function isEmoteOnlyMessage(message, emotes) {
 export async function checkAutomod({ channel, tags, message }) {
     // VIPs, mods, and the broadcaster are exempt
     if (tags.badges?.vip || tags.badges?.moderator || tags.badges?.broadcaster || tags.mod) {
+        return false;
+    }
+
+    // Per-channel opt-out: skip the emote filter if the owner has disabled it.
+    // Missing row / missing key / explicit `true` all preserve the original behavior.
+    const cleanChannel = channel.replace('#', '').toLowerCase();
+    const features = await getChannelFeatures(cleanChannel);
+    if (features?.emote_filter === false) {
         return false;
     }
 

@@ -627,6 +627,7 @@ function buildArgMap() {
         'pvp/accept': { match_id: 0 },  // filled at runtime
         'pvp/decline': { match_id: 0 },
         'pvp/resolve': { match_id: 0 },
+        'pvp/action': { action: 'attack' },  // live-duel turn (no active duel -> graceful "no active live duel")
     };
 }
 

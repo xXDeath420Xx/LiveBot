@@ -14,7 +14,7 @@ router.get('/:guildId/stream-ended/subscriptions', ensureAuth, ensureGuildPerms,
             FROM subscriptions sub
             JOIN streamers s ON sub.streamer_id = s.streamer_id
             LEFT JOIN twitch_teams ts ON sub.team_subscription_id = ts.id
-            LEFT JOIN guild_config gc ON CAST(sub.guild_id AS CHAR) = CAST(gc.guild_id AS CHAR)
+            LEFT JOIN guild_config gc ON sub.guild_id COLLATE utf8mb4_unicode_ci = gc.guild_id COLLATE utf8mb4_unicode_ci
             WHERE sub.guild_id = ?
             ORDER BY sub.edit_on_end DESC, s.username
         `, [req.guildId]);
@@ -23,6 +23,29 @@ router.get('/:guildId/stream-ended/subscriptions', ensureAuth, ensureGuildPerms,
     } catch (error) {
         logger.error('[API Stream-Ended Subscriptions GET] Error:', { error: error.message });
         res.status(500).json({ error: 'Failed to fetch subscriptions' });
+    }
+});
+
+// PATCH /api/guilds/:guildId/stream-ended/subscriptions/bulk
+// Must be defined before :subId route so "bulk" isn't caught as a param
+router.patch('/:guildId/stream-ended/subscriptions/bulk', ensureAuth, ensureGuildPerms, async (req, res) => {
+    try {
+        const { subscription_ids, edit_on_end } = req.body;
+
+        if (!Array.isArray(subscription_ids) || subscription_ids.length === 0) {
+            return res.status(400).json({ error: 'subscription_ids array is required' });
+        }
+
+        const placeholders = subscription_ids.map(() => '?').join(',');
+        const [result] = await pool.execute(
+            `UPDATE subscriptions SET edit_on_end = ? WHERE subscription_id IN (${placeholders}) AND guild_id = ?`,
+            [edit_on_end ? 1 : 0, ...subscription_ids, req.guildId]
+        );
+
+        res.json({ success: true, message: `Updated ${result.affectedRows} subscriptions` });
+    } catch (error) {
+        logger.error('[API Stream-Ended Bulk PATCH] Error:', { error: error.message });
+        res.status(500).json({ error: 'Failed to bulk update subscriptions' });
     }
 });
 

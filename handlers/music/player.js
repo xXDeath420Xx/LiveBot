@@ -5,6 +5,7 @@ import {
   getSessionForUser, acquire, release, streamTrack, uriFromUrl, isOwnerUser,
 } from '../../core/spotify-connect-manager.js';
 import logger from '../../utils/logger.js';
+import { searchSpotifyTrack } from '../../core/spotify-resolver.js';
 
 /**
  * discord-player onBeforeCreateStream hook: for a Spotify TRACK, play it through
@@ -306,7 +307,21 @@ export async function handlePlay(interaction) {
     }
 
     // Detect source for better feedback
-    const source = detectQuerySource(query);
+    let source = detectQuerySource(query);
+
+    // Spotify is the default source for a free-text search. Resolving the query to a real
+    // Spotify track up front means `onBeforeCreateStream` can stream it through go-librespot
+    // (actual Spotify audio). When no linked account is free, discord-player bridges the track
+    // out to yt-dlp, and then to SoundCloud — so this only ever adds a source, never removes one.
+    // An explicit URL is always honoured as typed.
+    if (source.platform === 'search') {
+        const hit = await searchSpotifyTrack(query);
+        if (hit?.url) {
+            logger.info(`[Music] search "${query}" resolved to Spotify: ${hit.artist} - ${hit.title}`);
+            query = hit.url;
+            source = detectQuerySource(query);
+        }
+    }
 
     // YouTube Mix/Radio URLs are personalized - inform user we'll play the single video
     const isMixUrl = source.type === 'mix';

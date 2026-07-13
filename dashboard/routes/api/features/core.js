@@ -253,4 +253,162 @@ router.post('/sync', async (req, res) => {
     }
 });
 
+// ===========================
+// STAT DISPLAY CHANNELS
+// ===========================
+
+/**
+ * GET /api/guilds/:guildId/core/stat-displays
+ */
+router.get('/stat-displays', async (req, res) => {
+    try {
+        const { guildId } = req.params;
+        const [rows] = await pool.execute(
+            'SELECT id, channel_id, stat_type, template FROM stat_display_channels WHERE guild_id = ?',
+            [guildId]
+        );
+        res.json({ success: true, statDisplays: rows });
+    } catch (error) {
+        logger.error('[API Core] Error fetching stat displays:', error);
+        res.status(500).json({ error: 'Failed to fetch stat display channels' });
+    }
+});
+
+/**
+ * POST /api/guilds/:guildId/core/stat-displays
+ */
+router.post('/stat-displays', async (req, res) => {
+    try {
+        const { guildId } = req.params;
+        let { channel_id, stat_type, template } = req.body;
+
+        if (!stat_type) {
+            return res.status(400).json({ error: 'Stat type is required' });
+        }
+
+        const validTypes = ['members', 'humans', 'bots', 'online', 'channels', 'roles', 'boosts', 'time', 'date', 'role', 'twitch_followers'];
+        if (!validTypes.includes(stat_type)) {
+            return res.status(400).json({ error: 'Invalid stat type' });
+        }
+
+        if (stat_type === 'role' && !req.body.role_id) {
+            return res.status(400).json({ error: 'Select a role to count members for' });
+        }
+
+        if (stat_type === 'twitch_followers' && !req.body.twitch_username) {
+            return res.status(400).json({ error: 'Enter a Twitch username to track followers for' });
+        }
+
+        const finalTemplate = template || `${stat_type.charAt(0).toUpperCase() + stat_type.slice(1)}: {value}`;
+
+        // Create a new voice channel if requested
+        if (channel_id === 'create') {
+            const guild = req.guildObject;
+            if (!guild) {
+                return res.status(400).json({ error: 'Could not access server' });
+            }
+            try {
+                const { ChannelType, PermissionsBitField } = await import('discord.js');
+                const newChannel = await guild.channels.create({
+                    name: finalTemplate.replace('{value}', '...'),
+                    type: ChannelType.GuildVoice,
+                    permissionOverwrites: [
+                        { id: guildId, deny: [PermissionsBitField.Flags.Connect] } // Deny @everyone from joining
+                    ],
+                    reason: 'Stat display channel'
+                });
+                channel_id = newChannel.id;
+                logger.info(`[API Core] Created stat display voice channel: ${newChannel.name} (${channel_id})`);
+            } catch (createErr) {
+                logger.error('[API Core] Failed to create voice channel:', { error: createErr.message });
+                return res.status(500).json({ error: 'Failed to create voice channel: ' + createErr.message });
+            }
+        }
+
+        if (!channel_id) {
+            return res.status(400).json({ error: 'Select a voice channel or choose "Create new channel"' });
+        }
+
+        const config = stat_type === 'role' ? JSON.stringify({ role_id: req.body.role_id })
+            : stat_type === 'twitch_followers' ? JSON.stringify({ twitch_username: req.body.twitch_username.trim().toLowerCase() })
+            : null;
+
+        await pool.execute(`
+            INSERT INTO stat_display_channels (guild_id, channel_id, stat_type, template, config)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE stat_type = VALUES(stat_type), template = VALUES(template), config = VALUES(config)
+        `, [guildId, channel_id, stat_type, finalTemplate, config]);
+
+        logger.info(`[API Core] Stat display added: ${stat_type} → ${channel_id} in guild ${guildId}`);
+        res.json({ success: true, message: 'Stat display channel added' });
+    } catch (error) {
+        logger.error('[API Core] Error adding stat display:', { error: error.message, code: error.code, sql: error.sql });
+        res.status(500).json({ error: error.code === 'ER_DUP_ENTRY' ? 'This channel already has a stat display assigned' : 'Failed to add stat display channel' });
+    }
+});
+
+/**
+ * DELETE /api/guilds/:guildId/core/stat-displays/:id
+ */
+router.delete('/stat-displays/:id', async (req, res) => {
+    try {
+        const { guildId, id } = req.params;
+        await pool.execute(
+            'DELETE FROM stat_display_channels WHERE id = ? AND guild_id = ?',
+            [id, guildId]
+        );
+        logger.info(`[API Core] Stat display ${id} removed from guild ${guildId}`);
+        res.json({ success: true, message: 'Stat display channel removed' });
+    } catch (error) {
+        logger.error('[API Core] Error removing stat display:', error);
+        res.status(500).json({ error: 'Failed to remove stat display channel' });
+    }
+});
+
+/**
+ * PATCH /api/guilds/:guildId/core/stat-displays/:id
+ * Update a stat display's template or config
+ */
+router.patch('/stat-displays/:id', async (req, res) => {
+    try {
+        const { guildId, id } = req.params;
+        const { template, stat_type, config } = req.body;
+
+        const updates = [];
+        const values = [];
+
+        if (template !== undefined) {
+            if (!template.includes('{value}')) {
+                return res.status(400).json({ error: 'Template must include {value}' });
+            }
+            updates.push('template = ?');
+            values.push(template);
+        }
+        if (stat_type !== undefined) {
+            updates.push('stat_type = ?');
+            values.push(stat_type);
+        }
+        if (config !== undefined) {
+            updates.push('config = ?');
+            values.push(typeof config === 'string' ? config : JSON.stringify(config));
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'Nothing to update' });
+        }
+
+        values.push(id, guildId);
+        await pool.execute(
+            `UPDATE stat_display_channels SET ${updates.join(', ')} WHERE id = ? AND guild_id = ?`,
+            values
+        );
+
+        logger.info(`[API Core] Stat display ${id} updated in guild ${guildId}`);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[API Core] Error updating stat display:', { error: error.message });
+        res.status(500).json({ error: 'Failed to update stat display' });
+    }
+});
+
 export default router;

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Cards — Free Digital Greeting Cards | CertiFried</title>
+    <meta name="description" content="Create free digital group greeting cards for birthdays, farewells, thank yous, and more. Unlimited signers, custom fonts, GIFs, voice messages, AI covers — all free.">
+    <meta property="og:title" content="Free Group Greeting Cards | CertiFried">
+    <meta property="og:description" content="Create and share digital group cards. No signup required. All premium features free.">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0b0f11; --card-bg: #141a1e; --border: rgba(255,255,255,0.08); --accent: #a78bfa; --text: #ffffff; --muted: rgba(255,255,255,0.5); --pink: #FF69B4; --gold: #FFD700; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        .hero { text-align: center; padding: 80px 24px 60px; position: relative; overflow: hidden; }
+        .hero::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(ellipse at center, rgba(167,139,250,0.08) 0%, transparent 60%); pointer-events: none; }
+        .hero h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 12px; position: relative; }
+        .hero h1 span { background: linear-gradient(135deg, var(--pink), var(--gold)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { color: var(--muted); font-size: 1.1rem; max-width: 600px; margin: 0 auto 32px; position: relative; line-height: 1.6; }
+        .hero-badges { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-bottom: 32px; position: relative; }
+        .hero-badge { background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.2); border-radius: 20px; padding: 6px 14px; font-size: 0.75rem; color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .hero-badge i { font-size: 0.7rem; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+
+        /* Occasion grid */
+        .section-title { text-align: center; font-size: 1.3rem; font-weight: 700; margin-bottom: 8px; }
+        .section-sub { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 32px; }
+
+        .occasions { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-bottom: 60px; }
+        .occasion-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 24px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: var(--text);
+        }
+        .occasion-card:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: 0 8px 24px rgba(167,139,250,0.15); }
+        .occasion-icon { font-size: 2rem; margin-bottom: 10px; display: block; }
+        .occasion-name { font-size: 0.85rem; font-weight: 600; }
+
+        /* How it works */
+        .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 60px; }
+        .step { text-align: center; padding: 24px; }
+        .step-num { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--pink)); color: white; font-weight: 800; font-size: 1rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px; }
+        .step h3 { font-size: 0.95rem; margin-bottom: 8px; }
+        .step p { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+
+        /* Features */
+        .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-bottom: 60px; }
+        .feature { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+        .feature i { color: var(--accent); font-size: 1.1rem; margin-bottom: 10px; display: block; }
+        .feature h4 { font-size: 0.9rem; margin-bottom: 6px; }
+        .feature p { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+        .feature .free-tag { display: inline-block; background: rgba(34,197,94,0.15); color: #22c55e; font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+
+        /* CTA */
+        .cta-section { text-align: center; padding: 48px 24px; background: linear-gradient(135deg, rgba(167,139,250,0.1), rgba(255,105,180,0.1)); border: 1px solid var(--border); border-radius: 20px; margin-bottom: 40px; }
+        .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 28px; border-radius: 12px; font-weight: 700; font-size: 1rem; cursor: pointer; border: none; font-family: inherit; transition: all 0.2s; text-decoration: none; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--pink)); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(167,139,250,0.3); }
+
+        .footer { text-align: center; padding: 24px; color: var(--muted); font-size: 0.75rem; }
+        .footer a { color: var(--accent); text-decoration: none; }
+
+        /* Nav */
+        .nav { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; border-bottom: 1px solid var(--border); }
+        .nav-brand { font-weight: 800; font-size: 1.1rem; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+        .nav-links { display: flex; gap: 16px; align-items: center; }
+        .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.85rem; transition: color 0.15s; }
+        .nav-links a:hover { color: var(--text); }
+
+        @media (max-width: 600px) {
+            .hero h1 { font-size: 1.75rem; }
+            .occasions { grid-template-columns: repeat(3, 1fr); gap: 10px; }
+            .occasion-card { padding: 16px 10px; }
+            .occasion-icon { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand"><i class="fas fa-bolt" style="color: var(--accent);"></i> CertiFried</a>
+        <div class="nav-links">
+            <a href="/cards">Cards</a>
+            <a href="/cards/my-cards"><i class="fas fa-folder-open"></i> My Cards</a>
+            <a href="/status">Status</a>
+            <% if (user) { %>
+                <a href="/servers" style="color: var(--accent);"><i class="fas fa-server"></i> Dashboard</a>
+            <% } else { %>
+                <a href="/auth/discord?returnTo=/cards" style="color: var(--accent);"><i class="fab fa-discord"></i> Login</a>
+            <% } %>
+        </div>
+    </nav>
+
+    <div class="hero">
+        <h1>Free <span>Group Greeting Cards</span></h1>
+        <p>Create digital group cards for any occasion. Unlimited signers, custom fonts, GIFs, voice messages, AI-generated covers — everything free. No signup required.</p>
+        <div class="hero-badges">
+            <div class="hero-badge"><i class="fas fa-infinity"></i> Unlimited Signers</div>
+            <div class="hero-badge"><i class="fas fa-dollar-sign"></i> 100% Free</div>
+            <div class="hero-badge"><i class="fas fa-magic"></i> AI Covers</div>
+            <div class="hero-badge"><i class="fas fa-microphone"></i> Voice Messages</div>
+            <div class="hero-badge"><i class="fas fa-lock"></i> Gift Card Encryption</div>
+        </div>
+        <a href="/cards/create" class="btn btn-primary"><i class="fas fa-plus"></i> Create a Card — It's Free</a>
+        <div style="font-size: 0.8rem; color: var(--muted); margin-top: 10px;">No signup necessary.</div>
+    </div>
+
+    <div class="container">
+        <!-- Occasion Categories -->
+        <div class="section-title">Cards for every occasion</div>
+        <div class="section-sub">Click an occasion to create a card right now.</div>
+        <div class="occasions">
+            <% const occasions = [
+                { id: 'birthday', icon: '🎂', name: 'Birthday' },
+                { id: 'farewell', icon: '👋', name: 'Farewell' },
+                { id: 'thank-you', icon: '🙏', name: 'Thank You' },
+                { id: 'congratulations', icon: '🎉', name: 'Congrats' },
+                { id: 'retirement', icon: '🏖️', name: 'Retirement' },
+                { id: 'welcome', icon: '🤝', name: 'Welcome' },
+                { id: 'anniversary', icon: '💍', name: 'Anniversary' },
+                { id: 'baby', icon: '👶', name: 'Baby' },
+                { id: 'get-well', icon: '💐', name: 'Get Well' },
+                { id: 'holidays', icon: '🎄', name: 'Holidays' },
+                { id: 'graduation', icon: '🎓', name: 'Graduation' },
+                { id: 'promotion', icon: '📈', name: 'Promotion' },
+                { id: 'miss-you', icon: '💕', name: 'Miss You' },
+                { id: 'condolence', icon: '🕊️', name: 'Condolence' },
+                { id: 'custom', icon: '✨', name: 'Custom' },
+            ]; %>
+            <% occasions.forEach(o => { %>
+            <a href="/cards/create?occasion=<%= o.id %>" class="occasion-card">
+                <span class="occasion-icon"><%= o.icon %></span>
+                <div class="occasion-name"><%= o.name %></div>
+            </a>
+            <% }); %>
+        </div>
+
+        <!-- How it works -->
+        <div class="section-title">How it works</div>
+        <div class="section-sub">4 simple steps to create and deliver a group card.</div>
+        <div class="steps">
+            <div class="step">
+                <div class="step-num">1</div>
+                <h3>Create</h3>
+                <p>Pick an occasion, name the recipient, and customize your card. No account needed.</p>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <h3>Share</h3>
+                <p>Send the signing link to friends, family, or coworkers. Anyone can add a message.</p>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <h3>Sign</h3>
+                <p>Everyone adds messages, GIFs, stickers, voice recordings, even gift card codes.</p>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <h3>Deliver</h3>
+                <p>Share the card with the recipient. Download as PDF or JPEG, or embed it anywhere.</p>
+            </div>
+        </div>
+
+        <!-- Features -->
+        <div class="section-title">Everything free. No catch.</div>
+        <div class="section-sub">Features that cost $2.49-$5.99/card on other platforms.</div>
+        <div class="features">
+            <div class="feature">
+                <i class="fas fa-paint-brush"></i>
+                <h4>Custom Fonts & Colors <span class="free-tag">FREE</span></h4>
+                <p>27 fonts including handwriting styles. Full color picker. Live preview as you type.</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-magic"></i>
+                <h4>AI Cover Images <span class="free-tag">FREE</span></h4>
+                <p>Generate unique card covers from a text prompt. Powered by Google Gemini.</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-microphone"></i>
+                <h4>Voice Messages <span class="free-tag">FREE</span></h4>
+                <p>Record 30-second voice messages directly in the browser. No app needed.</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-gift"></i>
+                <h4>Encrypted Gift Cards <span class="free-tag">FREE</span></h4>
+                <p>Attach gift card codes that are encrypted and only revealed to the recipient after delivery.</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-images"></i>
+                <h4>GIFs, Stickers & Photos <span class="free-tag">FREE</span></h4>
+                <p>Giphy integration, sticker search, image uploads, and YouTube video embeds.</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-music"></i>
+                <h4>Background Music <span class="free-tag">FREE</span></h4>
+                <p>Add a soundtrack to your card. Custom backgrounds, logos, and password protection too.</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-file-pdf"></i>
+                <h4>PDF & JPEG Export <span class="free-tag">FREE</span></h4>
+                <p>Download the card as a printable PDF or shareable JPEG image.</p>
+            </div>
+            <div class="feature">
+                <i class="fas fa-code"></i>
+                <h4>Embed Anywhere <span class="free-tag">FREE</span></h4>
+                <p>Get an iframe embed code to put the card on any website.</p>
+            </div>
+        </div>
+
+        <!-- CTA -->
+        <div class="cta-section">
+            <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 12px;">Ready to create a card?</h2>
+            <p style="color: var(--muted); margin-bottom: 24px; font-size: 0.95rem;">It takes less than a minute. No signup, no credit card, no catch.</p>
+            <a href="/cards/create" class="btn btn-primary"><i class="fas fa-plus"></i> Create a Card — It's Free</a>
+        </div>
+
+        <!-- Recent cards section removed — cards are private by default -->
+    </div>
+
+    <div class="footer">
+        <a href="/">CertiFried</a> &middot; <a href="/cards">Cards</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a>
+        <div style="margin-top: 6px;">&copy; <%= new Date().getFullYear() %> CertiFried. All features free, forever.</div>
+    </div>
+</body>
+</html>

@@ -173,6 +173,10 @@
                                 <input type="checkbox" id="feature-shoutout" <%= features.shoutout ? 'checked' : '' %>>
                                 Shoutouts
                             </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;" title="Auto-deletes Twitch messages that are only emotes. Mods, VIPs, and the broadcaster are always exempt.">
+                                <input type="checkbox" id="feature-emote-filter" <%= features.emote_filter !== false ? 'checked' : '' %>>
+                                Emote Spam Filter
+                            </label>
                         </div>
 
                         <div style="margin-top: 1.5rem;">
@@ -316,13 +320,14 @@
                     spark: document.getElementById('feature-spark').checked,
                     sessions: document.getElementById('feature-sessions').checked,
                     trivia: document.getElementById('feature-trivia').checked,
-                    shoutout: document.getElementById('feature-shoutout').checked
+                    shoutout: document.getElementById('feature-shoutout').checked,
+                    emote_filter: document.getElementById('feature-emote-filter').checked
                 }
             };
 
             try {
                 const response = await fetch(`/tokes-bot/api/channels/${channelId}`, {
-                    method: 'PUT',
+                    method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });

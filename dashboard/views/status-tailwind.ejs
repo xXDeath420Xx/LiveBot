@@ -188,46 +188,47 @@
             padding: 2rem 0 3rem;
         }
 
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
         .stat-hero-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 14px;
             padding: 1.5rem;
             text-align: center;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
-
-        .stat-hero-card:hover {
-            border-color: var(--border-hover);
-            transform: translateY(-2px);
+        .stat-hero-card:nth-child(1) { animation-delay: 0.05s; }
+        .stat-hero-card:nth-child(2) { animation-delay: 0.1s; }
+        .stat-hero-card:nth-child(3) { animation-delay: 0.15s; }
+        .stat-hero-card:nth-child(4) { animation-delay: 0.2s; }
+        .stat-hero-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--card-accent, var(--accent-purple)), color-mix(in srgb, var(--card-accent, var(--accent-purple)) 50%, transparent));
+            opacity: 0; transition: opacity 0.3s;
         }
+        .stat-hero-card:hover { transform: translateY(-3px); border-color: rgba(255,255,255,0.1); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+        .stat-hero-card:hover::before { opacity: 1; }
+        .stat-hero-card:hover .stat-hero-icon { transform: scale(1.1); }
 
         .stat-hero-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 48px; height: 48px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
             margin: 0 auto 1rem;
+            transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
         }
 
         .stat-hero-icon svg { width: 24px; height: 24px; }
-        .stat-hero-icon.purple { background: var(--accent-purple-dim); color: var(--accent-purple); }
-        .stat-hero-icon.green { background: var(--accent-green-dim); color: var(--accent-green); }
-        .stat-hero-icon.blue { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); }
-        .stat-hero-icon.red { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); }
+        .stat-hero-icon.purple { background: var(--accent-purple-dim); color: var(--accent-purple); --card-accent: var(--accent-purple); box-shadow: 0 4px 12px rgba(167,139,250,0.2); }
+        .stat-hero-icon.green { background: var(--accent-green-dim); color: var(--accent-green); --card-accent: var(--accent-green); box-shadow: 0 4px 12px rgba(35,245,107,0.2); }
+        .stat-hero-icon.blue { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); --card-accent: var(--accent-blue); box-shadow: 0 4px 12px rgba(96,165,250,0.2); }
+        .stat-hero-icon.red { background: rgba(239, 68, 68, 0.15); color: var(--accent-red); --card-accent: var(--accent-red); box-shadow: 0 4px 12px rgba(239,68,68,0.2); }
 
-        .stat-hero-value {
-            font-size: 2rem;
-            font-weight: 800;
-            margin-bottom: 0.25rem;
-        }
-
-        .stat-hero-label {
-            color: var(--text-muted);
-            font-size: 0.85rem;
-        }
+        .stat-hero-value { font-size: 2rem; font-weight: 800; margin-bottom: 0.25rem; }
+        .stat-hero-label { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
 
         /* Section */
         .section {
@@ -265,19 +266,26 @@
         }
 
         .service-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-left: 3px solid var(--accent-green);
+            border-radius: 4px 12px 12px 4px;
             padding: 1.25rem;
             display: flex;
             align-items: center;
             gap: 1rem;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+            position: relative;
+            overflow: hidden;
         }
 
         .service-card:hover {
-            border-color: var(--accent-green);
+            border-color: rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(35,245,107,0.06);
         }
+        .service-card:hover .service-icon { transform: scale(1.08); }
 
         .service-icon {
             width: 44px;
@@ -287,6 +295,7 @@
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
         }
 
         .service-icon svg { width: 22px; height: 22px; }
@@ -648,8 +657,10 @@
                 <div class="navbar-links">
                     <a href="/" class="navbar-link">Home</a>
                     <a href="/commands" class="navbar-link">Commands</a>
+                    <a href="/cards" class="navbar-link">Cards</a>
                     <a href="/status" class="navbar-link active">Status</a>
                     <a href="/docs" class="navbar-link">Docs</a>
+                    <a href="/sprites" class="navbar-link">👾 Sprites</a>
                 </div>
                 <div class="navbar-actions">
                     <% if (user) { %>
@@ -670,6 +681,7 @@
         <div class="mobile-menu-links">
             <a href="/" class="mobile-menu-link">Home</a>
             <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/cards" class="mobile-menu-link">Cards</a>
             <a href="/status" class="mobile-menu-link">Status</a>
             <a href="/docs" class="mobile-menu-link">Docs</a>
             <% if (user) { %>
@@ -784,19 +796,6 @@
                             Online
                         </div>
                     </div>
-                    <a href="https://fivem.certifriedmultitool.com" target="_blank" class="service-card" style="text-decoration: none;">
-                        <div class="service-icon" style="background: rgba(34, 197, 94, 0.15); color: #22c55e;">
-                            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
-                        </div>
-                        <div class="service-info">
-                            <div class="service-name">FiveM Server</div>
-                            <div class="service-detail" id="fivem-status-text">Blunt Trauma RP</div>
-                        </div>
-                        <div class="service-status" id="fivem-status-badge">
-                            <span class="service-status-dot"></span>
-                            <span id="fivem-status-label">Checking...</span>
-                        </div>
-                    </a>
                 </div>
             </section>
 
@@ -1013,10 +1012,10 @@
             <div class="footer-content">
                 <div class="footer-links">
                     <a href="/commands" class="footer-link">Commands</a>
+                    <a href="/cards" class="footer-link">Cards</a>
                     <a href="/status" class="footer-link">Status</a>
                     <a href="/docs" class="footer-link">Documentation</a>
-                    <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" class="footer-link">Support</a>
-                    <a href="https://fivem.certifriedmultitool.com" target="_blank" class="footer-link">FiveM Server</a>
+                    <a href="https://certifriedmultitool.com/discord" target="_blank" class="footer-link">Support</a>
                     <a href="/terms" class="footer-link">Terms</a>
                     <a href="/privacy" class="footer-link">Privacy</a>
                 </div>
@@ -1126,50 +1125,16 @@
             }
         }
 
-        // Fetch FiveM server status
-        async function fetchFiveMStatus() {
-            try {
-                const response = await fetch('/api/status/fivem');
-                const data = await response.json();
-
-                const statusText = document.getElementById('fivem-status-text');
-                const statusLabel = document.getElementById('fivem-status-label');
-                const statusBadge = document.getElementById('fivem-status-badge');
-                const statusDot = statusBadge?.querySelector('.service-status-dot');
-
-                if (data.online) {
-                    statusText.textContent = `${data.players?.current || 0}/${data.players?.max || 64} Players`;
-                    statusLabel.textContent = 'Online';
-                    statusBadge.style.background = 'var(--accent-green-dim)';
-                    statusBadge.style.color = 'var(--accent-green)';
-                    if (statusDot) statusDot.style.background = 'var(--accent-green)';
-                } else {
-                    statusText.textContent = 'Blunt Trauma RP';
-                    statusLabel.textContent = 'Offline';
-                    statusBadge.style.background = 'rgba(239, 68, 68, 0.15)';
-                    statusBadge.style.color = 'var(--accent-red)';
-                    if (statusDot) statusDot.style.background = 'var(--accent-red)';
-                }
-            } catch (error) {
-                const statusLabel = document.getElementById('fivem-status-label');
-                if (statusLabel) statusLabel.textContent = 'Unknown';
-            }
-        }
-
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {
             fetchGatewayStatus();
             fetchApiHealth();
-            fetchFiveMStatus();
 
             // Refresh gateway every 10 seconds
             setInterval(fetchGatewayStatus, 10000);
 
             // Refresh API health every 60 seconds
             setInterval(fetchApiHealth, 60000);
-
-            // Refresh FiveM status every 30 seconds
-            setInterval(fetchFiveMStatus, 30000);
         });
     </script>
 </body>

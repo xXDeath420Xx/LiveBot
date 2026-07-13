@@ -2,7 +2,19 @@
 const spConfig = typeof selfPromoConfig !== 'undefined' ? selfPromoConfig : {};
 const spEnabled = !!spConfig.enabled;
 const spChannelId = spConfig.channel_id || '';
+const spAnnouncementChannelId = spConfig.announcement_channel_id || '';
+const spSameChannel = spConfig.same_channel !== undefined ? !!spConfig.same_channel : true;
 const spPlatforms = Array.isArray(spConfig.allowed_platforms) ? spConfig.allowed_platforms : ['twitch', 'kick', 'youtube'];
+const spGateEnabled = !!spConfig.announce_gate_enabled;
+const spGateMinLevel = Number.isFinite(Number(spConfig.announce_min_level)) ? Number(spConfig.announce_min_level) : 1;
+let spGateRequiredRoles = spConfig.announce_required_role_ids;
+if (typeof spGateRequiredRoles === 'string') {
+    try { spGateRequiredRoles = JSON.parse(spGateRequiredRoles); } catch { spGateRequiredRoles = []; }
+}
+if (!Array.isArray(spGateRequiredRoles)) spGateRequiredRoles = [];
+const spGateDeleteUnauth = spConfig.announce_delete_unauthorized !== undefined
+    ? !!spConfig.announce_delete_unauthorized : true;
+const spRoles = typeof roles !== 'undefined' ? roles : [];
 %>
 
 <style>
@@ -164,14 +176,36 @@ const spPlatforms = Array.isArray(spConfig.allowed_platforms) ? spConfig.allowed
             </div>
             <div class="sp-card-body">
                 <div class="sp-form-group">
-                    <label class="sp-form-label">Self-Promo Channel</label>
+                    <label class="sp-form-label">Request Channel <span style="color:#ef4444;">*</span></label>
                     <select name="channel_id" class="sp-form-select">
                         <option value="">Select a channel...</option>
                         <% channels.forEach(ch => { %>
                             <option value="<%= ch.id %>" <%= spChannelId === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
                         <% }); %>
                     </select>
-                    <div class="sp-form-hint">Messages in this channel will be processed for stream links</div>
+                    <div class="sp-form-hint">Where users drop their stream links to get tracked.</div>
+                </div>
+
+                <div class="sp-toggle-row" style="margin-bottom: 12px;">
+                    <div>
+                        <div class="sp-toggle-label">Same Channel for Requests & Announcements</div>
+                        <div class="sp-toggle-hint">When off, go-live announcements will post in a separate channel.</div>
+                    </div>
+                    <label class="sp-toggle-switch">
+                        <input type="checkbox" name="same_channel" id="sp-same-channel" <%= spSameChannel ? 'checked' : '' %> onchange="document.getElementById('sp-announce-channel').style.display = this.checked ? 'none' : 'block';">
+                        <span class="sp-toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="sp-form-group" id="sp-announce-channel" style="<%= spSameChannel ? 'display:none;' : '' %>">
+                    <label class="sp-form-label">Announcement Channel</label>
+                    <select name="announcement_channel_id" class="sp-form-select">
+                        <option value="">Select a channel...</option>
+                        <% channels.forEach(ch => { %>
+                            <option value="<%= ch.id %>" <%= spAnnouncementChannelId === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                        <% }); %>
+                    </select>
+                    <div class="sp-form-hint">Where go-live announcements are posted when tracked streamers go live. If blank, uses the request channel.</div>
                 </div>
 
                 <div class="sp-form-group">
@@ -204,6 +238,13 @@ const spPlatforms = Array.isArray(spConfig.allowed_platforms) ? spConfig.allowed
                 </div>
                 <div class="sp-toggle-row">
                     <div>
+                        <div class="sp-toggle-label">Allow Self-Posting</div>
+                        <div class="sp-toggle-hint">Members' promo posts stay up and nothing is ever deleted. They're still auto-added to the stream tracker, confirmed with a ✅ and a DM. Leave this off to run the channel as a signup box, where the link is consumed and removed.</div>
+                    </div>
+                    <input type="checkbox" name="keep_message" <%= spConfig.keep_message ? 'checked' : '' %> style="accent-color: #10b981;">
+                </div>
+                <div class="sp-toggle-row">
+                    <div>
                         <div class="sp-toggle-label">Delete Invalid Messages</div>
                         <div class="sp-toggle-hint">Delete messages that don't contain a valid stream link</div>
                     </div>
@@ -226,6 +267,63 @@ const spPlatforms = Array.isArray(spConfig.allowed_platforms) ? spConfig.allowed
             </div>
         </div>
 
+        <!-- Announcement Channel Gate -->
+        <div class="sp-card">
+            <div class="sp-card-header">
+                <i class="fas fa-shield-alt"></i>
+                <h3>Announcement Channel Gate</h3>
+            </div>
+            <div class="sp-card-body">
+                <p style="font-size:0.8rem; color:rgba(255,255,255,0.55); margin: 0 0 14px 0;">
+                    Restrict who can post messages <strong>or create threads</strong> in the
+                    announcement channel above. Members who don't meet the requirements have
+                    their messages/threads deleted and receive a DM explaining why. Leaves the
+                    request channel untouched.
+                </p>
+
+                <div class="sp-toggle-row">
+                    <div>
+                        <div class="sp-toggle-label">Enable Announcement Gate</div>
+                        <div class="sp-toggle-hint">Off by default — turn on after selecting an announcement channel.</div>
+                    </div>
+                    <label class="sp-toggle-switch">
+                        <input type="checkbox" name="announce_gate_enabled" id="sp-gate-enabled" <%= spGateEnabled ? 'checked' : '' %>>
+                        <span class="sp-toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="sp-form-group" style="margin-top: 14px;">
+                    <label class="sp-form-label">Minimum Level</label>
+                    <input type="number" name="announce_min_level" id="sp-gate-min-level"
+                           min="0" max="200" value="<%= spGateMinLevel %>"
+                           class="sp-form-select" style="max-width: 140px;">
+                    <div class="sp-form-hint">0 = no level requirement. Ignored on custom-bot instances without a leveling manager.</div>
+                </div>
+
+                <div class="sp-form-group">
+                    <label class="sp-form-label">Required Role(s)</label>
+                    <select name="announce_required_role_ids" id="sp-gate-required-roles"
+                            multiple size="6" class="sp-form-select" style="height: auto; min-height: 120px;">
+                        <% spRoles.forEach(role => { %>
+                            <option value="<%= role.id %>" <%= spGateRequiredRoles.includes(role.id) ? 'selected' : '' %>><%= role.name %></option>
+                        <% }); %>
+                    </select>
+                    <div class="sp-form-hint">Hold Ctrl/Cmd to select multiple. User must have at least one of these roles. Empty = no role requirement.</div>
+                </div>
+
+                <div class="sp-toggle-row">
+                    <div>
+                        <div class="sp-toggle-label">Delete Unauthorized Posts & Threads</div>
+                        <div class="sp-toggle-hint">When off, the bot lets the post stand (not recommended).</div>
+                    </div>
+                    <label class="sp-toggle-switch">
+                        <input type="checkbox" name="announce_delete_unauthorized" id="sp-gate-delete-unauth" <%= spGateDeleteUnauth ? 'checked' : '' %>>
+                        <span class="sp-toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
         <button type="submit" class="sp-save-btn">
             <i class="fas fa-save"></i> Save Self-Promo Config
         </button>
@@ -240,14 +338,28 @@ document.getElementById('sp-form').addEventListener('submit', async (e) => {
     ['twitch', 'kick', 'youtube'].forEach(p => {
         if (document.getElementById('sp-platform-' + p).checked) platforms.push(p);
     });
+    const requiredRoleSelect = document.getElementById('sp-gate-required-roles');
+    const requiredRoleIds = requiredRoleSelect
+        ? Array.from(requiredRoleSelect.selectedOptions).map(o => o.value).filter(Boolean)
+        : [];
+    const minLevelRaw = document.getElementById('sp-gate-min-level')?.value ?? '1';
+    const minLevel = Math.max(0, Math.min(200, parseInt(minLevelRaw, 10) || 0));
+    const announceChannelEl = document.querySelector('[name="announcement_channel_id"]');
     const body = {
         enabled: document.getElementById('sp-enabled').checked,
         channel_id: e.target.channel_id.value || null,
+        announcement_channel_id: announceChannelEl ? (announceChannelEl.value || null) : undefined,
+        same_channel: document.getElementById('sp-same-channel')?.checked,
         allowed_platforms: platforms,
         auto_subscribe: e.target.auto_subscribe.checked,
+        keep_message: e.target.keep_message.checked,
         delete_invalid: e.target.delete_invalid.checked,
         dm_on_track: e.target.dm_on_track.checked,
-        dm_on_already_tracked: e.target.dm_on_already_tracked.checked
+        dm_on_already_tracked: e.target.dm_on_already_tracked.checked,
+        announce_gate_enabled: document.getElementById('sp-gate-enabled').checked,
+        announce_min_level: minLevel,
+        announce_required_role_ids: requiredRoleIds,
+        announce_delete_unauthorized: document.getElementById('sp-gate-delete-unauth').checked,
     };
     try {
         const res = await fetch('/api/guilds/<%= guild.id %>/self-promo/config', {

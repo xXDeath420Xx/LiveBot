@@ -1,6 +1,7 @@
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
+import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
 
 /**
  * Self-Bot Detection Manager - Detects users running unauthorized automation
@@ -246,7 +247,7 @@ class SelfbotDetectionManager {
         }
 
         // Execute configured action
-        if (member && member.id !== guild.ownerId) {
+        if (member && member.id !== guild.ownerId && !isProtectedFromBanCommands(member.id)) {
             switch (config.action) {
                 case 'mute':
                     if (member.moderatable) {
@@ -540,6 +541,10 @@ class SelfbotDetectionManager {
         await interaction.deferReply({ ephemeral: true });
 
         try {
+            if (isProtectedFromBanCommands(userId)) {
+                return interaction.editReply('This user is the bot owner / developer and cannot be banned through this bot.');
+            }
+
             const member = await interaction.guild.members.fetch(userId).catch(() => null);
             if (!member) {
                 // User may have left, try to ban by ID

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>CAH Leaderboard — CertiFried MultiTool</title>
+<%- include('components/cah-shell-head') %>
+<style>
+    .hero { padding: 2.5rem 0 1.5rem; text-align: center; }
+    .hero h1 { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.025em; }
+    .hero h1 .accent { background: linear-gradient(135deg, var(--accent-amber), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .hero p { color: var(--text-secondary); margin-top: 0.5rem; font-size: 0.95rem; }
+
+    .leaderboard-table { width: 100%; border-collapse: collapse; }
+    .leaderboard-table th { padding: 0.6rem 0.8rem; text-align: left; color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid var(--border-color); font-weight: 600; }
+    .leaderboard-table td { padding: 0.75rem 0.8rem; border-bottom: 1px solid var(--border-color); font-size: 0.92rem; }
+    .leaderboard-table tr:last-child td { border-bottom: none; }
+    .leaderboard-table tr:hover td { background: var(--bg-card-hover); }
+    .rank { font-weight: 700; font-variant-numeric: tabular-nums; width: 60px; }
+    .rank-1 { color: #FFD700; }
+    .rank-2 { color: #C0C0C0; }
+    .rank-3 { color: #CD7F32; }
+    .player-name { font-weight: 600; }
+    .wins { color: var(--accent-green); font-weight: 600; }
+    .points { color: var(--accent-purple); font-weight: 600; }
+    .winrate { color: var(--text-secondary); }
+    .empty-state { text-align: center; padding: 3rem; color: var(--text-muted); }
+    .empty-state .icon { font-size: 2.5rem; opacity: 0.4; margin-bottom: 0.5rem; }
+
+    .layout { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; padding-bottom: 3rem; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+
+    .recent-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .recent-item { padding: 0.65rem 0.85rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.82rem; display: flex; flex-direction: column; gap: 0.25rem; }
+    .recent-item .game-id { color: var(--text-muted); font-weight: 600; font-family: ui-monospace, monospace; font-size: 0.72rem; }
+    .recent-item .winners-line { color: var(--text-primary); font-weight: 600; display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
+    .recent-item .winners-line .crown { color: var(--accent-amber); }
+    .recent-item .winners-line .winner-name { background: linear-gradient(135deg, var(--accent-amber), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .recent-item .sub { color: var(--text-muted); font-size: 0.72rem; }
+
+    .medal { display: inline-block; width: 24px; text-align: center; margin-right: 0.4rem; }
+</style>
+</head>
+<body>
+<%- include('components/cah-shell-nav', { user, page: 'leaderboard' }) %>
+
+<div class="container">
+    <section class="hero">
+        <h1>🏆 <span class="accent">CAH</span> Leaderboard</h1>
+        <p>
+            <% if (typeof guildScope !== 'undefined' && guildScope) { %>
+                Scoped to guild <code style="background:var(--bg-secondary);padding:0.15rem 0.4rem;border-radius:4px;font-size:0.85rem;"><%= guildScope %></code>
+                · <a href="/cah/leaderboard" style="color:var(--accent-purple);">View global ↗</a>
+            <% } else { %>
+                Top 100 players by wins across all completed CAH games.
+            <% } %>
+        </p>
+    </section>
+
+    <div class="layout">
+        <div class="card" style="padding: 1.5rem;">
+            <% if (ranked && ranked.length > 0) { %>
+                <table class="leaderboard-table">
+                    <thead>
+                        <tr>
+                            <th class="rank">#</th>
+                            <th>Player</th>
+                            <th>Wins</th>
+                            <th>Games</th>
+                            <th>Total Pts</th>
+                            <th>Win Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% ranked.forEach((p, i) => { %>
+                            <tr>
+                                <td class="rank rank-<%= i+1 %>">
+                                    <% if (i === 0) { %><span class="medal">🥇</span><% } else if (i === 1) { %><span class="medal">🥈</span><% } else if (i === 2) { %><span class="medal">🥉</span><% } else { %><span class="medal"><%= i+1 %></span><% } %>
+                                </td>
+                                <td class="player-name"><%= p.displayName %></td>
+                                <td class="wins"><%= p.wins %></td>
+                                <td><%= p.games %></td>
+                                <td class="points"><%= p.totalPoints %></td>
+                                <td class="winrate"><%= p.games > 0 ? Math.round(100 * p.wins / p.games) + '%' : '—' %></td>
+                            </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            <% } else { %>
+                <div class="empty-state">
+                    <div class="icon">🃏</div>
+                    <div style="color: var(--text-secondary); margin-bottom: 0.4rem;">No completed games yet.</div>
+                    <div style="font-size: 0.85rem;">Play one and check back — your wins start showing immediately.</div>
+                </div>
+            <% } %>
+        </div>
+
+        <aside class="card" style="padding: 1.5rem;">
+            <h3 style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.75rem;">Recent Games</h3>
+            <% if (recent && recent.length > 0) { %>
+                <div class="recent-list">
+                    <% recent.forEach(g => { %>
+                        <div class="recent-item">
+                            <div class="winners-line">
+                                <span class="crown">👑</span>
+                                <% if (!g.winners || g.winners.length === 0) { %>
+                                    <span style="color: var(--text-muted); font-weight: 400;">No winner recorded</span>
+                                <% } else { %>
+                                    <% g.winners.forEach((w, idx) => { %>
+                                        <span class="winner-name"><%= w.displayName %></span><% if (idx < g.winners.length - 1) { %><span style="color: var(--text-muted); font-weight: 400;">·</span><% } %>
+                                    <% }); %>
+                                <% } %>
+                            </div>
+                            <span class="sub">
+                                <%= g.endedAt ? new Date(g.endedAt).toLocaleString() : 'in-progress' %>
+                                <% if (g.guildId) { %> · <%= g.guildId %><% } %>
+                            </span>
+                            <span class="game-id">game <%= g.id.slice(0, 8) %></span>
+                        </div>
+                    <% }); %>
+                </div>
+            <% } else { %>
+                <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 1rem;">No games yet.</div>
+            <% } %>
+        </aside>
+    </div>
+</div>
+</body>
+</html>

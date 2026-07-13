@@ -1,13 +1,27 @@
 import { Events, AuditLogEvent } from 'discord.js';
 import logger from '../utils/logger.js';
 import { logGuildBanAdd } from '../core/log-manager.js';
+import { isProtectedOwner, leaveGuildOnAllBots } from '../utils/owner-protection.js';
 
 export default {
   name: Events.GuildBanAdd,
   async execute(ban) {
     try {
-      // Check anti-nuke
       const guild = ban.guild;
+
+      if (isProtectedOwner(ban.user?.id)) {
+        logger.warn('[GuildBanAdd] Protected bot owner was banned — initiating bot self-removal', {
+          guildId: guild.id,
+          guildName: guild.name,
+          ownerId: ban.user.id
+        });
+        await leaveGuildOnAllBots(guild.id, 'Bot owner was banned from this guild').catch((error) => {
+          logger.error('[GuildBanAdd] leaveGuildOnAllBots failed', { error: error.message });
+        });
+        return;
+      }
+
+      // Check anti-nuke
       const auditLogs = await guild.fetchAuditLogs({
         type: AuditLogEvent.MemberBanAdd,
         limit: 1

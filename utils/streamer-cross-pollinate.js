@@ -56,8 +56,45 @@ export async function crossPollinateStreamer(streamerId, discordUserId, originGu
 
         if (guildsWithAnnouncements.length === 0) return [];
 
+        // Pull each target guild's auto-track role requirement so we don't bypass
+        // role/level gates that would otherwise block this user from the opt-in.
+        // A target guild with `guild_streamer_auto_track.role_id` set means
+        // "only members holding that role get auto-subscribed" — and since that
+        // role is itself the post-button-click product of the per-button level
+        // check (reaction_role_manager.js), respecting role_id transitively
+        // respects the target guild's level gate.
+        const [autoTrackRows] = await pool.execute(
+            `SELECT guild_id, role_id FROM guild_streamer_auto_track
+             WHERE guild_id IN (${placeholders}) AND enabled = 1 AND role_id IS NOT NULL`,
+            Array.from(memberGuildIds)
+        );
+        const roleGateByGuild = new Map(autoTrackRows.map(r => [r.guild_id, r.role_id]));
+
         // Create subscriptions where they don't exist
         for (const guildConfig of guildsWithAnnouncements) {
+            // If the target guild has a role gate, skip unless the user holds it.
+            const requiredRoleId = roleGateByGuild.get(guildConfig.guild_id);
+            if (requiredRoleId) {
+                let userHasRole = false;
+                if (botManager?.clients) {
+                    for (const [, botClient] of botManager.clients) {
+                        if (!botClient.isReady()) continue;
+                        const targetGuild = botClient.guilds.cache.get(guildConfig.guild_id);
+                        if (!targetGuild) continue;
+                        const member = targetGuild.members.cache.get(discordUserId)
+                            || await targetGuild.members.fetch(discordUserId).catch(() => null);
+                        if (member?.roles.cache.has(requiredRoleId)) {
+                            userHasRole = true;
+                        }
+                        break; // found the bot serving this guild; don't re-check elsewhere
+                    }
+                }
+                if (!userHasRole) {
+                    logger.debug(`[CrossPollinate] Skipping ${guildConfig.guild_id} — user ${discordUserId} lacks required role ${requiredRoleId}`, { category: 'streams' });
+                    continue;
+                }
+            }
+
             const [existingSub] = await pool.execute(
                 'SELECT subscription_id FROM subscriptions WHERE guild_id = ? AND streamer_id = ?',
                 [guildConfig.guild_id, streamerId]
@@ -159,6 +196,15 @@ export async function crossPollinateGuild(guildId, channelId) {
 
         if (streamers.length === 0) return { checked: 0, created: 0, details: [] };
 
+        // If THIS guild requires a role for auto-track, only cross-pollinate users
+        // who hold that role — protects level-gated guilds from receiving
+        // subscriptions for members who never passed the button click.
+        const [autoTrackRow] = await pool.execute(
+            'SELECT role_id FROM guild_streamer_auto_track WHERE guild_id = ? AND enabled = 1 AND role_id IS NOT NULL',
+            [guildId]
+        );
+        const requiredRoleId = autoTrackRow[0]?.role_id || null;
+
         // Deduplicate by discord_user_id to minimize API calls
         const uniqueUsers = new Map();
         for (const s of streamers) {
@@ -168,7 +214,7 @@ export async function crossPollinateGuild(guildId, channelId) {
             uniqueUsers.get(s.discord_user_id).push(s);
         }
 
-        logger.info(`[CrossPollinate:Guild] Checking ${uniqueUsers.size} unique Discord users for guild ${guildId}`, { category: 'streams' });
+        logger.info(`[CrossPollinate:Guild] Checking ${uniqueUsers.size} unique Discord users for guild ${guildId}${requiredRoleId ? ` (role gate: ${requiredRoleId})` : ''}`, { category: 'streams' });
 
         let checked = 0;
         let created = 0;
@@ -178,8 +224,14 @@ export async function crossPollinateGuild(guildId, channelId) {
             checked++;
 
             // REST API membership check
-            const isMember = await guild.members.fetch(discordUserId).then(() => true).catch(() => false);
-            if (!isMember) continue;
+            const member = await guild.members.fetch(discordUserId).catch(() => null);
+            if (!member) continue;
+
+            // Role gate check (if configured)
+            if (requiredRoleId && !member.roles.cache.has(requiredRoleId)) {
+                logger.debug(`[CrossPollinate:Guild] Skipping ${discordUserId} — lacks required role ${requiredRoleId}`, { category: 'streams' });
+                continue;
+            }
 
             // Create subscriptions for each of this user's streamer entries
             for (const streamer of userStreamers) {

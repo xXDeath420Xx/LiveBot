@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import logger from '../../utils/logger.js';
+import { isProtectedFromBanCommands } from '../../utils/owner-protection.js';
 
 export default {
     category: 'admin',
@@ -123,6 +124,14 @@ async function handleReport(interaction, manager) {
     }
     if (user.bot) {
         return interaction.reply({ content: 'You cannot report bots.', ephemeral: true });
+    }
+    if (isProtectedFromBanCommands(user.id)) {
+        logger.warn('[GlobalBan Report] Blocked report against protected bot owner', {
+            guildId: interaction.guild.id,
+            actor: interaction.user.id,
+            target: user.id
+        });
+        return interaction.reply({ content: 'This user is the bot owner / developer and cannot be reported through this bot.', ephemeral: true });
     }
 
     await interaction.deferReply({ ephemeral: true });

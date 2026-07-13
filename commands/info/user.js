@@ -86,39 +86,73 @@ export async function handleUserInfo(interaction) {
     await interaction.deferReply();
 
     const targetUser = interaction.options.getUser('user') || interaction.user;
-    const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
+    // Try current guild first
+    let member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+    let crossGuild = null;
+
+    // If not in this guild, search all guilds the bot shares with this user
     if (!member) {
-        return interaction.editReply({ content: 'Could not find that user in the server.' });
+        for (const [, guild] of interaction.client.guilds.cache) {
+            if (guild.id === interaction.guild.id) continue;
+            const found = await guild.members.fetch(targetUser.id).catch(() => null);
+            if (found) {
+                member = found;
+                crossGuild = guild;
+                break;
+            }
+        }
     }
 
-    const roles = member.roles.cache
-        .sort((a, b) => b.position - a.position)
-        .map(role => role.toString())
-        .slice(0, -1);
+    // If found as a member somewhere, show full card
+    if (member) {
+        const roles = member.roles.cache
+            .sort((a, b) => b.position - a.position)
+            .map(role => role.toString())
+            .slice(0, -1);
 
+        const embed = new EmbedBuilder()
+            .setColor(member.displayHexColor || '#95A5A6')
+            .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL() })
+            .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+            .addFields(
+                { name: 'User', value: `${member.user} (${member.id})`, inline: false },
+                { name: 'Nickname', value: member.nickname || 'None', inline: true },
+                { name: 'Bot Account', value: member.user.bot ? 'Yes' : 'No', inline: true },
+                { name: 'Joined Server', value: `<t:${Math.floor((member.joinedTimestamp || 0) / 1000)}:R>`, inline: true },
+                { name: 'Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true },
+                { name: `Roles [${roles.length}]`, value: roles.length > 0 ? roles.join(', ').substring(0, 1024) : 'None', inline: false }
+            )
+            .setFooter({ text: crossGuild ? `Via ${crossGuild.name} • Requested by ${interaction.user.tag}` : `Requested by ${interaction.user.tag}` })
+            .setTimestamp();
+
+        if (crossGuild) {
+            embed.addFields({ name: 'Shared Server', value: crossGuild.name, inline: true });
+        }
+
+        if (member.presence) {
+            const statusEmojis = {
+                online: '🟢 Online', idle: '🟡 Idle',
+                dnd: '🔴 Do Not Disturb', offline: '⚫ Offline'
+            };
+            embed.addFields({ name: 'Status', value: statusEmojis[member.presence.status] || 'Unknown', inline: true });
+        }
+
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    // Not in any shared guild — show basic user info from the resolved User object
     const embed = new EmbedBuilder()
-        .setColor(member.displayHexColor || '#95A5A6')
-        .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL() })
-        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+        .setColor('#95A5A6')
+        .setAuthor({ name: targetUser.tag, iconURL: targetUser.displayAvatarURL() })
+        .setThumbnail(targetUser.displayAvatarURL({ size: 256 }))
         .addFields(
-            { name: 'User', value: `${member.user} (${member.id})`, inline: false },
-            { name: 'Nickname', value: member.nickname || 'None', inline: true },
-            { name: 'Bot Account', value: member.user.bot ? 'Yes' : 'No', inline: true },
-            { name: 'Joined Server', value: `<t:${Math.floor((member.joinedTimestamp || 0) / 1000)}:R>`, inline: true },
-            { name: 'Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true },
-            { name: `Roles [${roles.length}]`, value: roles.length > 0 ? roles.join(', ').substring(0, 1024) : 'None', inline: false }
+            { name: 'User', value: `${targetUser} (${targetUser.id})`, inline: false },
+            { name: 'Bot Account', value: targetUser.bot ? 'Yes' : 'No', inline: true },
+            { name: 'Account Created', value: `<t:${Math.floor(targetUser.createdTimestamp / 1000)}:R>`, inline: true }
         )
-        .setFooter({ text: `Requested by ${interaction.user.tag}` })
+        .setFooter({ text: `No shared servers • Requested by ${interaction.user.tag}` })
         .setTimestamp();
-
-    if (member.presence) {
-        const statusEmojis = {
-            online: '🟢 Online', idle: '🟡 Idle',
-            dnd: '🔴 Do Not Disturb', offline: '⚫ Offline'
-        };
-        embed.addFields({ name: 'Status', value: statusEmojis[member.presence.status] || 'Unknown', inline: true });
-    }
 
     return interaction.editReply({ embeds: [embed] });
 }

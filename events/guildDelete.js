@@ -9,12 +9,13 @@ export default {
     logger.warn(`[GuildDelete] Removed from guild: ${guildName} (${guild.id})`);
 
     try {
-      // Update last_seen to mark when we lost access — do NOT delete the row
+      // Mark loss via left_at; preserve last_seen so we keep the
+      // "last observed" timestamp for audit purposes.
       await pool.execute(`
-        INSERT INTO guilds (guild_id, guild_name, last_seen)
-        VALUES (?, ?, NOW())
+        INSERT INTO guilds (guild_id, guild_name, last_seen, left_at)
+        VALUES (?, ?, NOW(), NOW())
         ON DUPLICATE KEY UPDATE
-          last_seen = NOW()
+          left_at = NOW()
       `, [guild.id, guildName]);
     } catch (error) {
       logger.error('[GuildDelete] Failed to update guild record', {

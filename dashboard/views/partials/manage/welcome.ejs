@@ -250,7 +250,7 @@
         </div>
     </div>
 
-    <form action="/manage/<%= guild.id %>/update-welcome" method="POST">
+    <form action="/manage/<%= guild.id %>/update-welcome" method="POST" enctype="multipart/form-data">
         <!-- Welcome Settings Section -->
         <div class="welcome-section-card">
             <div class="welcome-section-header">
@@ -319,9 +319,18 @@
                     </div>
 
                     <div class="welcome-form-group" style="margin-top: 16px; margin-bottom: 0;">
-                        <label class="welcome-form-label">Background Image URL</label>
-                        <input type="text" class="welcome-form-input" name="card_background_url" value="<%= (welcomeSettings && welcomeSettings.card_background_url) ? welcomeSettings.card_background_url : '' %>" placeholder="https://i.imgur.com/example.png">
-                        <span class="welcome-form-hint">Custom background for welcome banner. <strong>Supported formats: JPG, PNG</strong> (WebP not supported)</span>
+                        <label class="welcome-form-label">Background Image</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start;">
+                            <div>
+                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block; margin-bottom: 4px;">Upload Image</label>
+                                <input type="file" class="welcome-form-input" name="card_background_file" accept="image/png,image/jpeg,image/jpg" style="padding: 6px;">
+                            </div>
+                            <div>
+                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block; margin-bottom: 4px;">Or paste URL</label>
+                                <input type="text" class="welcome-form-input" name="card_background_url" value="<%= (welcomeSettings && welcomeSettings.card_background_url) ? welcomeSettings.card_background_url : '' %>" placeholder="https://example.com/image.png">
+                            </div>
+                        </div>
+                        <span class="welcome-form-hint">Upload a file or paste a URL. <strong>Supported: JPG, PNG</strong> (max 5MB). Uploaded file takes priority over URL.</span>
                     </div>
                 </div>
             </div>

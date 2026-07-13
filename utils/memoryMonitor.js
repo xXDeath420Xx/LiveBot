@@ -7,8 +7,8 @@ import logger from './logger.js';
 class MemoryMonitor {
     constructor(options = {}) {
         this.intervalMs = options.intervalMs || 60000; // Check every minute
-        this.warningThresholdMB = options.warningThresholdMB || 500;
-        this.criticalThresholdMB = options.criticalThresholdMB || 800;
+        this.warningThresholdMB = options.warningThresholdMB || 2500;
+        this.criticalThresholdMB = options.criticalThresholdMB || 3500;
         this.interval = null;
         this.history = [];
         this.maxHistory = options.maxHistory || 60; // Keep 1 hour of history
@@ -112,12 +112,20 @@ class MemoryMonitor {
             const growthPercent = Math.round((growth / first) * 100);
 
             if (growthPercent > 50) {
+                // Include the LARGEST watched maps so we can see which one is leaking
+                // instead of just "memory grew, dunno why" every minute.
+                const topMaps = Object.entries(mapSizes)
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 8)
+                    .map(([k, v]) => `${k}=${v.toLocaleString()}`)
+                    .join(', ');
                 logger.warn('[MemoryMonitor] Significant memory growth detected', {
                     firstMB: first,
                     lastMB: last,
                     growthMB: growth,
                     growthPercent,
-                    periodMinutes: Math.round((this.history.length * this.intervalMs) / 60000)
+                    periodMinutes: Math.round((this.history.length * this.intervalMs) / 60000),
+                    topMaps: topMaps || '(none watched)'
                 });
             }
         }

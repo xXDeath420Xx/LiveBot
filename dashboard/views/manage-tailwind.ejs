@@ -1245,6 +1245,7 @@
         'polls': 'Polls',
         'suggestions': 'Suggestions',
         'music': 'Music',
+        'soundboard': 'Soundboard',
         'schedule': 'Schedule',
         'birthday': 'Birthdays',
         'weather': 'Weather',
@@ -1280,6 +1281,12 @@
         'custom-embeds': 'Custom Embeds',
         'auto-purge': 'Auto Purge',
         'commands': 'Commands',
+        'command-center': 'Command Center',
+        'initialize': 'Initialize Bot',
+        'takeover': 'Analyze & Take Over',
+        'kofi': 'Ko-fi',
+        'counting': 'Counting',
+        'minigames': 'Minigames',
         'forms': 'Forms',
         'tickets': 'Tickets',
         'backups': 'Backups',
@@ -1388,6 +1395,7 @@
             <a href="/commands" class="mobile-menu-link">Commands</a>
             <a href="/cards" class="mobile-menu-link">Cards</a>
             <a href="/cah" class="mobile-menu-link">🃏 CAH</a>
+                    <a href="/sprites" class="mobile-menu-link">👾 Sprites</a>
             <a href="/status" class="mobile-menu-link">Status</a>
             <a href="/dashboard" class="mobile-menu-link">Dashboard</a>
             <a href="/lb/<%= guild.id %>" class="mobile-menu-link">Leaderboard</a>
@@ -1449,6 +1457,7 @@
                     'polls': { partial: 'polls', data: { guild, polls, channels } },
                     'suggestions': { partial: 'suggestions', data: { guild, suggestions, suggestionConfig, suggestionStats, suggestionTags, channels, roles } },
                     'music': { partial: 'music', data: { guild, musicConfig: typeof musicConfig !== 'undefined' ? musicConfig : {}, availableDJVoices: typeof availableDJVoices !== 'undefined' ? availableDJVoices : [], roles, channels, voiceChannels } },
+                    'soundboard': { partial: 'soundboard', data: { guild } },
                     'birthday': { partial: 'birthday', data: { guild, birthdays: typeof birthdayUsers !== 'undefined' ? birthdayUsers : [], birthdayStats: typeof birthdayStats !== 'undefined' ? birthdayStats : {}, birthdayConfig: typeof birthdayConfig !== 'undefined' ? birthdayConfig : {}, birthdayCards: typeof birthdayCards !== 'undefined' ? birthdayCards : [], channels, roles } },
                     'weather': { partial: 'weather', data: { guild, weatherStats, weatherConfig: typeof weatherConfig !== 'undefined' ? weatherConfig : {}, channels } },
                     'economy': { partial: 'economy', data: { guild, economyConfig, shopItems, economyStats, topUsers } },
@@ -1475,6 +1484,13 @@
                     'custom-embeds': { partial: 'custom-embeds', data: { guild, customEmbeds: typeof customEmbeds !== 'undefined' ? customEmbeds : [], channels } },
                     'auto-purge': { partial: 'auto-purge', data: { guild, purgeConfigs: typeof purgeConfigs !== 'undefined' ? purgeConfigs : [], channels } },
                     'commands': { partial: 'commands', data: { guild, commands: typeof commandSettings !== 'undefined' ? commandSettings : [], commandRestrictions: typeof commandRestrictions !== 'undefined' ? commandRestrictions : {}, guildId: guild.id, prefixConfig: typeof prefixConfig !== 'undefined' ? prefixConfig : {}, prefixAliases: typeof prefixAliases !== 'undefined' ? prefixAliases : [] } },
+                    // Fully API-driven: needs nothing but the guild.
+                    'command-center': { partial: 'command-center', data: { guild } },
+                    'initialize': { partial: 'initialize', data: { guild, channels } },
+                    'takeover': { partial: 'takeover', data: { guild, channels } },
+                    'kofi': { partial: 'kofi', data: { guild, channels, roles } },
+                    'counting': { partial: 'counting', data: { guild, channels } },
+                    'minigames': { partial: 'minigames', data: { guild, channels } },
                     'forms': { partial: 'forms', data: { guild, forms: typeof forms !== 'undefined' ? forms : [], channels } },
                     'tickets': { partial: 'tickets', data: { guild, ticketConfig, forms: typeof ticketFormsList !== 'undefined' ? ticketFormsList : [], categories, roles } },
                     'backups': { partial: 'backups', data: { guild, backups: typeof backups !== 'undefined' ? backups : [] } },
@@ -1810,10 +1826,28 @@
                         <h2 class="section-title">Core</h2>
                         <div class="section-desc">Bot configuration, commands, and display settings</div>
                     </div>
-                    <span class="section-count">5</span>
+                    <span class="section-count">7</span>
                     <i class="fas fa-chevron-down section-chevron"></i>
                 </div>
                 <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=initialize" class="module-card purple" data-tags="setup wizard initialize onboarding guide start getting started first time">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+                            <div>
+                                <div class="module-title">Initialize Bot</div>
+                                <div class="module-desc">Guided end-to-end setup for a new server</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=takeover" class="module-card purple" data-tags="takeover migrate replace scan audit bots retire remove mee6 carl dyno parity">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-crosshairs"></i></div>
+                            <div>
+                                <div class="module-title">Analyze &amp; Take Over</div>
+                                <div class="module-desc">Scan the server, replace other bots, retire them</div>
+                            </div>
+                        </div>
+                    </a>
                     <a href="/manage/<%= guild.id %>?page=appearance" class="module-card purple" data-tags="nickname avatar color embed custom bot instance token branding">
                         <div class="module-header">
                             <div class="module-icon"><i class="fas fa-paint-brush"></i></div>
@@ -1951,10 +1985,19 @@
                         <h2 class="section-title">Community</h2>
                         <div class="section-desc">Engagement, progression, and social features</div>
                     </div>
-                    <span class="section-count">11</span>
+                    <span class="section-count">13</span>
                     <i class="fas fa-chevron-down section-chevron"></i>
                 </div>
                 <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=kofi" class="module-card cyan" data-tags="kofi ko-fi donation supporter tip subscription membership roles webhook">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-mug-hot"></i></div>
+                            <div>
+                                <div class="module-title">Ko-fi</div>
+                                <div class="module-desc">Grant roles when someone tips or subscribes</div>
+                            </div>
+                        </div>
+                    </a>
                     <a href="/manage/<%= guild.id %>?page=welcome" class="module-card cyan" data-tags="welcome join message dm greeting autorole member">
                         <div class="module-header">
                             <div class="module-icon"><i class="fas fa-hand-sparkles"></i></div>
@@ -2054,6 +2097,15 @@
                             </div>
                         </div>
                     </a>
+                    <a href="/manage/<%= guild.id %>?page=soundboard" class="module-card cyan" data-tags="soundboard sound sfx clip audio voice meme upload play sounds">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-volume-high"></i></div>
+                            <div>
+                                <div class="module-title">Soundboard</div>
+                                <div class="module-desc">Upload sound clips and play them in voice</div>
+                            </div>
+                        </div>
+                    </a>
                 </div>
             </section>
 
@@ -2065,10 +2117,28 @@
                         <h2 class="section-title">Economy & Games</h2>
                         <div class="section-desc">Currency, mini-games, and entertainment</div>
                     </div>
-                    <span class="section-count">7</span>
+                    <span class="section-count">9</span>
                     <i class="fas fa-chevron-down section-chevron"></i>
                 </div>
                 <div class="module-grid">
+                    <a href="/manage/<%= guild.id %>?page=counting" class="module-card yellow" data-tags="counting count numbers game channel streak reset delete">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-sort-numeric-up"></i></div>
+                            <div>
+                                <div class="module-title">Counting</div>
+                                <div class="module-desc">Count together; wrong numbers reset or get deleted</div>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="/manage/<%= guild.id %>?page=minigames" class="module-card yellow" data-tags="minigames cat catbot tree grow timezone games spawn fun">
+                        <div class="module-header">
+                            <div class="module-icon"><i class="fas fa-dice"></i></div>
+                            <div>
+                                <div class="module-title">Minigames</div>
+                                <div class="module-desc">Cat Bot, Grow a Tree and timezone conversion</div>
+                            </div>
+                        </div>
+                    </a>
                     <a href="/manage/<%= guild.id %>?page=economy" class="module-card yellow" data-tags="economy currency coins shop balance transfer">
                         <div class="module-header">
                             <div class="module-icon"><i class="fas fa-coins"></i></div>

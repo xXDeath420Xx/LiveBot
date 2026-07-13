@@ -3,6 +3,8 @@ import logger from '../utils/logger.js';
 import crypto from 'crypto';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
 import configCache from '../utils/configCache.js';
+import { isWhitelisted } from '../utils/automod-whitelist.js';
+import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
 
 /**
  * Adaptive Spam Manager - Learns from spam patterns and adapts detection over time
@@ -70,12 +72,13 @@ class AdaptiveSpamManager {
     async analyzeMessage(message) {
         const { guild, author, channel, member } = message;
 
-        // Skip spam detection for users with Administrator permission or guild owners
+        // Skip spam detection for admins, guild owners, and whitelisted users
         if (member) {
             const isAdmin = member.permissions.has(PermissionFlagsBits.Administrator);
             const isOwner = member.id === guild.ownerId;
             if (isAdmin || isOwner) return false;
         }
+        if (await isWhitelisted(guild.id, author.id)) return false;
 
         try {
             // Get config
@@ -126,26 +129,24 @@ class AdaptiveSpamManager {
             // Get user's spam profile
             const profile = await this.getOrCreateProfile(guild.id, author.id);
 
-            // Apply score decay - reduce score by 5 points per minute of inactivity
-            const timeSinceLastMsg = filtered.length > 1
-                ? now - filtered[filtered.length - 2].timestamp
-                : 60000; // Default 1 minute if first tracked message
-            const decayMinutes = Math.floor(timeSinceLastMsg / 60000);
-            const decayedScore = Math.max(0, profile.spam_score - (decayMinutes * 5));
-
-            // Calculate current spam score
+            // Calculate spam score based ONLY on current message window (not cumulative)
             const spamScore = await this.calculateSpamScore(guild, author, config, profile, filtered);
 
-            // Update profile with decayed score + new score
-            const newScore = Math.min(100, decayedScore + spamScore);
+            // Update profile score — use the CURRENT window score, not cumulative
+            // Decay the stored score aggressively (10 pts/min) then take the MAX of decayed vs current
+            const timeSinceLastMsg = filtered.length > 1
+                ? now - filtered[filtered.length - 2].timestamp
+                : 60000;
+            const decayMinutes = Math.floor(timeSinceLastMsg / 60000);
+            const decayedStored = Math.max(0, profile.spam_score - (decayMinutes * 10));
+            const newScore = Math.max(decayedStored, spamScore);
+
             if (newScore !== profile.spam_score) {
-                await this.updateProfile(guild.id, author.id, {
-                    spam_score: newScore
-                });
+                await this.updateProfile(guild.id, author.id, { spam_score: newScore });
             }
 
-            // Check if action threshold exceeded (raised from 50 to 75 to reduce false positives)
-            const actionThreshold = config.action_threshold || 75;
+            // Action threshold — only trigger on genuinely high scores
+            const actionThreshold = config.action_threshold || 80;
             if (newScore >= actionThreshold) {
                 await this.triggerSpamAction(message, config, newScore);
                 return true;
@@ -254,51 +255,31 @@ class AdaptiveSpamManager {
             repeatedHashes[msg.hash] = (repeatedHashes[msg.hash] || 0) + 1;
         }
 
-        // 1. Check for repeated identical/similar messages (actual spam behavior)
+        // 1. Check for repeated identical/similar messages
+        // Only flag if same message sent 5+ times AND the message is non-trivial (>5 chars)
         for (const [hash, count] of Object.entries(repeatedHashes)) {
-            // Only flag if same message sent 4+ times in the tracking window
-            if (count >= 4) {
-                // This IS spam - same message repeated multiple times
-                score += Math.min(50, (count - 3) * 15);
-
-                logger.debug('[AdaptiveSpam] Repeated message detected', {
-                    guildId: guild.id,
-                    userId: author.id,
-                    repeatCount: count,
-                    scoreAdded: Math.min(50, (count - 3) * 15)
-                });
+            if (count >= 5) {
+                score += Math.min(40, (count - 4) * 10);
             }
         }
 
         // 2. Check for cross-channel spam (same message in multiple channels)
+        const threshold = config.cross_channel_threshold || 3;
         for (const [hash, count] of Object.entries(repeatedHashes)) {
             if (count >= 2) {
                 const hashData = this.messageHashes.get(`${guild.id}_${hash}`);
-                if (hashData && hashData.channels.size >= 3) {
-                    // Same message in 3+ different channels = cross-channel spam
-                    score += Math.min(40, hashData.channels.size * 12);
-
-                    logger.debug('[AdaptiveSpam] Cross-channel spam detected', {
-                        guildId: guild.id,
-                        userId: author.id,
-                        channelCount: hashData.channels.size,
-                        scoreAdded: Math.min(40, hashData.channels.size * 12)
-                    });
+                if (hashData && hashData.channels.size >= threshold) {
+                    score += Math.min(40, hashData.channels.size * 10);
                 }
             }
         }
 
-        // 3. Apply new account multiplier (capped to prevent excessive penalties)
+        // 3. Apply new account multiplier (capped)
         const accountAgeHours = (Date.now() - author.createdTimestamp) / (1000 * 60 * 60);
-
         if (accountAgeHours < 24) {
-            // Cap at 2.5x even if config is higher to prevent false positive bans
-            const multiplier = Math.min(config.new_account_multiplier_24h || 2.0, 2.5);
-            score *= multiplier;
-        } else if (accountAgeHours < 168) { // 7 days
-            // Cap at 1.75x for 7-day accounts
-            const multiplier = Math.min(config.new_account_multiplier_7d || 1.5, 1.75);
-            score *= multiplier;
+            score *= Math.min(config.new_account_multiplier_24h || 2.0, 2.0);
+        } else if (accountAgeHours < 168) {
+            score *= Math.min(config.new_account_multiplier_7d || 1.5, 1.5);
         }
 
         return Math.round(score);
@@ -327,7 +308,7 @@ class AdaptiveSpamManager {
         await this.logInfractionForSpam(guild, author, config.action);
 
         // Execute action
-        if (member && member.id !== guild.ownerId) {
+        if (member && member.id !== guild.ownerId && !isProtectedFromBanCommands(member.id)) {
             try {
                 switch (config.action) {
                     case 'mute':

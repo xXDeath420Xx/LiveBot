@@ -2,6 +2,7 @@ import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import configCache from '../utils/configCache.js';
+import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
 
 /**
  * Raid Detection Manager - Detects and responds to coordinated mass-join attacks
@@ -206,6 +207,9 @@ class RaidDetectionManager {
 
                 // Skip guild owner
                 if (member.id === guild.ownerId) continue;
+
+                // Never act on the bot owner / super admin
+                if (isProtectedFromBanCommands(member.id)) continue;
 
                 // Purge messages if enabled
                 if (config.purge_messages) {
@@ -501,6 +505,7 @@ class RaidDetectionManager {
             try {
                 const member = await interaction.guild.members.fetch(userId).catch(() => null);
                 if (!member || member.id === interaction.guild.ownerId) continue;
+                if (isProtectedFromBanCommands(member.id)) continue;
 
                 if (actionType === 'kick' && member.kickable) {
                     await member.kick(`Raid escalation by ${interaction.user.tag}`);

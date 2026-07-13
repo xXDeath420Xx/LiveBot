@@ -46,6 +46,14 @@ function generateCorrelationId() {
   return `${timestamp}-${counter}`;
 }
 
+// Log categories we deliberately NEVER record (console, file, or otherwise):
+// emoji / sticker / soundboard churn is pure noise nobody cares about, and the
+// disabled emoji cache makes emoji events storm on every reconnect.
+const _SUPPRESSED_CATEGORIES = /^(emoji|sticker|soundboard)/i;
+function _suppressedLog(meta) {
+  return !!(meta && typeof meta.category === 'string' && _SUPPRESSED_CATEGORIES.test(meta.category));
+}
+
 /**
  * Safe JSON stringify that handles circular references and BigInts
  */
@@ -429,12 +437,13 @@ const logger = {
     });
   },
 
-  // Standard logging methods
-  info: (message, meta) => baseLogger.info(message, meta),
-  warn: (message, meta) => baseLogger.warn(message, meta),
+  // Standard logging methods. Suppressed categories (emoji/sticker/soundboard)
+  // are dropped entirely — never console, never file.
+  info: (message, meta) => { if (_suppressedLog(meta)) return; baseLogger.info(message, meta); },
+  warn: (message, meta) => { if (_suppressedLog(meta)) return; baseLogger.warn(message, meta); },
   error: (message, meta) => baseLogger.error(message, meta),
-  debug: (message, meta) => baseLogger.debug(message, meta),
-  verbose: (message, meta) => baseLogger.verbose(message, meta),
+  debug: (message, meta) => { if (_suppressedLog(meta)) return; baseLogger.debug(message, meta); },
+  verbose: (message, meta) => { if (_suppressedLog(meta)) return; baseLogger.verbose(message, meta); },
   http: (message, meta) => baseLogger.http(message, meta),
 
   /**

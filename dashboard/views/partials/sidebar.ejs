@@ -42,6 +42,14 @@
                 <span class="nav-link-icon"><i class="fas fa-chart-line"></i></span>
                 <span class="nav-link-text">Status</span>
             </a>
+            <a href="/cah" class="nav-link <%= currentPage === 'cah' ? 'active' : '' %>">
+                <span class="nav-link-icon">🃏</span>
+                <span class="nav-link-text">Cards Against Humanity</span>
+            </a>
+            <a href="/sprites" class="nav-link <%= currentPage === 'sprites' ? 'active' : '' %>">
+                <span class="nav-link-icon">👾</span>
+                <span class="nav-link-text">Fortnite Sprite Tracker</span>
+            </a>
         </div>
 
         <!-- Bot Management -->
@@ -86,7 +94,7 @@
         <!-- Support Section -->
         <div class="nav-section">
             <div class="nav-section-title">Support</div>
-            <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" class="nav-link">
+            <a href="https://certifriedmultitool.com/discord" target="_blank" class="nav-link">
                 <span class="nav-link-icon"><i class="fab fa-discord"></i></span>
                 <span class="nav-link-text">Discord Server</span>
             </a>
@@ -103,6 +111,10 @@
             <a href="/super-admin" class="nav-link <%= currentPage === 'super-admin' ? 'active' : '' %>">
                 <span class="nav-link-icon"><i class="fas fa-user-shield"></i></span>
                 <span class="nav-link-text">Super Admin</span>
+            </a>
+            <a href="/admin/cah" class="nav-link <%= currentPage === 'cah-admin' ? 'active' : '' %>">
+                <span class="nav-link-icon">🃏</span>
+                <span class="nav-link-text">CAH Admin</span>
             </a>
         </div>
         <% } %>

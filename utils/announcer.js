@@ -248,32 +248,60 @@ async function updateAnnouncement(
     });
 
     if (liveData.thumbnailUrl) {
-        // New messages: cache-bust so Discord fetches a fresh thumbnail
-        // Edits: use stable URL so Discord reuses the cached image (no flicker)
-        const imageUrl = existingAnnouncement?.message_id
-            ? liveData.thumbnailUrl
-            : `${liveData.thumbnailUrl}?t=${Date.now()}`;
-        embed.setImage(imageUrl);
+        // Cache-bust ALWAYS — including on edits — because Twitch/Kick/YouTube
+        // serve thumbnails at stable URLs (e.g. live_user_xxxx-1920x1080.jpg)
+        // and Discord's CDN caches by URL. Without busting on edits, the
+        // thumbnail would forever show whatever was in the cache on first post.
+        //
+        // Round to the nearest 2-minute bucket so we don't issue a new URL
+        // on EVERY tick (which would force Discord to refetch + reattach the
+        // image on every edit, causing visible flicker for users actively
+        // viewing the message). 2 min matches Twitch's actual thumbnail
+        // refresh cadence — anything faster is wasted work.
+        const bucket = Math.floor(Date.now() / (2 * 60 * 1000));
+        embed.setImage(`${liveData.thumbnailUrl}?t=${bucket}`);
     }
+
+    // Escape Discord markdown characters in usernames to prevent formatting issues
+    const safeUsername = liveData.username.replace(/([_*~`|\\])/g, '\\$1');
 
     let content = subContext.custom_message
         ? subContext.custom_message
-            .replace(/{username}/g, liveData.username)
-            .replace(/{streamer}/g, liveData.username)
+            .replace(/{username}/g, safeUsername)
+            .replace(/{streamer}/g, safeUsername)
             .replace(/{platform}/g, platformName)
             .replace(/{url}/g, liveData.url)
-            .replace(/{title}/g, liveData.title || 'Untitled Stream')
-            .replace(/{game}/g, liveData.game || 'N/A')
+            .replace(/{title}/g, (liveData.title || 'Untitled Stream').replace(/([_*~`|\\])/g, '\\$1'))
+            .replace(/{game}/g, (liveData.game || 'N/A').replace(/([_*~`|\\])/g, '\\$1'))
+            .replace(/{everyone}/g, '@everyone')
         : null;
 
+    // Build ping mention separately — sent as its own message so edits don't suppress the notification
+    let pingMention = null;
+    if (subContext.ping_role_id) {
+        pingMention = subContext.ping_role_id === 'everyone' ? '@everyone' : `<@&${subContext.ping_role_id}>`;
+    }
+
     try {
+        // Load guild appearance overrides (custom bot avatar from dashboard)
+        let guildAppearance = null;
+        try {
+            const [appearanceRows] = await pool.execute(
+                'SELECT bot_avatar_url, bot_nickname FROM guild_config WHERE guild_id = ?',
+                [subContext.guild_id]
+            );
+            if (appearanceRows.length > 0) guildAppearance = appearanceRows[0];
+        } catch { /* ignore */ }
+
         // Determine if this guild uses webhook persona (streamer name/avatar) or bot-direct mode
         const useWebhookPersona = guildSettings?.use_webhook_persona === 1;
+        // If guild has a custom avatar configured, force webhook mode so the custom avatar appears
+        const hasCustomAvatar = !!guildAppearance?.bot_avatar_url;
 
         // Always use platform username, not Discord username
         let finalNickname = liveData.username;
-        // Start with default bot avatar or team avatar (ignore guild-level customization)
-        let finalAvatarURL = teamSettings?.webhook_avatar_url || client.user.displayAvatarURL();
+        // Start with custom guild avatar, team avatar, or default bot avatar
+        let finalAvatarURL = guildAppearance?.bot_avatar_url || teamSettings?.webhook_avatar_url || client.user.displayAvatarURL();
 
         if (useWebhookPersona) {
             // If streamer has linked Discord account, use their Discord avatar
@@ -302,8 +330,15 @@ async function updateAnnouncement(
             else if (channelSettings?.override_nickname) finalNickname = channelSettings.override_nickname;
         }
 
+        // If guild has a custom avatar but is in bot-direct mode, use the guild's
+        // custom bot name for the webhook (not the streamer's name)
+        if (!useWebhookPersona && hasCustomAvatar) {
+            finalNickname = guildAppearance?.bot_nickname || client.user.username;
+        }
+
         // ── Bot-direct mode: send as the bot via channel.send() ──
-        if (!useWebhookPersona) {
+        // If guild has a custom avatar, use webhook instead so the avatar appears
+        if (!useWebhookPersona && !hasCustomAvatar) {
             const channel = client.channels.cache.get(targetChannelId)
                 || await client.channels.fetch(targetChannelId).catch(() => null);
 
@@ -330,12 +365,15 @@ async function updateAnnouncement(
                         logger.info(`[Announcer] Bot-direct message edited for ${liveData.username} - Message ID: ${editedMessage?.id || 'NO_ID'}`, {
                             username: liveData.username, channelId: targetChannelId, messageId: editedMessage?.id, category: 'announcer'
                         });
+                        // Preserve the ping message id across edits so it isn't lost on save/cleanup
+                        if (editedMessage) editedMessage.pingMessageId = existingAnnouncement?.ping_message_id ?? existingAnnouncement?.pingMessageId ?? null;
                         return editedMessage;
                     } else {
                         // Existing message was sent by webhook — leave it alone until stream ends
                         logger.info(`[Announcer] Existing announcement for ${liveData.username} is a webhook message — skipping edit, will use bot-direct on next stream`, {
                             username: liveData.username, channelId: targetChannelId, messageId: existingAnnouncement.message_id, category: 'announcer'
                         });
+                        if (existingMsg) existingMsg.pingMessageId = existingAnnouncement?.ping_message_id ?? existingAnnouncement?.pingMessageId ?? null;
                         return existingMsg;
                     }
                 } catch (e) {
@@ -355,13 +393,25 @@ async function updateAnnouncement(
             }
 
             if (shouldSendNew) {
+                // Send ping as separate message first (so it triggers a notification that survives embed edits)
+                let pingMessageId = null;
+                if (pingMention) {
+                    try {
+                        const pingMsg = await channel.send({ content: pingMention });
+                        pingMessageId = pingMsg.id;
+                    } catch (err) {
+                        logger.warn(`[Announcer] Failed to send ping message for ${liveData.username}:`, { error: err.message, category: 'announcer' });
+                    }
+                }
+
                 const sentMessage = await channel.send(botMessageOptions);
                 logger.info(`[Announcer] Bot-direct message sent for ${liveData.username} - Message ID: ${sentMessage?.id || 'NO_ID'}`, {
-                    username: liveData.username, channelId: targetChannelId, messageId: sentMessage?.id, category: 'announcer'
+                    username: liveData.username, channelId: targetChannelId, messageId: sentMessage?.id, pingMessageId, category: 'announcer'
                 });
                 pool.execute(
                     'INSERT INTO global_stats (id, total_announcements) VALUES (1, 1) ON DUPLICATE KEY UPDATE total_announcements = total_announcements + 1'
                 );
+                if (sentMessage) sentMessage.pingMessageId = pingMessageId;
                 return sentMessage;
             }
             return null;
@@ -378,9 +428,14 @@ async function updateAnnouncement(
             return null;
         }
 
+        // Cache-bust the avatar URL so Discord doesn't serve a stale/failed cached version
+        const cacheBustedAvatar = finalAvatarURL && !finalAvatarURL.includes('cdn.discordapp.com')
+            ? `${finalAvatarURL}${finalAvatarURL.includes('?') ? '&' : '?'}v=${Math.floor(Date.now() / 3600000)}`
+            : finalAvatarURL;
+
         const messageOptions = {
             username: finalNickname,
-            avatarURL: finalAvatarURL,
+            avatarURL: cacheBustedAvatar,
             content: content || undefined,
             embeds: [embed]
         };
@@ -408,6 +463,8 @@ async function updateAnnouncement(
                     messageId: editedMessage?.id,
                     category: 'announcer'
                 });
+                // Preserve the ping message id across edits so it isn't lost on save/cleanup
+                if (editedMessage) editedMessage.pingMessageId = existingAnnouncement?.ping_message_id ?? existingAnnouncement?.pingMessageId ?? null;
                 return editedMessage;
             } catch (e) {
                 if (e instanceof DiscordAPIError && e.code === 10008) { // Unknown Message
@@ -431,17 +488,34 @@ async function updateAnnouncement(
 
         // Send new message if no existing message or if old message was deleted
         if (shouldSendNew) {
+            // Send ping as separate bot-direct message first (not via webhook, so it triggers a real notification)
+            let pingMessageId = null;
+            if (pingMention) {
+                try {
+                    const channel = client.channels.cache.get(targetChannelId)
+                        || await client.channels.fetch(targetChannelId).catch(() => null);
+                    if (channel) {
+                        const pingMsg = await channel.send({ content: pingMention });
+                        pingMessageId = pingMsg.id;
+                    }
+                } catch (err) {
+                    logger.warn(`[Announcer] Failed to send ping message for ${liveData.username}:`, { error: err.message, category: 'announcer' });
+                }
+            }
+
             const sentMessage = await webhookClient.send(messageOptions);
             logger.info(`[Announcer] Message sent for ${liveData.username} - Message ID: ${sentMessage?.id || 'NO_ID'}`, {
                 username: liveData.username,
                 channelId: targetChannelId,
                 messageId: sentMessage?.id,
                 hasId: !!sentMessage?.id,
+                pingMessageId,
                 category: 'announcer'
             });
             pool.execute(
                 'INSERT INTO global_stats (id, total_announcements) VALUES (1, 1) ON DUPLICATE KEY UPDATE total_announcements = total_announcements + 1'
             );
+            if (sentMessage) sentMessage.pingMessageId = pingMessageId;
             return sentMessage;
         }
     } catch (error) {
@@ -539,10 +613,22 @@ async function editAnnouncementStreamEnded(client, channelId, messageId, usernam
             embed.setDescription('This streamer does not have VODs enabled — sorry you missed the stream!');
         }
 
-        await message.edit({ embeds: [embed] });
+        // Webhook messages can only be edited via the webhook client, not message.edit().
+        // Pass empty content explicitly so any @everyone/role mention left in the original
+        // message body clears on edit (Discord preserves prior `content` if you don't supply it).
+        if (message.webhookId) {
+            const webhookClient = await getWebhookClient(client, channelId);
+            if (!webhookClient) {
+                logger.error(`[Announcer] Cannot get webhook client to edit stream-ended for ${username} in channel ${channelId}`, { category: 'announcer' });
+                return false;
+            }
+            await webhookClient.editMessage(messageId, { content: '', embeds: [embed] });
+        } else {
+            await message.edit({ content: '', embeds: [embed] });
+        }
 
         logger.info(`[Announcer] Edited announcement to stream-ended for ${username}`, {
-            channelId, messageId, hasVod: !!vod, category: 'announcer'
+            channelId, messageId, hasVod: !!vod, isWebhook: !!message.webhookId, category: 'announcer'
         });
         return true;
     } catch (error) {

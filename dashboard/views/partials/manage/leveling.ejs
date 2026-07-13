@@ -303,6 +303,29 @@
     .leveling-form-grid { grid-template-columns: 1fr; }
     .leveling-add-reward-grid { grid-template-columns: 1fr; }
     .leveling-add-btn { width: 100%; justify-content: center; }
+
+    /* Touch-friendly inputs */
+    .leveling-form-select,
+    .leveling-form-input,
+    .leveling-save-btn,
+    .leveling-add-btn,
+    .leveling-delete-btn { min-height: 44px; }
+
+    /* Reduce multi-select height on mobile */
+    .leveling-form-select[multiple] { min-height: 70px !important; height: auto; }
+
+    /* Save button full-width */
+    .leveling-save-btn { width: 100%; justify-content: center; }
+    .leveling-delete-btn { width: 100%; justify-content: center; }
+
+    /* Rewards table - smaller padding */
+    .leveling-rewards-table th,
+    .leveling-rewards-table td { padding: 8px 10px; }
+
+    .leveling-rewards-table { font-size: 0.85rem; }
+
+    /* Stack reward role info */
+    .reward-role-name { font-size: 0.8rem; }
 }
 </style>
 
@@ -389,7 +412,7 @@
                 </div>
 
                 <!-- Ignored Roles -->
-                <div class="leveling-form-group" style="margin-bottom: 0;">
+                <div class="leveling-form-group">
                     <label class="leveling-form-label">
                         <i class="fas fa-user-slash"></i>Ignored Roles
                     </label>
@@ -399,6 +422,29 @@
                         <% }) %>
                     </select>
                     <span class="leveling-form-hint">Users with these roles won't earn XP (Ctrl+Click to select multiple)</span>
+                </div>
+
+                <!-- Periodic Reset -->
+                <label class="leveling-toggle-wrapper" style="margin-top: 20px;">
+                    <div class="leveling-toggle">
+                        <input type="checkbox" id="monthly_reset_enabled" name="monthly_reset_enabled" <%= settings.monthly_reset_enabled ? 'checked' : '' %>>
+                        <span class="leveling-toggle-slider"></span>
+                    </div>
+                    <div>
+                        <div class="leveling-toggle-label">Enable Periodic Level Reset</div>
+                        <div class="leveling-toggle-desc">Wipes XP, strips reward roles, and pauses sub-level-3 stream subs on the interval below</div>
+                    </div>
+                </label>
+
+                <div class="leveling-form-group" style="margin-bottom: 0;">
+                    <label class="leveling-form-label">
+                        <i class="fas fa-history"></i>Reset Interval (days)
+                    </label>
+                    <input type="number" class="leveling-form-input" name="reset_interval_days" value="<%= settings.reset_interval_days || 30 %>" min="7" max="365">
+                    <span class="leveling-form-hint">Minimum days between automatic resets (7–365). Only applies when "Periodic Level Reset" is enabled.</span>
+                    <% if (settings.last_reset_at) { %>
+                        <div style="margin-top: 6px; font-size: 12px; color: #9ca3af;">Last reset: <%= new Date(settings.last_reset_at).toUTCString() %></div>
+                    <% } %>
                 </div>
 
                 <div style="margin-top: 24px;">

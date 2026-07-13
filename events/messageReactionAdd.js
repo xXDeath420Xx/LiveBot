@@ -2,6 +2,7 @@ import { Events, EmbedBuilder } from 'discord.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 import logger from '../utils/logger.js';
 import { sendLogEmbed } from '../core/log-manager.js';
+import { handleTimeReaction } from '../core/timezone-manager.js';
 
 export default {
   name: Events.MessageReactionAdd,
@@ -9,6 +10,10 @@ export default {
     try {
       // Ignore bot reactions
       if (user.bot) return;
+
+      // 🕰️ on a time we detected — DM the clicker their conversion. Returning here also
+      // keeps a bot-provided UI affordance out of the reaction log.
+      if (await handleTimeReaction(reaction, user)) return;
 
       // Handle starboard reactions
       if (reaction.client.starboardManager) {

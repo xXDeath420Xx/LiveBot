@@ -211,9 +211,86 @@
     box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
 }
 
-.birthday-form-select option {
+.birthday-form-select option,
+.birthday-form-select optgroup {
     background: #1a1d21;
     color: #ffffff;
+}
+
+/* Force dark theme on ALL selects, inputs, and textareas in this page */
+.birthday-page select,
+.birthday-page input,
+.birthday-page textarea,
+.birthday-page .form-control,
+.birthday-page .form-select {
+    background: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+    border-radius: 8px;
+    color-scheme: dark;
+}
+.birthday-page select option,
+.birthday-page select optgroup {
+    background: #1a1d21;
+    color: #ffffff;
+}
+.birthday-page select:focus,
+.birthday-page input:focus,
+.birthday-page textarea:focus {
+    border-color: rgba(167, 139, 250, 0.5) !important;
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
+    outline: none;
+}
+.birthday-page input[type="color"] {
+    padding: 2px !important;
+    cursor: pointer;
+}
+.birthday-page input[type="date"] {
+    color-scheme: dark;
+}
+
+/* Card Type Selector */
+.card-type-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.card-type-option {
+    background: rgba(0, 0, 0, 0.2);
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+.card-type-option:hover {
+    border-color: rgba(167, 139, 250, 0.3);
+    background: rgba(167, 139, 250, 0.05);
+}
+.card-type-option.selected {
+    border-color: #a78bfa;
+    background: rgba(167, 139, 250, 0.1);
+}
+.card-type-option .ct-icon {
+    font-size: 1.5rem;
+    margin-bottom: 6px;
+    display: block;
+}
+.card-type-option .ct-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #ffffff;
+    margin-bottom: 4px;
+}
+.card-type-option .ct-desc {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.5);
+    line-height: 1.4;
+}
+@media (max-width: 600px) {
+    .card-type-grid { grid-template-columns: 1fr; }
 }
 
 .birthday-form-hint {
@@ -295,7 +372,7 @@
 }
 </style>
 
-<div class="page-section">
+<div class="page-section birthday-page">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
@@ -335,6 +412,78 @@
         </div>
     <% } %>
 
+    <!-- Birthday List -->
+    <% const bdayList = typeof birthdays !== 'undefined' ? birthdays : []; %>
+    <% if (bdayList.length > 0) { %>
+    <div class="birthday-section-card" style="margin-bottom: 20px;">
+        <div class="birthday-section-header">
+            <i class="fas fa-list"></i>
+            <div>
+                <h3>Registered Birthdays (<%= bdayList.length %>)</h3>
+                <p>All members who have set their birthday</p>
+            </div>
+        </div>
+        <div class="birthday-section-body" style="padding: 0;">
+            <%
+                const now = new Date();
+                const todayMonth = now.getMonth() + 1;
+                const todayDay = now.getDate();
+
+                // Sort by next occurrence
+                const sorted = [...bdayList].map(b => {
+                    let nextDate = new Date(now.getFullYear(), b.month - 1, b.day);
+                    if (nextDate < now) nextDate.setFullYear(nextDate.getFullYear() + 1);
+                    const daysAway = Math.ceil((nextDate - now) / 86400000);
+                    const isToday = b.month === todayMonth && b.day === todayDay;
+                    return { ...b, daysAway, isToday, nextDate };
+                }).sort((a, b) => a.daysAway - b.daysAway);
+
+                const pageSize = 15;
+                const totalPages = Math.ceil(sorted.length / pageSize);
+            %>
+            <div id="bday-list" style="max-height: 400px; overflow-y: auto;">
+                <% sorted.forEach((b, i) => {
+                    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    const dateStr = months[b.month - 1] + ' ' + b.day;
+                %>
+                <div class="bday-row" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); <%= b.isToday ? 'background: rgba(255,105,180,0.08);' : '' %>">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <% if (b.avatar_url) { %>
+                        <img src="<%= b.avatar_url %>" style="width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; object-fit: cover; border: 2px solid <%= b.isToday ? '#FF69B4' : 'transparent' %>;">
+                        <% } else { %>
+                        <div style="width: 32px; height: 32px; border-radius: 50%; background: <%= b.isToday ? 'rgba(255,105,180,0.2)' : 'rgba(167,139,250,0.1)' %>; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <% if (b.isToday) { %>
+                                <span style="font-size: 0.9rem;">🎂</span>
+                            <% } else { %>
+                                <i class="fas fa-gift" style="font-size: 0.7rem; color: var(--accent);"></i>
+                            <% } %>
+                        </div>
+                        <% } %>
+                        <div>
+                            <div style="font-size: 0.8rem; font-weight: 600; color: #fff;">
+                                <%= b.username || b.user_id %>
+                            </div>
+                            <div style="font-size: 0.7rem; color: rgba(255,255,255,0.4);"><%= dateStr %></div>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <% if (b.isToday) { %>
+                            <span style="background: rgba(255,105,180,0.2); color: #FF69B4; padding: 2px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 600;">Today!</span>
+                        <% } else if (b.daysAway <= 7) { %>
+                            <span style="background: rgba(34,197,94,0.15); color: #22c55e; padding: 2px 10px; border-radius: 10px; font-size: 0.7rem; font-weight: 600;">In <%= b.daysAway %> day<%= b.daysAway !== 1 ? 's' : '' %></span>
+                        <% } else if (b.daysAway <= 30) { %>
+                            <span style="font-size: 0.7rem; color: rgba(255,255,255,0.3);">In <%= b.daysAway %> days</span>
+                        <% } else { %>
+                            <span style="font-size: 0.7rem; color: rgba(255,255,255,0.2);"><%= dateStr %></span>
+                        <% } %>
+                    </div>
+                </div>
+                <% }); %>
+            </div>
+        </div>
+    </div>
+    <% } %>
+
     <!-- Configuration Section -->
     <div class="birthday-section-card">
         <div class="birthday-section-header">
@@ -353,8 +502,8 @@
                         <span class="birthday-toggle-slider"></span>
                     </div>
                     <div>
-                        <div class="birthday-toggle-label">Enable Birthday Announcements</div>
-                        <div class="birthday-toggle-desc">Post daily birthday messages for server members</div>
+                        <div class="birthday-toggle-label">Turn On Birthday Celebrations</div>
+                        <div class="birthday-toggle-desc">When someone's birthday comes around, the bot will shout them out in the channel you pick below</div>
                     </div>
                 </label>
 
@@ -363,13 +512,83 @@
                     <label class="birthday-form-label">
                         <i class="fas fa-hashtag"></i>Announcement Channel
                     </label>
-                    <select class="birthday-form-select" name="channelId" required>
+                    <select class="birthday-form-select" name="announcement_channel_id" required>
                         <option value="">Select channel...</option>
-                        <% (channels || []).filter(c => c.type === 0).forEach(channel => { %>
+                        <% (channels || []).forEach(channel => { %>
                             <option value="<%= channel.id %>" <%= (birthdayConfig && birthdayConfig.announcement_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
                         <% }) %>
                     </select>
-                    <span class="birthday-form-hint">Channel where birthday announcements will be posted daily</span>
+                    <span class="birthday-form-hint">Channel where birthday announcements and delivered cards are posted</span>
+                </div>
+
+                <!-- Birthday Cards Toggle -->
+                <div class="birthday-form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06);">
+                    <label class="birthday-toggle-wrapper">
+                        <div class="birthday-toggle">
+                            <input type="checkbox" name="cards_enabled" <%= (birthdayConfig && birthdayConfig.cards_enabled) ? 'checked' : '' %>>
+                            <span class="birthday-toggle-slider"></span>
+                        </div>
+                        <div>
+                            <div class="birthday-toggle-label">Birthday Cards</div>
+                            <div class="birthday-toggle-desc">Automatically create a digital card 14 days before each birthday so people can sign it. The card gets revealed on the big day.</div>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Default Card Type -->
+                <div class="birthday-form-group" style="margin-top: 12px;">
+                    <label class="birthday-form-label">
+                        <i class="fas fa-layer-group" style="color: #a78bfa;"></i>Default Card Type
+                    </label>
+                    <div class="card-type-grid">
+                        <label class="card-type-option" onclick="this.querySelector('input').checked=true; document.querySelectorAll('.card-type-option').forEach(o=>o.classList.remove('selected')); this.classList.add('selected');">
+                            <input type="radio" name="default_card_type" value="board" style="display: none;" <%= (!birthdayConfig || !birthdayConfig.default_card_type || birthdayConfig.default_card_type === 'board') ? 'checked' : '' %>>
+                            <span class="ct-icon">📋</span>
+                            <div class="ct-name">Group Board</div>
+                            <div class="ct-desc">A shared space for everyone to post messages and photos. Perfect for office farewells, group birthdays, and team celebrations.</div>
+                        </label>
+                        <label class="card-type-option" onclick="this.querySelector('input').checked=true; document.querySelectorAll('.card-type-option').forEach(o=>o.classList.remove('selected')); this.classList.add('selected');">
+                            <input type="radio" name="default_card_type" value="greeting_card" style="display: none;" <%= (birthdayConfig && birthdayConfig.default_card_type === 'greeting_card') ? 'checked' : '' %>>
+                            <span class="ct-icon">💌</span>
+                            <div class="ct-name">Greeting Card</div>
+                            <div class="ct-desc">A classic digital card that opens like a real one. Great for sending a beautiful, personal message with a traditional feel.</div>
+                        </label>
+                        <label class="card-type-option" onclick="this.querySelector('input').checked=true; document.querySelectorAll('.card-type-option').forEach(o=>o.classList.remove('selected')); this.classList.add('selected');">
+                            <input type="radio" name="default_card_type" value="one_person" style="display: none;" <%= (birthdayConfig && birthdayConfig.default_card_type === 'one_person') ? 'checked' : '' %>>
+                            <span class="ct-icon">💝</span>
+                            <div class="ct-name">One Person Card</div>
+                            <div class="ct-desc">A private card for a single sender to a single recipient. Ideal for personal notes, thank yous, and intimate occasions.</div>
+                        </label>
+                    </div>
+                    <span class="birthday-form-hint">The default card type when auto-creating birthday cards. Users can also choose a type when creating cards manually on the website.</span>
+                </div>
+
+                <!-- Card Channel (hidden from birthday person) -->
+                <div class="birthday-form-group">
+                    <label class="birthday-form-label">
+                        <i class="fas fa-envelope-open-text" style="color: #FF69B4;"></i>Card Signing Channel
+                    </label>
+                    <select class="birthday-form-select" name="card_channel_id">
+                        <option value="">Same as announcement channel</option>
+                        <% (channels || []).forEach(channel => { %>
+                            <option value="<%= channel.id %>" <%= (birthdayConfig && birthdayConfig.card_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                    <span class="birthday-form-hint">Where "Sign the card!" links are posted 14 days before a birthday. Use a channel hidden from the birthday person so the card is a surprise! The finished card is revealed in the announcement channel on the birthday.</span>
+                </div>
+
+                <!-- Birthday Role -->
+                <div class="birthday-form-group">
+                    <label class="birthday-form-label">
+                        <i class="fas fa-crown" style="color: #FFD700;"></i>Birthday Role (Optional)
+                    </label>
+                    <select class="birthday-form-select" name="birthday_role_id">
+                        <option value="">No role</option>
+                        <% if (typeof roles !== 'undefined') { roles.forEach(role => { %>
+                            <option value="<%= role.id %>" <%= (birthdayConfig && birthdayConfig.birthday_role_id === role.id) ? 'selected' : '' %>>@<%= role.name %></option>
+                        <% }); } %>
+                    </select>
+                    <span class="birthday-form-hint">Assigned on their birthday and automatically removed after 24 hours</span>
                 </div>
 
                 <!-- Custom Message -->
@@ -377,7 +596,7 @@
                     <label class="birthday-form-label">
                         <i class="fas fa-comment-dots"></i>Custom Birthday Message (Optional)
                     </label>
-                    <textarea class="birthday-form-textarea" name="messageTemplate" placeholder="Happy Birthday {user}! 🎉🎂"><%= (birthdayConfig && birthdayConfig.message_template) ? birthdayConfig.message_template : '' %></textarea>
+                    <textarea class="birthday-form-textarea" name="message_template" placeholder="Happy Birthday {user}! 🎉🎂"><%= (birthdayConfig && birthdayConfig.message_template) ? birthdayConfig.message_template : '' %></textarea>
                     <span class="birthday-form-hint">
                         Use <span class="birthday-placeholder-tag">{user}</span> as placeholder for the user mention. Leave empty for default message.
                     </span>
@@ -423,4 +642,231 @@
             </div>
         </div>
     </div>
+
+    <!-- Birthday Cards Section -->
+    <div class="page-section" style="margin-top: 20px;">
+        <div class="page-section-header" style="margin-bottom: 16px;">
+            <div>
+                <div class="page-section-title" style="font-size: 1.1rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-envelope-open-text" style="color: #FF69B4;"></i>
+                    Birthday Cards
+                </div>
+                <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-top: 4px;">
+                    Digital cards that guild members can sign before a birthday. Auto-created 14 days before, posted on the day.
+                </div>
+            </div>
+        </div>
+
+        <% const cards = typeof birthdayCards !== 'undefined' ? birthdayCards : []; %>
+        <% if (cards.length > 0) { %>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px;">
+            <% cards.forEach(card => { %>
+            <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); border: 1px solid rgba(167,139,250,0.15); border-radius: 10px; padding: 12px 16px; border-left: 4px solid <%= card.is_posted ? '#FFD700' : '#FF69B4' %>;">
+                <div>
+                    <div style="font-weight: 600; color: #fff; font-size: 0.85rem;">
+                        User <%= card.user_id %> &middot; <%= card.birthday_month %>/<%= card.birthday_day %>
+                    </div>
+                    <div style="font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-top: 2px;">
+                        <i class="fas fa-pen-nib" style="margin-right: 3px;"></i> <%= card.signature_count || 0 %> signatures
+                        &middot; <%= card.is_posted ? 'Delivered' : 'Open for signing' %>
+                        &middot; Created <%= new Date(card.created_at).toLocaleDateString() %>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 6px;">
+                    <a href="/card/<%= card.slug || card.share_token %>" target="_blank" style="background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.3); border-radius: 6px; padding: 6px 12px; color: #a78bfa; font-size: 0.75rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                        <i class="fas fa-external-link-alt"></i> View
+                    </a>
+                    <a href="/card/<%= card.slug || card.share_token %>?slideshow" target="_blank" style="background: rgba(255,105,180,0.15); border: 1px solid rgba(255,105,180,0.3); border-radius: 6px; padding: 6px 12px; color: #FF69B4; font-size: 0.75rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+                        <i class="fas fa-play"></i> Slideshow
+                    </a>
+                    <form action="/manage/<%= guild.id %>/birthday/delete-card" method="POST" style="display: inline;" onsubmit="return confirm('Delete this card and all its signatures? This cannot be undone.')">
+                        <input type="hidden" name="cardId" value="<%= card.id %>">
+                        <button type="submit" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); border-radius: 6px; padding: 6px 12px; color: #f87171; cursor: pointer; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px;">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </form>
+                </div>
+                <!-- Card customization -->
+                <details style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 8px;">
+                    <summary style="cursor: pointer; font-size: 0.7rem; color: rgba(255,255,255,0.4); user-select: none;"><i class="fas fa-cog" style="margin-right: 4px;"></i>Customize Card</summary>
+                    <form action="/manage/<%= guild.id %>/birthday/update-card" method="POST" style="margin-top: 8px;">
+                        <input type="hidden" name="cardId" value="<%= card.id %>">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.75rem;">
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Header Cover Image URL</label>
+                                <input type="text" name="card_background_url" value="<%= card.card_background_url || '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="https://... (header background)">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Header Background Color</label>
+                                <input type="color" name="header_bg_color" value="<%= card.header_bg_color || '#000000' %>" style="width: 32px; height: 32px; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; cursor: pointer;">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Board Background Image URL</label>
+                                <input type="text" name="board_bg_image_url" value="<%= card.board_bg_image_url || '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="https://... (behind cards)">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Board Background Color</label>
+                                <input type="color" name="board_bg_color" value="<%= card.board_bg_color || '#000000' %>" style="width: 32px; height: 32px; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; cursor: pointer;">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Title Font</label>
+                                <select name="title_font" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;">
+                                    <option value="">Default</option>
+                                    <option value="Source Code Pro" <%= card.title_font === 'Source Code Pro' ? 'selected' : '' %>>Source Code Pro</option>
+                                    <option value="Indie Flower" <%= card.title_font === 'Indie Flower' ? 'selected' : '' %>>Indie Flower</option>
+                                    <option value="Pacifico" <%= card.title_font === 'Pacifico' ? 'selected' : '' %>>Pacifico</option>
+                                    <option value="Lobster" <%= card.title_font === 'Lobster' ? 'selected' : '' %>>Lobster</option>
+                                    <option value="Dancing Script" <%= card.title_font === 'Dancing Script' ? 'selected' : '' %>>Dancing Script</option>
+                                    <option value="Muli" <%= card.title_font === 'Muli' ? 'selected' : '' %>>Muli</option>
+                                    <option value="Roboto" <%= card.title_font === 'Roboto' ? 'selected' : '' %>>Roboto</option>
+                                    <option value="Quicksand" <%= card.title_font === 'Quicksand' ? 'selected' : '' %>>Quicksand</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Title Color</label>
+                                <input type="color" name="title_font_color" value="<%= card.title_font_color || '#ffffff' %>" style="width: 32px; height: 32px; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; cursor: pointer;">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Title Size (px)</label>
+                                <input type="number" name="title_font_size" value="<%= card.title_font_size || 36 %>" min="20" max="60" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Subtitle Text</label>
+                                <input type="text" name="subtitle_text" value="<%= card.subtitle_text || '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="A tagline or message..." maxlength="500">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Subtitle Color</label>
+                                <input type="color" name="subtitle_font_color" value="<%= card.subtitle_font_color || '#ffffff99' %>" style="width: 32px; height: 32px; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; cursor: pointer;">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Background Music URL</label>
+                                <input type="text" name="background_music_url" value="<%= card.background_music_url || '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="https://...mp3">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Wishlist / Gift Link</label>
+                                <input type="text" name="wishlist_url" value="<%= card.wishlist_url || '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="https://amazon.com/wishlist/...">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Custom Logo URL</label>
+                                <input type="text" name="custom_logo_url" value="<%= card.custom_logo_url || '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="https://...logo.png">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Password Protection</label>
+                                <input type="text" name="password" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="Leave blank for no password">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Profile / Website Link</label>
+                                <input type="text" name="profile_link" value="<%= card.profile_link || '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="https://twitch.tv/username">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Credits / Attribution</label>
+                                <input type="text" name="credits_text" value="<%= card.credits_text || '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="Card created by..." maxlength="500">
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Scheduled Delivery</label>
+                                <input type="date" name="deliver_at" value="<%= card.deliver_at ? new Date(card.deliver_at).toISOString().split('T')[0] : '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                <input type="checkbox" name="is_frozen" id="freeze-<%= card.id %>" value="1" <%= card.is_frozen ? 'checked' : '' %>>
+                                <label for="freeze-<%= card.id %>" style="color: rgba(255,255,255,0.5); font-size: 0.75rem; cursor: pointer;">
+                                    <i class="fas fa-snowflake" style="color: #60a5fa; margin-right: 4px;"></i>Freeze card (stop new messages)
+                                </label>
+                            </div>
+                            <div>
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px;">Card URL Slug</label>
+                                <input type="text" name="custom_slug" value="<%= card.slug || '' %>" class="form-control" style="font-size: 0.75rem; padding: 4px 8px; font-family: monospace;" placeholder="happy-birthday-name" maxlength="200">
+                                <div style="font-size: 0.6rem; color: rgba(255,255,255,0.3); margin-top: 2px;">certifriedmultitool.com/card/<strong><%= card.slug || card.share_token %></strong></div>
+                            </div>
+                        </div>
+                        <button type="submit" style="margin-top: 8px; background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.3); border-radius: 6px; padding: 4px 12px; color: #a78bfa; cursor: pointer; font-size: 0.7rem;">Save</button>
+                    </form>
+                    <!-- AI Cover Generation -->
+                    <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.06);">
+                        <form action="/manage/<%= guild.id %>/birthday/generate-cover" method="POST" style="display: flex; gap: 6px; align-items: flex-end;">
+                            <input type="hidden" name="cardId" value="<%= card.id %>">
+                            <div style="flex: 1;">
+                                <label style="color: rgba(255,255,255,0.5); display: block; margin-bottom: 2px; font-size: 0.7rem;"><i class="fas fa-magic" style="color: #a78bfa;"></i> AI Cover Image</label>
+                                <input type="text" name="prompt" class="form-control" style="font-size: 0.75rem; padding: 4px 8px;" placeholder="A cosmic birthday cake with neon candles in space..." required>
+                            </div>
+                            <button type="submit" style="background: linear-gradient(135deg, #a78bfa, #ec4899); border: none; border-radius: 6px; padding: 5px 12px; color: white; cursor: pointer; font-size: 0.7rem; white-space: nowrap;"><i class="fas fa-wand-magic-sparkles"></i> Generate</button>
+                        </form>
+                        <% if (card.ai_cover_url) { %>
+                        <div style="margin-top: 6px; font-size: 0.65rem; color: rgba(255,255,255,0.4);">Current AI cover: <a href="<%= card.ai_cover_url %>" target="_blank" style="color: #a78bfa;">view</a> — "<%= card.ai_cover_prompt || '' %>"</div>
+                        <% } %>
+                    </div>
+                </details>
+            </div>
+            <% }); %>
+        </div>
+        <% } else { %>
+        <div style="text-align: center; padding: 24px; background: rgba(255,255,255,0.03); border: 1px solid rgba(167,139,250,0.15); border-radius: 10px; margin-bottom: 16px;">
+            <i class="fas fa-envelope-open-text" style="font-size: 1.5rem; color: rgba(255,255,255,0.2); margin-bottom: 8px; display: block;"></i>
+            <div style="font-size: 0.85rem; color: rgba(255,255,255,0.5);">No birthday cards yet</div>
+            <div style="font-size: 0.75rem; color: rgba(255,255,255,0.3); margin-top: 4px;">Cards are auto-created 14 days before a registered birthday</div>
+        </div>
+        <% } %>
+
+        <!-- Import from RecoCards -->
+        <details style="background: rgba(255,255,255,0.03); border: 1px solid rgba(167,139,250,0.15); border-radius: 10px; padding: 14px 16px; margin-bottom: 8px;">
+            <summary style="cursor: pointer; font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.7); user-select: none;">
+                <i class="fas fa-globe" style="color: #22c55e; margin-right: 6px;"></i>
+                Import from RecoCards URL
+            </summary>
+            <div style="margin-top: 12px;">
+                <form action="/manage/<%= guild.id %>/birthday/import-recocard" method="POST">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div>
+                            <label style="font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.5); display: block; margin-bottom: 4px;">Birthday Person (User ID)</label>
+                            <input type="text" name="user_id" class="form-control" required placeholder="Discord User ID" style="font-size: 0.8rem;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.5); display: block; margin-bottom: 4px;">RecoCards Board URL</label>
+                            <input type="text" name="recocard_url" class="form-control" required placeholder="https://recocards.com/board/..." style="font-size: 0.8rem;">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="font-size: 0.8rem; padding: 8px 16px;">
+                        <i class="fas fa-download"></i> Import from RecoCards
+                    </button>
+                    <div style="font-size: 0.7rem; color: rgba(255,255,255,0.3); margin-top: 8px;">
+                        Scrapes the RecoCards board page and imports all signer names, messages, and images directly. Takes ~30 seconds.
+                    </div>
+                </form>
+            </div>
+        </details>
+
+        <!-- PDF Import (fallback) -->
+        <details style="background: rgba(255,255,255,0.03); border: 1px solid rgba(167,139,250,0.15); border-radius: 10px; padding: 14px 16px;">
+            <summary style="cursor: pointer; font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.7); user-select: none;">
+                <i class="fas fa-file-pdf" style="color: #ef4444; margin-right: 6px;"></i>
+                Import from PDF File
+            </summary>
+            <div style="margin-top: 12px;">
+                <form action="/manage/<%= guild.id %>/birthday/import-card" method="POST" enctype="multipart/form-data">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                        <div>
+                            <label style="font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.5); display: block; margin-bottom: 4px;">Birthday Person (User ID)</label>
+                            <input type="text" name="user_id" class="form-control" required placeholder="Discord User ID" style="font-size: 0.8rem;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.5); display: block; margin-bottom: 4px;">PDF File</label>
+                            <input type="file" name="pdf_file" accept=".pdf" required class="form-control" style="font-size: 0.8rem; padding: 6px;">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="font-size: 0.8rem; padding: 8px 16px;">
+                        <i class="fas fa-upload"></i> Import from PDF
+                    </button>
+                    <div style="font-size: 0.7rem; color: rgba(255,255,255,0.3); margin-top: 8px;">
+                        Converts each PDF page to an image. For best results, use the URL import above instead.
+                    </div>
+                </form>
+            </div>
+        </details>
+    </div>
 </div>
+
+<script>
+// Set initial selected state on card type radio buttons
+document.querySelectorAll('.card-type-option input[type="radio"]:checked').forEach(function(radio) {
+    radio.closest('.card-type-option').classList.add('selected');
+});
+</script>

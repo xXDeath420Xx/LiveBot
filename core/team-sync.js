@@ -48,8 +48,8 @@ async function syncTwitchTeam(teamId, client = null) {
         if (usersToRemove.length > 0) {
             const streamerIdsToRemove = usersToRemove.map(s => s.streamer_id);
             const placeholders = streamerIdsToRemove.map(() => '?').join(',');
-            await connection.execute(`UPDATE subscriptions SET team_subscription_id = NULL WHERE team_subscription_id = ? AND streamer_id IN (${placeholders})`, [teamId, ...streamerIdsToRemove]);
-            logger.info(`[TeamSync] Disassociated ${streamerIdsToRemove.length} streamers from team ${team.team_name}.`, { guildId, category: 'team-sync' });
+            await connection.execute(`DELETE FROM subscriptions WHERE team_subscription_id = ? AND streamer_id IN (${placeholders})`, [teamId, ...streamerIdsToRemove]);
+            logger.info(`[TeamSync] Deleted subscriptions for ${streamerIdsToRemove.length} streamers removed from team ${team.team_name}.`, { guildId, category: 'team-sync' });
         }
 
         // Filter out blacklisted members first

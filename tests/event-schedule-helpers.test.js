@@ -50,6 +50,20 @@ test('materializeWeek: weekly event lands on its day-of-week within the window',
     assert.equal(new Date(segs[0].end).toISOString(), '2026-06-02T21:00:00.000Z');
 });
 
+test('materializeWeek: all_day flag propagates to the segment for both one-off and weekly', () => {
+    const ws = weekStartFor(new Date('2026-06-02T13:00:00Z')); // 05-31..06-07
+    const events = [
+        { id: 1, recurrence: 'none', start_time: '2026-06-02T00:00:00Z', end_time: '2026-06-03T00:00:00Z', title: 'TBD one-off', category_id: 1, user_id: 'u1', all_day: 1 },
+        { id: 2, recurrence: 'weekly', recur_dow: 6, recur_start_min: 0, recur_end_min: 1440, title: 'TBD weekly', category_id: 1, user_id: 'u2', all_day: 1 },
+        { id: 3, recurrence: 'none', start_time: '2026-06-04T19:00:00Z', end_time: '2026-06-04T20:00:00Z', title: 'Timed', category_id: 1, user_id: 'u3', all_day: 0 },
+    ];
+    const segs = materializeWeek(events, ws);
+    const byTitle = Object.fromEntries(segs.map(s => [s.title, s]));
+    assert.equal(byTitle['TBD one-off'].allDay, true);
+    assert.equal(byTitle['TBD weekly'].allDay, true);
+    assert.equal(byTitle['Timed'].allDay, false);
+});
+
 test('groupByCategory: orders by category sort_order, unknown category -> Other bucket', () => {
     const cats = [{ id: 1, name: 'Streams', sort_order: 0 }, { id: 2, name: 'Tournaments', sort_order: 1 }];
     const segs = [{ categoryId: 2, title: 'T' }, { categoryId: 1, title: 'S' }, { categoryId: 999, title: 'U' }];

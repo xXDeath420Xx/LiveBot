@@ -65,6 +65,23 @@ export default {
                     sub.setName('leaderboard').setDescription('View the counting leaderboard')
                         .addChannelOption(opt => opt.setName('channel').setDescription('Channel to view leaderboard for (defaults to current channel)'))
                 )
+                .addSubcommand(sub =>
+                    sub.setName('setcount').setDescription('Set the count without resetting stats (e.g. taking over from another bot)')
+                        .addIntegerOption(opt => opt.setName('last-number').setDescription('The last number successfully posted').setRequired(true).setMinValue(0))
+                        .addChannelOption(opt => opt.setName('channel').setDescription('Channel (defaults to current channel)'))
+                )
+                .addSubcommand(sub =>
+                    sub.setName('mode').setDescription('Change how a counting channel behaves')
+                        .addStringOption(opt => opt.setName('on-wrong-number').setDescription('What happens when someone gets it wrong')
+                            .addChoices(
+                                { name: 'Reset the count to 0', value: 'reset' },
+                                { name: 'Delete the message, never reset (infinite attempts)', value: 'delete' }))
+                        .addBooleanOption(opt => opt.setName('allow-same-user').setDescription('Let one person count twice in a row'))
+                        .addBooleanOption(opt => opt.setName('react-on-valid').setDescription('React ✅ on every valid count'))
+                        .addBooleanOption(opt => opt.setName('announce-milestones').setDescription('Announce milestones and pay economy coins'))
+                        .addBooleanOption(opt => opt.setName('delete-chatter').setDescription('Delete non-numeric messages (delete mode only)'))
+                        .addChannelOption(opt => opt.setName('channel').setDescription('Channel (defaults to current channel)'))
+                )
         )
 
         // ─── servers group (3 subcmds) ───
@@ -232,6 +249,8 @@ export default {
                     case 'reset': return countingHandler.handleReset(interaction);
                     case 'stats': return countingHandler.handleStats(interaction);
                     case 'leaderboard': return countingHandler.handleLeaderboard(interaction);
+                    case 'setcount': return countingHandler.handleSetCount(interaction);
+                    case 'mode': return countingHandler.handleMode(interaction);
                 }
                 break;
 

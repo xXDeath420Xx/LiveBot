@@ -250,6 +250,13 @@ export function resolveEmoji(guild, spec) {
   return found ? `<${found.animated ? 'a' : ''}:${found.name}:${found.id}>` : null;
 }
 
+/**
+ * `mode`:
+ *   'multiple' — tick as many as you like (the default; what Carl-bot's panels do today).
+ *   'unique'   — picking one drops the others in the SAME panel.
+ * The four panels recovered from Carl-bot stay 'multiple' because that is how they behave today;
+ * parity beats our opinion. The three NEW panels choose deliberately — see each.
+ */
 export const CARLBOT_PANELS = Object.freeze([
   { name: 'Where are you from?', roles: [
     ['🇪🇺', '1466950885136535876', 'Europe'],
@@ -257,9 +264,12 @@ export const CARLBOT_PANELS = Object.freeze([
     ['🌄', '1466950888034795693', 'South America'],
     ['🐼', '1466950888760545333', 'Asia'],
     ['🐨', '1466950889653932223', 'Oceania'],
-    // 🦒 → 1466950890425679976 is a DELETED role. Carl-bot's live panel still offers it and it
-    // silently does nothing. Rebuilding it verbatim would carry the bug across, so it is dropped;
-    // recreate the role and re-add the option if it is still wanted.
+    // Carl-bot's live panel offers 🦒 pointing at role 1466950890425679976, which is DELETED — the
+    // button has been silently doing nothing. `Africa` (below) is the real, surviving role, so the
+    // option is restored rather than dropped.
+    ['🦒', '1466950520668422421', 'Africa'],
+    // Renamed from an abandoned duplicate — see scripts/kabster-role-plan.mjs.
+    ['🕌', '1466950515253313711', 'Middle East'],
   ] },
   { name: 'What are your pronouns?', roles: [
     ['🧡', '1466950818564411604', 'He/Him'],
@@ -283,6 +293,42 @@ export const CARLBOT_PANELS = Object.freeze([
     ['♐', '1466950571301933248', 'Sagittarius'], ['♑', '1466950572132532460', 'Capricorn'],
     ['♒', '1466950573415993385', 'Aquarius'],    ['♓', '1466950574582010085', 'Pisces'],
   ] },
+
+  // ── New panels. These roles ALREADY EXIST in the guild but have never had a panel to pick them
+  //    from, which is why they are empty. Nothing here invents a role out of nothing: the first
+  //    entries in each set are the guild's own, the rest are duplicates reclaimed by the role plan.
+
+  // 'unique': two colour roles fight, and the higher one silently wins — a confusing outcome the
+  // member cannot see or explain. One at a time is the only honest behaviour.
+  { name: 'Pick a name colour', mode: 'unique', roles: [
+    ['🔴', '1466950769541517362', 'Red'],      ['🟠', '1466950773500936275', 'Orange'],
+    ['🟡', '1466950775631511742', 'Yellow'],   ['🟢', '1466950771198394603', 'Green'],
+    ['🔵', '1466950777158373491', 'Blue'],     ['🟣', '1466950770069999639', 'Purple'],
+    ['🩷', '1466950772607549460', 'Pink'],
+    ['🩵', '1466949413120512217', 'Cyan'],     ['🐬', '1466949461216333907', 'Teal'],
+    ['🍋', '1466949462290202847', 'Lime'],     ['💗', '1466949463124869233', 'Magenta'],
+    ['🏆', '1466949464190357729', 'Gold'],     ['🪻', '1466949546671210639', 'Lavender'],
+    ['🍷', '1466949547568660510', 'Crimson'],  ['⚪', '1466949548508184597', 'White'],
+  ] },
+
+  // 'unique': you are in one timezone. The whole point is that other people can read it off you.
+  { name: 'What timezone are you in?', mode: 'unique', roles: [
+    ['🇬🇧', '1488345353697890405', 'GMT'],   ['🌍', '1488345779264295032', 'UTC'],
+    ['🌇', '1488345530546393241', 'EST'],   ['🌆', '1466950516411076650', 'CST'],
+    ['🏜️', '1466950518222885018', 'MST'],   ['🌉', '1488345592370429963', 'PST'],
+    ['🥐', '1466950519254814851', 'CET'],   ['🏛️', '1466950520110317720', 'EET'],
+    ['🦘', '1488345630572285963', 'AEST'],  ['🌏', '1466949410595278872', 'ACST'],
+    ['🏄', '1466949409446301788', 'AWST'],  ['🥝', '1466949412013080617', 'NZST'],
+  ] },
+
+  // 'multiple': the entire point is opting in to some pings and not others.
+  { name: 'What do you want pinged for?', mode: 'multiple', roles: [
+    ['🔴', '1466950362702286918', 'Stream Pings'],
+    ['🎁', '1466949549955219701', 'Free Games'],
+    ['🎉', '1466950313675198580', 'Giveaways'],
+    ['📅', '1466950315210178714', 'Events'],
+    ['❓', '1466950315784802519', 'Question of the Day'],
+  ] },
 ]);
 
 /** Steps a plan can contain. Each is idempotent; `check` decides if it is already done. */
@@ -305,7 +351,15 @@ const STEPS = {
   catbot: { label: 'Cat Bot', describe: s => `Spawn cats in #${s.channelName}` },
   growtree: { label: 'Grow a Tree', describe: () => 'Enable /tree (a tree is planted on first use)' },
   owo: { label: 'OwO', describe: () => 'Enable OwO commands and the `owo` chat prefix' },
+  birthday: {
+    label: 'Birthdays',
+    describe: s => `Announce in #${s.channelName}, granting **${s.roleName}** for the day`,
+    needs: ['ManageRoles'],
+  },
 };
+
+/** The guild's own birthday role. Empty today only because Birthday Bot never actually granted it. */
+const BIRTHDAY_ROLE = '1488337520889696517';
 
 // ── Inspection ───────────────────────────────────────────────────────────────
 
@@ -545,6 +599,44 @@ export async function plan(guild, opts = {}) {
     });
   }
 
+  // ── Birthdays ──
+  if (byFeature.has('birthday')) {
+    const [[bd]] = await pool.execute(
+      'SELECT announcement_channel_id, birthday_role_id, enabled FROM birthday_config WHERE guild_id = ?', [guildId]);
+    const [[stored]] = await pool.execute(
+      'SELECT COUNT(*) AS n FROM user_birthdays WHERE guild_id = ?', [guildId]);
+
+    const channel = guild.channels.cache.get(bd?.announcement_channel_id)
+      ?? guild.channels.cache.find(c => c.isTextBased?.() && nameMatches(c, /birthday/));
+    const role = guild.roles.cache.get(bd?.birthday_role_id ?? BIRTHDAY_ROLE);
+
+    // A birthday role is worthless if we cannot actually put it on anyone, and the failure is
+    // silent at grant time (a caught warn in birthday-manager). Prove the hierarchy up front:
+    // Discord only lets us grant a role strictly BELOW our own highest, and `managed` roles
+    // (a bot's or a boost role) can never be granted by anyone at all.
+    const me = guild.members.me;
+    const cannotGrant = !role ? 'the birthday role no longer exists'
+      : role.managed ? `${role.name} is managed by Discord and cannot be granted by any bot`
+        : !me?.permissions.has(PermissionFlagsBits.ManageRoles) ? 'missing Manage Roles'
+          : me.roles.highest.comparePositionTo(role) <= 0
+            ? `${role.name} sits at or above our own highest role — Discord refuses the grant`
+            : null;
+
+    push('birthday', {
+      label: STEPS.birthday.label,
+      channelId: channel?.id ?? null,
+      channelName: channel?.name ?? '—',
+      roleId: role?.id ?? null,
+      roleName: role?.name ?? '—',
+      stored: Number(stored.n),
+      done: !!(bd?.enabled && bd.announcement_channel_id && bd.birthday_role_id && !cannotGrant),
+      blocked: cannotGrant ?? (channel ? null : 'no birthday channel found'),
+      note: `${stored.n} birthday(s) already imported. The ${role?.name ?? 'birthday'} role is empty today because ` +
+        'the incumbent never granted it — we grant it on the day and strip it the morning after.',
+      replaces: byFeature.get('birthday').name,
+    });
+  }
+
   // ── Ko-fi ──
   if (byFeature.has('kofi')) {
     const [[kofi]] = await pool.execute('SELECT enabled FROM kofi_config WHERE guild_id = ?', [guildId]);
@@ -637,6 +729,13 @@ export async function plan(guild, opts = {}) {
     // A genuine problem (missing channel/roles/emoji) is `blocked`. Otherwise it is READY but
     // `deliberate`: a role panel IS a message, so this is the one step that posts to the guild and
     // it must be triggered on its own (the "Post panels" button), never swept up by config-apply.
+    // The role plan RENAMES abandoned duplicates into the colours/timezones/pings these panels
+    // offer. A button carries a role ID, so it would still "work" before the rename — it would just
+    // hand out a role called "Ask" to someone who clicked "Cyan". That is worse than not working.
+    const notYetRenamed = CARLBOT_PANELS.flatMap(p => p.roles)
+      .filter(([, id, label]) => guild.roles.cache.get(id) && guild.roles.cache.get(id).name !== label)
+      .map(([, , label]) => label);
+
     const panelBlocker = !channel ? 'self-assign channel not found'
       : missingRoles.length ? `these roles no longer exist: ${missingRoles.join(', ')}`
         : missingEmoji.length ? `upload the platform emoji first — not in this server yet: ${missingEmoji.join(', ')}`
@@ -647,7 +746,11 @@ export async function plan(guild, opts = {}) {
       channelName: channel?.name ?? SELF_ASSIGN_CHANNEL,
       done: Number(panels.n) >= CARLBOT_PANELS.length,
       blocked: panelBlocker,
-      deliberate: panelBlocker ? null : 'ready — posts 4 button panels. Use the "Post panels" action; it is the only step that writes to the guild.',
+      sequenced: panelBlocker || !notYetRenamed.length ? null
+        : `run the role clean-up first (scripts/kabster-role-plan.mjs --apply) — ${notYetRenamed.length} role(s) ` +
+          `still carry their old duplicate name, so a member clicking "${notYetRenamed[0]}" would be given the wrong-named role`,
+      deliberate: panelBlocker || notYetRenamed.length ? null
+        : `ready — posts ${CARLBOT_PANELS.length} button panels. Use the "Post panels" action; it is the only step that writes to the guild.`,
       note: CARLBOT_PANELS.map(p => `${p.name} (${p.roles.length})`).join(' · '),
       replaces: byFeature.get('reaction_roles').name,
     });
@@ -804,6 +907,19 @@ async function runStep(guild, step) {
          ON DUPLICATE KEY UPDATE enabled = 1`, [g]);
       return;
 
+    case 'birthday':
+      // The row already carries the incumbent's own wording, recovered from its posts — leave
+      // message_template alone so re-running never overwrites it with a default.
+      await pool.execute(
+        `INSERT INTO birthday_config (guild_id, announcement_channel_id, birthday_role_id, enabled)
+         VALUES (?, ?, ?, 1)
+         ON DUPLICATE KEY UPDATE
+           announcement_channel_id = VALUES(announcement_channel_id),
+           birthday_role_id        = VALUES(birthday_role_id),
+           enabled                 = 1`,
+        [g, step.channelId, step.roleId]);
+      return;
+
     case 'platform_emoji': {
       // Pull each image straight from the CDN and re-host it here. Idempotent: an emoji whose name
       // already exists is left alone, so a partial run can simply be repeated.
@@ -920,9 +1036,12 @@ export async function postPanels(guild) {
     // Built against the client that actually holds this guild — with custom bots there is no one
     // global client, and the manager resolves the guild from its own cache.
     const manager = new ReactionRoleManager(guild.client);
+    const mode = panel.mode ?? 'multiple';
     const made = await manager.createReactionPanel(
-      guild.id, channel.id, panel.name, 'multiple', 'button', roles,
-      { title: panel.name, description: 'Pick as many as you like. Click again to remove.' });
+      guild.id, channel.id, panel.name, mode, 'button', roles,
+      { title: panel.name, description: mode === 'unique'
+        ? 'Pick one. Picking another swaps it; click the one you have to remove it.'
+        : 'Pick as many as you like. Click again to remove.' });
 
     if (!made) throw new Error(`${panel.name}: panel creation failed`);
     results.push({ panel: panel.name, outcome: 'posted', messageId: made.messageId });

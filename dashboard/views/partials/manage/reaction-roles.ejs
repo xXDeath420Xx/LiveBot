@@ -58,6 +58,13 @@
                                     <span>Post to Discord</span>
                                 </button>
                             <% } %>
+                            <form action="/manage/<%= guild.id %>/repost-rr-panel" method="POST" style="display:inline;">
+                                <input type="hidden" name="panelId" value="<%= panel.id %>">
+                                <button type="submit" class="btn btn-sm btn-secondary" title="Delete the old message and repost with current mappings">
+                                    <i class="fas fa-sync"></i>
+                                    <span>Repost</span>
+                                </button>
+                            </form>
                             <form action="/manage/<%= guild.id %>/delete-rr-panel" method="POST" onsubmit="return confirm('Delete this panel and all its role mappings?');">
                                 <input type="hidden" name="panelId" value="<%= panel.id %>">
                                 <button type="submit" class="btn btn-sm btn-danger">
@@ -112,28 +119,60 @@
                                 <input type="hidden" name="panelId" value="<%= panel.id %>">
                                 <div class="rr-add-mapping-grid">
                                     <div>
-                                        <label class="form-label">Emoji</label>
+                                        <label class="form-label">Emoji <% if (panel.interaction_type === 'reaction') { %><span style="color:#ef4444;">*</span><% } else { %><span style="font-weight:400;color:var(--color-text-muted);">(optional)</span><% } %></label>
                                         <div style="position: relative;">
-                                            <input type="text" name="emoji_id" class="form-control emoji-input" required placeholder="Click to select emoji" readonly style="cursor: pointer;">
+                                            <input type="text" name="emoji_id" class="form-control emoji-input" <%= panel.interaction_type === 'reaction' ? 'required' : '' %> placeholder="Click to select emoji" readonly style="cursor: pointer;">
                                             <button type="button" class="emoji-picker-btn" onclick="openEmojiPicker(this)">
                                                 <i class="fas fa-smile"></i>
                                             </button>
                                         </div>
-                                        <div class="form-help">Click to select an emoji</div>
+                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">
+                                            <% if (panel.interaction_type === 'reaction') { %>
+                                                Required. The emoji users will react with.
+                                            <% } else if (panel.interaction_type === 'button') { %>
+                                                Shown on the button before the text. Leave blank for text-only buttons.
+                                            <% } else { %>
+                                                Shown next to the option in the dropdown. Leave blank for text-only.
+                                            <% } %>
+                                        </div>
                                     </div>
                                     <div>
-                                        <label class="form-label">Role</label>
+                                        <label class="form-label">Role <span style="color:#ef4444;">*</span></label>
                                         <select name="role_id" class="form-select" required>
                                             <option value="">Select role...</option>
                                             <% roles.forEach(role => { %>
                                                 <option value="<%= role.id %>"><%= role.name %></option>
                                             <% }); %>
                                         </select>
+                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">Required. The role to assign/remove when clicked.</div>
                                     </div>
+                                    <% if (panel.interaction_type === 'button') { %>
+                                    <div>
+                                        <label class="form-label">Button Text <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
+                                        <input type="text" name="label" class="form-control" placeholder="e.g. 🎮 Gaming" maxlength="80">
+                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">The label shown on the button. Defaults to the role name if left blank.</div>
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Button Color <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
+                                        <select name="button_style" class="form-select">
+                                            <option value="primary">🔵 Blue (default)</option>
+                                            <option value="secondary">⚪ Grey</option>
+                                            <option value="success">🟢 Green</option>
+                                            <option value="danger">🔴 Red</option>
+                                        </select>
+                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">The color of the button. Defaults to Blue.</div>
+                                    </div>
+                                    <% } else if (panel.interaction_type === 'select_menu') { %>
+                                    <div>
+                                        <label class="form-label">Option Label <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
+                                        <input type="text" name="label" class="form-control" placeholder="e.g. Gaming Notifications" maxlength="80">
+                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">The text shown in the dropdown. Defaults to the role name if left blank.</div>
+                                    </div>
+                                    <% } %>
                                     <div>
                                         <button type="submit" class="btn btn-primary" style="width: 100%;">
                                             <i class="fas fa-plus"></i>
-                                            <span>Add Mapping</span>
+                                            <span>Add</span>
                                         </button>
                                     </div>
                                 </div>
@@ -171,45 +210,47 @@
             <form action="/manage/<%= guild.id %>/create-rr-panel" method="POST">
                 <div class="modal-body">
                     <div class="rr-form-group">
-                        <label class="form-label">Panel Name</label>
-                        <input type="text" name="panel_name" class="form-control" required placeholder="e.g., Server Rules">
-                        <div class="form-help">Title displayed in the embed</div>
+                        <label class="form-label">Panel Name <span style="color:#ef4444;">*</span></label>
+                        <input type="text" name="panel_name" class="form-control" required placeholder="e.g., Notification Roles">
+                        <div class="form-help">Required. The title displayed at the top of the embed.</div>
                     </div>
                     <div class="rr-form-group">
-                        <label class="form-label">Channel</label>
+                        <label class="form-label">Channel <span style="color:#ef4444;">*</span></label>
                         <select name="channel_id" class="form-select" required>
                             <option value="">Select channel...</option>
                             <% channels.forEach(c => { %>
                                 <option value="<%= c.id %>">#<%= c.name %></option>
                             <% }); %>
                         </select>
-                        <div class="form-help">Where the reaction role message will be posted</div>
+                        <div class="form-help">Required. The channel where the reaction role message will be posted.</div>
                     </div>
                     <div class="rr-form-group">
-                        <label class="form-label">Embed Description</label>
-                        <textarea name="description" class="form-control" rows="5" placeholder="React to this message to get your roles! You can write up to 4096 characters here."></textarea>
-                        <div class="form-help">The main message content (supports up to 4096 characters)</div>
+                        <label class="form-label">Embed Description <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
+                        <textarea name="description" class="form-control" rows="5" placeholder="Pick your roles by clicking the buttons below!"></textarea>
+                        <div class="form-help">Optional. The main message content shown in the embed body. Supports up to 4096 characters.</div>
                     </div>
                     <div class="rr-form-group">
-                        <label class="form-label">Embed Color</label>
+                        <label class="form-label">Embed Color <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
                         <input type="color" name="embed_color" class="form-control" value="#a78bfa">
-                        <div class="form-help">Color of the embed border</div>
+                        <div class="form-help">Optional. The accent color of the embed border. Defaults to purple.</div>
                     </div>
                     <div class="rr-form-row">
                         <div>
-                            <label class="form-label">Panel Mode</label>
+                            <label class="form-label">Panel Mode <span style="color:#ef4444;">*</span></label>
                             <select name="panel_mode" class="form-select">
                                 <option value="normal">Normal (Multiple Roles)</option>
                                 <option value="unique">Unique (One Role Only)</option>
                             </select>
+                            <div class="form-help">Normal: users can pick multiple roles. Unique: selecting one removes the others.</div>
                         </div>
                         <div>
-                            <label class="form-label">Interaction Type</label>
+                            <label class="form-label">Interaction Type <span style="color:#ef4444;">*</span></label>
                             <select name="interaction_type" class="form-select">
                                 <option value="button">Buttons</option>
-                                <option value="select_menu">Select Menu</option>
-                                <option value="reaction">Reactions</option>
+                                <option value="select_menu">Select Menu (Dropdown)</option>
+                                <option value="reaction">Reactions (Emoji)</option>
                             </select>
+                            <div class="form-help">Buttons: clickable buttons with labels. Dropdown: select from a list. Reactions: click emoji on the message.</div>
                         </div>
                     </div>
                 </div>

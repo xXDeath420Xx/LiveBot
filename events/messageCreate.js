@@ -8,9 +8,14 @@ import AutoResponseManager from '../core/auto-response-manager.js';
 import { handleAutoPublisher } from '../core/auto-publisher.js';
 import { handleMessage as handleCountingMessage } from '../core/counting-manager.js';
 import { handleWordGameMessage } from '../core/word-game-manager.js';
+import { handleTimeMessage } from '../core/timezone-manager.js';
+import { handleCatMessage } from '../core/catbot/spawn-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 import { handlePrefixCommand } from '../core/prefix-command-manager.js';
+import { handleOwoNaturalPrefix } from '../core/owo-natural-prefix.js';
 import { handleSelfPromoMessage, checkAnnounceChannelGate } from '../core/self-promo-handler.js';
+import { handleStaffLiveForward } from '../core/staff-live-forward.js';
+import { checkBlockedImage } from '../core/image-blocklist.js';
 import { handleShowcaseMessage } from '../core/showcase-manager.js';
 import { spawnPokemon } from '../commands/games/pokemon.js';
 import { handleRPGReply, handleRPGMentionOrChannel, getUserActiveChannel } from '../core/rpg-reply-handler.js';
@@ -176,6 +181,10 @@ export default {
       // Prefix command handling — runs before all other message processing
       if (await handlePrefixCommand(message)) return;
 
+      // OwO's own `owo` prefix (`owoh`, `owo hunt`, `owolb all`) + the silent
+      // owo/uwu point counter. Only consumes the message if a command actually ran.
+      if (await handleOwoNaturalPrefix(message)) return;
+
       // Creator Showcase: re-host audio/video uploads as protected HLS and delete the
       // original attachment. Consumes the message so normal processing is skipped.
       if (await handleShowcaseMessage(message)) return;
@@ -184,6 +193,19 @@ export default {
       const isAutomodWhitelisted = message.guild ? await isWhitelisted(message.guild.id, message.author.id) : false;
       if (isAutomodWhitelisted) {
         logger.debug(`[MessageCreate] Whitelist bypass for user ${message.author.id} in guild ${message.guild.id}`);
+      }
+
+      // Staff live-link forwarder: a Mod/Admin/Owner dropping a stream link in a
+      // watched channel gets promoted to their tier's live channel with the tier
+      // ping, and the original is removed. Runs before the announce-gate and
+      // self-promo tracker so staff links are moved, not gated or auto-subscribed.
+      // Not whitelist-gated — this isn't a moderation action.
+      if (message.guild && message.author && !message.author.bot) {
+        try {
+          if (await handleStaffLiveForward(message)) return;
+        } catch (error) {
+          logger.error('[MessageCreate] Error in staff live forwarder', { error: error.message });
+        }
       }
 
       // Self-promo announcement-channel gate — runs BEFORE the URL handler so
@@ -368,6 +390,13 @@ export default {
         return; // consumed by an active word game in this channel
       }
 
+      // Cat Bot: typing "cat" claims the live spawn in a setupped channel.
+      if (await handleCatMessage(message)) return;
+
+      // Time-zone detection (🕰️ react / zone-board reply). Never consumes the message,
+      // and is inert unless an admin ran /timezone server.
+      handleTimeMessage(message).catch(() => {});
+
       // Handle RPG session replies (players replying to bot's RPG messages)
       if (message.reference?.messageId) {
         try {
@@ -524,6 +553,14 @@ export default {
               userId: message.author.id
             });
           }
+        }
+
+        // Known scam-image blocklist: delete matching images instantly, ban on
+        // spread across >2 channels (gated on the guild's phishing protection).
+        try {
+          if (await checkBlockedImage(message)) return;
+        } catch (error) {
+          logger.error('[MessageCreate] Error in image blocklist', { error: error.message });
         }
 
         // Phishing link detection

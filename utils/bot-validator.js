@@ -14,30 +14,9 @@ import logger from './logger.js';
 export async function testBotConnection(botToken) {
     logger.info('[Bot Validator] Testing bot connection...');
 
+    // Only use Guilds intent for validation — privileged intents may not be enabled yet
     const testClient = new Client({
-        intents: [
-            GatewayIntentBits.Guilds,
-            GatewayIntentBits.GuildMembers,
-            GatewayIntentBits.GuildVoiceStates,
-            GatewayIntentBits.GuildMessages,
-            GatewayIntentBits.MessageContent,
-            GatewayIntentBits.GuildMessageReactions,
-            GatewayIntentBits.GuildInvites,
-            GatewayIntentBits.GuildPresences,
-            GatewayIntentBits.GuildModeration,
-            GatewayIntentBits.GuildEmojisAndStickers,
-            GatewayIntentBits.GuildIntegrations,
-            GatewayIntentBits.AutoModerationConfiguration,
-            GatewayIntentBits.AutoModerationExecution,
-            GatewayIntentBits.DirectMessages
-        ],
-        partials: [
-            Partials.Message,
-            Partials.Channel,
-            Partials.Reaction,
-            Partials.User,
-            Partials.GuildMember
-        ]
+        intents: [GatewayIntentBits.Guilds]
     });
 
     return new Promise((resolve, reject) => {

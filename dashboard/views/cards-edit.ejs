@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit: <%= card.card_name || 'Card' %> | CertiFried</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0b0f11; --card-bg: #141a1e; --border: rgba(255,255,255,0.08); --accent: #a78bfa; --text: #ffffff; --muted: rgba(255,255,255,0.5); --danger: #f87171; --success: #34d399; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+        .nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 24px; background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border); }
+        .nav-brand { color: var(--text); text-decoration: none; font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+        .nav-links { display: flex; gap: 16px; align-items: center; }
+        .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.85rem; }
+
+        .container { max-width: 640px; margin: 0 auto; padding: 32px 16px 80px; }
+        .back-link { color: var(--muted); text-decoration: none; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; margin-bottom: 20px; }
+        .back-link:hover { color: var(--text); }
+
+        h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 4px; }
+        .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 28px; }
+
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 0.9rem; font-family: inherit; transition: border-color 0.2s; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
+        .form-group .hint { font-size: 0.7rem; color: rgba(255,255,255,0.3); margin-top: 4px; }
+
+        .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; }
+        .toggle-row span { font-size: 0.85rem; }
+        .toggle { position: relative; width: 40px; height: 22px; cursor: pointer; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .toggle .slider { position: absolute; inset: 0; background: rgba(255,255,255,0.1); border-radius: 22px; transition: 0.2s; }
+        .toggle .slider::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.2s; }
+        .toggle input:checked + .slider { background: var(--accent); }
+        .toggle input:checked + .slider::before { transform: translateX(18px); }
+
+        .btn-row { display: flex; gap: 10px; margin-top: 32px; }
+        .btn { padding: 12px 24px; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: all 0.2s; text-decoration: none; text-align: center; }
+        .btn-save { background: var(--accent); color: white; flex: 1; }
+        .btn-save:hover { opacity: 0.9; }
+        .btn-delete { background: rgba(248,113,113,0.1); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
+        .btn-delete:hover { background: rgba(248,113,113,0.2); }
+        .btn-cancel { background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid var(--border); }
+        .btn-cancel:hover { color: var(--text); }
+
+        .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--success); color: #0b0f11; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; display: none; z-index: 100; }
+        .toast.error { background: var(--danger); color: white; }
+        .toast.show { display: block; }
+
+        .section-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin: 28px 0 14px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+
+        .preview-img { width: 100%; max-height: 160px; object-fit: cover; border-radius: 8px; margin-top: 8px; border: 1px solid var(--border); }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand"><i class="fas fa-bolt" style="color: var(--accent);"></i> CertiFried</a>
+        <div class="nav-links">
+            <a href="/cards">Cards</a>
+            <a href="/cards/my-cards"><i class="fas fa-folder-open"></i> My Cards</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <a href="/cards/my-cards" class="back-link"><i class="fas fa-arrow-left"></i> Back to My Cards</a>
+
+        <h1><i class="fas fa-pen" style="color: var(--accent);"></i> Edit Card</h1>
+        <p class="subtitle"><%= card.card_name || 'Untitled' %> &middot; <%= card.card_type === 'greeting_card' ? 'Greeting Card' : card.card_type === 'one_person' ? 'One Person' : 'Group Board' %></p>
+
+        <form id="editForm">
+            <div class="section-title">Basic Info</div>
+
+            <div class="form-group">
+                <label>Card Title</label>
+                <input type="text" name="card_name" value="<%= card.card_name || '' %>" maxlength="200">
+            </div>
+
+            <div class="form-group">
+                <label>Recipient Name</label>
+                <input type="text" name="recipient_name" value="<%= card.recipient_name || '' %>" maxlength="100">
+            </div>
+
+            <div class="form-group">
+                <label>Custom URL Slug</label>
+                <input type="text" name="custom_slug" value="<%= card.slug || '' %>" maxlength="200" pattern="[a-z0-9-]+">
+                <p class="hint">certifriedmultitool.com/card/<strong><%= card.slug || card.share_token %></strong></p>
+            </div>
+
+            <div class="section-title">Media & Extras</div>
+
+            <div class="form-group">
+                <label>Background Music URL</label>
+                <input type="url" name="background_music_url" value="<%= card.background_music_url || '' %>" placeholder="YouTube, SoundCloud, or direct audio URL">
+            </div>
+
+            <div class="form-group">
+                <label>Wishlist URL</label>
+                <input type="url" name="wishlist_url" value="<%= card.wishlist_url || '' %>" placeholder="Amazon wishlist, registry, etc.">
+            </div>
+
+            <div class="form-group">
+                <label>Card Background Image URL</label>
+                <input type="url" name="card_background_url" value="<%= card.card_background_url || '' %>" placeholder="Direct image URL">
+                <% if (card.card_background_url) { %><img src="<%= card.card_background_url %>" class="preview-img" alt="Background"><% } %>
+            </div>
+
+            <div class="form-group">
+                <label>Board Background Image URL</label>
+                <input type="url" name="board_bg_image_url" value="<%= card.board_bg_image_url || '' %>" placeholder="Direct image URL">
+                <% if (card.board_bg_image_url) { %><img src="<%= card.board_bg_image_url %>" class="preview-img" alt="Board BG"><% } %>
+            </div>
+
+            <div class="form-group">
+                <label>Board Background Color</label>
+                <input type="text" name="board_bg_color" value="<%= card.board_bg_color || '' %>" placeholder="#1a1a2e or rgba(...)">
+            </div>
+
+            <div class="section-title">Security</div>
+
+            <div class="form-group">
+                <label>Set New Password <span style="color: var(--muted); font-weight: 400; text-transform: none;">(leave empty to keep current)</span></label>
+                <input type="password" name="password" placeholder="<%= card.password_hash ? 'Password is set — enter new to change' : 'Optional password protection' %>">
+            </div>
+
+            <div class="form-group">
+                <div class="toggle-row">
+                    <span><i class="fas fa-snowflake" style="color: #60a5fa;"></i> Freeze Card <span style="color: var(--muted); font-size: 0.75rem;">(no new signatures)</span></span>
+                    <label class="toggle">
+                        <input type="checkbox" name="is_frozen" <%= card.is_frozen ? 'checked' : '' %>>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="btn-row">
+                <button type="submit" class="btn btn-save"><i class="fas fa-save"></i> Save Changes</button>
+                <a href="/card/<%= card.slug || card.share_token %>" class="btn btn-cancel">Cancel</a>
+                <button type="button" class="btn btn-delete" onclick="deleteCard()"><i class="fas fa-trash"></i></button>
+            </div>
+        </form>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+    const slug = '<%= card.slug || card.share_token %>';
+
+    document.getElementById('editForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const form = new FormData(e.target);
+        const data = Object.fromEntries(form.entries());
+        data.is_frozen = e.target.querySelector('[name="is_frozen"]').checked ? '1' : '';
+
+        try {
+            const res = await fetch('/card/' + slug + '/edit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.success) {
+                showToast('Card updated!');
+                if (result.slug !== slug) {
+                    setTimeout(() => window.location.href = '/card/' + result.slug + '/edit', 800);
+                }
+            } else {
+                showToast(result.error || 'Update failed', true);
+            }
+        } catch (err) {
+            showToast('Network error', true);
+        }
+    });
+
+    function deleteCard() {
+        if (!confirm('Delete this card and all signatures? This cannot be undone.')) return;
+        fetch('/card/' + slug, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Card deleted');
+                    setTimeout(() => window.location.href = '/cards/my-cards', 800);
+                } else {
+                    showToast(data.error || 'Delete failed', true);
+                }
+            })
+            .catch(() => showToast('Network error', true));
+    }
+
+    function showToast(msg, isError) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = 'toast show' + (isError ? ' error' : '');
+        setTimeout(() => t.className = 'toast', 3000);
+    }
+    </script>
+</body>
+</html>

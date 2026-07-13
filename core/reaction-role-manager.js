@@ -148,23 +148,25 @@ class ReactionRoleManager {
       logger.info(`[ReactionRoleManager] Button clicked: ${interaction.customId} by ${interaction.user.tag} in guild ${interaction.guildId}`);
       await interaction.deferReply({ flags: 64 });
 
-      const roleId = interaction.customId.replace('rr_', '');
-      const role = interaction.guild.roles.cache.get(roleId);
+      let roleId = interaction.customId.replace('rr_', '');
+      let role = interaction.guild.roles.cache.get(roleId);
+
+      // If the custom ID isn't a valid role snowflake, look up from DB mapping
+      if (!role) {
+        const [dbMapping] = await pool.execute(
+          `SELECT rm.role_id FROM reaction_role_mappings rm
+           JOIN reaction_role_panels rp ON rm.panel_id = rp.id
+           WHERE rp.message_id = ? AND rm.emoji_id = ?`,
+          [interaction.message.id, interaction.customId]
+        );
+        if (dbMapping.length > 0) {
+          roleId = dbMapping[0].role_id;
+          role = interaction.guild.roles.cache.get(roleId);
+        }
+      }
 
       if (!role) {
         await interaction.editReply('This role no longer exists.');
-        return true;
-      }
-
-      // Get panel info
-      const [panels] = await pool.execute(
-        'SELECT * FROM reaction_role_panels WHERE message_id = ?',
-        [interaction.message.id]
-      );
-
-      const panel = panels[0];
-      if (!panel) {
-        await interaction.editReply('This panel is not configured.');
         return true;
       }
 
@@ -173,8 +175,16 @@ class ReactionRoleManager {
 
       const hasRole = member.roles.cache.has(roleId);
 
-      // Handle unique mode
-      if (panel.panel_mode === 'unique' && !hasRole) {
+      // Get panel info (optional — rr_ buttons work without a DB panel)
+      const [panels] = await pool.execute(
+        'SELECT * FROM reaction_role_panels WHERE message_id = ?',
+        [interaction.message.id]
+      );
+
+      const panel = panels[0];
+
+      // Handle unique mode if panel exists and is configured for it
+      if (panel?.panel_mode === 'unique' && !hasRole) {
         const [allMappings] = await pool.execute(
           'SELECT role_id FROM reaction_role_mappings WHERE panel_id = ?',
           [panel.id]
@@ -188,8 +198,48 @@ class ReactionRoleManager {
         await member.roles.remove(role, 'Reaction Role: Button removed');
         await interaction.editReply(`Removed the **${role.name}** role!`);
       } else {
+        // Optional per-mapping level gate. Only enforced on the grant path —
+        // opt-out is always allowed regardless of level.
+        if (panel) {
+          const [mappingRows] = await pool.execute(
+            'SELECT min_level FROM reaction_role_mappings WHERE panel_id = ? AND role_id = ? LIMIT 1',
+            [panel.id, roleId]
+          );
+          const minLevel = mappingRows[0]?.min_level || null;
+          if (minLevel && minLevel > 0) {
+            const lm = interaction.client?.levelingManager;
+            const rank = lm ? await lm.getUserRank(interaction.guild.id, interaction.user.id) : null;
+            const userLevel = rank?.level || 0;
+            if (userLevel < minLevel) {
+              await interaction.editReply(
+                `🔒 You need to reach **level ${minLevel}** in this server before you can opt in here. You're currently **level ${userLevel}**.`
+              );
+              return true;
+            }
+          }
+        }
+
         await member.roles.add(role, 'Reaction Role: Button added');
-        await interaction.editReply(`You now have the **${role.name}** role!`);
+
+        // Optional follow-up: if the panel is configured with a redirect
+        // channel, include a Link button so the user can jump there in one
+        // click. Used by rules-verify panels to funnel users to #roles.
+        const redirectChannelId = panel?.post_assign_redirect_channel_id;
+        if (redirectChannelId) {
+          const channel = interaction.guild.channels.cache.get(redirectChannelId);
+          const linkLabel = channel ? `Go to #${channel.name}` : 'Continue';
+          const linkButton = new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel(linkLabel)
+            .setURL(`https://discord.com/channels/${interaction.guild.id}/${redirectChannelId}`)
+            .setEmoji('🎭');
+          await interaction.editReply({
+            content: `You now have the **${role.name}** role!`,
+            components: [new ActionRowBuilder().addComponents(linkButton)],
+          });
+        } else {
+          await interaction.editReply(`You now have the **${role.name}** role!`);
+        }
       }
 
       logger.info(`[ReactionRoleManager] ${member.user.tag} toggled role ${role.name}`, {
@@ -216,6 +266,8 @@ class ReactionRoleManager {
       await interaction.deferReply({ flags: 64 });
 
       const selectedRoles = interaction.values;
+      logger.info(`[ReactionRoleManager] Select menu: user=${interaction.user.tag} values=${JSON.stringify(selectedRoles)} msgId=${interaction.message.id}`, { category: 'reaction-roles' });
+
       const [panels] = await pool.execute(
         'SELECT * FROM reaction_role_panels WHERE message_id = ?',
         [interaction.message.id]
@@ -507,12 +559,14 @@ class ReactionRoleManager {
 
       // Get the emoji identifier (works for both unicode and custom emojis)
       const emojiId = reaction.emoji.id || reaction.emoji.name;
+      logger.info(`[ReactionRoleManager] Reaction: user=${user.tag} emoji="${emojiId}" emojiName="${reaction.emoji.name}" emojiId="${reaction.emoji.id}" panelId=${panel.id} msgId=${message.id}`, { category: 'reaction-roles' });
 
       // Find the role mapping for this emoji
       const [mappings] = await pool.execute(
         'SELECT role_id FROM reaction_role_mappings WHERE panel_id = ? AND emoji_id = ?',
         [panel.id, emojiId]
       );
+      logger.info(`[ReactionRoleManager] Emoji lookup: panel=${panel.id} emoji="${emojiId}" found=${mappings.length} roles=${mappings.map(m=>m.role_id).join(',')}`, { category: 'reaction-roles' });
 
       if (mappings.length === 0) {
         // No mapping found for this emoji, remove the reaction
@@ -554,8 +608,10 @@ class ReactionRoleManager {
         });
 
         // Check if this is a verification role and send welcome message
-        if (role.name.toLowerCase().includes('verified')) {
-          await this.sendWelcomeMessage(message.guild, member);
+        // Only for grow community guilds that have this feature explicitly configured
+        const GROW_GUILDS = ['1452972683867459657', '1452698337152336067'];
+        if (role.name.toLowerCase().includes('verified') && GROW_GUILDS.includes(message.guild.id)) {
+          await this.sendGrowWelcomeMessage(message.guild, member);
         }
       }
     } catch (error) {
@@ -565,7 +621,7 @@ class ReactionRoleManager {
     }
   }
 
-  async sendWelcomeMessage(guild, member) {
+  async sendGrowWelcomeMessage(guild, member) {
     try {
       // Get welcome settings from database
       const [settings] = await pool.execute(

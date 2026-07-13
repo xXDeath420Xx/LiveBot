@@ -372,7 +372,20 @@ const defaultMessage = announcementSettings.announcement_message || '{streamer} 
 }
 
 @media (max-width: 768px) {
-    .streamers-stats-grid { grid-template-columns: 1fr; }
+    .streamers-stats-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px; }
+    .settings-grid { grid-template-columns: 1fr !important; }
+    .settings-grid-full { grid-column: span 1 !important; }
+
+    /* Table: hide subscriptions + status columns on mobile */
+    .streamers-table .mobile-hide { display: none !important; }
+    .streamers-table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .streamers-table thead th,
+    .streamers-table tbody td { padding: 8px 10px !important; }
+
+    /* Stack search + bulk actions */
+    .page-content > .page-section > div[style*="display: flex"][style*="gap: 12px"] {
+        flex-direction: column !important;
+    }
 }
 </style>
 
@@ -469,6 +482,21 @@ const defaultMessage = announcementSettings.announcement_message || '{streamer} 
                         <textarea class="form-control" name="announcement_message" rows="2" style="font-family: monospace; font-size: 0.8rem;"><%= defaultMessage %></textarea>
                         <div class="form-help">Variables: {streamer}, {platform}, {game}, {url}, {title}, {everyone}</div>
                     </div>
+                    <div class="settings-grid-full">
+                        <label class="form-label">Ignored Roles</label>
+                        <select class="form-select" name="stream_ignored_roles" multiple size="4" style="min-height: 100px;" id="ignored-roles-select-streamers">
+                            <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>"
+                                    <%= (settings.stream_ignored_roles || []).includes(role.id) ? 'selected' : '' %>>
+                                    <%= role.name %>
+                                </option>
+                            <% }); %>
+                        </select>
+                        <div class="form-help">
+                            Streamers with any of these roles won't trigger live notifications (Ctrl+Click to select multiple)
+                            <span id="ignored-roles-count-streamers" style="color: var(--accent-purple); font-weight: 600;"></span>
+                        </div>
+                    </div>
                 </div>
                 <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
                     <button type="submit" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.85rem;">
@@ -498,20 +526,20 @@ const defaultMessage = announcementSettings.announcement_message || '{streamer} 
             <table class="streamers-table">
                 <thead>
                     <tr>
-                        <th style="width: 40px;">
+                        <th style="width: 40px;" class="mobile-hide">
                             <input type="checkbox" id="select-all-streamers" class="form-check-input" title="Select All">
                         </th>
                         <th>Streamer</th>
                         <th>Platforms</th>
-                        <th>Subscriptions</th>
-                        <th>Status</th>
+                        <th class="mobile-hide">Subscriptions</th>
+                        <th class="mobile-hide">Status</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="streamersTableBody">
                     <% consolidatedStreamers.forEach(streamer => { %>
                         <tr class="streamer-row" data-streamer-name="<%= (streamer.name || '').toLowerCase() %>" data-platforms="<%= ((streamer.platforms || []).join(' ')).toLowerCase() %>" data-subscription-ids="<%= (streamer.subscriptions || []).map(s => s.id || s.subscription_id).filter(Boolean).join(',') %>">
-                            <td>
+                            <td class="mobile-hide">
                                 <input type="checkbox" class="form-check-input streamer-checkbox">
                             </td>
                             <td>
@@ -547,10 +575,10 @@ const defaultMessage = announcementSettings.announcement_message || '{streamer} 
                                     <% }); %>
                                 </div>
                             </td>
-                            <td>
+                            <td class="mobile-hide">
                                 <span class="subscription-badge"><%= streamer.subscriptions.length %></span>
                             </td>
-                            <td>
+                            <td class="mobile-hide">
                                 <span class="status-badge <%= streamer.is_blacklisted ? 'blacklisted' : 'active' %>">
                                     <%= streamer.is_blacklisted ? 'Blocked' : 'Active' %>
                                 </span>
@@ -795,6 +823,18 @@ document.getElementById('select-all-streamers')?.addEventListener('change', func
 document.addEventListener('change', function(e) {
     if (e.target.classList.contains('streamer-checkbox')) updateBulkSelection();
 });
+
+// Show selected count for ignored roles multi-select
+const ignoredSelect = document.getElementById('ignored-roles-select-streamers');
+const ignoredCount = document.getElementById('ignored-roles-count-streamers');
+if (ignoredSelect && ignoredCount) {
+    function updateIgnoredCount() {
+        const count = ignoredSelect.selectedOptions.length;
+        ignoredCount.textContent = count > 0 ? `— ${count} role(s) selected` : '';
+    }
+    updateIgnoredCount();
+    ignoredSelect.addEventListener('change', updateIgnoredCount);
+}
 </script>
 
 <style>

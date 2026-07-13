@@ -84,7 +84,7 @@ const RESERVED = [
 
 /** Not dead — waiting on something. Listed so nobody "cleans" them up by mistake. */
 const WAITING = [
-  { id: '1488337520889696517', name: 'BIRTHDAY!!!',               why: 'wire to our birthday system' },
+  { id: '1488337520889696517', name: 'BIRTHDAY!!!',               why: 'ALREADY WIRED — we grant it on the day, strip it after. Empty only because the old bot never granted it' },
   { id: '1490586756188344320', name: 'Ko-fi Supporter <3',        why: 'Ko-fi tier — needs the webhook token' },
   { id: '1490587340249501737', name: 'MONTHLY Ko-fi Supporter <3', why: 'Ko-fi tier — needs the webhook token' },
   { id: '1466950520668422421', name: 'Africa',                    why: "restore as the 🦒 option on the region panel (it currently points at a DELETED role)" },

@@ -31,6 +31,7 @@ export async function handleCreate(interaction) {
       [guildId, channelId, message.id]
     );
 
+    if (!client.musicPanelManager) client.musicPanelManager = new Map();
     client.musicPanelManager.set(guildId, panel);
 
     await interaction.editReply({ content: 'Music panel created successfully!' });
