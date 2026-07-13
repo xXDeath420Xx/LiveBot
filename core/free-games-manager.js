@@ -7,6 +7,31 @@ import EpicGamesScraper from '../utils/scrapers/epic-games-scraper.js';
 import SteamScraper from '../utils/scrapers/steam-scraper.js';
 import GOGScraper from '../utils/scrapers/gog-scraper.js';
 import PrimeGamingScraper from '../utils/scrapers/prime-gaming-scraper.js';
+import { gameKey } from '../utils/free-games-key.js';
+
+/**
+ * Collapse a scraper's output to one entry per real game.
+ *
+ * This sits between EVERY scraper and the database on purpose. Prime Gaming's card walk was
+ * resolving to the whole offer grid rather than a single card, so all 54 buttons reported the first
+ * title on the page — the same game, 54 times, each of which would have become its own announcement
+ * and its own Discord post. That specific bug is fixed at the source, but a scraper scrapes someone
+ * else's HTML: the next redesign can break it again, silently, at 3am. A guard here means the worst
+ * a broken scraper can do is announce too few games, never the same game fifty times.
+ *
+ * Identity is the store URL, falling back to the title only when there is no usable URL.
+ */
+function dedupeGames(games) {
+  const out = [];
+  const seen = new Set();
+  for (const g of games ?? []) {
+    const id = gameKey(g?.url) ?? (g?.title ? `title:${String(g.title).trim().toLowerCase()}` : null);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(g);
+  }
+  return out;
+}
 
 /**
  * Manages free games discovery, storage, and notifications
@@ -68,11 +93,17 @@ export default class FreeGamesManager {
         continue;
       }
 
-      if (games && games.length > 0) {
+      const deduped = dedupeGames(games);
+      if (deduped.length !== (games?.length ?? 0)) {
+        logger.warn(`[FreeGamesManager] ${platform} returned ${games.length} games but only ${deduped.length} are distinct — ` +
+          'the scraper is repeating itself. Announcing the deduplicated set.');
+      }
+
+      if (deduped.length > 0) {
         // Process games in parallel batches of 5 to avoid overwhelming the database
         const batchSize = 5;
-        for (let i = 0; i < games.length; i += batchSize) {
-          const batch = games.slice(i, i + batchSize);
+        for (let i = 0; i < deduped.length; i += batchSize) {
+          const batch = deduped.slice(i, i + batchSize);
           const announcements = await Promise.all(
             batch.map(game => this.processGame(game).catch(() => null))
           );
@@ -85,7 +116,7 @@ export default class FreeGamesManager {
         }
 
         // Update scraper cache
-        await this.updateScraperCache(platform, games, null);
+        await this.updateScraperCache(platform, deduped, null);
       }
     }
 
@@ -425,12 +456,38 @@ export default class FreeGamesManager {
         return;
       }
 
+      // A promo whose window has closed is not news, it is misinformation. Never announce it, and
+      // never leave it sitting in the queue pretending to be pending.
+      if (announcement.until_date && new Date(announcement.until_date) < new Date()) {
+        logger.info(`[FreeGamesManager] "${announcement.title}" expired ${announcement.until_date} — not announcing`);
+        await pool.execute(
+          'UPDATE free_games_announcements SET notified = 1, is_active = 0 WHERE id = ?',
+          [announcement.id]);
+        return;
+      }
+
       logger.info(`[FreeGamesManager] Sending notification to ${subscriptions.length} subscription(s) for "${announcement.title}"`);
 
       let successCount = 0;
       let failCount = 0;
+      let skipCount = 0;
 
       for (const sub of subscriptions) {
+        // THE duplicate guard. `free_games_notifications` has always been written but never read,
+        // so a retry re-sent to every subscription — including the ones that had already received
+        // the message. That happens whenever a send half-fails (the post lands, then the ledger
+        // INSERT throws), which reports failure for a message the guild can already see.
+        if (await this.alreadyDelivered(sub.id, announcement.id)) { skipCount++; continue; }
+
+        // The guild may already have been told about this game by the bot we are replacing. Their
+        // members do not care which bot posted it — to them it is simply the same game, twice.
+        if (await this.guildHasSeenProducts(sub.guild_id, products)) {
+          logger.info(`[FreeGamesManager] guild ${sub.guild_id} already saw "${announcement.title}" (announced by the previous bot) — skipping`);
+          await this.recordDelivered(sub.id, announcement.id);
+          skipCount++;
+          continue;
+        }
+
         const success = await this.sendNotificationToSubscription(sub, announcement, products);
         if (success) {
           successCount++;
@@ -439,16 +496,19 @@ export default class FreeGamesManager {
         }
       }
 
-      logger.info(`[FreeGamesManager] Notification results for "${announcement.title}": ${successCount} sent, ${failCount} failed`);
+      logger.info(`[FreeGamesManager] Notification results for "${announcement.title}": ${successCount} sent, ${failCount} failed, ${skipCount} already had it`);
 
-      // Only mark as notified if at least one notification was sent successfully
-      if (successCount > 0) {
+      // Retire the announcement only once EVERY matching subscription is accounted for. The old rule
+      // — "one success is enough" — meant a guild whose send failed while another's succeeded never
+      // got that game at all. Now a failure keeps the announcement open for retry, and the ledger
+      // check above stops the retry from double-posting to anyone who already has it.
+      if (failCount === 0) {
         await pool.execute(
           'UPDATE free_games_announcements SET notified = 1 WHERE id = ?',
           [announcement.id]
         );
       } else {
-        logger.warn(`[FreeGamesManager] All notifications failed for announcement ${announcement.id}, will retry later`);
+        logger.warn(`[FreeGamesManager] ${failCount} notification(s) failed for announcement ${announcement.id}; keeping it open so they retry`);
       }
 
     } catch (error) {
@@ -456,6 +516,57 @@ export default class FreeGamesManager {
         error: error.message,
         stack: error.stack
       });
+    }
+  }
+
+  /** Has this exact subscription already been sent this exact announcement? */
+  async alreadyDelivered(subscriptionId, announcementId) {
+    const [[row]] = await pool.execute(
+      'SELECT 1 AS hit FROM free_games_notifications WHERE subscription_id = ? AND announcement_id = ? LIMIT 1',
+      [subscriptionId, announcementId]);
+    return !!row;
+  }
+
+  /** Write the ledger row. Idempotent — a retry must not stack duplicate rows. */
+  async recordDelivered(subscriptionId, announcementId) {
+    await pool.execute(
+      `INSERT INTO free_games_notifications (subscription_id, announcement_id)
+       SELECT ?, ? FROM DUAL
+        WHERE NOT EXISTS (SELECT 1 FROM free_games_notifications
+                           WHERE subscription_id = ? AND announcement_id = ?)`,
+      [subscriptionId, announcementId, subscriptionId, announcementId]);
+  }
+
+  /**
+   * Has this GUILD already been shown these games — by anyone, us or the bot we replaced?
+   *
+   * Matched on store-URL identity, never on title (see utils/free-games-key.js). A product whose
+   * URL we cannot parse yields no key, and a game with no key is treated as NOT seen: an unknown
+   * must fall through to "announce it" rather than silently suppress a real free game.
+   */
+  async guildHasSeenProducts(guildId, products) {
+    const keys = products.map(p => gameKey(p.url)).filter(Boolean);
+    if (!keys.length) return false;
+
+    const [rows] = await pool.execute(
+      `SELECT game_key FROM free_games_seen
+        WHERE guild_id = ? AND game_key IN (${keys.map(() => '?').join(',')})`,
+      [guildId, ...keys]);
+
+    // Every game in the announcement must already be seen. If a bundle contains one new game among
+    // three old ones, the guild has not seen it and it goes out.
+    return rows.length === keys.length;
+  }
+
+  /** Remember that this guild has now been shown these games, so nothing ever announces them twice. */
+  async recordSeen(guildId, products, source = 'us') {
+    for (const p of products) {
+      const key = gameKey(p.url);
+      if (!key) continue;
+      await pool.execute(
+        `INSERT INTO free_games_seen (guild_id, game_key, title, source) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE seen_at = seen_at`,
+        [guildId, key, p.title ?? null, source]);
     }
   }
 
@@ -512,11 +623,17 @@ export default class FreeGamesManager {
       const channel = await botClient.channels.fetch(subscription.discord_channel_id).catch(() => null);
 
       if (!channel) {
-        logger.warn(`[FreeGamesManager] Channel ${subscription.discord_channel_id} not found for guild ${subscription.guild_id}`, {
+        // A deleted channel is PERMANENT, not a blip. Now that a failure keeps an announcement open
+        // for retry, reporting this as a normal failure would pin every announcement open forever,
+        // retrying a channel that is never coming back. Close it out for this subscription and say
+        // so loudly instead.
+        logger.warn(`[FreeGamesManager] Channel ${subscription.discord_channel_id} is gone for guild ${subscription.guild_id} — ` +
+          'closing this announcement for that subscription. Re-point it with /alerts freegames.', {
           usingCustomBot,
-          botId: botClient.user?.id
+          botId: botClient.user?.id,
         });
-        return false;
+        await this.recordDelivered(subscription.id, announcement.id).catch(() => {});
+        return true; // "nothing left to do here", not "the guild got it"
       }
 
       // Build embed
@@ -535,11 +652,17 @@ export default class FreeGamesManager {
         embeds: [embed]
       });
 
-      // Record notification
-      await pool.execute(
-        'INSERT INTO free_games_notifications (subscription_id, announcement_id) VALUES (?, ?)',
-        [subscription.id, announcement.id]
-      );
+      // The message is now visible in the guild. Everything from here on MUST NOT be able to report
+      // failure — a "failed" send whose post actually landed is what caused the duplicate re-post.
+      try {
+        await this.recordDelivered(subscription.id, announcement.id);
+        await this.recordSeen(subscription.guild_id, products, 'us');
+      } catch (err) {
+        logger.error('[FreeGamesManager] Post succeeded but the ledger write failed — the guild HAS the message', {
+          error: err.message, subscriptionId: subscription.id, announcementId: announcement.id,
+        });
+        // Deliberately still true: the guild has it. Reporting false here would re-post it.
+      }
 
       logger.info(`[FreeGamesManager] Sent notification to guild ${subscription.guild_id}`, {
         messageId: message.id,

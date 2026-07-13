@@ -58,18 +58,35 @@ export default class PrimeGamingScraper extends FreeGamesScraper {
       const games = await page.evaluate(() => {
         const offers = [];
 
-        // Find ONLY buttons that say exactly "Claim game" - not "Claim in-game content" or just "Claim"
-        const claimButtons = Array.from(document.querySelectorAll('button, a')).filter(el => {
-          if (!el.textContent) return false;
-          const text = el.textContent.toLowerCase().trim();
-          // Must contain "claim game" but NOT "in-game"
+        // Everything that looks like a "Claim game" control — not "Claim in-game content".
+        const claimish = Array.from(document.querySelectorAll('button, a')).filter(el => {
+          const text = (el.textContent ?? '').toLowerCase().trim();
           return text.includes('claim game') && !text.includes('in-game');
         });
 
+        // Prime wraps its button in an anchor, so BOTH the <a> and the <button> match the text test
+        // and one offer yields two "claim" elements. Keep only the innermost — an element that does
+        // not contain another claim element — so one offer counts exactly once.
+        const claimButtons = claimish.filter(el => !claimish.some(other => other !== el && el.contains(other)));
+
+        const seenLinks = new Set();
+
         claimButtons.forEach(button => {
           try {
-            // Walk up the DOM to find the card container
-            let card = button.closest('[class*="offer"]') || button.closest('[class*="item"]') || button.closest('article') || button.parentElement.parentElement;
+            // Walk up from the button to find THIS offer's card.
+            //
+            // The old code fell back to `parentElement.parentElement`, which on Prime's current
+            // layout lands on the container wrapping EVERY offer. `card.querySelector('h3')` then
+            // returns the first title in the whole grid — which is why all 54 buttons reported the
+            // same game. A real card contains exactly ONE claim button; if a candidate contains
+            // more, it is the grid, and no title can be attributed from it.
+            const claimsInside = (el) => claimButtons.filter(b => el.contains(b)).length;
+
+            let card = null;
+            for (let el = button.parentElement, hops = 0; el && hops < 8; el = el.parentElement, hops++) {
+              if (claimsInside(el) > 1) break;                 // we have walked out into the grid
+              if (el.querySelector('h1, h2, h3, h4, [class*="title"], [class*="Title"]')) { card = el; break; }
+            }
 
             if (!card) return;
 
@@ -98,6 +115,11 @@ export default class PrimeGamingScraper extends FreeGamesScraper {
             // Get link
             const linkElement = card.querySelector('a') || button;
             const link = linkElement.href || window.location.href;
+
+            // Last line of defence: even a correct card walk must never emit the same game twice.
+            const dedupeOn = link || title;
+            if (seenLinks.has(dedupeOn)) return;
+            seenLinks.add(dedupeOn);
 
             offers.push({
               title,
