@@ -120,7 +120,7 @@ const gate = (id, label, pass, detail) => ({ id, label, pass, detail });
  * Evaluate every gate for one bot. Pure inspection — safe to call from a GET.
  * `pass: null` means "cannot determine", which is treated as a failure by `retire()`.
  */
-export async function evaluate(guild, botId, scanId, { soakHours = DEFAULT_SOAK_HOURS } = {}) {
+export async function evaluate(guild, botId, scanId, { soakHours = DEFAULT_SOAK_HOURS, overrideSoak = false } = {}) {
     const meta = KNOWN_BOTS[botId] ?? null;
     const member = await guild.members.fetch(botId).catch(() => null);
     const gates = [];
@@ -188,14 +188,25 @@ export async function evaluate(guild, botId, scanId, { soakHours = DEFAULT_SOAK_
         me ? '' : 'bot member not cached'));
 
     // 7. Soak: parity must have held for a while before we burn the bridge.
+    //
+    // `overrideSoak` waives THIS gate and this gate only. It is deliberately powerless over the
+    // others: the clock is the one thing here that is about patience rather than correctness, so it
+    // is the one thing an owner may reasonably skip. Parity, evidence, data extraction and hierarchy
+    // are about whether we ACTUALLY replaced the bot, and no override touches them — a waiver removes
+    // the wait, never the proof. The clock is still stamped/read normally underneath, so the gate
+    // stays honest about what it skipped.
     const readyAt = await soakClock(guild.id, botId, gates);
     const soakMs = soakHours * 3_600_000;
     const elapsed = readyAt ? Date.now() - new Date(readyAt).getTime() : 0;
+    const soakMet = !!readyAt && elapsed >= soakMs;
+    const soakWaived = overrideSoak && !soakMet;
     gates.push(gate('soak', `Replacement running for ${soakHours}h`,
-        !!readyAt && elapsed >= soakMs,
-        !readyAt ? 'starts once every other gate passes'
-            : elapsed >= soakMs ? `ready since ${new Date(readyAt).toISOString()}`
-                : `${Math.ceil((soakMs - elapsed) / 3_600_000)}h remaining`));
+        soakMet || overrideSoak,
+        soakWaived
+            ? 'WAIVED by owner — the 24h proof was skipped; every other gate is still enforced'
+            : !readyAt ? 'starts once every other gate passes'
+                : soakMet ? `ready since ${new Date(readyAt).toISOString()}`
+                    : `${Math.ceil((soakMs - elapsed) / 3_600_000)}h remaining`));
 
     return {
         botId,
@@ -204,6 +215,9 @@ export async function evaluate(guild, botId, scanId, { soakHours = DEFAULT_SOAK_
         gates,
         ready: gates.every(g => g.pass === true),
         blockers: gates.filter(g => g.pass !== true).map(g => g.label),
+        // True only when the waiver actually did something — the soak was NOT naturally met and the
+        // override carried it. Lets retire() log the fact rather than the intent.
+        soakWaived,
     };
 }
 
@@ -260,10 +274,22 @@ const ascii = (s) => String(s).replace(/[^\x20-\x7E]/g, '').slice(0, 400);
  * Prefers deleting the integration over kicking the member: that strips the application and its
  * registered slash commands together, where a kick leaves stale commands in the picker.
  */
-export async function retire(guild, botId, { scanId, userId, soakHours = DEFAULT_SOAK_HOURS } = {}) {
-    const verdict = await evaluate(guild, botId, scanId, { soakHours });
+export async function retire(guild, botId, { scanId, userId, soakHours = DEFAULT_SOAK_HOURS, overrideSoak = false } = {}) {
+    const verdict = await evaluate(guild, botId, scanId, { soakHours, overrideSoak });
     if (!verdict.ready) {
         return { ok: false, verdict, error: `blocked: ${verdict.blockers.join('; ')}` };
+    }
+
+    // A waiver is a thing that happened, not just a thing that was allowed. Record it before the
+    // removal so the audit trail exists even if the kick itself then fails.
+    if (verdict.soakWaived) {
+        logger.warn(`[Retire] SOAK WAIVED by ${userId ?? 'unknown'} — removing ${verdict.name} (${botId}) from `
+            + `${guild.name} without the ${soakHours}h parity proof. Every other gate passed.`);
+        const waiver = JSON.stringify({ soak_waiver: { by: userId ?? null, at: new Date().toISOString(), soakHours } });
+        await pool.execute(
+            `INSERT INTO guild_retire_state (guild_id, bot_id, snapshot) VALUES (?, ?, CAST(? AS JSON))
+             ON DUPLICATE KEY UPDATE snapshot = JSON_MERGE_PATCH(COALESCE(snapshot, JSON_OBJECT()), CAST(? AS JSON))`,
+            [guild.id, botId, waiver, waiver]);
     }
 
     const member = await guild.members.fetch(botId).catch(() => null);

@@ -468,7 +468,23 @@ router.post('/bots/:botId/retire', ownerOnly, async (req, res) => {
             return res.status(409).json({ error: 'A completed scan is required before removing a bot.' });
         }
 
-        const result = await retire(guild, req.params.botId, { scanId: scan.id, userId: req.user?.id });
+        // Waiving the 24h soak is its own deliberate act, with its own confirmation — never a silent
+        // rider on the removal. The route is already owner-only, but the waiver additionally demands
+        // the caller type the acknowledgement, so it cannot be flipped on by a default-true checkbox
+        // or a replayed request. It waives ONLY the soak; core/bot-retirement enforces the rest.
+        let overrideSoak = false;
+        if (req.body?.overrideSoak === true) {
+            if (String(req.body?.acknowledgeSoakWaiver ?? '') !== 'SKIP SOAK') {
+                return res.status(400).json({
+                    error: 'To skip the 24h soak, type exactly: SKIP SOAK. Every other gate is still enforced.',
+                });
+            }
+            overrideSoak = true;
+            logger.warn(`[Takeover] ${req.user?.id} is removing ${req.params.botId} from ${guild.name} `
+                + 'WITH THE SOAK WAIVED — the 24h parity proof is being skipped.');
+        }
+
+        const result = await retire(guild, req.params.botId, { scanId: scan.id, userId: req.user?.id, overrideSoak });
         if (!result.ok) return res.status(409).json(result);
         res.json(result);
     } catch (err) {

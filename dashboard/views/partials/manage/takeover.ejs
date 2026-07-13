@@ -182,6 +182,9 @@
   #takeoverPage .to-step { display:flex; gap:.6rem; align-items:flex-start; padding:.55rem .7rem;
     border:1px solid #2c2f3a; border-radius:8px; background:#14161c; font-size:.88rem; }
   #takeoverPage .to-retire { margin-top:.8rem; padding-top:.8rem; border-top:1px solid #2c2f3a; display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+  /* When soak is the only thing left, the waiver row is visibly a deliberate, out-of-the-ordinary act. */
+  #takeoverPage .to-retire-waive { border-top-color:#5c5230; background:linear-gradient(0deg,#211d10,transparent); border-radius:0 0 8px 8px; }
+  #takeoverPage .to-waive { display:inline-flex; align-items:center; gap:.35rem; font-size:.84rem; color:#e0cf8b; }
   #takeoverPage .to-ready-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:.7rem; margin:.9rem 0 1.1rem; }
   #takeoverPage .to-ready { border:1px solid #2c2f3a; border-radius:8px; background:#14161c; padding:.75rem .9rem; }
   #takeoverPage .to-ready h5 { margin:0 0 .5rem; font-size:.82rem; text-transform:uppercase; letter-spacing:.03em; color:#8b8f9e; }
@@ -349,12 +352,25 @@
     const ack = bot.holdsData && !gates.gates.find(g => g.id === 'data')?.pass
       ? `<button class="btn btn-sm btn-secondary" data-ack="${bot.bot_id}">I exported ${esc(bot.holdsData.what)}</button>` : '';
 
-    return `<div class="to-retire">
+    // Is the 24h soak the ONLY thing standing in the way? Every other gate — the ones that prove we
+    // actually replaced the bot — must be green. If so, the owner may waive the wait (but never the
+    // proof). If anything else is red, there is no waiver: fix it first.
+    const soakGate = gates.gates.find(g => g.id === 'soak');
+    const others = gates.gates.filter(g => g.id !== 'soak');
+    const soakOnly = !gates.ready && soakGate && soakGate.pass !== true && others.every(g => g.pass === true);
+
+    const waiver = soakOnly ? `
+      <label class="to-waive"><input type="checkbox" data-waive="${bot.bot_id}"> Skip the 24h soak</label>
+      <input type="text" class="form-control" style="max-width:11rem" placeholder="Type: SKIP SOAK" data-waiveack="${bot.bot_id}">` : '';
+
+    const canClick = gates.ready || soakOnly;
+    const label = gates.ready ? 'Remove this bot' : soakOnly ? 'Remove (soak waived)' : 'Blocked';
+
+    return `<div class="to-retire ${soakOnly ? 'to-retire-waive' : ''}">
       ${ack}
+      ${waiver}
       <input type="text" class="form-control" style="max-width:16rem" placeholder="Type: ${esc(guildName)}" data-confirm="${bot.bot_id}">
-      <button class="btn btn-sm btn-danger" data-retire="${bot.bot_id}" ${gates.ready ? '' : 'disabled'}>
-        ${gates.ready ? 'Remove this bot' : 'Blocked'}
-      </button>
+      <button class="btn btn-sm btn-danger" data-retire="${bot.bot_id}" ${canClick ? '' : 'disabled'}>${label}</button>
       <span class="to-muted" data-rstatus="${bot.bot_id}"></span>
     </div>`;
   }
@@ -802,11 +818,25 @@
       const botId = rm.dataset.retire;
       const confirmEl = root.querySelector(`[data-confirm="${botId}"]`);
       const status = root.querySelector(`[data-rstatus="${botId}"]`);
-      if (!confirm(`Remove this bot from ${guildName}? Its stored data is gone for good.`)) return;
+
+      // The soak waiver, if this bot is showing one and the owner engaged it.
+      const waiveBox = root.querySelector(`[data-waive="${botId}"]`);
+      const waiveAckEl = root.querySelector(`[data-waiveack="${botId}"]`);
+      const waiving = !!waiveBox?.checked;
+
+      const prompt = waiving
+        ? `Remove this bot WITHOUT the 24h soak? Every other gate passed, but the replacement has not `
+          + `been proven live in this server. Its stored data is gone for good.`
+        : `Remove this bot from ${guildName}? Its stored data is gone for good.`;
+      if (!confirm(prompt)) return;
+
+      const body = { confirm: confirmEl.value };
+      if (waiving) { body.overrideSoak = true; body.acknowledgeSoakWaiver = waiveAckEl?.value ?? ''; }
+
       rm.disabled = true;
       try {
-        const r = await req(api(`/bots/${botId}/retire`), { method:'POST', body: JSON.stringify({ confirm: confirmEl.value }) });
-        status.textContent = `Removed via ${r.method}.`;
+        const r = await req(api(`/bots/${botId}/retire`), { method:'POST', body: JSON.stringify(body) });
+        status.textContent = `Removed via ${r.method}${r.verdict?.soakWaived ? ' (soak waived)' : ''}.`;
         await load();
       } catch (err) { status.textContent = err.message; status.style.color = '#ED4245'; rm.disabled = false; }
     }
