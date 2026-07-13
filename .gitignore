@@ -59,3 +59,4 @@ test_db.js
 test_db2.js
 
 data/showcase/
+.claude/worktrees/
