@@ -17,7 +17,7 @@ import {
     startScan, resumeScan, cancelScan, isScanning,
     getScan, getLatestScan, getBots, getTemplates, attribute, scannableChannels,
 } from '../../../../core/guild-analyzer.js';
-import { plan, apply, postPanels, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
+import { plan, apply, postPanels, postTwitchLinkPanel, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
 import { evaluate, retire, autoAttribute, acknowledgeExtraction, DATA_HOLDERS, DEFAULT_SOAK_HOURS } from '../../../../core/bot-retirement.js';
 import { QUESTIONS, CATALOGUE } from '../../../../core/takeover-questions.js';
 import { createLink } from '../../kabster.js';
@@ -309,6 +309,27 @@ router.post('/apply', async (req, res) => {
  * creates messages in the server, so it must be asked for by name and never ride along with a
  * config sweep. Carl-bot's originals are left where they are.
  */
+/**
+ * Post the "Link your Twitch" button. Like /panels, this WRITES A MESSAGE to the guild, so it is
+ * owner-only, asked for by name, and never rides along with a config apply.
+ */
+router.post('/twitch-link-panel', ownerOnly, async (req, res) => {
+    try {
+        const guild = resolveGuild(req, res);
+        if (!guild) return;
+
+        const channelId = String(req.body?.channelId ?? '');
+        if (!/^\d{17,20}$/.test(channelId)) return res.status(400).json({ error: 'Pick a channel first.' });
+
+        const result = await postTwitchLinkPanel(guild, channelId);
+        logger.info(`[Takeover] ${req.user?.id} posted the Twitch link panel in ${guild.name}`);
+        res.json({ success: true, ...result });
+    } catch (err) {
+        logger.error(`[API takeover] twitch link panel failed: ${err.message}`);
+        res.status(400).json({ error: err.message });
+    }
+});
+
 router.post('/panels', ownerOnly, async (req, res) => {
     try {
         const guild = resolveGuild(req, res);
