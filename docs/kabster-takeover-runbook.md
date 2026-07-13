@@ -299,20 +299,42 @@ idempotent. **Step 8 refuses to run until this is done.**
 
 ### Step 7 — The rest of the config
 Timezone (Friend Time) · Cat Bot channel · Ko-fi · FreeStuff · birthdays · CannaFriend · Throne.
-Ko-fi still needs its **webhook token** from Karabi's Ko-fi settings — that step stays blocked
-until it is supplied.
+**Ko-fi is no longer blocked** — Karabi supplied her webhook token (`5e39361f-981b-4b28-945a-f90ff37843a4`,
+answered `kofi=token`); `/kofi setup` + `/kofi tier` can run.
 
 ### Step 8 — Post the role panels *(posts messages — deliberate, separate action)*
-Rebuilds Carl-bot's four self-assign panels in `#self-assign-roles･ﾟ❀` as **buttons**: region (5),
-pronouns (4), platform (5), zodiac (12) — **26 roles**. Carl-bot's originals are left where they
-are; they simply stop responding when it leaves, and can be deleted afterwards.
+Rebuilds the self-assign panels in `#self-assign-roles･ﾟ❀` as **buttons**. Six panels:
+region (7, incl. restored 🕌 Middle East), pronouns (4), platform (5), zodiac (12), **timezone (12)**
+and **pings (5)**.
 
-The 🦒 **Africa** role is **already deleted** — Carl-bot's live panel still offers it and it silently
-does nothing. We drop it rather than carry the bug across. Recreate the role and re-add the option
-if it is still wanted.
+**No colour panel.** Karabi approved the clean-up with *"everything but colours!"* (answered
+`roles_ok=go`), so *Pick a name colour* is **not** posted — her seven existing colour roles stay as
+they are, pickerless, and no duplicates are renamed into colours. Enforced in code
+(`GUILD_PROFILES.skipPanels`), so it cannot be posted by accident.
 
-*(`/cat setup` and the tree carry-over are run here:
-`/tree plant name:Kababi height:190 last-watered-by:@you`)*
+The 🦒 **Africa** role was previously deleted and is now **restored** in the region panel (role
+`1466950520668422421`).
+
+**Also posted here (her answers):**
+- **Spare-role panel** — the 7 roles she named, verbatim: `Fortnite, Streamer, Minecraft, Party
+  Games, Among Us, 18-20, 21+` (answered `spare_roles=names`).
+- **Twitch link panel** — a "Link your Twitch" button in the self-assign channel (`twitch_member_link=panel`,
+  note *"self roles!"*). Her own Twitch links via the dashboard so her VIPs/mods map to **existing**
+  Discord roles (`twitch_roles=yes`, *"Existing ones please"*). Subscriber roles stay Discord-native.
+
+**The tree — a forest fire, not a carry-over.** Karabi changed her mind: she answered `tree=fresh`
+with the note *"We would like a forest fire natural disaster story"*. So the tree **does** reset now.
+The sequence (run at removal of Grow a Tree, so there aren't two trees visible):
+1. `/tree plant name:Kababi height:193 last-watered-by:@karabi` — carry the incumbent's live height
+   in so the fire has a real 193ft tree to consume.
+2. Trigger the **Forest fire** action (`POST /forest-fire`, owner-only, typed `BURN`). It burns the
+   193ft Kababi, posts the fire → green-shoot → sapling story, and pins the sapling. Levels, XP,
+   coins and sticker books all survive; the tree and gardener board do not.
+
+The tree minigames (bug net → sticker book, falling fruit → baskets → coins → community composter)
+ship with ours and are live.
+
+*(`/cat setup` is run at Cat Bot's removal, not here — both would spawn cats otherwise.)*
 
 ### Step 9 — Retire the bots *(one at a time, owner only, typed confirmation)*
 Each bot is re-gated **live** at the moment of removal — a plan that passed an hour ago proves
@@ -333,7 +355,32 @@ the rest. Retire **Pingcord last** — it is the one whose failure is loudest an
 ## 6. Before you start
 
 - [ ] **Say out loud** that OwO and Cat Bot progress resets (§3). Do it *before*, not after.
-      Grow a Tree does NOT reset — it carries over at 190ft.
-- [ ] Get the **Ko-fi webhook token**.
+- [ ] The tree resets too, on purpose — the **forest fire** story (§ step 8). Not a silent loss.
+- [x] ~~Get the Ko-fi webhook token~~ — supplied (`kofi=token`).
+- [x] ~~Hierarchy (step 0)~~ — verified live 2026-07-13: Kabbot @104, all 19 bots strictly below.
 - [ ] Do **step 0**. Nothing retires without it.
 - [ ] Leave **TANGIA**'s webhook in `#𝙩𝙩𝙨` alone.
+- [ ] Raise verification to **Medium** (`sec_verify=raise`, *"nothing too crazy"*). Leave **2FA off**
+      (`sec_2fa=off`, she finds it annoying). Leave the **ALT** role alone (`sec_alt=intended`).
+- [ ] She does **NOT** want, so do not switch on: automod/word-filters, welcome messages, reminders,
+      tags, D&D, CAH, TTS, social feeds, game-patch watcher, grow journal.
+
+## 7. The soak gate — why this is TWO sessions, not one *(added 2026-07-13)*
+
+The retirements cannot happen the same day as the config. The `soak` gate requires the replacement to
+have run **24h uninterrupted** with every other gate green, and the clock **has not started** —
+`guild_retire_state` is empty. This is correct: most of our replacements (OwO, counting, Nightbot,
+Cat Bot) are still OFF, because turning them on while the incumbent is present makes both bots reply.
+
+**Session 1 (today).** Apply the non-conflicting config, post the panels (step 8), run the tree fire,
+then open `?page=takeover` and evaluate each bot so the soak clocks **start**. Nothing is removed.
+
+**Session 2 (≥24h later).** Retire the bots one at a time (§ step 9), each re-gated live. Flip the
+**sequenced** replacements on as their incumbent leaves — OwO the moment OwO goes, counting as
+Counting Bot goes, Nightbot commands/autoresponses as Nightbot goes, `/cat setup` as Cat Bot goes.
+**Pingcord last.** Its `@everyone` go-live ping is the loudest thing to break, and our Karabi420
+subscription must be confirmed live before it leaves — this was the original gap.
+
+Compressing the soak (removing today) is a call only the owner can make, and it means skipping the
+one thing the soak proves: that our replacement ran correctly in *this* server before the original
+was burned. Given the conflicting features were never live here, that proof has real value.
