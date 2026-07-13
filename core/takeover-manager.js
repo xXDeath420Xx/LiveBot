@@ -20,6 +20,8 @@ import { PermissionFlagsBits } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import ReactionRoleManager from './reaction-role-manager.js';
+import { loadDecisions, summarizeDecisions } from './takeover-decisions.js';
+import { QUESTIONS } from './takeover-questions.js';
 
 /** X-Audit-Log-Reason must be ASCII — anything above 0x7E is rejected outright. */
 const ascii = (s) => String(s).replace(/[^\x20-\x7E]/g, '').slice(0, 400);
@@ -292,6 +294,23 @@ const GUILD_PROFILES = Object.freeze({
     nightbotAutoresponses: 'NIGHTBOT_AUTORESPONSES',
     panels: 'CARLBOT_PANELS',
     platformEmoji: 'PLATFORM_EMOJI',
+
+    // Panels she asked us NOT to put up.
+    //
+    // She approved the role clean-up with: "everything but colours!". That is prose, and prose is
+    // not something the code should be interpreting at runtime — so the reading is made HERE, once,
+    // by a human, with her words next to it, and reviewed like any other per-guild fact.
+    //
+    // Not posting is the reversible direction: her seven existing colour roles stay exactly as they
+    // are today (pickerless, which is how she has always had them), and no abandoned duplicates get
+    // renamed into new colours. If she meant something else, a panel we did not post costs one
+    // click to add, whereas fifteen roles renamed and a panel members have already used costs an
+    // afternoon to unpick.
+    skipPanels: ['Pick a name colour'],
+
+    // The seven spare roles, in her words: "Fortnite, Streamer, Minecraft, Party Games, Among Us,
+    // 18-20, 21+". Parsed from her answer at runtime (see decisions.spareRoleNames) — this is only
+    // the note that the count matches the seven the clean-up frees up.
   },
 });
 
@@ -311,6 +330,13 @@ export async function profileFor(guildId) {
     const TABLES = {
       PINGCORD_STREAMERS, NIGHTBOT_COMMANDS, NIGHTBOT_AUTORESPONSES, CARLBOT_PANELS, PLATFORM_EMOJI,
     };
+    // A panel the owner declined is filtered out HERE, at the single point every caller reads its
+    // panels from — plan(), postPanels() and the emoji step all go through this. Filtering in each of
+    // them instead would work right up until somebody adds a fourth caller and posts the panel she
+    // said no to.
+    const skip = new Set(p.skipPanels ?? []);
+    const panels = (TABLES[p.panels] ?? []).filter(pan => !skip.has(pan.name));
+
     return {
       source: 'hand-verified',
       selfAssignChannel: p.selfAssignChannel ?? null,
@@ -318,7 +344,8 @@ export async function profileFor(guildId) {
       streamers: TABLES[p.streamers] ?? [],
       nightbotCommands: TABLES[p.nightbotCommands] ?? [],
       nightbotAutoresponses: TABLES[p.nightbotAutoresponses] ?? [],
-      panels: TABLES[p.panels] ?? [],
+      panels,
+      skippedPanels: [...skip],
       platformEmoji: TABLES[p.platformEmoji] ?? [],
     };
   }
@@ -584,6 +611,9 @@ export async function plan(guild, opts = {}) {
   // depends on it is skipped entirely rather than offered with another guild's ids in it.
   const profile = await profileFor(guildId);
 
+  // What the owner asked for. Applied at the END, over the top of everything we worked out ourselves.
+  const decisions = await loadDecisions(guildId);
+
   // ── Counting ──
   const countingChannel = opts.countingChannel
     ?? guild.channels.cache.find(c => c.isTextBased?.() && nameMatches(c, /count/) && !nameMatches(c, /log/));
@@ -681,21 +711,33 @@ export async function plan(guild, opts = {}) {
     // state. That turns "start again from a 3ft sapling" from the only option into a CHOICE.
     const old = await readIncumbentTree(guild);
 
+    // Which of the two defensible answers she picked. Until she answers, we must not pick for her —
+    // but once she HAS, continuing to ask is not caution, it is not listening.
+    const treeChoice = decisions.value('tree');
+
     push('growtree', {
       label: STEPS.growtree.label,
       done: !!tree,
       carryOver: old,
-      // Not blocked and not a no-op: it is a decision only the owner can make, because the two
-      // answers are both defensible and we must not pick for her.
-      needsInput: tree ? null
+      treeChoice,
+      needsInput: tree || treeChoice ? null
         : old
           ? `the server's tree is "${old.name}" at ${old.size}ft — carry it over at that height, or start fresh? ` +
             `(/tree setup ${old.size} carries it; plain /tree plants a 3ft sapling)`
           : null,
-      noop: tree || old ? null : 'no setup needed — the first /tree plants the tree',
-      note: old
-        ? `read live from #${old.channelName}: "${old.name}", ${old.size}ft, last watered by <@${old.lastWateredBy}>`
-        : null,
+      // 'fresh' is not a config-apply. Burning a 193ft tree is the single most irreversible thing in
+      // the whole takeover, and it POSTS to the guild — so it is deliberate, like the panels: its own
+      // button, its own confirmation, never swept up by "apply all".
+      deliberate: tree || treeChoice !== 'fresh' ? null
+        : 'she chose to start fresh, with a forest fire to explain it — use the "Forest fire" action. '
+          + 'It burns the old tree, tells the story, and plants the sapling in one go. '
+          + 'Levels, XP, coins and sticker books all survive it.',
+      noop: tree || old || treeChoice ? null : 'no setup needed — the first /tree plants the tree',
+      note: [
+        old && `read live from #${old.channelName}: "${old.name}", ${old.size}ft, last watered by <@${old.lastWateredBy}>`,
+        treeChoice === 'carry' && old && `she chose to carry it over — /tree setup ${old.size}`,
+        treeChoice === 'fresh' && 'she chose a fresh start',
+      ].filter(Boolean).join(' · ') || null,
       replaces: byFeature.get('growtree').name,
     });
   }
@@ -877,7 +919,13 @@ export async function plan(guild, opts = {}) {
         : `ready — posts ${profile.panels.length} button panels` +
           (oldPanels.length ? `, then removes Carl-bot's ${oldPanels.length} old reaction panel(s) once ours are up` : '') +
           '. Use the "Post panels" action; it is the only step that writes to the guild.',
+      // A panel we are NOT posting has to be as visible as the ones we are. A silent omission looks
+      // exactly like a bug, and six months from now nobody remembers it was asked for.
+      skipped: profile.skippedPanels ?? [],
       note: profile.panels.map(p => `${p.name} (${p.roles.length})`).join(' · ')
+        + (profile.skippedPanels?.length
+          ? ` — NOT posting: ${profile.skippedPanels.join(', ')} (the owner declined it)`
+          : '')
         + (oldPanels.length
           ? ` — REMOVES (archived first): ${oldPanels.map(m => m.embeds[0]?.title ?? m.id).join(', ')}. `
             + 'Carl-bot panels keep showing their reactions after it leaves, so members would click a dead panel.'
@@ -906,6 +954,35 @@ export async function plan(guild, opts = {}) {
     });
   }
 
+  // ── What the owner actually said ──
+  //
+  // Applied LAST, over the top of everything the scan worked out for itself, because her answer wins.
+  // A step she declined is not "ready and we chose not to" — it is decided, and it must carry that
+  // decision into apply() so that nobody can run it by clicking "apply all" and never reading her
+  // page. Her note rides along on the step it concerns, so the operator cannot act on a step without
+  // seeing what she wrote next to it.
+  for (const s of steps) {
+    const dec = decisions.forStep(s.key);
+    if (dec.note) s.ownerNote = dec.note;
+    if (dec.declined) {
+      const q = QUESTIONS.find(x => x.key === dec.key);
+      const opt = q?.options?.find(o => o.v === dec.value);
+      s.declined = `the owner asked us not to — she answered "${opt?.label ?? dec.value}"`;
+    }
+  }
+
+  // Ko-fi's only real blocker was a token nobody but her could fetch. If she has pasted one, the
+  // step stops asking for it.
+  const kofiStep = steps.find(s => s.key === 'kofi');
+  if (kofiStep && decisions.kofiToken && !kofiStep.done) {
+    kofiStep.needsInput = null;
+    kofiStep.tokenSupplied = true;
+    kofiStep.note = 'the owner has supplied her Ko-fi webhook token — /kofi setup can run now';
+  } else if (kofiStep && decisions.kofiTokenMalformed) {
+    kofiStep.blocked = `the Ko-fi answer is not a token: "${decisions.kofiTokenMalformed}" — a Ko-fi `
+      + 'verification token is a UUID (Ko-fi → Settings → API)';
+  }
+
   // Give every step one honest status instead of overloading `blocked`. The distinction matters:
   // only `blocked` is a problem. `ready` is one click away; `sequenced`/`deliberate`/`needs-input`
   // are working-as-intended; `no-op` needs nothing at all.
@@ -919,9 +996,13 @@ export async function plan(guild, opts = {}) {
     steps,
     // "actionable" = the config-only steps apply() will run. Deliberate (panel-posting) and
     // sequenced (post-removal) steps are intentionally excluded — they are not blocked, just not
-    // part of a bulk config apply.
+    // part of a bulk config apply. `declined` never reaches here: statusOf() ranks it above `ready`.
     actionable: steps.filter(s => s.status === 'ready'),
     summary: summarize(steps),
+    // Her answers, at the TOP of the plan rather than buried in a table somewhere else. A plan you
+    // can work through without ever encountering what the owner asked for is a plan that will get
+    // something she said no to.
+    decisions: summarizeDecisions(decisions),
     readiness: await readiness(guild).catch(err => {
       logger.warn(`[Takeover] readiness failed: ${err.message}`);
       return null;
@@ -935,6 +1016,10 @@ export async function plan(guild, opts = {}) {
  */
 export function statusOf(s) {
   if (s.done) return 'done';
+  // Above every other reason, including `blocked`. Whether we COULD do it stops being interesting
+  // the moment the owner has said not to, and a declined step that also happens to be blocked must
+  // not read as "fix the blocker and go".
+  if (s.declined) return 'declined';
   if (s.blocked) return 'blocked';       // a real problem: missing perms, unreadable state, gone roles
   if (s.sequenced) return 'sequenced';   // works, but do it after a named event (e.g. OwO removal)
   if (s.deliberate) return 'deliberate'; // ready, but posts to the guild — its own explicit action
@@ -946,7 +1031,7 @@ export function statusOf(s) {
 const STATUS_LABELS = Object.freeze({
   done: 'done', ready: 'ready to apply', sequenced: 'after removal',
   deliberate: 'deliberate action', 'needs-input': 'needs your input', 'no-op': 'no setup needed',
-  blocked: 'blocked',
+  declined: 'the owner said no', blocked: 'blocked',
 });
 
 /** Roll the per-step statuses up into counts, so the UI can lead with an honest headline. */
@@ -973,8 +1058,23 @@ export async function apply(guild, planned, only) {
   const wanted = new Set(only ?? planned.actionable.map(s => s.key));
   const results = [];
 
+  // Re-read her answers HERE rather than trusting the ones baked into `planned`. Same reasoning as
+  // the profile guard below: `planned` arrives from the caller and could be stale — made before she
+  // answered, or hand-built — and "the owner said no" is not a thing we are willing to lose to a
+  // stale object. She can also change her mind between planning and applying, and the later answer
+  // is the real one.
+  const decisions = await loadDecisions(guild.id);
+
   for (const step of planned.steps) {
     if (!wanted.has(step.key)) continue;
+
+    const dec = decisions.forStep(step.key);
+    if (dec.declined) {
+      results.push({ ...step, outcome: `refused: the owner declined this (${dec.key} = ${dec.value})` });
+      logger.warn(`[Takeover] refused "${step.key}" on ${guild.name} — the owner answered ${dec.key}=${dec.value}`);
+      continue;
+    }
+
     const status = step.status ?? statusOf(step);
     if (status === 'done') { results.push({ ...step, outcome: 'already-done' }); continue; }
     // Only 'ready' steps are config-applies. Everything else is intentionally hand-driven:

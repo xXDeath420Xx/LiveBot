@@ -116,6 +116,10 @@
             </div>
         </div>
 
+        <!-- What the owner asked for. ABOVE the steps on purpose: a plan you can work through without
+             ever meeting her answers is a plan that will eventually do something she said no to. -->
+        <div id="toDecisions" hidden></div>
+
         <!-- Readiness: the full picture around the steps. Populated by Preview plan. -->
         <div id="toReadiness" hidden>
             <div class="to-ready-grid">
@@ -201,6 +205,27 @@
   #takeoverPage .to-sum-chip.no { color:#ED4245; border-color:#6f2f2f; }
   #takeoverPage .to-step.to-st-blocked { border-color:#6f2f2f; }
   #takeoverPage .to-step.to-st-ready { border-color:#3a3f7a; }
+  /* Declined: visibly stood down, not broken. It is not a failure — it is an answer. */
+  #takeoverPage .to-step.to-st-declined { border-color:#3a3d47; opacity:.72; }
+  #takeoverPage .to-tag.off { background:#3a3d47; color:#c9d1d9; }
+
+  /* Her own words, wherever they appear. Quoted, warm, and never confusable with our prose. */
+  #takeoverPage .to-ownernote { margin-top:.35rem; padding:.35rem .6rem; border-left:2px solid #5865F2;
+    background:#1a1c24; border-radius:0 6px 6px 0; font-size:.86rem; color:#dcdfe4; font-style:italic; }
+
+  #takeoverPage .to-sub { margin:.9rem 0 .45rem; font-size:.82rem; text-transform:uppercase;
+    letter-spacing:.03em; color:#8b8f9e; font-weight:600; }
+  #takeoverPage .to-dec-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));
+    gap:.6rem; margin:.8rem 0; }
+  #takeoverPage .to-dec { border:1px solid #2c2f3a; border-radius:8px; background:#14161c; padding:.6rem .75rem; }
+  #takeoverPage .to-dec-q { font-size:.78rem; color:#8b8f9e; }
+  #takeoverPage .to-dec-a { font-weight:600; color:#e6e9ef; margin-top:.15rem; }
+  #takeoverPage .to-dec-n { margin-top:.3rem; font-size:.83rem; color:#c9d1d9; font-style:italic; }
+  #takeoverPage .to-feats { display:flex; flex-wrap:wrap; gap:.35rem; }
+  #takeoverPage .to-feat { font-size:.8rem; padding:.2rem .55rem; border-radius:999px; border:1px solid #2c2f3a; }
+  #takeoverPage .to-feat.yes { background:#16301f; border-color:#2c5c3c; color:#8be0a4; }
+  #takeoverPage .to-feat.no  { background:#241a1a; border-color:#5c3030; color:#e0a0a0; }
+  #takeoverPage .to-feat.ask { background:#2a2618; border-color:#5c5230; color:#e0cf8b; }
 </style>
 
 <script>
@@ -383,14 +408,16 @@
     deliberate:    { cls:'seq',  text:'deliberate action' },
     'needs-input': { cls:'warn', text:'needs your input' },
     'no-op':       { cls:'ok',   text:'no setup needed' },
+    declined:      { cls:'off',  text:'she said no' },
     blocked:       { cls:'no',   text:'blocked' },
   };
-  // The reason line comes from whichever intent field is set — not always `blocked`.
-  const stepReason = (s) => s.blocked || s.sequenced || s.deliberate || s.needsInput || s.noop || null;
+  // The reason line comes from whichever intent field is set — not always `blocked`. `declined` goes
+  // first: once she has said no, why we COULD have done it is not the interesting part.
+  const stepReason = (s) => s.declined || s.blocked || s.sequenced || s.deliberate || s.needsInput || s.noop || null;
 
   function renderHeadline(p) {
     const c = p.summary?.counts || {};
-    const order = ['done','ready','deliberate','sequenced','needs-input','no-op','blocked'];
+    const order = ['done','ready','deliberate','sequenced','needs-input','no-op','declined','blocked'];
     const chips = order.filter(k => c[k]).map(k => {
       const m = STATUS_META[k];
       return `<span class="to-sum-chip ${m.cls}">${c[k]} ${esc(m.text)}</span>`;
@@ -402,7 +429,61 @@
     return `<div class="to-sum">${lead}<div class="to-sum-chips">${chips}</div></div>`;
   }
 
+  /**
+   * The owner's answers.
+   *
+   * Rendered above the steps, and the "does not want" list is given equal weight to the "wants" —
+   * a takeover goes wrong by switching on something nobody asked for far more often than by
+   * forgetting something they did.
+   */
+  function renderDecisions(d) {
+    const box = $('toDecisions');
+    if (!d) { box.hidden = true; return; }
+    box.hidden = false;
+
+    const pct = Math.round(((d.questions.answered + d.catalogue.answered)
+      / (d.questions.total + d.catalogue.total)) * 100);
+    const head = d.complete
+      ? `<span class="good">Answered in full.</span>`
+      : `<span class="warn">${pct}% answered</span> — ${d.questions.answered}/${d.questions.total} questions, `
+        + `${d.catalogue.answered}/${d.catalogue.total} features.`;
+
+    const rows = (d.decisions || []).map(x => `
+      <div class="to-dec">
+        <div class="to-dec-q">${esc(x.q)}</div>
+        <div class="to-dec-a">${x.answer ? esc(x.answer) : '<span class="to-muted">—</span>'}</div>
+        ${x.note ? `<div class="to-dec-n">“${esc(x.note)}”</div>` : ''}
+      </div>`).join('');
+
+    const chips = (list, cls) => list.map(c => `<span class="to-feat ${cls}">${esc(c.name)}</span>`).join('');
+
+    box.innerHTML = `
+      <div class="to-card">
+        <h4 class="to-h">What she asked for</h4>
+        <div class="to-muted">${head}</div>
+        <div class="to-dec-grid">${rows}</div>
+
+        ${d.spareRoleNames?.length ? `
+          <h5 class="to-sub">The spare roles, in her words</h5>
+          <div class="to-feats">${d.spareRoleNames.map(n => `<span class="to-feat yes">${esc(n)}</span>`).join('')}</div>` : ''}
+
+        <h5 class="to-sub">Wants switched on <span class="to-muted">(${d.wanted.length})</span></h5>
+        <div class="to-feats">${chips(d.wanted, 'yes') || '<span class="to-muted">—</span>'}</div>
+
+        <h5 class="to-sub">Does <em>not</em> want <span class="to-muted">(${d.unwanted.length})</span></h5>
+        <div class="to-feats">${chips(d.unwanted, 'no') || '<span class="to-muted">—</span>'}</div>
+        <div class="to-muted">Leave these alone. Switching one on because it seemed like a nice idea is the
+          exact thing she was asked in order to prevent.</div>
+
+        ${d.needsExplaining?.length ? `
+          <h5 class="to-sub">She wants these explained <span class="to-muted">(${d.needsExplaining.length})</span></h5>
+          <div class="to-feats">${chips(d.needsExplaining, 'ask')}</div>
+          <div class="to-muted">These are questions back to us, not answers. Answer them before assuming either way.</div>` : ''}
+      </div>`;
+  }
+
   function renderSteps(p) {
+    renderDecisions(p.decisions);
     renderReadiness(p.readiness);
     const headline = renderHeadline(p);
     $('toSteps').innerHTML = headline + (p.steps.map(s => {
@@ -419,6 +500,7 @@
           ${s.replaces ? `<span class="to-muted"> — replaces ${esc(s.replaces)}</span>` : ''}
           ${s.note ? `<div class="to-muted">${esc(s.note)}</div>` : ''}
           ${reason ? `<div class="to-muted">${esc(reason)}</div>` : ''}
+          ${s.ownerNote ? `<div class="to-ownernote">“${esc(s.ownerNote)}” <span class="to-muted">— the owner</span></div>` : ''}
         </div>
       </div>`;
     }).join('') || '<div class="to-muted">Nothing to do.</div>');

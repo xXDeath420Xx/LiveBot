@@ -42,9 +42,15 @@ const [rows] = await db.execute(
 await db.end();
 
 const byKey = new Map(rows.map(r => [r.item_key, r]));
-const answered = rows.filter(r => r.value || r.note?.trim()).length;
 
-console.log(`\n  ${answered} of ${QUESTIONS.length} answered\n`);
+// Count the two lists SEPARATELY. Counting every row in the table against QUESTIONS.length swept the
+// 45 catalogue answers in with the 16 questions and cheerfully reported "61 of 16 answered".
+const has = (k) => { const r = byKey.get(k); return !!(r && (r.value || r.note?.trim())); };
+const answeredQ = QUESTIONS.filter(q => has(q.key)).length;
+const answeredC = CATALOGUE.filter(c => byKey.get(c.key)?.value).length;
+
+console.log(`\n  ${answeredQ} of ${QUESTIONS.length} questions · ${answeredC} of ${CATALOGUE.length} features`
+  + `${answeredQ === QUESTIONS.length && answeredC === CATALOGUE.length ? '  — answered in full' : ''}\n`);
 
 let section = null;
 for (const q of QUESTIONS) {
