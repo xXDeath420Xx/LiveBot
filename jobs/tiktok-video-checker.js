@@ -18,7 +18,7 @@ async function checkTikTokVideos(client) {
             SELECT DISTINCT s.streamer_id, s.username, s.profile_image_url, s.platform,
                    sub.guild_id, sub.announcement_channel_id AS video_announcement_channel_id,
                    sub.tiktok_vod_notifications AS notify_videos,
-                   sub.custom_message
+                   sub.custom_message, sub.tiktok_embed_video, sub.ping_role_id
             FROM streamers s
             JOIN subscriptions sub ON s.streamer_id = sub.streamer_id
             WHERE s.platform = 'tiktok'
@@ -139,6 +139,24 @@ async function checkStreamerVideos(client, streamerData) {
                 }
             }
 
+            // Skip videos older than 24 hours (prevent backfill spam on first enable)
+            if (video.posted_at) {
+                const videoAge = Date.now() - new Date(video.posted_at).getTime();
+                if (videoAge > 24 * 60 * 60 * 1000) {
+                    // Still save to DB so we don't re-check, but don't announce
+                    await pool.execute(`
+                        INSERT INTO tiktok_video_posts
+                        (streamer_id, video_id, video_url, title, description, thumbnail_url,
+                         view_count, like_count, share_count, comment_count, posted_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [streamer_id, video.video_id, video.url || null, (video.title || '').substring(0, 500),
+                        (video.description || '').substring(0, 2000), video.thumbnail || null,
+                        video.views || 0, video.likes || 0, video.shares || 0, video.comments || 0, postedAtMysql]);
+                    logger.info(`[TikTok Video Checker] Skipping old video ${video.video_id} from ${username} (${Math.round(videoAge / 3600000)}h old)`);
+                    continue;
+                }
+            }
+
             await pool.execute(`
                 INSERT INTO tiktok_video_posts
                 (streamer_id, video_id, video_url, title, description, thumbnail_url,
@@ -182,7 +200,8 @@ async function checkStreamerVideos(client, streamerData) {
  * Announce a new video to a guild
  */
 async function announceVideo(client, subscription, video, username, profileImageUrl) {
-    const { guild_id, video_announcement_channel_id, custom_message } = subscription;
+    const { guild_id, video_announcement_channel_id, custom_message, tiktok_embed_video, ping_role_id } = subscription;
+    const embedVideo = tiktok_embed_video !== 0; // Default true
 
     let guild = null;
     let announcingClient = client;
@@ -222,23 +241,29 @@ async function announceVideo(client, subscription, video, username, profileImage
         caption = caption.substring(0, 497) + '...';
     }
 
-    // Build ping content from custom_message if it contains mentions
+    // Build ping content from custom_message — placed as message content (not inside embed)
+    // Escape Discord markdown in dynamic values to prevent formatting issues (e.g. kateooo_ losing the underscore)
+    const escMd = str => str.replace(/([_*~`|\\])/g, '\\$1');
     let pingContent = '';
     if (custom_message) {
-        // Extract any mentions from custom message
         pingContent = custom_message
-            .replace(/{username}/g, username)
-            .replace(/{url}/g, '')
-            .replace(/{title}/g, video.title || '')
-            .replace(/{description}/g, '')
+            .replace(/{username}/g, escMd(username))
+            .replace(/{streamer}/g, escMd(username))
+            .replace(/{url}/g, video.url || '')
+            .replace(/{title}/g, escMd(video.title || ''))
+            .replace(/{description}/g, escMd(caption || ''))
+            .replace(/{everyone}/g, '@everyone')
+            .replace(/{here}/g, '@here')
             .trim();
     }
 
-    // Build embed description with caption + ping at the end
-    let embedDescription = caption || 'Check out this new TikTok!';
-    if (pingContent) {
-        embedDescription += '\n\n' + pingContent;
+    // Prepend ping role mention if configured
+    if (ping_role_id) {
+        const mention = ping_role_id === 'everyone' ? '@everyone' : `<@&${ping_role_id}>`;
+        pingContent = pingContent ? `${mention} ${pingContent}` : mention;
     }
+
+    let embedDescription = caption || 'Check out this new TikTok!';
 
     // Create FreshTok-style embed
     const embed = new EmbedBuilder()
@@ -262,37 +287,38 @@ async function announceVideo(client, subscription, video, username, profileImage
 
     const row = new ActionRowBuilder().addComponents(viewButton, analyticsButton);
 
-    // Download the video file from TikTok
-    const videoFile = await downloadTikTokVideo(video.url);
-
     // Build message payload
     const messagePayload = {
+        content: pingContent || undefined,
         embeds: [embed],
         components: [row]
     };
 
-    if (videoFile && videoFile.buffer) {
-        // Discord's default file upload limit is 8MB for regular servers
-        // 25MB requires Nitro boost level 2, 100MB requires level 3
-        const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB
+    if (embedVideo) {
+        // Download and attach the video file
+        const videoFile = await downloadTikTokVideo(video.url);
 
-        if (videoFile.size <= MAX_FILE_SIZE) {
-            // Add video file to the same message
-            const attachment = new AttachmentBuilder(videoFile.buffer, {
-                name: `${username}_${video.video_id}.mp4`
-            });
-            messagePayload.files = [attachment];
+        if (videoFile && videoFile.buffer) {
+            const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB default Discord limit
 
-            logger.info(`[TikTok Video Checker] Uploading video file for ${username} (${(videoFile.size / 1024 / 1024).toFixed(2)}MB)`);
+            if (videoFile.size <= MAX_FILE_SIZE) {
+                const attachment = new AttachmentBuilder(videoFile.buffer, {
+                    name: `${username}_${video.video_id}.mp4`
+                });
+                messagePayload.files = [attachment];
+                logger.info(`[TikTok Video Checker] Uploading video file for ${username} (${(videoFile.size / 1024 / 1024).toFixed(2)}MB)`);
+            } else {
+                logger.warn(`[TikTok Video Checker] Video too large (${(videoFile.size / 1024 / 1024).toFixed(2)}MB), using URL instead`);
+                messagePayload.content = (messagePayload.content ? messagePayload.content + '\n' : '') + video.url;
+            }
         } else {
-            // Video too large, include URL in content instead
-            logger.warn(`[TikTok Video Checker] Video too large (${(videoFile.size / 1024 / 1024).toFixed(2)}MB), using URL instead`);
-            messagePayload.content = video.url;
+            logger.warn(`[TikTok Video Checker] Failed to download video, using URL instead`);
+            messagePayload.content = (messagePayload.content ? messagePayload.content + '\n' : '') + video.url;
         }
     } else {
-        // Download failed, include URL in content instead
-        logger.warn(`[TikTok Video Checker] Failed to download video, using URL instead`);
-        messagePayload.content = video.url;
+        // Link only — include TikTok URL in message content (no video download)
+        messagePayload.content = (messagePayload.content ? messagePayload.content + '\n' : '') + video.url;
+        logger.info(`[TikTok Video Checker] Link-only mode for ${username} in guild ${guild_id}`);
     }
 
     // Send single message with video + embed + button

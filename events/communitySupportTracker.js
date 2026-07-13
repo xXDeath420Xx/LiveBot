@@ -156,7 +156,9 @@ export default {
             }
 
             // React to confirm tracking
-            await message.react('\u2705').catch(() => {});
+            await message.react('\u2705').catch(err => {
+                logger.warn(`[CommunitySupport] Failed to react to message ${message.id} in ${channelId}: ${err.message}`);
+            });
 
             // Reply with point breakdown
             if (results.length > 0) {
@@ -174,7 +176,18 @@ export default {
                     .setFooter({ text: 'Community Support Tracker' })
                     .setTimestamp();
 
-                await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } }).catch(() => {});
+                // Try reply first (preserves the visual link to the source message). If reply fails
+                // (e.g. source message was deleted by another handler mid-flight), fall back to a
+                // plain channel send so the user still sees the confirmation.
+                const sent = await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } }).catch(err => {
+                    logger.warn(`[CommunitySupport] Reply failed for message ${message.id} in ${channelId}: ${err.message} — falling back to channel send`);
+                    return null;
+                });
+                if (!sent) {
+                    await message.channel.send({ embeds: [embed] }).catch(err => {
+                        logger.error(`[CommunitySupport] Fallback channel send also failed for ${channelId}: ${err.message}`);
+                    });
+                }
             }
 
         } catch (error) {

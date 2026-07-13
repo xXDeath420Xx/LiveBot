@@ -6,9 +6,14 @@ set -euo pipefail
 
 PREFIX="2604:2dc0:200:163b::/64"   # this server's routed OVH /64
 
-echo "==> 1) net.ipv6.ip_nonlocal_bind=1 (allow bind() to unconfigured addresses)"
+echo "==> 1) sysctls: allow non-local bind + enable IPv6 on loopback (needed for the"
+echo "        AnyIP route to attach to dev lo)"
 sysctl -w net.ipv6.ip_nonlocal_bind=1
-echo 'net.ipv6.ip_nonlocal_bind=1' > /etc/sysctl.d/99-ytdlp-ipv6.conf
+sysctl -w net.ipv6.conf.lo.disable_ipv6=0
+cat > /etc/sysctl.d/99-ytdlp-ipv6.conf <<SYSCTL
+net.ipv6.ip_nonlocal_bind=1
+net.ipv6.conf.lo.disable_ipv6=0
+SYSCTL
 
 echo "==> 2) AnyIP: make the whole ${PREFIX} locally deliverable (this boot)"
 ip route replace local "$PREFIX" dev lo
@@ -22,6 +27,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+ExecStartPre=/sbin/sysctl -w net.ipv6.conf.lo.disable_ipv6=0
 ExecStart=/sbin/ip route replace local ${PREFIX} dev lo
 RemainAfterExit=yes
 

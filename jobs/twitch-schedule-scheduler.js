@@ -6,9 +6,11 @@ let scheduledTask = null;
 const scheduleManagers = new Map(); // Map of botId -> manager
 
 /**
- * Start the Twitch schedule sync scheduler
- * Runs every 6 hours to sync Twitch schedules to Discord
- * Supports multi-bot system - creates managers for all bots
+ * Start the Twitch schedule sync scheduler.
+ * Cron ticks every 5 minutes; each sync config's sync_interval_minutes field
+ * is checked inside processAllSyncs() so guilds can configure any cadence
+ * from 15 minutes to once a week.
+ * Supports multi-bot system - creates managers for all bots.
  * @param {Client} client - Discord client instance (default bot)
  */
 export function startTwitchScheduleScheduler(client) {
@@ -34,8 +36,8 @@ export function startTwitchScheduleScheduler(client) {
     return;
   }
 
-  // Schedule to run every 6 hours (at :00 of every 6th hour)
-  scheduledTask = cron.schedule('0 */6 * * *', async () => {
+  // Tick every 5 minutes — per-sync sync_interval_minutes filters inside processAllSyncs
+  scheduledTask = cron.schedule('*/5 * * * *', async () => {
     logger.info('[TwitchScheduleScheduler] Running Twitch schedule sync check');
 
     // Process schedules for all bots
@@ -54,7 +56,7 @@ export function startTwitchScheduleScheduler(client) {
     logger.info('[TwitchScheduleScheduler] Completed Twitch schedule sync check');
   });
 
-  logger.info(`[TwitchScheduleScheduler] Twitch schedule scheduler started for ${scheduleManagers.size} bot(s) (runs every 6 hours, multi-bot support enabled)`);
+  logger.info(`[TwitchScheduleScheduler] Twitch schedule scheduler started for ${scheduleManagers.size} bot(s) (ticks every 5 min, per-sync intervals enforced in processAllSyncs)`);
 
   // Run immediately on startup (after a 10 second delay to let bot fully initialize)
   setTimeout(async () => {

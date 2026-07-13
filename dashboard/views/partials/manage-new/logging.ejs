@@ -4,6 +4,16 @@
 const currentSettings = locals.settings || {};
 const enabledLogs = JSON.parse(currentSettings.enabled_logs || '[]');
 const categoryChannels = JSON.parse(currentSettings.log_categories || '{}');
+const eventColors = JSON.parse(currentSettings.event_colors || '{}');
+const defaultColorMap = {
+    messageDelete: '#ED4245', messageUpdate: '#ED4245',
+    memberUpdate: '#5865F2', memberLeave: '#ED4245', memberKick: '#ED4245',
+    voiceUpdate: '#FEE75C',
+    channelCreate: '#57F287', channelDelete: '#ED4245', channelUpdate: '#5865F2',
+    ban: '#ED4245', unban: '#57F287', moderation: '#ED4245',
+    roleCreate: '#57F287', roleDelete: '#ED4245', roleUpdate: '#5865F2',
+    tickets: '#5865F2', xp: '#57F287', giveaway: '#FEE75C', starboard: '#FEE75C', http: '#5865F2'
+};
 const logCategories = [
     // Core Message Events
     { key: 'messageDelete', label: 'Message Deletions', icon: '💬', category: 'Messages' },
@@ -100,8 +110,9 @@ const logCategories = [
                 <table class="data-table w-full">
                     <thead>
                         <tr>
-                            <th class="w-1/3">Log Category</th>
-                            <th class="w-24 text-center">Enable</th>
+                            <th class="w-1/4">Log Category</th>
+                            <th class="w-20 text-center">Enable</th>
+                            <th class="w-16 text-center">Color</th>
                             <th>Channel Override</th>
                         </tr>
                     </thead>
@@ -112,7 +123,7 @@ const logCategories = [
                             const catItems = logCategories.filter(c => c.category === category);
                         %>
                             <tr class="bg-dark-600">
-                                <td colspan="3" class="py-2 px-4">
+                                <td colspan="4" class="py-2 px-4">
                                     <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider"><%= category %></span>
                                 </td>
                             </tr>
@@ -132,6 +143,13 @@ const logCategories = [
                                             checked: enabledLogs.includes(cat.key),
                                             size: 'sm'
                                         }) %>
+                                    </td>
+                                    <td class="text-center">
+                                        <input type="color"
+                                            name="event_colors[<%= cat.key %>]"
+                                            value="<%= eventColors[cat.key] || defaultColorMap[cat.key] || '#5865F2' %>"
+                                            class="w-8 h-8 rounded cursor-pointer border border-dark-400 bg-transparent"
+                                            title="Embed color for <%= cat.label %>">
                                     </td>
                                     <td>
                                         <select name="log_categories[<%= cat.key %>]" class="form-input w-full text-sm">
@@ -234,7 +252,8 @@ document.getElementById('logging-form')?.addEventListener('submit', async functi
     const data = {
         log_channel_id: formData.get('log_channel_id'),
         enabled_logs: [],
-        log_categories: {}
+        log_categories: {},
+        event_colors: {}
     };
 
     // Collect enabled logs
@@ -242,12 +261,18 @@ document.getElementById('logging-form')?.addEventListener('submit', async functi
         if (key) data.enabled_logs.push(key);
     });
 
-    // Collect category channels
+    // Collect category channels and event colors
     for (const [key, value] of formData.entries()) {
         if (key.startsWith('log_categories[')) {
             const catKey = key.match(/\[(.+)\]/)?.[1];
             if (catKey && value) {
                 data.log_categories[catKey] = value;
+            }
+        }
+        if (key.startsWith('event_colors[')) {
+            const catKey = key.match(/\[(.+)\]/)?.[1];
+            if (catKey && value) {
+                data.event_colors[catKey] = value;
             }
         }
     }

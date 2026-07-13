@@ -3,6 +3,7 @@ import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { logInfraction } from './moderation-manager.js';
 import { safeJsonArray, safeJsonObject } from '../utils/safeJson.js';
+import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
 
 // Memory limits to prevent unbounded growth
 const MAX_RULES_CACHE = 5000;
@@ -516,6 +517,7 @@ async function addHeat(message, heat, reason) {
 
 async function takeHeatAction(message, action) {
     if (!message.guild || !message.member) return;
+    if (isProtectedFromBanCommands(message.author?.id)) return;
 
     const reason = `Automod: Reached heat threshold of ${action.threshold}.`;
     try {

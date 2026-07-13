@@ -1,0 +1,1063 @@
+<style>
+/* Emoji Manager Styles */
+.em-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.em-stat-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: 14px;
+    padding: 20px 16px;
+    text-align: center;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.em-stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #7c3aed 0%, #a78bfa 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.em-stat-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(167, 139, 250, 0.4);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(167, 139, 250, 0.15);
+}
+
+.em-stat-card:hover::before { opacity: 1; }
+
+.em-stat-label {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+    font-weight: 500;
+}
+
+.em-stat-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.em-progress-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.em-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #7c3aed, #a78bfa);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.em-progress-fill.warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.em-progress-fill.danger { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+/* Section Cards */
+.em-section {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.em-section-header {
+    background: rgba(167, 139, 250, 0.08);
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.em-section-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+}
+
+.em-section-header i { font-size: 1.1rem; color: #a78bfa; }
+
+.em-section-body {
+    padding: 20px;
+}
+
+/* Grid of emoji/sticker items */
+.em-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+}
+
+.em-grid.sticker-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+.em-item {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px;
+    text-align: center;
+    transition: all 0.2s ease;
+    position: relative;
+    cursor: default;
+}
+
+.em-item:hover {
+    background: rgba(0, 0, 0, 0.35);
+    border-color: rgba(167, 139, 250, 0.3);
+    transform: translateY(-2px);
+}
+
+.em-item img {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+    margin-bottom: 6px;
+    border-radius: 4px;
+}
+
+.em-item.sticker-item img {
+    width: 80px;
+    height: 80px;
+}
+
+.em-item-name {
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.8);
+    word-break: break-all;
+    line-height: 1.2;
+    font-weight: 500;
+}
+
+.em-item-tags {
+    font-size: 0.65rem;
+    color: rgba(255, 255, 255, 0.4);
+    margin-top: 2px;
+}
+
+.em-item-actions {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: none;
+    gap: 4px;
+}
+
+.em-item:hover .em-item-actions { display: flex; }
+
+.em-item-actions button {
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    transition: all 0.15s ease;
+}
+
+.em-btn-edit {
+    background: rgba(96, 165, 250, 0.3);
+    color: #60a5fa;
+}
+.em-btn-edit:hover { background: rgba(96, 165, 250, 0.5); }
+
+.em-btn-delete {
+    background: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+.em-btn-delete:hover { background: rgba(239, 68, 68, 0.5); }
+
+.em-managed-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    font-size: 0.55rem;
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+/* Upload button */
+.em-upload-btn {
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.em-upload-btn:hover {
+    background: linear-gradient(135deg, #6d28d9, #5b21b6);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+}
+
+/* Modal */
+.em-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(4px);
+}
+
+.em-modal-overlay.active { display: flex; }
+
+.em-modal {
+    background: #1a1d23;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+}
+
+.em-modal-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.em-modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.em-modal-close {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px;
+}
+.em-modal-close:hover { color: #fff; }
+
+.em-modal-body { padding: 24px; }
+
+/* Drop zone */
+.em-dropzone {
+    border: 2px dashed rgba(167, 139, 250, 0.3);
+    border-radius: 12px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 16px;
+    position: relative;
+}
+
+.em-dropzone:hover,
+.em-dropzone.dragover {
+    border-color: #a78bfa;
+    background: rgba(167, 139, 250, 0.08);
+}
+
+.em-dropzone input[type="file"] {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.em-dropzone-icon {
+    font-size: 2rem;
+    color: rgba(167, 139, 250, 0.5);
+    margin-bottom: 8px;
+}
+
+.em-dropzone-text {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.em-dropzone-hint {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: 4px;
+}
+
+.em-preview-area {
+    display: none;
+    text-align: center;
+    margin-bottom: 16px;
+}
+
+.em-preview-area img {
+    max-width: 128px;
+    max-height: 128px;
+    border-radius: 8px;
+    border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.em-preview-area.sticker-preview img {
+    max-width: 160px;
+    max-height: 160px;
+}
+
+/* Form fields */
+.em-field {
+    margin-bottom: 14px;
+}
+
+.em-field label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 6px;
+}
+
+.em-field input,
+.em-field textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    color: #fff;
+    font-size: 0.85rem;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.em-field input:focus,
+.em-field textarea:focus {
+    outline: none;
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15);
+}
+
+.em-field .em-hint {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.4);
+    margin-top: 4px;
+}
+
+.em-modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.em-btn-cancel {
+    padding: 8px 18px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.em-btn-cancel:hover { background: rgba(255, 255, 255, 0.12); }
+
+.em-btn-submit {
+    padding: 8px 22px;
+    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.em-btn-submit:hover {
+    background: linear-gradient(135deg, #6d28d9, #5b21b6);
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
+}
+.em-btn-submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.em-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.85rem;
+}
+
+.em-empty i {
+    font-size: 2rem;
+    margin-bottom: 10px;
+    display: block;
+    opacity: 0.4;
+}
+
+.em-loading {
+    text-align: center;
+    padding: 40px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.em-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    z-index: 10001;
+    animation: emSlideIn 0.3s ease;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+.em-toast.success { background: #059669; color: white; }
+.em-toast.error { background: #dc2626; color: white; }
+
+@keyframes emSlideIn {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* Confirm dialog */
+.em-confirm-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 10002;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(4px);
+}
+
+.em-confirm-overlay.active { display: flex; }
+
+.em-confirm-box {
+    background: #1a1d23;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 14px;
+    padding: 24px;
+    max-width: 380px;
+    text-align: center;
+}
+
+.em-confirm-box h4 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    color: #fff;
+}
+
+.em-confirm-box p {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+    margin: 0 0 20px;
+}
+
+.em-confirm-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.em-btn-danger {
+    padding: 8px 22px;
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.em-btn-danger:hover { background: linear-gradient(135deg, #b91c1c, #991b1b); }
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-icons"></i>
+                <span>Emoji & Sticker Manager</span>
+            </div>
+            <div class="page-section-subtitle">Upload, rename, and delete server emojis and stickers</div>
+        </div>
+    </div>
+
+    <!-- Slot Usage -->
+    <div class="em-stats-grid" id="emStatsGrid">
+        <div class="em-stat-card">
+            <div class="em-stat-label">Static Emojis</div>
+            <div class="em-stat-value" id="emStaticCount">-</div>
+            <div class="em-progress-bar"><div class="em-progress-fill" id="emStaticBar" style="width: 0%"></div></div>
+        </div>
+        <div class="em-stat-card">
+            <div class="em-stat-label">Animated Emojis</div>
+            <div class="em-stat-value" id="emAnimatedCount">-</div>
+            <div class="em-progress-bar"><div class="em-progress-fill" id="emAnimatedBar" style="width: 0%"></div></div>
+        </div>
+        <div class="em-stat-card">
+            <div class="em-stat-label">Stickers</div>
+            <div class="em-stat-value" id="emStickerCount">-</div>
+            <div class="em-progress-bar"><div class="em-progress-fill" id="emStickerBar" style="width: 0%"></div></div>
+        </div>
+        <div class="em-stat-card">
+            <div class="em-stat-label">Boost Level</div>
+            <div class="em-stat-value" id="emBoostLevel">-</div>
+        </div>
+    </div>
+
+    <!-- Static Emojis -->
+    <div class="em-section">
+        <div class="em-section-header">
+            <h3><i class="fas fa-smile"></i> Static Emojis</h3>
+            <button class="em-upload-btn" onclick="openUploadModal('emoji')">
+                <i class="fas fa-plus"></i> Upload Emoji
+            </button>
+        </div>
+        <div class="em-section-body" id="emStaticGrid">
+            <div class="em-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+        </div>
+    </div>
+
+    <!-- Animated Emojis -->
+    <div class="em-section">
+        <div class="em-section-header">
+            <h3><i class="fas fa-magic"></i> Animated Emojis</h3>
+            <button class="em-upload-btn" onclick="openUploadModal('emoji')">
+                <i class="fas fa-plus"></i> Upload Emoji
+            </button>
+        </div>
+        <div class="em-section-body" id="emAnimatedGrid">
+            <div class="em-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+        </div>
+    </div>
+
+    <!-- Stickers -->
+    <div class="em-section">
+        <div class="em-section-header">
+            <h3><i class="fas fa-sticky-note"></i> Stickers</h3>
+            <button class="em-upload-btn" onclick="openUploadModal('sticker')">
+                <i class="fas fa-plus"></i> Upload Sticker
+            </button>
+        </div>
+        <div class="em-section-body" id="emStickerGrid">
+            <div class="em-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Modal -->
+<div class="em-modal-overlay" id="emUploadModal">
+    <div class="em-modal">
+        <div class="em-modal-header">
+            <h3 id="emUploadTitle">Upload Emoji</h3>
+            <button class="em-modal-close" onclick="closeUploadModal()">&times;</button>
+        </div>
+        <div class="em-modal-body">
+            <div class="em-dropzone" id="emDropzone">
+                <input type="file" id="emFileInput" accept="image/png,image/jpeg,image/gif,image/webp">
+                <div class="em-dropzone-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                <div class="em-dropzone-text">Drop image here or click to browse</div>
+                <div class="em-dropzone-hint" id="emDropzoneHint">PNG, JPEG, GIF &middot; Max 256KB</div>
+            </div>
+            <div class="em-preview-area" id="emPreviewArea">
+                <img id="emPreviewImg" src="" alt="Preview">
+            </div>
+            <div class="em-field">
+                <label for="emNameInput">Name</label>
+                <input type="text" id="emNameInput" placeholder="emoji_name" maxlength="32">
+                <div class="em-hint" id="emNameHint">2-32 characters, letters, numbers, underscores only</div>
+            </div>
+            <!-- Sticker-only fields -->
+            <div class="em-field" id="emTagsField" style="display:none">
+                <label for="emTagsInput">Related Emoji</label>
+                <input type="text" id="emTagsInput" placeholder="wave" maxlength="200">
+                <div class="em-hint">A related default emoji name (e.g. wave, smile, heart)</div>
+            </div>
+            <div class="em-field" id="emDescField" style="display:none">
+                <label for="emDescInput">Description</label>
+                <textarea id="emDescInput" placeholder="What does this sticker represent?" rows="2" maxlength="100"></textarea>
+            </div>
+        </div>
+        <div class="em-modal-footer">
+            <button class="em-btn-cancel" onclick="closeUploadModal()">Cancel</button>
+            <button class="em-btn-submit" id="emUploadSubmit" onclick="submitUpload()" disabled>Upload</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div class="em-modal-overlay" id="emEditModal">
+    <div class="em-modal">
+        <div class="em-modal-header">
+            <h3 id="emEditTitle">Edit</h3>
+            <button class="em-modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="em-modal-body">
+            <div class="em-field">
+                <label for="emEditName">Name</label>
+                <input type="text" id="emEditName" maxlength="32">
+            </div>
+            <div class="em-field" id="emEditTagsField" style="display:none">
+                <label for="emEditTags">Related Emoji</label>
+                <input type="text" id="emEditTags" maxlength="200">
+            </div>
+            <div class="em-field" id="emEditDescField" style="display:none">
+                <label for="emEditDesc">Description</label>
+                <textarea id="emEditDesc" rows="2" maxlength="100"></textarea>
+            </div>
+        </div>
+        <div class="em-modal-footer">
+            <button class="em-btn-cancel" onclick="closeEditModal()">Cancel</button>
+            <button class="em-btn-submit" id="emEditSubmit" onclick="submitEdit()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Delete -->
+<div class="em-confirm-overlay" id="emConfirmDelete">
+    <div class="em-confirm-box">
+        <h4>Delete <span id="emDeleteName"></span>?</h4>
+        <p>This cannot be undone.</p>
+        <div class="em-confirm-actions">
+            <button class="em-btn-cancel" onclick="closeConfirm()">Cancel</button>
+            <button class="em-btn-danger" id="emConfirmBtn" onclick="confirmDelete()">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const GUILD_ID = '<%= guild.id %>';
+    const API_BASE = '/api/guilds/' + GUILD_ID + '/emoji-manager';
+
+    let uploadType = 'emoji';
+    let selectedFile = null;
+    let editType = null;
+    let editId = null;
+    let deleteType = null;
+    let deleteId = null;
+
+    loadData();
+
+    async function loadData() {
+        try {
+            const resp = await fetch(API_BASE, { credentials: 'include' });
+            const data = await resp.json();
+            if (!data.success) throw new Error(data.error);
+
+            renderStats(data.limits);
+            renderEmojis('emStaticGrid', data.emojis.static);
+            renderEmojis('emAnimatedGrid', data.emojis.animated);
+            renderStickers(data.stickers);
+        } catch (err) {
+            document.getElementById('emStaticGrid').textContent = 'Failed to load data';
+            showToast(err.message, 'error');
+        }
+    }
+
+    function renderStats(limits) {
+        var staticPct = limits.emojiSlots ? Math.round(limits.staticUsed / limits.emojiSlots * 100) : 0;
+        var animPct = limits.emojiSlots ? Math.round(limits.animatedUsed / limits.emojiSlots * 100) : 0;
+        var stickerPct = limits.stickerSlots ? Math.round(limits.stickersUsed / limits.stickerSlots * 100) : 0;
+
+        document.getElementById('emStaticCount').textContent = limits.staticUsed + '/' + limits.emojiSlots;
+        document.getElementById('emAnimatedCount').textContent = limits.animatedUsed + '/' + limits.emojiSlots;
+        document.getElementById('emStickerCount').textContent = limits.stickersUsed + '/' + limits.stickerSlots;
+        document.getElementById('emBoostLevel').textContent = limits.premiumTier;
+
+        setBar('emStaticBar', staticPct);
+        setBar('emAnimatedBar', animPct);
+        setBar('emStickerBar', stickerPct);
+    }
+
+    function setBar(id, pct) {
+        var bar = document.getElementById(id);
+        bar.style.width = pct + '%';
+        bar.className = 'em-progress-fill' + (pct >= 90 ? ' danger' : pct >= 70 ? ' warning' : '');
+    }
+
+    function escAttr(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    function renderEmojis(containerId, emojis) {
+        var container = document.getElementById(containerId);
+        if (!emojis.length) {
+            container.textContent = '';
+            var empty = document.createElement('div');
+            empty.className = 'em-empty';
+            empty.innerHTML = '<i class="fas fa-smile-wink"></i>';
+            empty.appendChild(document.createTextNode('No emojis yet'));
+            container.appendChild(empty);
+            return;
+        }
+        var grid = document.createElement('div');
+        grid.className = 'em-grid';
+        emojis.forEach(function(e) {
+            var item = document.createElement('div');
+            item.className = 'em-item';
+            item.title = e.name;
+
+            if (e.managed) {
+                var badge = document.createElement('div');
+                badge.className = 'em-managed-badge';
+                badge.textContent = 'INT';
+                item.appendChild(badge);
+            }
+
+            if (!e.managed) {
+                var actions = document.createElement('div');
+                actions.className = 'em-item-actions';
+                var editBtn = document.createElement('button');
+                editBtn.className = 'em-btn-edit';
+                editBtn.title = 'Rename';
+                editBtn.innerHTML = '<i class="fas fa-pen"></i>';
+                editBtn.addEventListener('click', function(ev) { ev.stopPropagation(); openEditModal('emoji', e.id, e.name); });
+                var delBtn = document.createElement('button');
+                delBtn.className = 'em-btn-delete';
+                delBtn.title = 'Delete';
+                delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+                delBtn.addEventListener('click', function(ev) { ev.stopPropagation(); openConfirm('emoji', e.id, e.name); });
+                actions.appendChild(editBtn);
+                actions.appendChild(delBtn);
+                item.appendChild(actions);
+            }
+
+            var img = document.createElement('img');
+            img.src = e.url;
+            img.alt = e.name;
+            img.loading = 'lazy';
+            item.appendChild(img);
+
+            var nameEl = document.createElement('div');
+            nameEl.className = 'em-item-name';
+            nameEl.textContent = ':' + e.name + ':';
+            item.appendChild(nameEl);
+
+            grid.appendChild(item);
+        });
+        container.textContent = '';
+        container.appendChild(grid);
+    }
+
+    function renderStickers(stickers) {
+        var container = document.getElementById('emStickerGrid');
+        if (!stickers.length) {
+            container.textContent = '';
+            var empty = document.createElement('div');
+            empty.className = 'em-empty';
+            empty.innerHTML = '<i class="fas fa-sticky-note"></i>';
+            empty.appendChild(document.createTextNode('No stickers yet'));
+            container.appendChild(empty);
+            return;
+        }
+        var grid = document.createElement('div');
+        grid.className = 'em-grid sticker-grid';
+        stickers.forEach(function(s) {
+            var item = document.createElement('div');
+            item.className = 'em-item sticker-item';
+            item.title = s.name;
+
+            var actions = document.createElement('div');
+            actions.className = 'em-item-actions';
+            var editBtn = document.createElement('button');
+            editBtn.className = 'em-btn-edit';
+            editBtn.title = 'Edit';
+            editBtn.innerHTML = '<i class="fas fa-pen"></i>';
+            editBtn.addEventListener('click', function(ev) { ev.stopPropagation(); openEditModal('sticker', s.id, s.name, s.tags, s.description); });
+            var delBtn = document.createElement('button');
+            delBtn.className = 'em-btn-delete';
+            delBtn.title = 'Delete';
+            delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            delBtn.addEventListener('click', function(ev) { ev.stopPropagation(); openConfirm('sticker', s.id, s.name); });
+            actions.appendChild(editBtn);
+            actions.appendChild(delBtn);
+            item.appendChild(actions);
+
+            var img = document.createElement('img');
+            img.src = s.url;
+            img.alt = s.name;
+            img.loading = 'lazy';
+            item.appendChild(img);
+
+            var nameEl = document.createElement('div');
+            nameEl.className = 'em-item-name';
+            nameEl.textContent = s.name;
+            item.appendChild(nameEl);
+
+            if (s.tags) {
+                var tagsEl = document.createElement('div');
+                tagsEl.className = 'em-item-tags';
+                tagsEl.textContent = s.tags;
+                item.appendChild(tagsEl);
+            }
+
+            grid.appendChild(item);
+        });
+        container.textContent = '';
+        container.appendChild(grid);
+    }
+
+    // Upload modal
+    window.openUploadModal = function(type) {
+        uploadType = type;
+        selectedFile = null;
+        document.getElementById('emUploadTitle').textContent = type === 'sticker' ? 'Upload Sticker' : 'Upload Emoji';
+        document.getElementById('emFileInput').accept = type === 'sticker' ? 'image/png' : 'image/png,image/jpeg,image/gif,image/webp';
+        document.getElementById('emDropzoneHint').textContent = type === 'sticker'
+            ? 'PNG or APNG \u00b7 Max 512KB \u00b7 320\u00d7320 recommended'
+            : 'PNG, JPEG, GIF, WebP \u00b7 Max 256KB';
+        document.getElementById('emNameHint').textContent = type === 'sticker'
+            ? '2-30 characters'
+            : '2-32 characters, letters, numbers, underscores only';
+        document.getElementById('emNameInput').maxLength = type === 'sticker' ? 30 : 32;
+        document.getElementById('emTagsField').style.display = type === 'sticker' ? '' : 'none';
+        document.getElementById('emDescField').style.display = type === 'sticker' ? '' : 'none';
+        document.getElementById('emPreviewArea').style.display = 'none';
+        document.getElementById('emPreviewArea').className = type === 'sticker' ? 'em-preview-area sticker-preview' : 'em-preview-area';
+        document.getElementById('emNameInput').value = '';
+        document.getElementById('emTagsInput').value = '';
+        document.getElementById('emDescInput').value = '';
+        document.getElementById('emFileInput').value = '';
+        document.getElementById('emUploadSubmit').disabled = true;
+        document.getElementById('emUploadModal').classList.add('active');
+    };
+
+    window.closeUploadModal = function() {
+        document.getElementById('emUploadModal').classList.remove('active');
+    };
+
+    // File handling
+    var dropzone = document.getElementById('emDropzone');
+    var fileInput = document.getElementById('emFileInput');
+
+    dropzone.addEventListener('dragover', function(e) { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', function() { dropzone.classList.remove('dragover'); });
+    dropzone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', function() {
+        if (fileInput.files.length) handleFile(fileInput.files[0]);
+    });
+
+    function handleFile(file) {
+        var maxSize = uploadType === 'sticker' ? 512 * 1024 : 256 * 1024;
+        if (file.size > maxSize) {
+            showToast('File too large (' + Math.round(file.size / 1024) + 'KB). Max: ' + (maxSize / 1024) + 'KB', 'error');
+            return;
+        }
+        selectedFile = file;
+
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('emPreviewImg').src = e.target.result;
+            document.getElementById('emPreviewArea').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+
+        var nameInput = document.getElementById('emNameInput');
+        if (!nameInput.value) {
+            var name = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_]/g, '_').substring(0, 32);
+            if (name.length < 2) name = 'emoji_' + name;
+            nameInput.value = name;
+        }
+        validateUploadForm();
+    }
+
+    document.getElementById('emNameInput').addEventListener('input', validateUploadForm);
+    document.getElementById('emTagsInput').addEventListener('input', validateUploadForm);
+
+    function validateUploadForm() {
+        var name = document.getElementById('emNameInput').value.trim();
+        var hasFile = !!selectedFile;
+        var valid = hasFile && name.length >= 2;
+
+        if (uploadType === 'emoji') {
+            valid = valid && /^[a-zA-Z0-9_]{2,32}$/.test(name);
+        } else {
+            valid = valid && name.length <= 30 && document.getElementById('emTagsInput').value.trim().length > 0;
+        }
+        document.getElementById('emUploadSubmit').disabled = !valid;
+    }
+
+    window.submitUpload = async function() {
+        if (!selectedFile) return;
+
+        var btn = document.getElementById('emUploadSubmit');
+        btn.disabled = true;
+        btn.textContent = 'Uploading...';
+
+        var formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('name', document.getElementById('emNameInput').value.trim());
+
+        if (uploadType === 'sticker') {
+            formData.append('tags', document.getElementById('emTagsInput').value.trim());
+            formData.append('description', document.getElementById('emDescInput').value.trim());
+        }
+
+        var endpoint = uploadType === 'sticker' ? API_BASE + '/stickers' : API_BASE + '/emojis';
+
+        try {
+            var resp = await fetch(endpoint, { method: 'POST', credentials: 'include', body: formData });
+            var data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Upload failed');
+
+            showToast((uploadType === 'sticker' ? 'Sticker' : 'Emoji') + ' uploaded successfully!', 'success');
+            closeUploadModal();
+            loadData();
+        } catch (err) {
+            showToast(err.message, 'error');
+            btn.disabled = false;
+        }
+        btn.textContent = 'Upload';
+    };
+
+    // Edit modal
+    window.openEditModal = function(type, id, name, tags, description) {
+        editType = type;
+        editId = id;
+        document.getElementById('emEditTitle').textContent = type === 'sticker' ? 'Edit Sticker' : 'Rename Emoji';
+        document.getElementById('emEditName').value = name;
+        document.getElementById('emEditTagsField').style.display = type === 'sticker' ? '' : 'none';
+        document.getElementById('emEditDescField').style.display = type === 'sticker' ? '' : 'none';
+        if (type === 'sticker') {
+            document.getElementById('emEditTags').value = tags || '';
+            document.getElementById('emEditDesc').value = description || '';
+        }
+        document.getElementById('emEditModal').classList.add('active');
+    };
+
+    window.closeEditModal = function() {
+        document.getElementById('emEditModal').classList.remove('active');
+    };
+
+    window.submitEdit = async function() {
+        var btn = document.getElementById('emEditSubmit');
+        btn.disabled = true;
+
+        var body = { name: document.getElementById('emEditName').value.trim() };
+        if (editType === 'sticker') {
+            body.tags = document.getElementById('emEditTags').value.trim();
+            body.description = document.getElementById('emEditDesc').value.trim();
+        }
+
+        var endpoint = editType === 'sticker'
+            ? API_BASE + '/stickers/' + editId
+            : API_BASE + '/emojis/' + editId;
+
+        try {
+            var resp = await fetch(endpoint, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            var data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Edit failed');
+
+            showToast('Updated successfully!', 'success');
+            closeEditModal();
+            loadData();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+        btn.disabled = false;
+    };
+
+    // Delete confirmation
+    window.openConfirm = function(type, id, name) {
+        deleteType = type;
+        deleteId = id;
+        document.getElementById('emDeleteName').textContent = name;
+        document.getElementById('emConfirmDelete').classList.add('active');
+    };
+
+    window.closeConfirm = function() {
+        document.getElementById('emConfirmDelete').classList.remove('active');
+    };
+
+    window.confirmDelete = async function() {
+        var btn = document.getElementById('emConfirmBtn');
+        btn.disabled = true;
+        btn.textContent = 'Deleting...';
+
+        var endpoint = deleteType === 'sticker'
+            ? API_BASE + '/stickers/' + deleteId
+            : API_BASE + '/emojis/' + deleteId;
+
+        try {
+            var resp = await fetch(endpoint, { method: 'DELETE', credentials: 'include' });
+            var data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || 'Delete failed');
+
+            showToast('Deleted successfully!', 'success');
+            closeConfirm();
+            loadData();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+        btn.disabled = false;
+        btn.textContent = 'Delete';
+    };
+
+    function showToast(msg, type) {
+        var existing = document.querySelector('.em-toast');
+        if (existing) existing.remove();
+        var toast = document.createElement('div');
+        toast.className = 'em-toast ' + type;
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(function() { toast.remove(); }, 4000);
+    }
+})();
+</script>

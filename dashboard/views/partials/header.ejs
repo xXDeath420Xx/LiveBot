@@ -54,6 +54,8 @@
             <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
                 <li class="nav-item"><a class="nav-link" href="/commands">Commands</a></li>
                 <li class="nav-item"><a class="nav-link" href="/status">Status</a></li>
+                <li class="nav-item"><a class="nav-link" href="/cah">🃏 CAH</a></li>
+                <li class="nav-item"><a class="nav-link" href="/sprites">👾 Sprites</a></li>
                 <li class="nav-item"><a class="nav-link" href="/donate">Donate</a></li>
             </ul>
 
@@ -61,6 +63,7 @@
                 <% if (user) { %>
                     <% if (user.isSuperAdmin) { %>
                         <a href="/super-admin" class="btn btn-warning"><i class="fas fa-user-shield me-2"></i>Super Admin</a>
+                        <a href="/admin/cah" class="btn btn-warning">🃏 CAH Admin</a>
                     <% } %>
                     <% if (user.canCreateBots || user.isSuperAdmin) { %>
                         <a href="/bot-management" class="btn btn-info"><i class="fas fa-robot me-2"></i>Bot Management</a>

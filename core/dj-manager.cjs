@@ -52,6 +52,7 @@ var child_process_1 = require("child_process");
 var geminiApi = require("../utils/gemini-api.cjs");
 var musicMetrics = require("./music-metrics.cjs");
 var db_1 = require("../utils/db.cjs");
+var musicErrorReasons = require("../utils/music-error-reasons.cjs");
 // --- Piper TTS Configuration ---
 var PIPER_PATH = process.env.PIPER_PATH || '/home/death/.local/bin/piper';
 var PIPER_MODEL_DIR = process.env.PIPER_MODEL_DIR || '/home/death/CertiFriedUtility/piper_models';
@@ -664,33 +665,20 @@ var DJManager = /** @class */ (function () {
 
     DJManager.prototype.onPlayerError = function (queue, error) {
         return __awaiter(this, void 0, void 0, function () {
-            var channel, reason, errMsg;
+            var channel, reason;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
+                        // Only handle errors for DJ-mode sessions (matches onPlayerFinish/onQueueEnd pattern)
+                        if (!queue.metadata || !queue.metadata.djMode) {
+                            return [2 /*return*/];
+                        }
                         logger_1.default.error("[Player Error] Guild: ".concat(queue.guild.id, ", Error: ").concat(error.message));
                         return [4 /*yield*/, this.client.channels.cache.get(queue.metadata.channelId)];
                     case 1:
                         channel = _a.sent();
                         if (channel && channel.isTextBased()) {
-                            // Parse error message to provide user-friendly reason
-                            reason = "Unknown error";
-                            errMsg = error.message || "";
-                            if (errMsg.includes("account") && errMsg.includes("terminated")) {
-                                reason = "The YouTube channel was terminated";
-                            } else if (errMsg.includes("Terms of Service") || errMsg.includes("ToS")) {
-                                reason = "Video removed for Terms of Service violation";
-                            } else if (errMsg.includes("Video unavailable")) {
-                                reason = "Video is no longer available";
-                            } else if (errMsg.includes("private")) {
-                                reason = "Video is private";
-                            } else if (errMsg.includes("age") || errMsg.includes("Sign in")) {
-                                reason = "Video is age-restricted";
-                            } else if (errMsg.includes("country") || errMsg.includes("region")) {
-                                reason = "Video is region-locked";
-                            } else if (errMsg.includes("copyright")) {
-                                reason = "Video removed due to copyright";
-                            }
+                            reason = musicErrorReasons.getPlayerErrorReason(error.message);
                             channel.send("\u23ED\uFE0F | Skipped unavailable track: " + reason);
                         }
                         return [2 /*return*/];

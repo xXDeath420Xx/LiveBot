@@ -53,7 +53,7 @@ export async function handleSearch(interaction) {
         return interaction.reply({ content: permissionCheck.message, ephemeral: true });
     }
 
-    const query = interaction.options.getString("query");
+    let query = interaction.options.getString("query");
     const { member } = interaction;
 
     if (!member.voice.channel) {
@@ -61,6 +61,15 @@ export async function handleSearch(interaction) {
     }
 
     await interaction.deferReply();
+
+    // Strip Spotify share-flow params (flow_ctx, etc.) that break auto-routing
+    if (query && (query.includes('open.spotify.com/') || query.startsWith('spotify:'))) {
+        try {
+            const url = new URL(query);
+            for (const key of [...url.searchParams.keys()]) url.searchParams.delete(key);
+            query = url.toString();
+        } catch { /* not a parseable URL — pass through as-is */ }
+    }
 
     try {
         const results = await interaction.client.player.search(query, { requestedBy: interaction.user });

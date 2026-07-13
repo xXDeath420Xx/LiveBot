@@ -71,7 +71,7 @@
         <h1 class="error-title">Something Went Wrong</h1>
 
         <p class="error-message">
-            <%= error || 'An unexpected error occurred. Our team has been notified and will look into it.' %>
+            <%= (typeof error !== 'undefined' && error) ? error : (typeof message !== 'undefined' && message) ? message : 'An unexpected error occurred. Our team has been notified and will look into it.' %>
         </p>
 
         <div class="error-actions">

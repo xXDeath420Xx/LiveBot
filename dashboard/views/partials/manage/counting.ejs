@@ -1,0 +1,199 @@
+<%# Counting game — per-channel rules. API-driven; needs `guild` and `channels` in locals. %>
+<div class="page-section" id="countingPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-sort-numeric-up"></i>
+                <span>Counting</span>
+            </div>
+            <div class="page-section-subtitle">
+                Members count upward together. Choose whether a wrong number resets the count,
+                or is simply deleted so the run never breaks.
+            </div>
+        </div>
+    </div>
+
+    <div id="cntError" class="alert alert-danger" hidden></div>
+
+    <!-- Add -->
+    <div class="cnt-card">
+        <h3 class="cnt-h"><i class="fas fa-plus"></i> Start counting in a channel</h3>
+        <div class="cnt-add">
+            <select id="cntChannel" class="form-control">
+                <option value="">Choose a channel…</option>
+                <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).forEach(c => { %>
+                    <option value="<%= c.id %>">#<%= c.name %></option>
+                <% }) %>
+            </select>
+            <input type="number" id="cntStart" class="form-control" min="0" value="1" placeholder="Start at">
+            <button class="btn btn-primary" id="cntAdd">Enable</button>
+        </div>
+        <small class="form-help">
+            Taking over from another bot mid-run? Set <em>Start at</em> to the next number it expects,
+            or use <strong>Set count</strong> below afterwards.
+        </small>
+        <span class="cnt-status" id="cntAddStatus"></span>
+    </div>
+
+    <div id="cntChannels"></div>
+</div>
+
+<style>
+  #countingPage .cnt-card { background:#1e2028; border:1px solid #2c2f3a; border-radius:10px; padding:1.1rem 1.25rem; margin-bottom:1rem; }
+  #countingPage .cnt-h { margin:0 0 .5rem; font-size:1rem; font-weight:600; }
+  #countingPage .cnt-add { display:grid; grid-template-columns: 1fr 9rem auto; gap:.5rem; }
+  @media (max-width:800px){ #countingPage .cnt-add { grid-template-columns:1fr; } }
+  #countingPage .cnt-status { font-size:.85rem; color:#57F287; min-height:1em; display:block; margin-top:.4rem; }
+  #countingPage .cnt-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+  #countingPage .cnt-num { font-size:1.6rem; font-weight:700; }
+  #countingPage .cnt-muted { color:#8b8f9e; font-size:.85rem; }
+  #countingPage .cnt-modes { display:grid; gap:.55rem; margin-top:1rem; }
+  #countingPage .cnt-toggle { display:flex; align-items:flex-start; gap:.6rem; font-size:.9rem; }
+  #countingPage .cnt-toggle input { margin-top:.25rem; }
+  #countingPage .cnt-toggle .hint { color:#8b8f9e; font-size:.82rem; }
+  #countingPage .cnt-row { display:flex; gap:.5rem; align-items:center; margin-top:.9rem; flex-wrap:wrap; }
+  #countingPage .cnt-off { opacity:.55; }
+  #countingPage .radio-row { display:flex; gap:1.2rem; flex-wrap:wrap; }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('countingPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/counting${p}`;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  async function req(url, options) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const el = $('cntError'); if (!m) { el.hidden = true; return; } el.textContent = m; el.hidden = false; };
+  const flash = (el, m, ok = true) => { el.textContent = m; el.style.color = ok ? '#57F287' : '#ED4245'; setTimeout(() => { el.textContent = ''; }, 3000); };
+
+  const TOGGLES = [
+    ['delete_chatter',      'Delete non-numeric messages',   'Keeps the channel pure numbers. Only applies in delete mode.'],
+    ['allow_same_user',     'Allow counting twice in a row', 'Off means one person cannot post two numbers back to back.'],
+    ['react_on_valid',      'React ✅ on a valid count',      'Turn off for a silent channel.'],
+    ['announce_milestones', 'Announce milestones',           'Celebrates 25, 50, 100, 200, 500… and pays economy coins.'],
+  ];
+
+  function channelCard(c) {
+    const del = c.fail_mode === 'delete';
+    const name = c.channel_name ? `#${esc(c.channel_name)}` : `channel ${esc(c.channel_id)}`;
+
+    const toggles = TOGGLES.map(([key, label, hint]) => `
+      <label class="cnt-toggle ${key === 'delete_chatter' && !del ? 'cnt-off' : ''}">
+        <input type="checkbox" data-toggle="${key}" data-channel="${c.channel_id}"
+               ${c[key] ? 'checked' : ''} ${key === 'delete_chatter' && !del ? 'disabled' : ''}>
+        <span><strong>${label}</strong><br><span class="hint">${hint}</span></span>
+      </label>`).join('');
+
+    return `<div class="cnt-card" data-card="${c.channel_id}">
+      <div class="cnt-head">
+        <div>
+          <h3 class="cnt-h">${name} ${c.is_active ? '' : '<span class="cnt-muted">(disabled)</span>'}</h3>
+          <div class="cnt-muted">Highest ever: ${c.highest_count} · resets: ${c.reset_count}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="cnt-num">${c.next_number}</div>
+          <div class="cnt-muted">next number</div>
+        </div>
+      </div>
+
+      <div class="cnt-modes">
+        <div><strong>When someone posts the wrong number</strong></div>
+        <div class="radio-row">
+          <label class="cnt-toggle">
+            <input type="radio" name="mode-${c.channel_id}" data-mode="delete" data-channel="${c.channel_id}" ${del ? 'checked' : ''}>
+            <span><strong>Delete it</strong><br><span class="hint">The count never resets. Anyone may post the correct number. Needs Manage Messages.</span></span>
+          </label>
+          <label class="cnt-toggle">
+            <input type="radio" name="mode-${c.channel_id}" data-mode="reset" data-channel="${c.channel_id}" ${del ? '' : 'checked'}>
+            <span><strong>Reset to 0</strong><br><span class="hint">The classic game. Announces the break.</span></span>
+          </label>
+        </div>
+        ${toggles}
+      </div>
+
+      <div class="cnt-row">
+        <input type="number" min="0" class="form-control" style="max-width:9rem"
+               data-setcount-input="${c.channel_id}" placeholder="Last number">
+        <button class="btn btn-secondary btn-sm" data-setcount="${c.channel_id}">Set count</button>
+        <button class="btn btn-danger btn-sm" data-disable="${c.channel_id}" ${c.is_active ? '' : 'disabled'}>Disable</button>
+        <span class="cnt-status" data-status="${c.channel_id}"></span>
+      </div>
+    </div>`;
+  }
+
+  async function load() {
+    try {
+      showError('');
+      const { channels } = await req(api('/'));
+      $('cntChannels').innerHTML = channels.length
+        ? channels.map(channelCard).join('')
+        : '<div class="cnt-card cnt-muted">No counting channels yet.</div>';
+    } catch (err) { showError(err.message); }
+  }
+
+  async function saveMode(channelId, fields, statusEl) {
+    try {
+      await req(api(`/${channelId}/mode`), { method: 'PUT', body: JSON.stringify(fields) });
+      flash(statusEl, 'Saved.');
+      await load();
+    } catch (err) {
+      flash(statusEl, err.message, false);
+      await load(); // snap the control back to the real stored value
+    }
+  }
+
+  $('cntAdd').addEventListener('click', async () => {
+    try {
+      await req(api('/'), { method: 'POST', body: JSON.stringify({
+        channel_id: $('cntChannel').value,
+        start: Number($('cntStart').value || 1),
+      }) });
+      flash($('cntAddStatus'), 'Counting enabled.');
+      await load();
+    } catch (err) { flash($('cntAddStatus'), err.message, false); }
+  });
+
+  root.addEventListener('change', (e) => {
+    const t = e.target;
+    const channelId = t.dataset.channel;
+    if (!channelId) return;
+    const status = root.querySelector(`[data-status="${channelId}"]`);
+
+    if (t.dataset.mode) return saveMode(channelId, { fail_mode: t.dataset.mode }, status);
+    if (t.dataset.toggle) return saveMode(channelId, { [t.dataset.toggle]: t.checked }, status);
+  });
+
+  root.addEventListener('click', async (e) => {
+    const setBtn = e.target.closest('[data-setcount]');
+    if (setBtn) {
+      const id = setBtn.dataset.setcount;
+      const input = root.querySelector(`[data-setcount-input="${id}"]`);
+      const status = root.querySelector(`[data-status="${id}"]`);
+      if (input.value === '') return flash(status, 'Enter the last number posted.', false);
+      try {
+        const r = await req(api(`/${id}/count`), { method: 'POST', body: JSON.stringify({ last_number: Number(input.value) }) });
+        flash(status, `Next number is ${r.next_number}.`);
+        await load();
+      } catch (err) { flash(status, err.message, false); }
+      return;
+    }
+
+    const offBtn = e.target.closest('[data-disable]');
+    if (offBtn) {
+      if (!confirm('Stop counting in this channel? Stats are kept.')) return;
+      try { await req(api(`/${offBtn.dataset.disable}/disable`), { method: 'POST' }); await load(); }
+      catch (err) { showError(err.message); }
+    }
+  });
+
+  load();
+})();
+</script>

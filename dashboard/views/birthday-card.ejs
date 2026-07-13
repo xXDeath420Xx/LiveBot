@@ -1,0 +1,1847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= card.card_name || (card.username + "'s Card") %> | CertiFried</title>
+    <meta property="og:title" content="<%= card.card_name || ('Sign ' + card.username + "'s Card!") %>">
+    <meta property="og:description" content="<%= signatures.length %> people have signed so far. Add your message!">
+    <meta property="og:image" content="<%= card.avatar_url || '' %>">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Pacifico&family=Dancing+Script:wght@400;700&family=Lobster&family=Caveat:wght@400;700&family=Permanent+Marker&family=Satisfy&family=Great+Vibes&family=Sacramento&family=Architects+Daughter&family=Indie+Flower&family=Patrick+Hand&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Quicksand:wght@400;600;700&family=Roboto:wght@400;500;700&family=Muli:wght@400;600;700&family=Source+Code+Pro:wght@400;600&family=Annie+Use+Your+Telescope&family=Kalam:wght@400;700&family=Reenie+Beanie&family=Bad+Script&family=Swanky+and+Moo+Moo&family=Fredericka+the+Great&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0b0f11; --card-bg: #141a1e; --border: rgba(255,255,255,0.08); --accent: #a78bfa; --text: #ffffff; --muted: rgba(255,255,255,0.5); --pink: #FF69B4; --gold: #FFD700; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: rgb(0,0,0); color: var(--text); min-height: 100vh; }
+        .container { max-width: 100%; margin: 0; padding: 0; }
+
+        /* Card Header — dynamic theming from card data */
+        .card-header { text-align: center; padding: 30px 20px; border: none; border-radius: 0; margin-bottom: 0; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); }
+        .card-header::before { display: none; }
+        .avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); margin: 0 auto 12px; display: block; object-fit: cover; }
+        .avatar-placeholder { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); margin: 0 auto 12px; background: var(--card-bg); display: flex; align-items: center; justify-content: center; font-size: 2rem; }
+        .card-title { font-size: 36px; font-weight: 700; margin-bottom: 4px; }
+        .card-title span { background: none; -webkit-background-clip: unset; -webkit-text-fill-color: unset; }
+        .card-subtitle { font-size: 16px; margin-bottom: 8px; }
+
+        /* Note effects (animated overlays per card) */
+        .note-effect { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 1; }
+        .note-effect span { position: absolute; display: block; animation: note-float linear infinite; opacity: 0; }
+        .note-effect-hearts span::before { content: '❤️'; font-size: 16px; }
+        .note-effect-confetti span::before { content: '🎊'; font-size: 14px; }
+        .note-effect-stars span::before { content: '⭐'; font-size: 14px; }
+        .note-effect-sparkles span::before { content: '✨'; font-size: 14px; }
+        .note-effect span:nth-child(1) { left: 10%; animation-duration: 4s; animation-delay: 0s; }
+        .note-effect span:nth-child(2) { left: 30%; animation-duration: 5s; animation-delay: 1s; }
+        .note-effect span:nth-child(3) { left: 50%; animation-duration: 3.5s; animation-delay: 0.5s; }
+        .note-effect span:nth-child(4) { left: 70%; animation-duration: 4.5s; animation-delay: 1.5s; }
+        .note-effect span:nth-child(5) { left: 90%; animation-duration: 3s; animation-delay: 2s; }
+        @keyframes note-float { 0% { bottom: -20px; opacity: 0; } 20% { opacity: 0.8; } 80% { opacity: 0.6; } 100% { bottom: 110%; opacity: 0; transform: translateX(-15px) rotate(20deg); } }
+        .badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 6px 14px; font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.8); margin-top: 12px; }
+        .read-only-banner { background: rgba(255,215,0,0.1); border: 1px solid rgba(255,215,0,0.3); border-radius: 12px; padding: 12px 16px; text-align: center; color: var(--gold); font-size: 0.85rem; margin: 8px auto; max-width: 700px; }
+        .frozen-banner { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); border-radius: 12px; padding: 12px 16px; text-align: center; color: #60a5fa; font-size: 0.85rem; margin: 8px auto; max-width: 700px; }
+
+        /* Floating balloons animation (RecoCards-style) */
+        .balloons { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 0; }
+        .balloon { position: absolute; bottom: -80px; opacity: 0.15; animation: float-up linear infinite; }
+        .balloon:nth-child(1) { left: 5%; width: 30px; height: 40px; animation-duration: 12s; animation-delay: 0s; }
+        .balloon:nth-child(2) { left: 15%; width: 24px; height: 32px; animation-duration: 15s; animation-delay: 2s; }
+        .balloon:nth-child(3) { left: 30%; width: 28px; height: 38px; animation-duration: 11s; animation-delay: 4s; }
+        .balloon:nth-child(4) { left: 45%; width: 22px; height: 30px; animation-duration: 14s; animation-delay: 1s; }
+        .balloon:nth-child(5) { left: 60%; width: 26px; height: 35px; animation-duration: 13s; animation-delay: 3s; }
+        .balloon:nth-child(6) { left: 75%; width: 32px; height: 42px; animation-duration: 16s; animation-delay: 5s; }
+        .balloon:nth-child(7) { left: 88%; width: 20px; height: 28px; animation-duration: 10s; animation-delay: 2.5s; }
+        .balloon:nth-child(8) { left: 50%; width: 25px; height: 34px; animation-duration: 17s; animation-delay: 6s; }
+        .balloon:nth-child(9) { left: 95%; width: 18px; height: 24px; animation-duration: 18s; animation-delay: 0.5s; }
+        @keyframes float-up { 0% { bottom: -80px; opacity: 0; transform: translateX(0) rotate(0deg); } 10% { opacity: 0.2; } 90% { opacity: 0.15; } 100% { bottom: 110%; opacity: 0; transform: translateX(-30px) rotate(15deg); } }
+
+        /* Stats bar — hidden by default, shown in list mode */
+        .stats-bar { display: none; }
+
+        /* Toolbar — slim bar between header and board */
+        .card-toolbar { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 16px; background: rgb(0,0,0); border-bottom: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap; }
+        .card-toolbar .btn { font-size: 0.75rem; padding: 6px 14px; border-radius: 4px; }
+
+        /* Embed code box */
+        .embed-box { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 8px auto 16px; display: none; max-width: 700px; }
+        .embed-box pre { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; font-size: 0.75rem; color: var(--accent); overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+
+        /* Audio player in signatures */
+        .sig-audio { width: 100%; margin-top: 8px; height: 32px; opacity: 0.85; border-radius: 16px; }
+        .sig-audio::-webkit-media-controls-panel { background: #f3f4f6; border-radius: 16px; }
+
+        /* Recording UI */
+        .record-area { text-align: center; padding: 20px; }
+        .record-btn { width: 64px; height: 64px; border-radius: 50%; border: none; cursor: pointer; font-size: 1.2rem; color: white; transition: all 0.2s; }
+        .record-btn.idle { background: linear-gradient(135deg, var(--pink), var(--accent)); }
+        .record-btn.recording { background: #ef4444; animation: pulse-record 1s ease-in-out infinite; }
+        @keyframes pulse-record { 0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239,68,68,0.4); } 50% { transform: scale(1.05); box-shadow: 0 0 0 12px rgba(239,68,68,0); } }
+        .record-timer { font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
+        .record-preview { margin-top: 10px; }
+
+        /* Profile / Credits */
+        .card-credits { margin-top: 12px; font-size: 0.8rem; color: var(--muted); font-style: italic; }
+
+        /* ═══ Signatures — JS masonry (left-to-right, no row gaps) ═══ */
+        .signatures { position: relative; margin-bottom: 0; padding: 16px; border-radius: 0; background-attachment: fixed; background-size: cover; background-position: center; min-height: 200px; }
+        .signatures .sig { position: absolute; width: 336px; }
+        .sig {
+            background: #ffffff;
+            border: none;
+            border-radius: 4px;
+            padding: 16px;
+            color: rgba(0,0,0,0.87);
+            box-shadow: rgba(0,0,0,0.2) 0px 2px 1px -1px, rgba(0,0,0,0.14) 0px 1px 1px 0px, rgba(0,0,0,0.12) 0px 1px 3px 0px;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        /* Subtle rotations — RecoCards scattered look */
+        .sig:nth-child(12n+1)  { transform: rotate(-1.4deg); }
+        .sig:nth-child(12n+2)  { transform: rotate(0.8deg); }
+        .sig:nth-child(12n+3)  { transform: rotate(-0.5deg); }
+        .sig:nth-child(12n+4)  { transform: rotate(1.6deg); }
+        .sig:nth-child(12n+5)  { transform: rotate(-1.1deg); }
+        .sig:nth-child(12n+6)  { transform: rotate(0.3deg); }
+        .sig:nth-child(12n+7)  { transform: rotate(1.9deg); }
+        .sig:nth-child(12n+8)  { transform: rotate(-0.7deg); }
+        .sig:nth-child(12n+9)  { transform: rotate(1.2deg); }
+        .sig:nth-child(12n+10) { transform: rotate(-1.8deg); }
+        .sig:nth-child(12n+11) { transform: rotate(0.6deg); }
+        .sig:nth-child(12n+12) { transform: rotate(-0.2deg); }
+        .sig:hover { transform: rotate(0deg) scale(1.03) !important; box-shadow: 0 6px 20px rgba(0,0,0,0.4); z-index: 5; }
+
+        /* ═══ Compact list mode (no rotations, dark cards) ═══ */
+        .signatures.list-mode { position: static; display: flex; flex-direction: column; align-items: center; background: var(--bg); max-width: 700px; margin: 0 auto; gap: 12px; min-height: auto; }
+        .signatures.list-mode .sig { position: static !important; width: 100% !important; left: auto !important; top: auto !important; }
+        .signatures.list-mode .sig {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            color: var(--text);
+            box-shadow: none;
+            transform: none !important;
+        }
+        .signatures.list-mode .sig:hover { border-color: rgba(167,139,250,0.3); transform: translateY(-2px) !important; box-shadow: none; }
+        .signatures.list-mode .sig-name { color: var(--text); }
+        .signatures.list-mode .sig-message { color: rgba(255,255,255,0.85); }
+        .signatures.list-mode .sig-time { color: var(--muted); }
+        .signatures.list-mode .sig-actions { border-top-color: var(--border); }
+        .signatures.list-mode .sig-action-btn { color: var(--muted); }
+        .signatures.list-mode .sig-replies { border-top-color: var(--border); }
+        .signatures.list-mode .sig-reply { color: rgba(255,255,255,0.7); }
+        .signatures.list-mode .sig-reply strong { color: var(--text); }
+        .signatures.list-mode .reply-input { background: rgba(255,255,255,0.05); border-color: var(--border); color: var(--text); }
+        .signatures.list-mode .reply-send { background: var(--accent); }
+        .sig-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .sig-avatar { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; object-fit: cover; }
+        .sig-avatar-placeholder { width: 28px; height: 28px; border-radius: 50%; background: rgba(167,139,250,0.2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0.7rem; color: var(--accent); }
+        .sig-content { flex: 1; min-width: 0; }
+        .sig-name { font-weight: 500; font-size: 20px; color: rgba(0,0,0,0.87); font-family: 'Roboto', 'Helvetica Neue', sans-serif; margin-bottom: 8px; }
+        .sig-time { font-size: 0.65rem; color: #999; }
+        .sig-message { color: rgb(31, 41, 55); font-size: 14px; line-height: 26px; word-wrap: break-word; white-space: pre-wrap; font-family: 'Muli', 'Helvetica Neue', sans-serif; }
+        .sig-gif { width: 100%; border-radius: 20px; margin-top: 8px; display: block; max-width: 100%; }
+        .empty-state { text-align: center; padding: 40px; color: var(--muted); }
+
+        /* Like + Reply — RecoCards style */
+        .sig-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+        .sig-action-btn { background: #f3f4f6; border: 1px solid #e5e7eb; color: gray; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 4px; font-family: 'Roboto', sans-serif; font-weight: 400; transition: background 0.15s; }
+        .sig-action-btn:hover { background: #e5e7eb; }
+        .sig-action-btn:hover { color: #ef4444; }
+        .sig-action-btn.liked, .sig-action-btn.liked i { color: #ef4444; }
+        .like-btn i { transition: transform 0.2s; }
+        .like-btn:active i { transform: scale(1.3); }
+
+        .sig-replies { margin-top: 8px; padding-top: 6px; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 6px; }
+        .sig-reply { display: flex; align-items: flex-start; gap: 6px; font-size: 0.8rem; color: #555; }
+        .sig-reply strong { color: #111; margin-right: 4px; }
+        .reply-avatar { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; margin-top: 2px; }
+
+        .reply-form { display: flex; gap: 6px; margin-top: 6px; }
+        .reply-input { flex: 1; background: rgba(0,0,0,0.04); border: 1px solid #ddd; border-radius: 8px; padding: 6px 10px; color: #111; font-size: 0.8rem; font-family: inherit; }
+        .reply-input:focus { outline: none; border-color: var(--accent); }
+        .reply-send { background: var(--accent); border: none; border-radius: 8px; padding: 6px 10px; color: white; cursor: pointer; font-size: 0.75rem; }
+
+        /* Media tabs */
+        .media-tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 8px 14px; cursor: pointer; font-size: 0.8rem; font-family: inherit; transition: all 0.15s; display: flex; align-items: center; gap: 5px; }
+        .media-tab:hover { color: var(--text); }
+        .media-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .emoji-btn:hover { border-color: var(--accent); transform: scale(1.15); }
+        .giphy-item { cursor: pointer; border-radius: 8px; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s; background: rgba(255,255,255,0.03); border: 1px solid var(--border); break-inside: avoid; margin-bottom: 8px; }
+        .giphy-item:hover { transform: scale(1.03); box-shadow: 0 4px 12px rgba(167,139,250,0.2); border-color: var(--accent); }
+        .giphy-item img { width: 100%; height: auto; display: block; }
+
+        @media (max-width: 400px) { .signatures .sig { width: calc(100% - 24px) !important; } }
+
+        /* Sign Form */
+        .sign-form { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 700px; margin: 0 auto; display: none; }
+        .sign-form.visible, .sign-form.auto-show { display: block; }
+        .sign-form h3 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+        .form-group input, .form-group textarea { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-family: inherit; font-size: 0.9rem; resize: vertical; }
+        .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+        .form-group textarea { min-height: 80px; }
+        /* Dark theme for ALL select/option/optgroup elements */
+        select, select option, select optgroup { background: #1a1f25; color: #e5e7eb; }
+        select option:checked { background: rgba(167,139,250,0.3); }
+        input[type="color"] { background: #1a1f25; }
+        input[type="date"] { background: rgba(255,255,255,0.05); color: var(--text); color-scheme: dark; }
+        input[type="range"] { color-scheme: dark; }
+        .form-hint { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+        .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 0.9rem; cursor: pointer; border: none; font-family: inherit; transition: all 0.2s; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--pink)); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(167,139,250,0.3); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-discord { background: #5865F2; color: white; text-decoration: none; }
+        .btn-discord:hover { background: #4752c4; }
+        .error-msg { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 10px 14px; color: #f87171; font-size: 0.85rem; margin-bottom: 16px; display: none; }
+        .success-msg { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; padding: 10px 14px; color: #22c55e; font-size: 0.85rem; margin-bottom: 16px; display: none; }
+        .login-prompt { text-align: center; padding: 24px; }
+
+        /* Footer */
+        .footer { text-align: center; padding: 24px; color: var(--muted); font-size: 0.75rem; max-width: 700px; margin: 0 auto; }
+        .footer a { color: var(--accent); text-decoration: none; }
+
+        /* Slideshow */
+        .slideshow-toggle { display: flex; justify-content: center; gap: 8px; margin-bottom: 16px; }
+        .slideshow-toggle .btn { font-size: 0.8rem; padding: 8px 16px; border-radius: 20px; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+        .btn-outline.active { background: rgba(167,139,250,0.2); border-color: var(--accent); color: var(--accent); }
+
+        .slideshow-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; flex-direction: column; align-items: center; overflow: hidden; }
+        .slideshow-overlay.active { display: flex; }
+
+        /* Particles */
+        .slideshow-overlay::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(2px 2px at 10% 20%, rgba(255,255,255,0.3), transparent), radial-gradient(2px 2px at 30% 60%, rgba(255,255,255,0.2), transparent), radial-gradient(2px 2px at 50% 10%, rgba(255,255,255,0.3), transparent), radial-gradient(2px 2px at 70% 80%, rgba(255,255,255,0.2), transparent), radial-gradient(2px 2px at 90% 40%, rgba(255,255,255,0.3), transparent), radial-gradient(1px 1px at 15% 75%, rgba(255,255,255,0.15), transparent), radial-gradient(1px 1px at 45% 35%, rgba(255,255,255,0.15), transparent), radial-gradient(1px 1px at 85% 15%, rgba(255,255,255,0.15), transparent); animation: twinkle 6s ease-in-out infinite alternate; pointer-events: none; z-index: 0; }
+        @keyframes twinkle { 0% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        .slideshow-close { position: absolute; top: 20px; right: 24px; background: none; border: none; color: rgba(255,255,255,0.4); font-size: 1.5rem; cursor: pointer; z-index: 1002; padding: 8px; }
+        .slideshow-close:hover { color: #fff; }
+        .slideshow-counter { position: absolute; top: 24px; left: 24px; font-size: 0.8rem; color: rgba(255,255,255,0.3); z-index: 1002; }
+
+        /* Title header in slideshow */
+        .slideshow-title { text-align: center; padding-top: 40px; margin-bottom: 20px; z-index: 1; }
+        .slideshow-title h2 { font-size: 2rem; font-weight: 800; color: #fff; margin: 0; }
+        .slideshow-title p { font-size: 0.85rem; color: rgba(255,255,255,0.4); margin: 4px 0 0; }
+
+        /* Card-style slides */
+        .slideshow-card-area { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; width: 100%; z-index: 1; overflow: hidden; padding: 0 20px; }
+        .slideshow-slide { position: absolute; max-width: 480px; width: 85%; max-height: 65vh; overflow-y: auto; background: #fff; border-radius: 12px; padding: 24px 28px; color: #1a1a1a; opacity: 0; transform: translateX(60px) scale(0.96); transition: opacity 0.45s ease, transform 0.45s ease; box-shadow: 0 16px 48px rgba(0,0,0,0.5); pointer-events: none; }
+        .slideshow-slide.visible { opacity: 1; transform: translateX(0) scale(1); pointer-events: auto; }
+        .slideshow-slide::-webkit-scrollbar { width: 6px; }
+        .slideshow-slide::-webkit-scrollbar-track { background: transparent; }
+        .slideshow-slide::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 3px; }
+        .slideshow-slide::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
+        .slideshow-slide.visible { opacity: 1; transform: translateX(0) scale(1); }
+        .slideshow-slide.exit-left { opacity: 0; transform: translateX(-60px) scale(0.96); }
+
+        .slideshow-slide .slide-name { font-size: 0.9rem; font-weight: 700; color: #111; margin-bottom: 10px; }
+        .slideshow-slide .slide-message { font-size: 0.85rem; line-height: 1.65; color: #333; white-space: pre-wrap; }
+        .slideshow-slide .slide-gif { max-width: 100%; max-height: 250px; border-radius: 8px; margin-top: 10px; margin-bottom: 4px; display: block; object-fit: contain; }
+
+        .slideshow-nav { position: absolute; bottom: 32px; display: flex; gap: 12px; z-index: 1002; }
+        .slideshow-nav button { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .slideshow-nav button:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); }
+
+        .slideshow-progress { position: absolute; bottom: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--pink)); transition: width 0.3s ease; z-index: 1002; }
+
+        /* Print / PDF Export */
+        @media print {
+            body { background: #ffffff; color: #000000; }
+            .container { max-width: 100%; padding: 0; }
+            .card-header { background: linear-gradient(135deg, #f3e8ff, #ffe4f0); border: 2px solid #d8b4fe; color: #000; page-break-after: avoid; }
+            .card-header::before { display: none; }
+            .card-title span { -webkit-text-fill-color: #db2777; color: #db2777; background: none; }
+            .card-subtitle { color: #666; }
+            .badge { background: #f3e8ff; color: #7c3aed; border-color: #d8b4fe; }
+            .sig { background: #ffffff; border: 1px solid #e5e7eb; page-break-inside: avoid; margin-bottom: 8px; transform: none !important; box-shadow: none !important; }
+            .signatures { background: #fff !important; padding: 0 !important; }
+            .sig-name { color: #111; }
+            .sig-message { color: #333; }
+            .sig-time { color: #999; }
+            .slideshow-toggle, .slideshow-overlay, .sign-form, .footer, .read-only-banner, .login-prompt { display: none !important; }
+            .avatar { border-color: #db2777; }
+            a { color: inherit; text-decoration: none; }
+        }
+
+        @media (max-width: 600px) {
+            .card-title { font-size: 1.25rem; }
+            .container { padding: 16px 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- User bar (hidden — shown inside sign form context) -->
+        <div id="user-bar" style="display: none; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px 12px 0 0; margin: 8px auto 0; max-width: 700px;">
+            <% if (user) { %>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <% if (user.avatar) { %>
+                        <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;">
+                    <% } else { %>
+                        <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(167,139,250,0.2); display: flex; align-items: center; justify-content: center;"><i class="fas fa-user" style="font-size: 0.7rem; color: var(--accent);"></i></div>
+                    <% } %>
+                    <span style="font-size: 0.85rem; font-weight: 600; color: var(--text);"><%= user.username %></span>
+                </div>
+                <a href="/logout" style="font-size: 0.75rem; color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 4px; transition: color 0.15s;">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            <% } else { %>
+                <div style="font-size: 0.8rem; color: var(--muted);">Sign in for your avatar on the card</div>
+                <div style="display: flex; gap: 6px;">
+                    <a href="/auth/discord?returnTo=/card/<%= card.slug || card.share_token %>" style="background: #5865F2; color: white; text-decoration: none; padding: 5px 12px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 4px;"><i class="fab fa-discord"></i> Discord</a>
+                </div>
+            <% } %>
+        </div>
+        <!-- Card Header -->
+        <div class="card-header" style="background-color: <%= card.header_bg_color || '#000000' %>;<% if (card.card_background_url) { %> background-image: url('<%= card.card_background_url %>'); background-size: cover; background-position: center;<% } %>">
+            <%/* Clean black header — no decorations, matching RecoCards */%>
+            <% if (card.avatar_url) { %>
+                <img src="<%= card.avatar_url %>" alt="<%= card.username %>" class="avatar">
+            <% } else { %>
+                <div class="avatar-placeholder">🎂</div>
+            <% } %>
+            <div class="card-title" style="<% if (card.title_font) { %>font-family: '<%= card.title_font %>', sans-serif;<% } %><% if (card.title_font_size) { %>font-size: <%= card.title_font_size %>px;<% } %><% if (card.title_font_color) { %>color: <%= card.title_font_color %>;<% } else { %>color: #ffffff;<% } %>"><span><%= card.card_name || ('Happy Birthday, ' + card.username + '!') %></span></div>
+            <div class="card-subtitle" style="<% if (card.subtitle_font) { %>font-family: '<%= card.subtitle_font %>', sans-serif;<% } %><% if (card.subtitle_font_color) { %>color: <%= card.subtitle_font_color %>;<% } else { %>color: rgba(255,255,255,0.6);<% } %>"><%= card.subtitle_text || card.guild_name || 'CertiFried Cards' %></div>
+            <div class="badge">
+                <i class="fas fa-pen-nib"></i>
+                <%= signatures.length %> signature<%= signatures.length !== 1 ? 's' : '' %>
+            </div>
+            <% if (card.custom_logo_url) { %>
+                <img src="<%= card.custom_logo_url %>" alt="Logo" style="height: 32px; margin-top: 12px; opacity: 0.8;">
+            <% } %>
+            <% if (card.wishlist_url) { %>
+                <a href="<%= card.wishlist_url %>" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--accent); text-decoration: none; font-size: 0.85rem; font-weight: 600;">
+                    <i class="fas fa-gift"></i> View Wishlist
+                </a>
+            <% } %>
+            <% if (card.profile_link) { %>
+                <a href="<%= card.profile_link %>" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--accent); text-decoration: none; font-size: 0.8rem;">
+                    <i class="fas fa-external-link-alt"></i> Profile
+                </a>
+            <% } %>
+            <% if (card.credits_text) { %>
+                <div class="card-credits"><%= card.credits_text %></div>
+            <% } %>
+        </div>
+
+        <!-- Stats bar -->
+        <div class="stats-bar">
+            <div class="stat-item"><i class="fas fa-pen-nib"></i> <strong><%= signatures.length %></strong> signatures</div>
+            <div class="stat-item"><i class="fas fa-eye"></i> <strong><%= card.view_count || 0 %></strong> views</div>
+            <div class="stat-item"><i class="fas fa-heart"></i> <strong><%= signatures.reduce((sum, s) => sum + (s.likes || 0), 0) %></strong> likes</div>
+            <% if (card.deliver_at && !card.is_posted) { %>
+            <div class="stat-item"><i class="fas fa-clock"></i> Delivers <strong><%= new Date(card.deliver_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %></strong></div>
+            <% } %>
+        </div>
+
+        <!-- Discord Connection Panel (standalone cards only, creator only) -->
+        <% if (!card.guild_id && typeof isCreator !== 'undefined' && isCreator && typeof mutualGuilds !== 'undefined') { %>
+        <details style="background: rgba(88,101,242,0.08); border: 1px solid rgba(88,101,242,0.2); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;">
+            <summary style="cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #5865F2; display: flex; align-items: center; gap: 8px;">
+                <i class="fab fa-discord"></i> Connect to Discord Server
+                <span style="font-size: 0.65rem; font-weight: 500; color: var(--muted); margin-left: auto;">Optional</span>
+            </summary>
+            <div style="margin-top: 12px;">
+                <p style="font-size: 0.8rem; color: var(--muted); margin-bottom: 12px; line-height: 1.5;">
+                    Link this card to a Discord server to post a signing embed, assign birthday roles, and manage it from the dashboard.
+                    The card will keep all existing signatures — nothing is lost.
+                </p>
+                <% if (mutualGuilds.length > 0) { %>
+                <div style="display: grid; gap: 10px;">
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Server</label>
+                        <select id="connect-guild" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;" onchange="loadGuildChannels()">
+                            <option value="">Select a server...</option>
+                            <% mutualGuilds.forEach(g => { %>
+                            <option value="<%= g.id %>"><%= g.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Recipient (Discord User ID)</label>
+                        <input type="text" id="connect-user-id" placeholder="e.g. 123456789012345678" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;">
+                        <div style="font-size: 0.65rem; color: var(--muted); margin-top: 2px;">The Discord user who will receive the card. Right-click their profile → Copy User ID.</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Announcement Channel ID</label>
+                            <input type="text" id="connect-announce-channel" placeholder="Channel to post signing link" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;">
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Birthday Role ID <span style="font-weight: 400;">(optional)</span></label>
+                            <input type="text" id="connect-birthday-role" placeholder="Role to assign on birthday" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;">
+                        </div>
+                    </div>
+                    <button type="button" onclick="connectToDiscord()" id="connect-btn" style="background: #5865F2; border: none; border-radius: 10px; padding: 10px 20px; color: white; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <i class="fab fa-discord"></i> Connect Card to Server
+                    </button>
+                    <div id="connect-status" style="font-size: 0.8rem; display: none;"></div>
+                </div>
+                <% } else { %>
+                <div style="font-size: 0.8rem; color: var(--muted); padding: 12px; text-align: center; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <i class="fas fa-info-circle" style="color: var(--accent);"></i>
+                    No mutual servers found. Make sure CertiFried bot is in the server you want to connect to, and you have "Manage Server" permission.
+                </div>
+                <% } %>
+            </div>
+        </details>
+        <% } else if (card.guild_id && typeof isCreator !== 'undefined' && isCreator) { %>
+        <div style="font-size: 0.75rem; color: rgba(88,101,242,0.6); text-align: center; margin-bottom: 12px;">
+            <i class="fab fa-discord"></i> Connected to <strong><%= card.guild_name %></strong>
+        </div>
+        <% } %>
+
+        <% if (card.background_music_url) { %>
+        <%
+            const musicUrl = card.background_music_url;
+            const ytMatch = musicUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+            const scMatch = musicUrl.match(/soundcloud\.com\//);
+        %>
+        <% if (ytMatch || scMatch) { %>
+        <!-- Music Player (resolves YouTube/SoundCloud via yt-dlp to direct audio) -->
+        <style>
+            .music-bar { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.08); border-radius: 40px; padding: 6px 16px 6px 6px; max-width: 360px; margin: 0 auto 16px; backdrop-filter: blur(12px); }
+            .music-play { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--accent, #a78bfa); color: white; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity 0.2s; }
+            .music-play:hover { opacity: 0.85; }
+            .music-play:disabled { opacity: 0.3; cursor: default; }
+            .music-info { flex: 1; min-width: 0; }
+            .music-title { font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .music-sub { font-size: 0.6rem; color: rgba(255,255,255,0.4); }
+            .music-progress { width: 100%; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 4px; cursor: pointer; }
+            .music-progress-fill { height: 100%; background: var(--accent, #a78bfa); border-radius: 2px; width: 0%; transition: width 0.3s linear; }
+            .music-time { font-size: 0.6rem; color: rgba(255,255,255,0.35); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+            .music-bar.loading .music-play i::before { content: '\f110'; animation: spin 1s linear infinite; }
+            @keyframes spin { to { transform: rotate(360deg); } }
+        </style>
+        <div class="music-bar" id="music-bar">
+            <button class="music-play" id="music-play-btn" onclick="toggleMusic()" title="Play music"><i class="fas fa-play"></i></button>
+            <div class="music-info">
+                <div class="music-title" id="music-title">Loading music...</div>
+                <div class="music-sub"><% if (ytMatch) { %><i class="fab fa-youtube" style="color: #ff0000;"></i> YouTube<% } else { %><i class="fab fa-soundcloud" style="color: #ff5500;"></i> SoundCloud<% } %></div>
+                <div class="music-progress" onclick="seekMusic(event)"><div class="music-progress-fill" id="music-progress"></div></div>
+            </div>
+            <span class="music-time" id="music-time">--:--</span>
+        </div>
+        <audio id="bg-music" loop preload="none"></audio>
+        <script>
+        (function() {
+            var audio = document.getElementById('bg-music');
+            var playBtn = document.getElementById('music-play-btn');
+            var titleEl = document.getElementById('music-title');
+            var timeEl = document.getElementById('music-time');
+            var progressEl = document.getElementById('music-progress');
+            var bar = document.getElementById('music-bar');
+            var resolved = false, resolving = false;
+
+            function fmtTime(s) { var m = Math.floor(s / 60); return m + ':' + ('0' + Math.floor(s % 60)).slice(-2); }
+
+            // Resolve audio URL via yt-dlp on first play
+            function resolveAudio() {
+                if (resolved || resolving) return Promise.resolve();
+                resolving = true;
+                titleEl.textContent = 'Resolving audio...';
+                playBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                return fetch('/card/resolve-audio?url=' + encodeURIComponent('<%= musicUrl %>'))
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.audioUrl) {
+                            audio.src = data.audioUrl;
+                            resolved = true;
+                            titleEl.textContent = 'Background Music';
+                        } else {
+                            titleEl.textContent = 'Playback unavailable';
+                            playBtn.disabled = true;
+                        }
+                        resolving = false;
+                    })
+                    .catch(function() {
+                        titleEl.textContent = 'Playback unavailable';
+                        playBtn.disabled = true;
+                        resolving = false;
+                    });
+            }
+
+            window.toggleMusic = function() {
+                if (audio.paused) {
+                    if (!resolved) {
+                        resolveAudio().then(function() { if (resolved) audio.play(); });
+                    } else {
+                        audio.play();
+                    }
+                } else {
+                    audio.pause();
+                }
+            };
+
+            audio.addEventListener('play', function() { playBtn.innerHTML = '<i class="fas fa-pause"></i>'; });
+            audio.addEventListener('pause', function() { playBtn.innerHTML = '<i class="fas fa-play"></i>'; });
+            audio.addEventListener('timeupdate', function() {
+                if (audio.duration) {
+                    progressEl.querySelector('.music-progress-fill').style.width = (audio.currentTime / audio.duration * 100) + '%';
+                    timeEl.textContent = fmtTime(audio.currentTime) + ' / ' + fmtTime(audio.duration);
+                }
+            });
+            audio.addEventListener('error', function() {
+                titleEl.textContent = 'Playback error';
+                playBtn.innerHTML = '<i class="fas fa-play"></i>';
+            });
+
+            window.seekMusic = function(e) {
+                if (!audio.duration) return;
+                var rect = e.currentTarget.getBoundingClientRect();
+                audio.currentTime = (e.clientX - rect.left) / rect.width * audio.duration;
+            };
+
+            // Auto-resolve and auto-play on page load
+            resolveAudio().then(function() {
+                if (resolved) {
+                    audio.play().catch(function() {
+                        // Browser blocked autoplay — show a prompt
+                        titleEl.textContent = 'Click play to start music';
+                    });
+                }
+            });
+        })();
+        </script>
+        <% } else { %>
+        <div style="text-align: center; margin-bottom: 16px;">
+            <audio controls loop style="max-width: 300px; height: 32px; opacity: 0.7;">
+                <source src="<%= musicUrl %>" type="audio/mpeg">
+            </audio>
+            <div style="font-size: 0.65rem; color: var(--muted); margin-top: 4px;">Background Music</div>
+        </div>
+        <% } %>
+        <% } %>
+
+        <% if (card.is_frozen && !card.is_posted) { %>
+        <div class="frozen-banner">
+            <i class="fas fa-snowflake"></i> This card is frozen — new messages are temporarily disabled.
+        </div>
+        <% } %>
+
+        <% if (typeof passwordRequired !== 'undefined' && passwordRequired) { %>
+        <div class="sign-form" style="text-align: center; margin-bottom: 20px;">
+            <h3><i class="fas fa-lock" style="color: var(--accent); margin-right: 8px;"></i>This Card is Protected</h3>
+            <p style="color: var(--muted); margin-bottom: 16px; font-size: 0.9rem;">Enter the password to view this birthday card</p>
+            <form method="POST" action="/card/<%= card.slug || card.share_token %>/unlock" style="display: flex; gap: 8px; justify-content: center; max-width: 300px; margin: 0 auto;">
+                <input type="password" name="password" placeholder="Password" required style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.9rem;">
+                <button type="submit" class="btn btn-primary" style="padding: 8px 16px;"><i class="fas fa-unlock"></i></button>
+            </form>
+        </div>
+        <% } %>
+
+        <% if (card.is_posted) { %>
+        <div class="read-only-banner">
+            <i class="fas fa-gift"></i> This card has been delivered! Viewing in read-only mode.
+        </div>
+        <% } %>
+
+        <!-- Gift codes (encrypted — NEVER rendered in HTML, only via authenticated AJAX) -->
+        <% const giftCount = signatures.filter(s => s.gift_code_encrypted).length; %>
+        <% if (giftCount > 0) { %>
+        <div style="background: rgba(255,215,0,0.06); border: 1px solid rgba(255,215,0,0.15); border-radius: 12px; padding: 16px; margin-bottom: 16px; text-align: center;">
+            <div style="font-size: 0.85rem; color: var(--gold); margin-bottom: 8px;">
+                <i class="fas fa-gift"></i> This card contains <strong><%= giftCount %></strong> digital gift<%= giftCount !== 1 ? 's' : '' %>
+            </div>
+            <% if (user && (user.id === card.user_id || user.id === card.creator_user_id)) { %>
+                <button type="button" onclick="revealGifts()" class="btn btn-primary" style="background: linear-gradient(135deg, var(--gold), #f59e0b); padding: 8px 20px; font-size: 0.85rem;"><i class="fas fa-lock-open"></i> Decrypt & Reveal Gifts</button>
+                <div id="gifts-container" style="display: none; margin-top: 12px; text-align: left;"></div>
+                <div style="font-size: 0.65rem; color: var(--muted); margin-top: 8px;"><i class="fas fa-shield-alt"></i> Decrypted on-demand via secure request. Never stored in page HTML.</div>
+            <% } else { %>
+                <div style="font-size: 0.75rem; color: var(--muted);"><i class="fas fa-lock"></i> AES-256 encrypted. Only the recipient can decrypt these. <% if (!user) { %>Log in to check if they're for you.<% } %></div>
+            <% } %>
+        </div>
+        <% } %>
+
+        <!-- Thank You message -->
+        <% if (card.thank_you_message) { %>
+        <div style="background: linear-gradient(135deg, rgba(167,139,250,0.1), rgba(255,105,180,0.1)); border: 1px solid rgba(167,139,250,0.2); border-radius: 16px; padding: 20px; margin-bottom: 20px; text-align: center;">
+            <div style="font-size: 0.75rem; color: var(--accent); font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Thank You from <%= card.username %></div>
+            <div style="font-size: 1rem; line-height: 1.6; color: var(--text);"><%= card.thank_you_message %></div>
+        </div>
+        <% } else if (card.is_posted && user && (user.id === card.user_id || user.id === card.creator_user_id)) { %>
+        <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 20px;">
+            <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; color: var(--accent);"><i class="fas fa-heart"></i> Thank Everyone</div>
+            <div style="display: flex; gap: 8px;">
+                <textarea id="thank-you-msg" placeholder="Thank you all for the wishes!" style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 10px; color: var(--text); font-size: 0.9rem; font-family: inherit; resize: vertical; min-height: 60px;"></textarea>
+                <button type="button" onclick="postThankYou()" class="btn btn-primary" style="align-self: flex-end; white-space: nowrap;"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+        <% } %>
+
+        <%/* ═══ CARD TYPE ROUTING ═══ */%>
+        <% if (card.card_type === 'greeting_card') { %>
+            <%- include('partials/card-greeting', { card, signatures, user, userLikes: typeof userLikes !== 'undefined' ? userLikes : [], repliesMap: typeof repliesMap !== 'undefined' ? repliesMap : {} }) %>
+        <% } else if (card.card_type === 'one_person') { %>
+            <%- include('partials/card-one-person', { card, signatures, user }) %>
+        <% } else { %>
+        <%/* ═══ GROUP BOARD (default) ═══ */%>
+
+        <!-- Toolbar (RecoCards-style: Write button + minimal icons) -->
+        <div class="card-toolbar">
+            <% if (!card.is_posted && !card.is_frozen) { %>
+            <button type="button" class="btn btn-primary" style="font-size: 0.85rem; padding: 8px 20px; border-radius: 6px;" onclick="toggleSignForm()"><i class="fas fa-plus"></i> Write a message</button>
+            <% } %>
+            <% if (signatures.length > 0) { %>
+            <button type="button" class="btn btn-outline" id="view-board" onclick="setView('board')" title="Board view"><i class="fas fa-th"></i></button>
+            <button type="button" class="btn btn-outline" id="view-list" onclick="setView('list')" title="List view"><i class="fas fa-list"></i></button>
+            <% if (signatures.length > 1) { %>
+            <button type="button" class="btn btn-outline" id="view-slideshow" onclick="startSlideshow()" title="Slideshow"><i class="fas fa-play"></i></button>
+            <% } %>
+            <button type="button" class="btn btn-outline" onclick="window.print()" title="Export PDF"><i class="fas fa-file-pdf"></i></button>
+            <button type="button" class="btn btn-outline" onclick="downloadAsImage()" title="Export JPEG"><i class="fas fa-image"></i></button>
+            <button type="button" class="btn btn-outline" onclick="toggleEmbed()" title="Embed code"><i class="fas fa-code"></i></button>
+            <% } %>
+        </div>
+        <!-- Embed code box -->
+        <div class="embed-box" id="embed-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="font-size: 0.85rem; font-weight: 600;">Embed this card on your website</span>
+                <button type="button" onclick="copyEmbed()" class="btn btn-outline" style="font-size: 0.7rem; padding: 4px 10px;"><i class="fas fa-copy"></i> Copy</button>
+            </div>
+            <pre id="embed-code">&lt;iframe src="<%= (typeof process !== 'undefined' && process.env ? process.env.DASHBOARD_URL || '' : '') %>/card/<%= card.slug || card.share_token %>" width="100%" height="800" frameborder="0" style="border-radius: 12px; max-width: 1600px;"&gt;&lt;/iframe&gt;</pre>
+        </div>
+
+        <!-- Slideshow Overlay -->
+        <div class="slideshow-overlay" id="slideshow-overlay">
+            <button class="slideshow-close" onclick="stopSlideshow()"><i class="fas fa-times"></i></button>
+            <div class="slideshow-counter" id="slideshow-counter"></div>
+
+            <div class="slideshow-title">
+                <h2>Happy Birthday, <%= card.username %>!</h2>
+                <p><%= card.guild_name || '' %></p>
+            </div>
+
+            <div class="slideshow-card-area">
+                <% signatures.forEach(function(sig, i) { %>
+                <div class="slideshow-slide" data-slide="<%= i %>">
+                    <div class="slide-name"><%= sig.signer_username || 'Anonymous' %></div>
+                    <% if (sig.gif_url) { %>
+                        <img src="<%= sig.gif_url %>" class="slide-gif" loading="lazy">
+                    <% } %>
+                    <% if (sig.message && sig.message !== 'Imported from RecoCards') { %>
+                        <div class="slide-message" style="<% if (sig.font_color) { %>color: <%= sig.font_color %>;<% } %><% if (sig.font_family) { %>font-family: '<%= sig.font_family %>', sans-serif;<% } %><% if (sig.font_size) { %>font-size: <%= sig.font_size %>px;<% } %>"><%= sig.message %></div>
+                    <% } %>
+                </div>
+                <% }); %>
+            </div>
+
+            <div class="slideshow-nav">
+                <button onclick="prevSlide()"><i class="fas fa-chevron-left"></i></button>
+                <button onclick="toggleAutoplay()" id="autoplay-btn"><i class="fas fa-pause"></i></button>
+                <button onclick="nextSlide()"><i class="fas fa-chevron-right"></i></button>
+            </div>
+            <div class="slideshow-progress" id="slideshow-progress"></div>
+        </div>
+
+        <% } %>
+        <%/* ═══ END BOARD-SPECIFIC UI — Sign form below is shared across all card types ═══ */%>
+
+        <!-- Sign Form (shared by all card types) -->
+        <% const hideSignForm = card.card_type === 'one_person' && signatures.length > 0; %>
+        <% const autoShowForm = card.card_type !== 'board' || signatures.length === 0; %>
+        <% if (!card.is_posted && !hideSignForm) { %>
+        <div class="sign-form <%= autoShowForm ? 'auto-show' : '' %>" style="margin-bottom: 20px;">
+            <% if (user) { %>
+                <% if (alreadySigned) { %>
+                    <div style="text-align: center; padding: 16px; color: var(--accent);">
+                        <i class="fas fa-check-circle" style="font-size: 1.5rem; margin-bottom: 8px; display: block;"></i>
+                        <div style="font-weight: 600;">You've already signed this card!</div>
+                    </div>
+                <% } else { %>
+                    <h3><i class="fas fa-pen-nib" style="color: var(--accent); margin-right: 8px;"></i>Sign the Card</h3>
+                    <div id="sign-error" class="error-msg"></div>
+                    <div id="sign-success" class="success-msg"></div>
+                    <form id="sign-form">
+                        <div class="form-group">
+                            <label>Your Message</label>
+                            <textarea id="sign-message" placeholder="Happy birthday! Hope you have an amazing day..." maxlength="2000" required oninput="this.nextElementSibling.textContent=this.value.length+'/2000'" style="min-height: 100px;"></textarea>
+                            <div style="text-align: right; font-size: 0.65rem; color: var(--muted); margin-top: 2px;">0/2000</div>
+                        </div>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+                            <% ['❤️','👍','🥳','🎉','🎂','🥰','😍','🤩','🎁','🍰','🥂','🎊','💐','🌟','🔥'].forEach(e => { %>
+                            <button type="button" class="emoji-btn" onclick="document.getElementById('sign-message').value += '<%= e %>'" style="background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 1.1rem; cursor: pointer; transition: all 0.15s;"><%= e %></button>
+                            <% }); %>
+                        </div>
+                        <!-- Font customization (RecoCards-style, FREE) -->
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px;">
+                            <input type="color" id="font-color" value="#1f2937" title="Text color" style="width: 32px; height: 32px; border: 2px solid var(--border); border-radius: 6px; cursor: pointer; background: none; padding: 0;">
+                            <select id="font-family" title="Font" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.8rem; cursor: pointer; max-width: 160px;">
+                                <optgroup label="Sans Serif">
+                                    <option value="" selected>Default (Inter)</option>
+                                    <option value="Helvetica Neue" style="font-family: 'Helvetica Neue'">Helvetica Neue</option>
+                                    <option value="Arial" style="font-family: Arial">Arial</option>
+                                    <option value="Verdana" style="font-family: Verdana">Verdana</option>
+                                    <option value="Trebuchet MS" style="font-family: 'Trebuchet MS'">Trebuchet MS</option>
+                                    <option value="Roboto" style="font-family: Roboto">Roboto</option>
+                                    <option value="Quicksand" style="font-family: Quicksand">Quicksand</option>
+                                </optgroup>
+                                <optgroup label="Serif">
+                                    <option value="Georgia" style="font-family: Georgia">Georgia</option>
+                                    <option value="Palatino" style="font-family: Palatino">Palatino</option>
+                                    <option value="Garamond" style="font-family: Garamond">Garamond</option>
+                                    <option value="Bookman" style="font-family: Bookman">Bookman</option>
+                                </optgroup>
+                                <optgroup label="Monospace">
+                                    <option value="Courier New" style="font-family: 'Courier New'">Courier New</option>
+                                </optgroup>
+                                <optgroup label="Handwriting">
+                                    <option value="Pacifico" style="font-family: Pacifico">Pacifico</option>
+                                    <option value="Dancing Script" style="font-family: 'Dancing Script'">Dancing Script</option>
+                                    <option value="Lobster" style="font-family: Lobster">Lobster</option>
+                                    <option value="Caveat" style="font-family: Caveat">Caveat</option>
+                                    <option value="Permanent Marker" style="font-family: 'Permanent Marker'">Permanent Marker</option>
+                                    <option value="Satisfy" style="font-family: Satisfy">Satisfy</option>
+                                    <option value="Great Vibes" style="font-family: 'Great Vibes'">Great Vibes</option>
+                                    <option value="Sacramento" style="font-family: Sacramento">Sacramento</option>
+                                    <option value="Architects Daughter" style="font-family: 'Architects Daughter'">Architects Daughter</option>
+                                    <option value="Indie Flower" style="font-family: 'Indie Flower'">Indie Flower</option>
+                                    <option value="Patrick Hand" style="font-family: 'Patrick Hand'">Patrick Hand</option>
+                                    <option value="Shadows Into Light" style="font-family: 'Shadows Into Light'">Shadows Into Light</option>
+                                    <option value="Amatic SC" style="font-family: 'Amatic SC'">Amatic SC</option>
+                                </optgroup>
+                                <optgroup label="Display">
+                                    <option value="Comic Sans MS" style="font-family: 'Comic Sans MS'">Comic Sans MS</option>
+                                    <option value="Impact" style="font-family: Impact">Impact</option>
+                                </optgroup>
+                            </select>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="font-size: 0.7rem; color: var(--muted);">Size</span>
+                                <input type="range" id="font-size" min="10" max="28" value="14" style="width: 80px; accent-color: var(--pink); cursor: pointer;">
+                                <span id="font-size-label" style="font-size: 0.75rem; color: var(--muted); min-width: 28px;">14px</span>
+                            </div>
+                        </div>
+                        <!-- Card appearance customization -->
+                        <details style="margin-bottom: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;">
+                            <summary style="cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--accent);"><i class="fas fa-palette"></i> Card Style</summary>
+                            <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                                <div>
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Card Color</label>
+                                    <input type="color" id="card-bg-color" value="#ffffff" style="width: 32px; height: 32px; border: 2px solid var(--border); border-radius: 6px; cursor: pointer; background: none;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Border</label>
+                                    <input type="color" id="card-border-color" value="#ffffff" style="width: 32px; height: 32px; border: 2px solid var(--border); border-radius: 6px; cursor: pointer; background: none;">
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Shape</label>
+                                    <select id="card-border-radius" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 0.75rem;">
+                                        <option value="">Square (default)</option>
+                                        <option value="8">Rounded</option>
+                                        <option value="16">More Rounded</option>
+                                        <option value="24">Very Rounded</option>
+                                        <option value="32">Pill</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Shadow</label>
+                                    <select id="card-shadow" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 0.75rem;">
+                                        <option value="">Default</option>
+                                        <option value="light">Light</option>
+                                        <option value="dramatic">Dramatic</option>
+                                        <option value="none">None</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Effect</label>
+                                    <select id="note-effect" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 0.75rem;">
+                                        <option value="">None</option>
+                                        <option value="hearts">❤️ Hearts</option>
+                                        <option value="confetti">🎊 Confetti</option>
+                                        <option value="stars">⭐ Stars</option>
+                                        <option value="sparkles">✨ Sparkles</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </details>
+                        <div style="margin-bottom: 12px;">
+                            <div style="display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px;">
+                                <button type="button" class="media-tab active" data-tab="gif" onclick="switchMediaTab('gif')"><i class="fas fa-images"></i> GIF</button>
+                                <button type="button" class="media-tab" data-tab="sticker" onclick="switchMediaTab('sticker')"><i class="fas fa-sticky-note"></i> Sticker</button>
+                                <button type="button" class="media-tab" data-tab="video" onclick="switchMediaTab('video')"><i class="fas fa-video"></i> Video</button>
+                                <button type="button" class="media-tab" data-tab="audio" onclick="switchMediaTab('audio')"><i class="fas fa-microphone"></i> Audio</button>
+                                <button type="button" class="media-tab" data-tab="upload" onclick="switchMediaTab('upload')"><i class="fas fa-upload"></i> Upload</button>
+                            </div>
+                            <div class="media-panel" id="panel-gif">
+                                <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                    <input type="text" id="giphy-search" placeholder="Search GIFs..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                    <button type="button" onclick="searchGiphy('gif')" style="background: var(--accent); border: none; border-radius: 8px; padding: 8px 14px; color: white; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-search"></i></button>
+                                </div>
+                                <div id="giphy-results" style="columns: 4; column-gap: 8px; max-height: 280px; overflow-y: auto; padding: 4px;"></div>
+                                <div style="text-align: right; margin-top: 6px; font-size: 0.65rem; color: var(--muted);">Powered by GIPHY</div>
+                            </div>
+                            <div class="media-panel" id="panel-sticker" style="display: none;">
+                                <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                    <input type="text" id="sticker-search" placeholder="Search stickers..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                    <button type="button" onclick="searchGiphy('sticker')" style="background: var(--accent); border: none; border-radius: 8px; padding: 8px 14px; color: white; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-search"></i></button>
+                                </div>
+                                <div id="sticker-results" style="columns: 4; column-gap: 8px; max-height: 280px; overflow-y: auto; padding: 4px;"></div>
+                                <div style="text-align: right; margin-top: 6px; font-size: 0.65rem; color: var(--muted);">Powered by GIPHY</div>
+                            </div>
+                            <div class="media-panel" id="panel-video" style="display: none;">
+                                <input type="text" id="video-url" placeholder="Paste a YouTube video link..." style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                <div style="font-size: 0.75rem; color: var(--muted); margin-top: 6px;">The video thumbnail will be shown on the card</div>
+                            </div>
+                            <div class="media-panel" id="panel-audio" style="display: none;">
+                                <div class="record-area">
+                                    <button type="button" class="record-btn idle" id="record-btn" onclick="toggleRecording()">
+                                        <i class="fas fa-microphone"></i>
+                                    </button>
+                                    <div class="record-timer" id="record-timer">Tap to record (30s max)</div>
+                                    <div class="record-preview" id="record-preview" style="display: none;">
+                                        <audio id="record-playback" controls style="width: 100%; height: 32px; margin-top: 8px;"></audio>
+                                        <button type="button" onclick="clearRecording()" style="background: #ef4444; border: none; border-radius: 8px; padding: 4px 12px; color: white; cursor: pointer; font-size: 0.75rem; margin-top: 6px;"><i class="fas fa-trash"></i> Remove</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="media-panel" id="panel-upload" style="display: none;">
+                                <div style="padding: 12px;">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px;">
+                                        <div>
+                                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Upload a file</label>
+                                            <input type="file" id="upload-file" accept="image/png,image/jpeg,image/gif,image/webp" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 6px; color: var(--text); font-size: 0.8rem;">
+                                        </div>
+                                        <div>
+                                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Or paste a URL</label>
+                                            <input type="text" id="upload-url" placeholder="https://..." style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                        </div>
+                                    </div>
+                                    <div style="font-size: 0.65rem; color: var(--muted);">Max 5MB. JPG, PNG, GIF, WebP supported. Explicit content is prohibited.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="media-preview" style="display: none; margin-bottom: 12px; position: relative;">
+                            <img id="preview-img" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 2px solid var(--accent);">
+                            <button type="button" onclick="clearMedia()" style="position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: #ef4444; border: none; color: white; cursor: pointer; font-size: 0.7rem; display: flex; align-items: center; justify-content: center;"><i class="fas fa-times"></i></button>
+                        </div>
+                        <input type="hidden" id="sign-gif" value="">
+                        <!-- Gift Card Code (optional, encrypted) -->
+                        <details style="margin-bottom: 12px; background: rgba(255,215,0,0.05); border: 1px solid rgba(255,215,0,0.15); border-radius: 10px; padding: 10px 14px;">
+                            <summary style="cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--gold);"><i class="fas fa-gift"></i> Attach a Digital Gift (optional)</summary>
+                            <div style="margin-top: 10px;">
+                                <div class="form-group" style="margin-bottom: 10px;">
+                                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 2px;">What kind of gift?</label>
+                                    <select id="gift-platform" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.8rem;">
+                                        <option value="">Select type...</option>
+                                        <optgroup label="Gift Cards">
+                                            <option value="Amazon Gift Card">Amazon Gift Card</option>
+                                            <option value="Steam Gift Card">Steam Gift Card</option>
+                                            <option value="PlayStation Gift Card">PlayStation Store</option>
+                                            <option value="Xbox Gift Card">Xbox Gift Card</option>
+                                            <option value="Nintendo eShop">Nintendo eShop</option>
+                                            <option value="Google Play Gift Card">Google Play</option>
+                                            <option value="Apple Gift Card">Apple / iTunes</option>
+                                            <option value="Netflix Gift Card">Netflix</option>
+                                            <option value="Spotify Gift Card">Spotify</option>
+                                            <option value="DoorDash Gift Card">DoorDash</option>
+                                            <option value="Uber Eats Gift Card">Uber Eats</option>
+                                            <option value="Starbucks Gift Card">Starbucks</option>
+                                        </optgroup>
+                                        <optgroup label="Prepaid / Financial">
+                                            <option value="Visa Prepaid Card">Visa Prepaid Card</option>
+                                            <option value="Mastercard Prepaid">Mastercard Prepaid</option>
+                                            <option value="PayPal Gift">PayPal</option>
+                                            <option value="Crypto">Crypto</option>
+                                        </optgroup>
+                                        <optgroup label="Gaming">
+                                            <option value="Roblox Gift Card">Roblox</option>
+                                            <option value="V-Bucks Card">V-Bucks (Fortnite)</option>
+                                            <option value="League of Legends RP">League of Legends RP</option>
+                                            <option value="Battle.net Balance">Battle.net</option>
+                                        </optgroup>
+                                        <optgroup label="Other">
+                                            <option value="Subscription Code">Subscription Code</option>
+                                            <option value="Redeem URL">Redeem URL / Link</option>
+                                            <option value="Other">Other</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 6px;">
+                                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 2px;">Code, key, PIN, URL, or redemption details</label>
+                                    <textarea id="gift-code" placeholder="Paste the full code, key, PIN, URL, or any redemption details here. Multi-line is fine — include card numbers, security codes, PINs, expiry dates, or instructions." maxlength="2000" rows="3" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.8rem; font-family: monospace; resize: vertical;"></textarea>
+                                </div>
+                                <div style="font-size: 0.65rem; color: var(--muted); padding: 6px 8px; background: rgba(167,139,250,0.08); border-radius: 6px;">
+                                    <i class="fas fa-shield-alt" style="color: var(--accent);"></i>
+                                    <strong>AES-256 encrypted</strong> — stored securely, never visible on the card page. Only the recipient can decrypt via a private authenticated link. Not even admins can read it.
+                                </div>
+                            </div>
+                        </details>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <button type="submit" id="sign-btn" class="btn btn-primary"><i class="fas fa-pen-nib"></i> Sign Card</button>
+                            <div style="font-size: 0.7rem; color: var(--muted);">Explicit or NSFW content is prohibited.</div>
+                        </div>
+                    </form>
+                <% } %>
+            <% } else { %>
+                <h3><i class="fas fa-pen-nib" style="color: var(--accent); margin-right: 8px;"></i>Sign the Card</h3>
+                <p style="color: var(--muted); font-size: 0.85rem; margin-bottom: 16px;">Log in for your avatar, or sign as a guest with just your name.</p>
+
+                <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+                    <a href="/auth/discord?returnTo=/card/<%= card.slug || card.share_token %>" class="btn btn-discord" style="flex: 1; justify-content: center; min-width: 140px;"><i class="fab fa-discord"></i> Discord</a>
+                    <a href="/auth/twitch?returnTo=/card/<%= card.slug || card.share_token %>" class="btn" style="flex: 1; justify-content: center; min-width: 140px; background: #9146FF; color: white;"><i class="fab fa-twitch"></i> Twitch</a>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                    <div style="flex: 1; height: 1px; background: var(--border);"></div>
+                    <span style="font-size: 0.75rem; color: var(--muted);">or sign as guest</span>
+                    <div style="flex: 1; height: 1px; background: var(--border);"></div>
+                </div>
+
+                <div id="sign-error" class="error-msg"></div>
+                <div id="sign-success" class="success-msg"></div>
+                <form id="sign-form">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Your Name</label>
+                            <input type="text" id="guest-name" placeholder="Your name" required maxlength="100" style="font-size: 0.9rem;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label>Edit Password <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
+                            <input type="password" id="guest-password" placeholder="Set to edit later" maxlength="100" style="font-size: 0.9rem;">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Your Message</label>
+                        <textarea id="sign-message" placeholder="Happy birthday! Hope you have an amazing day..." maxlength="2000" required oninput="this.nextElementSibling.textContent=this.value.length+'/2000'" style="min-height: 80px;"></textarea>
+                        <div style="text-align: right; font-size: 0.65rem; color: var(--muted); margin-top: 2px;">0/2000</div>
+                    </div>
+                    <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+                        <% ['❤️','👍','🥳','🎉','🎂','🥰','😍','🤩','🎁','🍰','🥂','🎊','💐','🌟','🔥'].forEach(e => { %>
+                        <button type="button" class="emoji-btn" onclick="document.getElementById('sign-message').value += '<%= e %>'" style="background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 1.1rem; cursor: pointer; transition: all 0.15s;"><%= e %></button>
+                        <% }); %>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <div style="display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px;">
+                            <button type="button" class="media-tab active" data-tab="gif" onclick="switchMediaTab('gif')"><i class="fas fa-images"></i> GIF</button>
+                            <button type="button" class="media-tab" data-tab="sticker" onclick="switchMediaTab('sticker')"><i class="fas fa-sticky-note"></i> Sticker</button>
+                            <button type="button" class="media-tab" data-tab="upload" onclick="switchMediaTab('upload')"><i class="fas fa-upload"></i> Upload</button>
+                        </div>
+                        <div class="media-panel" id="panel-gif">
+                            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                <input type="text" id="giphy-search" placeholder="Search GIFs..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                <button type="button" onclick="searchGiphy('gif')" style="background: var(--accent); border: none; border-radius: 8px; padding: 8px 14px; color: white; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-search"></i></button>
+                            </div>
+                            <div id="giphy-results" style="columns: 4; column-gap: 8px; max-height: 280px; overflow-y: auto; padding: 4px;"></div>
+                            <div style="text-align: right; margin-top: 6px; font-size: 0.65rem; color: var(--muted);">Powered by GIPHY</div>
+                        </div>
+                        <div class="media-panel" id="panel-sticker" style="display: none;">
+                            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                                <input type="text" id="sticker-search" placeholder="Search stickers..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                <button type="button" onclick="searchGiphy('sticker')" style="background: var(--accent); border: none; border-radius: 8px; padding: 8px 14px; color: white; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-search"></i></button>
+                            </div>
+                            <div id="sticker-results" style="columns: 4; column-gap: 8px; max-height: 280px; overflow-y: auto; padding: 4px;"></div>
+                            <div style="text-align: right; margin-top: 6px; font-size: 0.65rem; color: var(--muted);">Powered by GIPHY</div>
+                        </div>
+                        <div class="media-panel" id="panel-upload" style="display: none;">
+                            <div style="padding: 12px;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px;">
+                                    <div>
+                                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Upload a file</label>
+                                        <input type="file" id="upload-file" accept="image/png,image/jpeg,image/gif,image/webp" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 6px; color: var(--text); font-size: 0.8rem;">
+                                    </div>
+                                    <div>
+                                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Or paste a URL</label>
+                                        <input type="text" id="upload-url" placeholder="https://..." style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="media-preview" style="display: none; margin-bottom: 12px; position: relative;">
+                        <img id="preview-img" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 2px solid var(--accent);">
+                        <button type="button" onclick="clearMedia()" style="position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: #ef4444; border: none; color: white; cursor: pointer; font-size: 0.7rem; display: flex; align-items: center; justify-content: center;"><i class="fas fa-times"></i></button>
+                    </div>
+                    <input type="hidden" id="sign-gif" value="">
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <button type="submit" id="sign-btn" class="btn btn-primary"><i class="fas fa-pen-nib"></i> Sign Card</button>
+                        <div style="font-size: 0.7rem; color: var(--muted);">Explicit or NSFW content is prohibited.</div>
+                    </div>
+                </form>
+            <% } %>
+        </div>
+        <% } %>
+
+        <%/* ═══ BOARD-SPECIFIC: Signatures grid (only for group boards) ═══ */%>
+        <% if (card.card_type !== 'greeting_card' && card.card_type !== 'one_person') { %>
+        <!-- Signatures -->
+        <div class="signatures" id="signatures-container" style="<% if (card.board_bg_image_url) { %>background-image: url('<%= card.board_bg_image_url %>'); background-color: rgba(0,0,0,0.3);<% } else if (card.board_bg_color) { %>background-color: <%= card.board_bg_color %>;<% } else { %>background-color: rgb(0,0,0);<% } %>">
+            <% if (signatures.length > 0) { %>
+                <%
+                    const likesSet = new Set((typeof userLikes !== 'undefined' ? userLikes : []));
+                    const rMap = typeof repliesMap !== 'undefined' ? repliesMap : {};
+                %>
+                <% signatures.forEach(sig => { %>
+                <div class="sig" id="sig-<%= sig.id %>" style="<% if (sig.rotation) { %>transform: rotate(<%= sig.rotation %>deg);<% } %><% if (sig.card_bg_color) { %>background-color: <%= sig.card_bg_color %>;<% } %><% if (sig.card_border_radius) { %>border-radius: <%= sig.card_border_radius %>px;<% } %><% if (sig.card_border_color) { %>border: 2px solid <%= sig.card_border_color %>;<% } %><% if (sig.card_shadow === 'light') { %>box-shadow: 0 1px 3px rgba(0,0,0,0.12);<% } else if (sig.card_shadow === 'dramatic') { %>box-shadow: 0 8px 24px rgba(0,0,0,0.2);<% } %><% if (sig.note_effect) { %>position: relative; overflow: hidden;<% } %>">
+                    <% if (sig.note_effect) { %>
+                    <div class="note-effect note-effect-<%= sig.note_effect %>">
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                    <% } %>
+                    <div class="sig-name"><%= sig.signer_username || '' %></div>
+                    <% if (sig.message && sig.message !== 'Imported from RecoCards') { %>
+                        <div class="sig-message" style="<% if (sig.font_color) { %>color: <%= sig.font_color %>;<% } %><% if (sig.font_family) { %>font-family: '<%= sig.font_family %>', sans-serif;<% } %><% if (sig.font_size) { %>font-size: <%= sig.font_size %>px;<% } %><% if (sig.pin_rank) { %>border-left: 3px solid var(--gold); padding-left: 10px;<% } %>"><%= sig.message %></div>
+                    <% } %>
+                    <% if (sig.gif_url) { %>
+                        <img src="<%= sig.gif_url %>" alt="" class="sig-gif" loading="lazy">
+                    <% } %>
+                    <% if (sig.audio_url) { %>
+                        <audio controls class="sig-audio" preload="none"><source src="<%= sig.audio_url %>" type="audio/webm"></audio>
+                    <% } %>
+                    <% if (sig.pin_rank) { %>
+                        <div style="font-size: 0.65rem; color: var(--gold); margin-top: 4px;"><i class="fas fa-thumbtack"></i> Pinned</div>
+                    <% } %>
+
+                    <!-- Like + Reply + Delete + Pin bar -->
+                    <div class="sig-actions">
+                        <% const isLiked = likesSet.has(sig.id); const hasLikes = (sig.likes || 0) > 0; %>
+                        <button type="button" class="sig-action-btn like-btn <%= isLiked || hasLikes ? 'liked' : '' %>" data-id="<%= sig.id %>" data-user-liked="<%= isLiked ? '1' : '0' %>" onclick="toggleLike(this, <%= sig.id %>)">
+                            <i class="<%= isLiked || hasLikes ? 'fas' : 'far' %> fa-heart"></i>
+                            <span class="like-count"><%= sig.likes || 0 %></span>
+                        </button>
+                        <button type="button" class="sig-action-btn" onclick="toggleReply(<%= sig.id %>)">
+                            <i class="far fa-comment"></i>
+                            <span><%= (rMap[sig.id] || []).length || '' %></span>
+                        </button>
+                        <% const canEdit = (user && user.id === sig.signer_user_id) || sig.guest_password_hash; %>
+                        <% if (canEdit) { %>
+                        <button type="button" class="sig-action-btn" onclick="editSig(<%= sig.id %>, <%= sig.guest_password_hash ? 'true' : 'false' %>)" title="Edit message"><i class="far fa-edit"></i></button>
+                        <% } %>
+                        <% const canDelete = (user && (user.id === sig.signer_user_id || user.id === card.user_id || user.id === card.creator_user_id)) || sig.guest_password_hash; %>
+                        <% if (canDelete) { %>
+                        <button type="button" class="sig-action-btn" onclick="deleteSig(<%= sig.id %>, <%= sig.guest_password_hash ? 'true' : 'false' %>)" title="Delete message"><i class="far fa-trash-alt"></i></button>
+                        <% } %>
+                        <% const canPin = user && (user.id === card.user_id || user.id === card.creator_user_id); %>
+                        <% if (canPin && card.card_type !== 'one_person') { %>
+                        <button type="button" class="sig-action-btn" onclick="pinSig(<%= sig.id %>, <%= sig.pin_rank ? 'null' : '1' %>)" title="<%= sig.pin_rank ? 'Unpin' : 'Pin to top' %>" style="<%= sig.pin_rank ? 'color: var(--gold);' : '' %>"><i class="fas fa-thumbtack"></i></button>
+                        <% } %>
+                    </div>
+
+                    <!-- Replies -->
+                    <% const sigReplies = rMap[sig.id] || []; %>
+                    <div class="sig-replies" id="replies-<%= sig.id %>" style="<%= sigReplies.length ? '' : 'display:none;' %>">
+                        <% sigReplies.forEach(r => { %>
+                        <div class="sig-reply">
+                            <% if (r.avatar_url) { %><img src="<%= r.avatar_url %>" class="reply-avatar"><% } %>
+                            <div><strong><%= r.username %></strong> <%= r.message %></div>
+                        </div>
+                        <% }); %>
+                    </div>
+
+                    <!-- Reply form (hidden) -->
+                    <div class="reply-form" id="reply-form-<%= sig.id %>" style="display:none;">
+                        <input type="text" class="reply-input" id="reply-input-<%= sig.id %>" placeholder="Write a reply..." maxlength="500">
+                        <button type="button" class="reply-send" onclick="sendReply(<%= sig.id %>)"><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                </div>
+                <% }); %>
+            <% } else { %>
+                <div class="empty-state">
+                    <i class="fas fa-pen-nib" style="font-size: 2rem; margin-bottom: 12px; display: block; opacity: 0.3;"></i>
+                    <div>No signatures yet — be the first to sign!</div>
+                </div>
+            <% } %>
+        </div>
+
+        <% } %>
+        <%/* ═══ END BOARD-SPECIFIC SIGNATURES ═══ */%>
+
+        <div class="footer">
+            Powered by <a href="/">CertiFried MultiTool</a>
+        </div>
+    </div>
+
+    <!-- JPEG Download (uses html2canvas via CDN) -->
+    <script>
+    function downloadAsImage() {
+        var script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        script.onload = function() {
+            var container = document.querySelector('.container');
+            // Temporarily hide non-content elements
+            var hide = document.querySelectorAll('.slideshow-toggle, .sign-form, .footer, .slideshow-overlay');
+            hide.forEach(function(el) { el.style.display = 'none'; });
+
+            html2canvas(container, { backgroundColor: '#0b0f11', scale: 2, useCORS: true }).then(function(canvas) {
+                hide.forEach(function(el) { el.style.display = ''; });
+                var link = document.createElement('a');
+                link.download = 'birthday-card.jpg';
+                link.href = canvas.toDataURL('image/jpeg', 0.9);
+                link.click();
+            }).catch(function() {
+                hide.forEach(function(el) { el.style.display = ''; });
+                alert('Could not generate image. Try the PDF export instead.');
+            });
+        };
+        document.head.appendChild(script);
+    }
+    </script>
+
+    <!-- Media / Giphy JS -->
+    <script>
+    var selectedMediaUrl = '';
+    var GIPHY_KEY = '7vqsKgH181mLvoB4U9L7iGsQvMmhcE6i';
+    var trendingLoaded = { gif: false, sticker: false };
+
+    // Live font preview — update textarea as user changes font settings
+    (function() {
+        var colorPicker = document.getElementById('font-color');
+        var fontSelect = document.getElementById('font-family');
+        var sizeSlider = document.getElementById('font-size');
+        var sizeLabel = document.getElementById('font-size-label');
+        var textarea = document.getElementById('sign-message');
+
+        function updatePreview() {
+            if (!textarea) return;
+            if (colorPicker) textarea.style.color = colorPicker.value;
+            if (fontSelect && fontSelect.value) {
+                textarea.style.fontFamily = "'" + fontSelect.value + "', sans-serif";
+            } else if (fontSelect) {
+                textarea.style.fontFamily = '';
+            }
+            if (sizeSlider) {
+                textarea.style.fontSize = sizeSlider.value + 'px';
+                if (sizeLabel) sizeLabel.textContent = sizeSlider.value + 'px';
+            }
+        }
+        if (colorPicker) colorPicker.addEventListener('input', updatePreview);
+        if (fontSelect) fontSelect.addEventListener('change', updatePreview);
+        if (sizeSlider) sizeSlider.addEventListener('input', updatePreview);
+    })();
+
+    function switchMediaTab(tab) {
+        document.querySelectorAll('.media-tab').forEach(function(t) { t.classList.remove('active'); });
+        document.querySelectorAll('.media-panel').forEach(function(p) { p.style.display = 'none'; });
+        document.querySelector('.media-tab[data-tab="' + tab + '"]').classList.add('active');
+        document.getElementById('panel-' + tab).style.display = '';
+
+        // Load trending on first open (Giphy Trending endpoint)
+        if (tab === 'gif' && !trendingLoaded.gif) {
+            loadTrending('gif');
+            trendingLoaded.gif = true;
+        }
+        if (tab === 'sticker' && !trendingLoaded.sticker) {
+            loadTrending('sticker');
+            trendingLoaded.sticker = true;
+        }
+    }
+
+    function loadTrending(type) {
+        var resultsId = type === 'sticker' ? 'sticker-results' : 'giphy-results';
+        var endpoint = type === 'sticker'
+            ? 'https://api.giphy.com/v1/stickers/trending'
+            : 'https://api.giphy.com/v1/gifs/trending';
+
+        var container = document.getElementById(resultsId);
+        container.textContent = 'Loading trending...';
+
+        fetch(endpoint + '?api_key=' + GIPHY_KEY + '&limit=30&rating=pg-13')
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(data) { renderGiphyResults(container, data); })
+        .catch(function(err) { container.textContent = 'Failed to load: ' + err.message; });
+    }
+
+    function searchGiphy(type) {
+        var inputId = type === 'sticker' ? 'sticker-search' : 'giphy-search';
+        var resultsId = type === 'sticker' ? 'sticker-results' : 'giphy-results';
+        var query = document.getElementById(inputId).value.trim();
+
+        // If empty search, reload trending
+        if (!query) { loadTrending(type); return; }
+
+        var endpoint = type === 'sticker'
+            ? 'https://api.giphy.com/v1/stickers/search'
+            : 'https://api.giphy.com/v1/gifs/search';
+
+        var container = document.getElementById(resultsId);
+        container.textContent = 'Searching...';
+
+        fetch(endpoint + '?api_key=' + GIPHY_KEY + '&q=' + encodeURIComponent(query) + '&limit=30&rating=pg-13')
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(data) { renderGiphyResults(container, data); })
+        .catch(function(err) { container.textContent = 'Search failed: ' + err.message; });
+    }
+
+    function renderGiphyResults(container, data) {
+        container.textContent = '';
+        if (!data || !data.data || !data.data.length) {
+            container.textContent = 'No results found';
+            return;
+        }
+        data.data.forEach(function(gif) {
+            if (!gif.images) return;
+            var div = document.createElement('div');
+            div.className = 'giphy-item';
+            var img = document.createElement('img');
+            // Use downsampled still for fast load, full on hover
+            var imgs = gif.images;
+            var stillUrl = (imgs.fixed_width_downsampled || imgs.fixed_width_small || imgs.fixed_width || imgs.original).url;
+            var animUrl = (imgs.fixed_width || imgs.fixed_width_small || imgs.original).url;
+            var fullUrl = imgs.original.url;
+            img.src = stillUrl;
+            img.alt = gif.title || '';
+            img.loading = 'lazy';
+            div.appendChild(img);
+            div.addEventListener('mouseenter', function() { img.src = animUrl; });
+            div.addEventListener('mouseleave', function() { img.src = stillUrl; });
+            div.addEventListener('click', function() { selectMedia(fullUrl); });
+            container.appendChild(div);
+        });
+    }
+
+    function selectMedia(url) {
+        selectedMediaUrl = url;
+        document.getElementById('sign-gif').value = url;
+        document.getElementById('preview-img').src = url;
+        document.getElementById('media-preview').style.display = 'inline-block';
+    }
+
+    function clearMedia() {
+        selectedMediaUrl = '';
+        document.getElementById('sign-gif').value = '';
+        document.getElementById('media-preview').style.display = 'none';
+    }
+
+    // Handle video URL → thumbnail
+    var videoInput = document.getElementById('video-url');
+    if (videoInput) {
+        videoInput.addEventListener('change', function() {
+            var url = videoInput.value.trim();
+            var ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/watch\?v=|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+            if (ytMatch) {
+                selectMedia('https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg');
+            }
+        });
+    }
+
+    // Handle upload URL
+    var uploadInput = document.getElementById('upload-url');
+    if (uploadInput) {
+        uploadInput.addEventListener('change', function() {
+            var url = uploadInput.value.trim();
+            if (url && (url.match(/\.(jpg|jpeg|png|gif|webp)/i) || url.includes('imgur') || url.includes('discord'))) {
+                selectMedia(url);
+            }
+        });
+    }
+
+    // Handle file upload
+    var uploadFile = document.getElementById('upload-file');
+    if (uploadFile) {
+        uploadFile.addEventListener('change', function() {
+            if (!uploadFile.files.length) return;
+            var file = uploadFile.files[0];
+            if (file.size > 5 * 1024 * 1024) { alert('File too large (max 5MB)'); return; }
+
+            var formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/card/upload', { method: 'POST', body: formData })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success && data.url) { selectMedia(data.url); }
+                else { alert(data.error || 'Upload failed'); }
+            })
+            .catch(function() { alert('Upload failed'); });
+        });
+    }
+
+    // Enter key searches in Giphy inputs
+    ['giphy-search', 'sticker-search'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); searchGiphy(id === 'sticker-search' ? 'sticker' : 'gif'); }
+        });
+    });
+
+    // Auto-load trending GIFs on page load
+    if (document.getElementById('panel-gif')) {
+        loadTrending('gif');
+        trendingLoaded.gif = true;
+    }
+    </script>
+
+    <!-- Likes + Replies JS -->
+    <script>
+    var cardToken = '<%= card.share_token %>';
+    var isLoggedIn = <%= user ? 'true' : 'false' %>;
+
+    function toggleLike(btn, sigId) {
+        if (!isLoggedIn) { window.location.href = '/auth/discord?returnTo=/card/' + cardToken; return; }
+        var userLiked = btn.getAttribute('data-user-liked') === '1';
+        var method = userLiked ? 'DELETE' : 'POST';
+        fetch('/card/' + cardToken + '/like/' + sigId, { method: method })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var count = btn.querySelector('.like-count');
+                var current = parseInt(count.textContent) || 0;
+                if (userLiked) {
+                    btn.setAttribute('data-user-liked', '0');
+                    count.textContent = Math.max(0, current - 1);
+                    if (current <= 1) {
+                        btn.classList.remove('liked');
+                        btn.querySelector('i').className = 'far fa-heart';
+                    }
+                } else {
+                    btn.setAttribute('data-user-liked', '1');
+                    btn.classList.add('liked');
+                    btn.querySelector('i').className = 'fas fa-heart';
+                    count.textContent = current + 1;
+                }
+            }
+        });
+    }
+
+    function toggleReply(sigId) {
+        var form = document.getElementById('reply-form-' + sigId);
+        var replies = document.getElementById('replies-' + sigId);
+        if (form.style.display === 'none') {
+            form.style.display = 'flex';
+            replies.style.display = '';
+            form.querySelector('input').focus();
+        } else {
+            form.style.display = 'none';
+        }
+    }
+
+    function sendReply(sigId) {
+        if (!isLoggedIn) { alert('Please log in to reply'); return; }
+        var input = document.getElementById('reply-input-' + sigId);
+        var msg = input.value.trim();
+        if (!msg) return;
+        fetch('/card/' + cardToken + '/reply/' + sigId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) { window.location.reload(); }
+            else { alert(data.error || 'Failed'); }
+        });
+    }
+
+    // Delete a signature
+    function deleteSig(sigId, needsPassword) {
+        if (!confirm('Delete this message? This cannot be undone.')) return;
+        var body = {};
+        if (needsPassword && !isLoggedIn) {
+            var pw = prompt('Enter the edit password you set when signing:');
+            if (!pw) return;
+            body.guest_password = pw;
+        }
+        fetch('/card/<%= card.slug || card.share_token %>/delete-signature/' + sigId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var el = document.getElementById('sig-' + sigId);
+                if (el) el.remove();
+            } else { alert(data.error || 'Failed to delete'); }
+        });
+    }
+
+    function editSig(sigId, needsPassword) {
+        var newMsg = prompt('Edit your message:');
+        if (!newMsg || !newMsg.trim()) return;
+        var body = { message: newMsg.trim() };
+        if (needsPassword && !isLoggedIn) {
+            var pw = prompt('Enter the edit password you set when signing:');
+            if (!pw) return;
+            body.guest_password = pw;
+        }
+        fetch('/card/<%= card.slug || card.share_token %>/edit-signature/' + sigId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) { window.location.reload(); }
+            else { alert(data.error || 'Failed to edit'); }
+        });
+    }
+
+    // Pin/unpin a signature
+    function pinSig(sigId, rank) {
+        fetch('/card/<%= card.slug || card.share_token %>/pin/' + sigId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin_rank: rank })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) window.location.reload();
+            else alert(data.error || 'Failed');
+        });
+    }
+    </script>
+
+    <!-- Slideshow JS -->
+    <% if (signatures.length > 1) { %>
+    <script>
+    (function() {
+        var totalSlides = <%= signatures.length %>;
+        var currentSlide = 0;
+        var autoplayTimer = null;
+        var autoplayInterval = 5000;
+        var isAutoplaying = true;
+
+        function showSlide(index) {
+            currentSlide = ((index % totalSlides) + totalSlides) % totalSlides;
+            var slides = document.querySelectorAll('.slideshow-slide');
+            slides.forEach(function(s) { s.classList.remove('visible'); });
+            slides[currentSlide].classList.add('visible');
+            document.getElementById('slideshow-counter').textContent = (currentSlide + 1) + ' / ' + totalSlides;
+            document.getElementById('slideshow-progress').style.width = (((currentSlide + 1) / totalSlides) * 100) + '%';
+        }
+
+        window.nextSlide = function() { showSlide(currentSlide + 1); resetAutoplay(); };
+        window.prevSlide = function() { showSlide(currentSlide - 1); resetAutoplay(); };
+
+        function resetAutoplay() {
+            if (!isAutoplaying) return;
+            clearInterval(autoplayTimer);
+            autoplayTimer = setInterval(function() { showSlide(currentSlide + 1); }, autoplayInterval);
+        }
+
+        window.toggleAutoplay = function() {
+            var btn = document.getElementById('autoplay-btn');
+            if (isAutoplaying) {
+                clearInterval(autoplayTimer);
+                isAutoplaying = false;
+                btn.querySelector('i').className = 'fas fa-play';
+            } else {
+                isAutoplaying = true;
+                resetAutoplay();
+                btn.querySelector('i').className = 'fas fa-pause';
+            }
+        };
+
+        window.startSlideshow = function() {
+            document.getElementById('slideshow-overlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+            showSlide(0);
+            isAutoplaying = true;
+            document.getElementById('autoplay-btn').querySelector('i').className = 'fas fa-pause';
+            autoplayTimer = setInterval(function() { showSlide(currentSlide + 1); }, autoplayInterval);
+        };
+
+        window.stopSlideshow = function() {
+            document.getElementById('slideshow-overlay').classList.remove('active');
+            document.body.style.overflow = '';
+            clearInterval(autoplayTimer);
+        };
+
+        window.setView = function(view) {
+            document.getElementById('view-board').classList.toggle('active', view === 'board');
+            document.getElementById('view-list').classList.toggle('active', view === 'list');
+            var slideshowBtn = document.getElementById('view-slideshow');
+            if (slideshowBtn) slideshowBtn.classList.toggle('active', view === 'slideshow');
+            var sigContainer = document.getElementById('signatures-container');
+            if (sigContainer) {
+                sigContainer.classList.toggle('list-mode', view === 'list');
+                sigContainer.style.height = '';
+                if (view === 'board' && window.layoutMasonry) setTimeout(window.layoutMasonry, 50);
+            }
+            if (view === 'slideshow') window.startSlideshow();
+        };
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (!document.getElementById('slideshow-overlay').classList.contains('active')) return;
+            if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); window.nextSlide(); }
+            else if (e.key === 'ArrowLeft') { e.preventDefault(); window.prevSlide(); }
+            else if (e.key === 'Escape') { window.stopSlideshow(); }
+        });
+
+        // URL param: auto-start slideshow if ?slideshow in URL
+        if (window.location.search.includes('slideshow')) {
+            setTimeout(function() { window.startSlideshow(); }, 500);
+        }
+    })();
+    </script>
+    <% } %>
+
+    <% if (!card.is_posted) { %>
+    <script>
+    var signForm = document.getElementById('sign-form');
+    if (signForm) {
+    signForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var msg = document.getElementById('sign-message').value.trim();
+        var gif = document.getElementById('sign-gif')?.value?.trim() || '';
+        var errorDiv = document.getElementById('sign-error');
+        var successDiv = document.getElementById('sign-success');
+        var btn = document.getElementById('sign-btn');
+        var guestName = document.getElementById('guest-name')?.value?.trim() || '';
+        var guestPassword = document.getElementById('guest-password')?.value?.trim() || '';
+
+        if (!msg) { errorDiv.textContent = 'Please write a message.'; errorDiv.style.display = 'block'; return; }
+        if (!isLoggedIn && !guestName) { errorDiv.textContent = 'Please enter your name.'; errorDiv.style.display = 'block'; return; }
+        errorDiv.style.display = 'none';
+        btn.disabled = true;
+        btn.querySelector('i').className = 'fas fa-spinner fa-spin';
+
+        var fontColor = document.getElementById('font-color')?.value || '';
+        var fontFamily = document.getElementById('font-family')?.value || '';
+        var fontSize = document.getElementById('font-size')?.value || '';
+        var body = { message: msg, gif_url: gif || null };
+        if (fontColor && fontColor !== '#1f2937') body.font_color = fontColor;
+        if (fontFamily) body.font_family = fontFamily;
+        if (fontSize && parseInt(fontSize) !== 14) body.font_size = parseInt(fontSize);
+        if (typeof recordedAudioUrl !== 'undefined' && recordedAudioUrl) body.audio_url = recordedAudioUrl;
+        var giftCode = document.getElementById('gift-code')?.value?.trim() || '';
+        var giftPlatform = document.getElementById('gift-platform')?.value || '';
+        if (giftCode) { body.gift_code = giftCode; body.gift_platform = giftPlatform; }
+        // Card style
+        var cardBgColor = document.getElementById('card-bg-color')?.value;
+        var cardBorderColor = document.getElementById('card-border-color')?.value;
+        var cardBorderRadius = document.getElementById('card-border-radius')?.value;
+        var cardShadow = document.getElementById('card-shadow')?.value;
+        var noteEffect = document.getElementById('note-effect')?.value;
+        if (cardBgColor && cardBgColor !== '#ffffff') body.card_bg_color = cardBgColor;
+        if (cardBorderColor && cardBorderColor !== '#ffffff') body.card_border_color = cardBorderColor;
+        if (cardBorderRadius) body.card_border_radius = cardBorderRadius;
+        if (cardShadow) body.card_shadow = cardShadow;
+        if (noteEffect) body.note_effect = noteEffect;
+        if (!isLoggedIn) { body.guest_name = guestName; if (guestPassword) body.guest_password = guestPassword; }
+
+        fetch('/card/<%= card.slug || card.share_token %>/sign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                successDiv.textContent = 'Signed! Your message has been added.';
+                successDiv.style.display = 'block';
+                setTimeout(function() { window.location.reload(); }, 1500);
+            } else {
+                errorDiv.textContent = data.error || 'Failed to sign.';
+                errorDiv.style.display = 'block';
+                btn.disabled = false;
+                btn.querySelector('i').className = 'fas fa-pen-nib';
+            }
+        })
+        .catch(function() {
+            errorDiv.textContent = 'Network error.';
+            errorDiv.style.display = 'block';
+            btn.disabled = false;
+            btn.querySelector('i').className = 'fas fa-pen-nib';
+        });
+    });
+    }
+    </script>
+    <% } %>
+
+    <!-- Audio Recording + Embed + Freeze JS -->
+    <script>
+    // Embed code toggle
+    // ═══ Masonry Layout Engine ═══
+    // Places cards left-to-right into shortest column (like RecoCards)
+    (function() {
+        var CARD_WIDTH = 336;
+        var GAP = 12;
+        var PADDING = 16;
+
+        function layoutMasonry() {
+            var container = document.getElementById('signatures-container');
+            if (!container || container.classList.contains('list-mode')) return;
+
+            var cards = container.querySelectorAll('.sig');
+            if (!cards.length) return;
+
+            var containerWidth = container.offsetWidth - (PADDING * 2);
+            var numCols = Math.max(1, Math.floor((containerWidth + GAP) / (CARD_WIDTH + GAP)));
+            var colHeights = new Array(numCols).fill(0);
+            var totalColWidth = numCols * CARD_WIDTH + (numCols - 1) * GAP;
+            var offsetX = Math.max(0, (containerWidth - totalColWidth) / 2) + PADDING;
+
+            for (var i = 0; i < cards.length; i++) {
+                // Find shortest column
+                var minCol = 0;
+                for (var c = 1; c < numCols; c++) {
+                    if (colHeights[c] < colHeights[minCol]) minCol = c;
+                }
+
+                var x = offsetX + minCol * (CARD_WIDTH + GAP);
+                var y = PADDING + colHeights[minCol];
+
+                cards[i].style.left = x + 'px';
+                cards[i].style.top = y + 'px';
+                cards[i].style.width = CARD_WIDTH + 'px';
+
+                colHeights[minCol] += cards[i].offsetHeight + GAP;
+            }
+
+            // Set container height to tallest column
+            var maxHeight = 0;
+            for (var c = 0; c < numCols; c++) {
+                if (colHeights[c] > maxHeight) maxHeight = colHeights[c];
+            }
+            container.style.height = (maxHeight + PADDING) + 'px';
+        }
+
+        // Run after images load
+        window.addEventListener('load', function() {
+            layoutMasonry();
+            // Re-layout after a delay for lazy-loaded images
+            setTimeout(layoutMasonry, 1000);
+            setTimeout(layoutMasonry, 3000);
+        });
+
+        // Re-layout on window resize
+        var resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(layoutMasonry, 150);
+        });
+
+        // Expose for view mode switching
+        window.layoutMasonry = layoutMasonry;
+
+        // Initial layout attempt
+        if (document.readyState === 'complete') layoutMasonry();
+        else document.addEventListener('DOMContentLoaded', layoutMasonry);
+    })();
+
+    // Toggle sign form
+    window.toggleSignForm = function() {
+        var form = document.querySelector('.sign-form');
+        var userBar = document.getElementById('user-bar');
+        if (form) {
+            var isVisible = form.classList.toggle('visible');
+            if (userBar) userBar.style.display = isVisible ? 'flex' : 'none';
+            if (isVisible) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    };
+
+    window.toggleEmbed = function() {
+        var box = document.getElementById('embed-box');
+        if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    };
+    window.copyEmbed = function() {
+        var code = document.getElementById('embed-code');
+        if (code) {
+            navigator.clipboard.writeText(code.textContent).then(function() {
+                var btn = code.parentElement.querySelector('button');
+                var icon = btn.querySelector('i');
+                if (icon) icon.className = 'fas fa-check';
+                btn.childNodes[btn.childNodes.length - 1].textContent = ' Copied!';
+                setTimeout(function() {
+                    if (icon) icon.className = 'fas fa-copy';
+                    btn.childNodes[btn.childNodes.length - 1].textContent = ' Copy';
+                }, 2000);
+            });
+        }
+    };
+
+    // Audio Recording (30s max, WebM format via MediaRecorder API)
+    var mediaRecorder = null;
+    var audioChunks = [];
+    var recordingTimer = null;
+    var recordingSeconds = 0;
+    var recordedAudioUrl = null;
+
+    window.toggleRecording = function() {
+        var btn = document.getElementById('record-btn');
+        if (!btn) return;
+        var icon = btn.querySelector('i');
+
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            return;
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            document.getElementById('record-timer').textContent = 'Audio recording not supported in this browser';
+            return;
+        }
+
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream) {
+            audioChunks = [];
+            recordingSeconds = 0;
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+            mediaRecorder.ondataavailable = function(e) {
+                if (e.data.size > 0) audioChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = function() {
+                stream.getTracks().forEach(function(t) { t.stop(); });
+                clearInterval(recordingTimer);
+                btn.className = 'record-btn idle';
+                if (icon) icon.className = 'fas fa-microphone';
+
+                var blob = new Blob(audioChunks, { type: 'audio/webm' });
+                if (blob.size > 2 * 1024 * 1024) {
+                    document.getElementById('record-timer').textContent = 'Recording too large (max 2MB). Try a shorter message.';
+                    return;
+                }
+
+                var formData = new FormData();
+                formData.append('audio', blob, 'voice_message.webm');
+                document.getElementById('record-timer').textContent = 'Uploading...';
+
+                fetch('/card/upload-audio', { method: 'POST', body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.url) {
+                        recordedAudioUrl = data.url;
+                        document.getElementById('record-timer').textContent = 'Voice message ready!';
+                        var preview = document.getElementById('record-preview');
+                        var playback = document.getElementById('record-playback');
+                        preview.style.display = 'block';
+                        playback.src = data.url;
+                    } else {
+                        document.getElementById('record-timer').textContent = data.error || 'Upload failed';
+                    }
+                })
+                .catch(function() {
+                    document.getElementById('record-timer').textContent = 'Upload failed';
+                });
+            };
+
+            mediaRecorder.start();
+            btn.className = 'record-btn recording';
+            if (icon) icon.className = 'fas fa-stop';
+
+            recordingTimer = setInterval(function() {
+                recordingSeconds++;
+                document.getElementById('record-timer').textContent = recordingSeconds + 's / 30s';
+                if (recordingSeconds >= 30) {
+                    mediaRecorder.stop();
+                }
+            }, 1000);
+        }).catch(function() {
+            document.getElementById('record-timer').textContent = 'Microphone access denied';
+        });
+    };
+
+    window.clearRecording = function() {
+        recordedAudioUrl = null;
+        document.getElementById('record-preview').style.display = 'none';
+        document.getElementById('record-timer').textContent = 'Tap to record (30s max)';
+        var btn = document.getElementById('record-btn');
+        var icon = btn ? btn.querySelector('i') : null;
+        if (btn) btn.className = 'record-btn idle';
+        if (icon) icon.className = 'fas fa-microphone';
+    };
+
+    // Connect standalone card to Discord
+    window.connectToDiscord = function() {
+        var guildId = document.getElementById('connect-guild')?.value;
+        var userId = document.getElementById('connect-user-id')?.value?.trim();
+        var announceChannel = document.getElementById('connect-announce-channel')?.value?.trim();
+        var birthdayRole = document.getElementById('connect-birthday-role')?.value?.trim();
+        var status = document.getElementById('connect-status');
+        var btn = document.getElementById('connect-btn');
+
+        if (!guildId) { status.textContent = 'Please select a server.'; status.style.display = 'block'; status.style.color = '#f87171'; return; }
+
+        status.style.display = 'block';
+        status.style.color = 'var(--accent)';
+        status.textContent = 'Connecting...';
+        btn.disabled = true;
+
+        fetch('/card/<%= card.slug || card.share_token %>/connect-discord', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                guild_id: guildId,
+                user_id: userId || null,
+                announcement_channel_id: announceChannel || null,
+                birthday_role_id: birthdayRole || null,
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                status.style.color = '#22c55e';
+                status.textContent = 'Connected! The card is now linked to your Discord server.';
+                setTimeout(function() { window.location.reload(); }, 2000);
+            } else {
+                status.style.color = '#f87171';
+                status.textContent = data.error || 'Failed to connect.';
+                btn.disabled = false;
+            }
+        })
+        .catch(function() {
+            status.style.color = '#f87171';
+            status.textContent = 'Network error.';
+            btn.disabled = false;
+        });
+    };
+
+    // Reveal gift codes (birthday person only)
+    window.revealGifts = function() {
+        var container = document.getElementById('gifts-container');
+        if (!container) return;
+        container.textContent = 'Loading...';
+        container.style.display = 'block';
+
+        fetch('/card/<%= card.slug || card.share_token %>/gifts')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.gifts && data.gifts.length > 0) {
+                container.textContent = '';
+                data.gifts.forEach(function(gift) {
+                    var el = document.createElement('div');
+                    el.style.cssText = 'background: var(--card-bg); border: 1px solid rgba(255,215,0,0.2); border-radius: 10px; padding: 14px; margin-bottom: 10px;';
+                    var info = document.createElement('div');
+                    var fromEl = document.createElement('div');
+                    fromEl.style.cssText = 'font-size: 0.8rem; font-weight: 600; color: var(--text); margin-bottom: 6px;';
+                    fromEl.textContent = (gift.platform || 'Gift') + ' from ' + gift.from;
+                    var codeEl = document.createElement('pre');
+                    codeEl.style.cssText = 'font-family: monospace; font-size: 0.85rem; color: var(--gold); white-space: pre-wrap; word-break: break-all; user-select: all; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin: 0;';
+                    codeEl.textContent = gift.code;
+                    info.appendChild(fromEl);
+                    info.appendChild(codeEl);
+                    el.appendChild(info);
+                    var copyBtn = document.createElement('button');
+                    copyBtn.style.cssText = 'background: rgba(255,215,0,0.2); border: 1px solid rgba(255,215,0,0.3); border-radius: 8px; padding: 6px 14px; color: var(--gold); cursor: pointer; font-size: 0.75rem; margin-top: 8px; display: block;';
+                    copyBtn.textContent = 'Copy to Clipboard';
+                    copyBtn.onclick = function() { navigator.clipboard.writeText(gift.code); copyBtn.textContent = 'Copied!'; setTimeout(function() { copyBtn.textContent = 'Copy to Clipboard'; }, 2000); };
+                    el.appendChild(copyBtn);
+                    container.appendChild(el);
+                });
+            } else {
+                container.textContent = data.error || 'No gift codes found';
+            }
+        })
+        .catch(function() { container.textContent = 'Failed to load gift codes'; });
+    };
+
+    // Thank you message
+    window.postThankYou = function() {
+        var msg = document.getElementById('thank-you-msg');
+        if (!msg || !msg.value.trim()) return;
+        fetch('/card/<%= card.slug || card.share_token %>/thank-you', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg.value.trim() })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) window.location.reload();
+            else alert(data.error || 'Failed to post');
+        })
+        .catch(function() { alert('Network error'); });
+    };
+    </script>
+</body>
+</html>

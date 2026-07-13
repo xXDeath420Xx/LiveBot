@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CertiFried Utility — Discord &amp; Kick bots</title>
+  <meta name="description" content="CertiFried Utility — server management and community games on Discord, and a shared-banlist defense network on Kick. Pick where you need us." />
+  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#0a0911;--ink:#f1f0f6;--muted:#928da8;--discord:#7c84ff;--kick:#53FC18}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+    .bg{position:fixed;inset:0;z-index:0;background:
+      radial-gradient(40rem 30rem at 20% -10%,rgba(124,132,255,.16),transparent 60%),
+      radial-gradient(40rem 30rem at 85% 0%,rgba(83,252,24,.10),transparent 55%);pointer-events:none}
+    .wrap{position:relative;z-index:1;max-width:62rem;margin:0 auto;padding:3rem 1.5rem 4rem;text-align:center}
+    .logo{display:inline-flex;align-items:center;gap:.6rem;font-weight:700;font-size:1rem;margin-bottom:3rem}
+    .logo img{width:32px;height:32px;border-radius:8px}
+    h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(2.4rem,6vw,4rem);line-height:1.05;letter-spacing:-.02em;margin-bottom:1.1rem}
+    h1 .g{background:linear-gradient(100deg,var(--discord),var(--kick));-webkit-background-clip:text;background-clip:text;color:transparent}
+    .lede{color:var(--muted);font-size:1.15rem;max-width:46ch;margin:0 auto 2.5rem;line-height:1.6}
+    .statbar{display:flex;justify-content:center;gap:0;flex-wrap:wrap;margin-bottom:3.5rem;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden;background:rgba(255,255,255,.02)}
+    .statbar .s{padding:1.2rem 1.8rem;border-right:1px solid rgba(255,255,255,.07);min-width:9rem;flex:1}
+    .statbar .s:last-child{border-right:none}
+    .statbar b{display:block;font-family:'Space Grotesk',sans-serif;font-size:1.9rem;font-weight:700}
+    .statbar span{color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.06em}
+    .cards{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;text-align:left}
+    @media(max-width:720px){.cards{grid-template-columns:1fr}}
+    .card{position:relative;border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2rem;background:rgba(255,255,255,.025);text-decoration:none;color:inherit;transition:transform .15s,border-color .15s,background .15s;overflow:hidden}
+    .card:hover{transform:translateY(-4px);background:rgba(255,255,255,.05)}
+    .card.d:hover{border-color:rgba(124,132,255,.6)}.card.k:hover{border-color:rgba(83,252,24,.5)}
+    .badge{display:inline-flex;align-items:center;gap:.45rem;font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:.25rem .7rem;border-radius:999px;margin-bottom:1rem}
+    .card.d .badge{background:rgba(124,132,255,.16);color:#bcc2ff}.card.k .badge{background:rgba(83,252,24,.15);color:#7dfc4f}
+    .signed{font-size:.66rem;color:#7dfc4f;letter-spacing:.04em}
+    .card h3{font-family:'Space Grotesk',sans-serif;font-size:1.5rem;font-weight:700;margin-bottom:.6rem}
+    .card p{color:var(--muted);font-size:.96rem;line-height:1.55;margin-bottom:1.4rem}
+    .go{display:inline-flex;align-items:center;gap:.5rem;font-weight:700;font-size:.95rem;padding:.7rem 1.3rem;border-radius:11px}
+    .card.d .go{background:var(--discord);color:#0a0911}.card.k .go{background:var(--kick);color:#06140a}
+    .mini{margin-top:1.3rem;display:flex;gap:1.5rem}
+    .mini b{display:block;font-family:'Space Grotesk',sans-serif;font-size:1.3rem}
+    .mini span{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
+    footer{position:relative;z-index:1;text-align:center;color:var(--muted);font-size:.8rem;padding:1.5rem}
+    footer a{color:var(--muted)}
+    /* ---- 4:20 world clock ---- */
+    .ftt{position:relative;z-index:1;max-width:46rem;margin:0 auto 3rem;border:1px solid rgba(83,252,24,.22);border-radius:20px;padding:1.6rem 1.5rem;background:linear-gradient(160deg,rgba(83,252,24,.06),rgba(124,132,255,.05));text-align:center;transition:border-color .3s}
+    .ftt-head{display:flex;align-items:center;justify-content:center;gap:.5rem;font-size:.82rem;color:var(--muted);margin-bottom:1.1rem;text-transform:uppercase;letter-spacing:.09em;font-weight:600}
+    .ftt-head b{color:#7dfc4f;font-family:'Space Grotesk',sans-serif;font-weight:700}
+    .ftt-leaf{font-size:1.05rem}
+    .ftt-now{font-size:1.12rem;line-height:1.5;margin-bottom:1rem;min-height:1.6rem}
+    .ftt-now .place{font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--ink)}
+    .ftt-now.lit{color:#aaffa0}
+    .ftt-now.lit .place{color:#d7ffce}
+    .ftt-clock{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(2.2rem,7vw,3.4rem);letter-spacing:.02em;line-height:1;background:linear-gradient(100deg,#7dfc4f,#7c84ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .ftt-sub{color:var(--muted);font-size:.85rem;margin-top:.45rem}
+    .ftt-ticker{display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem .55rem;margin-top:1.25rem}
+    .ftt-ticker .chip{font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:999px;padding:.25rem .65rem;white-space:nowrap}
+    .ftt-ticker .chip b{color:#cfd2ff;font-weight:600}
+    @keyframes fttpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+    .ftt.islit{border-color:rgba(83,252,24,.55)}
+    .ftt.islit .ftt-clock{animation:fttpulse 1.6s ease-in-out infinite}
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="wrap">
+    <div class="logo"><img src="/images/CertiFried.png" alt=""/> CertiFried Utility</div>
+    <h1>One toolkit for <span class="g">Discord</span> and <span class="g">Kick</span>.</h1>
+    <p class="lede">Server management and community games on Discord. A shared-banlist defense network on Kick. Pick where you need us.</p>
+
+    <div class="ftt" id="ftt">
+      <div class="ftt-head"><span class="ftt-leaf">🍃</span> Where in the world is it <b>4:20</b> right now?</div>
+      <div class="ftt-now" id="ftt-now">Syncing the globe…</div>
+      <div class="ftt-clock" id="ftt-clock">--:--:--</div>
+      <div class="ftt-sub" id="ftt-sub">until the next 4:20</div>
+      <div class="ftt-ticker" id="ftt-ticker"></div>
+      <noscript><div class="ftt-sub" style="margin-top:1rem">Enable JavaScript to watch 4:20 roll around the planet.</div></noscript>
+    </div>
+
+    <div class="statbar">
+      <div class="s"><b><%= Number(locals.discordServers || 0).toLocaleString() %></b><span>Discord servers</span></div>
+      <div class="s"><b><%= Number(locals.discordUsers || 0).toLocaleString() %></b><span>Members reached</span></div>
+      <div class="s"><b><%= Number(locals.kickChannels || 0).toLocaleString() %></b><span>Kick channels</span></div>
+      <div class="s"><b><%= Number(locals.phishingBlocked || 0).toLocaleString() %></b><span>Scam domains blocked</span></div>
+    </div>
+
+    <div class="cards">
+      <a class="card d" href="<%= discordHref %>">
+        <span class="badge">Discord Bot<% if (locals.discordLoggedIn) { %> <span class="signed">● signed in</span><% } %></span>
+        <h3>Command your community</h3>
+        <p>Moderation, anti-nuke, leveling, economy, music, giveaways, reaction roles, stream alerts, plus games like a full D&amp;D 5e RPG, word games and Cards Against Humanity — all dashboard-driven.</p>
+        <span class="go"><%= locals.discordLoggedIn ? 'Open your dashboard' : 'Log in with Discord' %> →</span>
+        <div class="mini">
+          <div><b><%= Number(locals.discordServers || 0).toLocaleString() %></b><span>servers served</span></div>
+        </div>
+      </a>
+      <a class="card k" href="<%= kickHref %>">
+        <span class="badge">Kick Bot<% if (locals.kickLoggedIn) { %> <span class="signed">● signed in</span><% } %></span>
+        <h3>Defend your channel</h3>
+        <p>Bad actors and scam links banned across every connected channel — automatically, the moment you connect. No mod-setup required.</p>
+        <span class="go"><%= locals.kickLoggedIn ? 'Open the defender' : 'Log in with Kick' %> →</span>
+        <div class="mini">
+          <div><b><%= Number(locals.kickChannels || 0).toLocaleString() %></b><span>channels</span></div>
+          <div><b><%= Number(locals.kickEnrolled || 0).toLocaleString() %></b><span>defender-on</span></div>
+        </div>
+      </a>
+    </div>
+  </div>
+  <footer>
+    <a href="/discord">About the Discord bot</a> ·
+    <a href="/kick">Kick dashboard</a> ·
+    <a href="/stream-team" style="color:#2dd4bf;">🌊 Join the Stream Team</a> ·
+    <a href="/docs#kick-defender">Kick docs</a> ·
+    <a href="/donate">Donate</a>
+  </footer>
+
+  <script>
+  (function () {
+    // Curated zones spanning (almost) every UTC offset, so a 4:20 is always
+    // close by. IANA names mean DST is handled for us by Intl — we just read
+    // each zone's real wall-clock time every second.
+    var ZONES = [
+      { tz: 'Pacific/Kiritimati',   label: 'Kiritimati, Kiribati',     flag: '🇰🇮' },
+      { tz: 'Pacific/Auckland',     label: 'Auckland, New Zealand',    flag: '🇳🇿' },
+      { tz: 'Pacific/Chatham',      label: 'Chatham Islands',          flag: '🇳🇿' },
+      { tz: 'Australia/Sydney',     label: 'Sydney, Australia',        flag: '🇦🇺' },
+      { tz: 'Australia/Adelaide',   label: 'Adelaide, Australia',      flag: '🇦🇺' },
+      { tz: 'Asia/Tokyo',           label: 'Tokyo, Japan',             flag: '🇯🇵' },
+      { tz: 'Asia/Seoul',           label: 'Seoul, South Korea',       flag: '🇰🇷' },
+      { tz: 'Australia/Eucla',      label: 'Eucla, Australia',         flag: '🇦🇺' },
+      { tz: 'Asia/Shanghai',        label: 'Shanghai, China',          flag: '🇨🇳' },
+      { tz: 'Asia/Singapore',       label: 'Singapore',                flag: '🇸🇬' },
+      { tz: 'Asia/Bangkok',         label: 'Bangkok, Thailand',        flag: '🇹🇭' },
+      { tz: 'Asia/Yangon',          label: 'Yangon, Myanmar',          flag: '🇲🇲' },
+      { tz: 'Asia/Dhaka',           label: 'Dhaka, Bangladesh',        flag: '🇧🇩' },
+      { tz: 'Asia/Kathmandu',       label: 'Kathmandu, Nepal',         flag: '🇳🇵' },
+      { tz: 'Asia/Kolkata',         label: 'Mumbai, India',            flag: '🇮🇳' },
+      { tz: 'Asia/Karachi',         label: 'Karachi, Pakistan',        flag: '🇵🇰' },
+      { tz: 'Asia/Kabul',           label: 'Kabul, Afghanistan',       flag: '🇦🇫' },
+      { tz: 'Asia/Dubai',           label: 'Dubai, UAE',               flag: '🇦🇪' },
+      { tz: 'Asia/Tehran',          label: 'Tehran, Iran',             flag: '🇮🇷' },
+      { tz: 'Europe/Moscow',        label: 'Moscow, Russia',           flag: '🇷🇺' },
+      { tz: 'Africa/Nairobi',       label: 'Nairobi, Kenya',           flag: '🇰🇪' },
+      { tz: 'Europe/Athens',        label: 'Athens, Greece',           flag: '🇬🇷' },
+      { tz: 'Europe/Paris',         label: 'Paris, France',            flag: '🇫🇷' },
+      { tz: 'Europe/London',        label: 'London, UK',               flag: '🇬🇧' },
+      { tz: 'Atlantic/Cape_Verde',  label: 'Cape Verde',               flag: '🇨🇻' },
+      { tz: 'America/Noronha',      label: 'Fernando de Noronha',      flag: '🇧🇷' },
+      { tz: 'America/Sao_Paulo',    label: 'São Paulo, Brazil',        flag: '🇧🇷' },
+      { tz: 'America/St_Johns',     label: "St. John's, Canada",       flag: '🇨🇦' },
+      { tz: 'America/New_York',     label: 'New York, USA',            flag: '🇺🇸' },
+      { tz: 'America/Chicago',      label: 'Chicago, USA',             flag: '🇺🇸' },
+      { tz: 'America/Denver',       label: 'Denver, USA',              flag: '🇺🇸' },
+      { tz: 'America/Los_Angeles',  label: 'Los Angeles, USA',         flag: '🇺🇸' },
+      { tz: 'America/Anchorage',    label: 'Anchorage, USA',           flag: '🇺🇸' },
+      { tz: 'Pacific/Marquesas',    label: 'Marquesas Islands',        flag: '🇵🇫' },
+      { tz: 'Pacific/Honolulu',     label: 'Honolulu, Hawaii',         flag: '🇺🇸' },
+      { tz: 'Pacific/Pago_Pago',    label: 'Pago Pago, Samoa',         flag: '🇦🇸' },
+      { tz: 'Pacific/Niue',         label: 'Niue',                     flag: '🇳🇺' }
+    ];
+
+    var AM = 4 * 3600 + 20 * 60;   // 04:20:00 -> 15600
+    var PM = 16 * 3600 + 20 * 60;  // 16:20:00 -> 58800
+    var DAY = 86400;
+    var fmtCache = {};
+
+    function fmt(tz) {
+      if (!fmtCache[tz]) {
+        fmtCache[tz] = new Intl.DateTimeFormat('en-US', {
+          timeZone: tz, hour12: false,
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+      }
+      return fmtCache[tz];
+    }
+
+    // Seconds-of-day for a zone's current wall clock (DST-correct).
+    function secondsOfDay(tz, now) {
+      var parts = fmt(tz).formatToParts(now);
+      var h = 0, m = 0, s = 0;
+      for (var i = 0; i < parts.length; i++) {
+        var p = parts[i];
+        if (p.type === 'hour') h = parseInt(p.value, 10);
+        else if (p.type === 'minute') m = parseInt(p.value, 10);
+        else if (p.type === 'second') s = parseInt(p.value, 10);
+      }
+      if (h === 24) h = 0; // some engines render midnight as 24
+      return h * 3600 + m * 60 + s;
+    }
+
+    // Is this zone inside its 4:20 minute right now? -> 'AM' | 'PM' | null
+    function litNow(sod) {
+      if (sod >= AM && sod < AM + 60) return 'AM';
+      if (sod >= PM && sod < PM + 60) return 'PM';
+      return null;
+    }
+
+    // Seconds until this zone NEXT enters a 4:20 (and which one).
+    function nextEntry(sod) {
+      var dAM = (AM - sod + DAY) % DAY;
+      var dPM = (PM - sod + DAY) % DAY;
+      return dAM <= dPM ? { secs: dAM, ap: 'AM' } : { secs: dPM, ap: 'PM' };
+    }
+
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+    function hhmmss(t) {
+      var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+      return pad(h) + ':' + pad(m) + ':' + pad(s);
+    }
+    function localClock(tz, now) {
+      var sod = secondsOfDay(tz, now);
+      var h = Math.floor(sod / 3600), m = Math.floor((sod % 3600) / 60);
+      var ap = h < 12 ? 'AM' : 'PM';
+      var h12 = h % 12; if (h12 === 0) h12 = 12;
+      return h12 + ':' + pad(m) + ' ' + ap;
+    }
+
+    var elBox = document.getElementById('ftt');
+    var elNow = document.getElementById('ftt-now');
+    var elClock = document.getElementById('ftt-clock');
+    var elSub = document.getElementById('ftt-sub');
+    var elTicker = document.getElementById('ftt-ticker');
+    if (!elBox) return;
+
+    function tick() {
+      var now = new Date();
+      var lit = [];
+      var upcoming = [];
+
+      for (var i = 0; i < ZONES.length; i++) {
+        var z = ZONES[i];
+        var sod;
+        try { sod = secondsOfDay(z.tz, now); } catch (e) { continue; }
+        var l = litNow(sod);
+        if (l) lit.push({ z: z, ap: l });
+        var ne = nextEntry(sod);
+        upcoming.push({ z: z, secs: ne.secs, ap: ne.ap });
+      }
+
+      upcoming.sort(function (a, b) { return a.secs - b.secs; });
+      // The soonest zone that isn't already lit becomes the countdown target.
+      var target = null;
+      for (var j = 0; j < upcoming.length; j++) {
+        if (upcoming[j].secs > 0) { target = upcoming[j]; break; }
+      }
+      if (!target) target = upcoming[0];
+
+      // Headline.
+      if (lit.length) {
+        elBox.classList.add('islit');
+        elNow.classList.add('lit');
+        var names = lit.map(function (x) {
+          return '<span class="place">' + x.z.flag + ' ' + x.z.label + '</span> (4:20 ' + x.ap + ')';
+        });
+        var lead = lit.length === 1 ? "🔥 It's <b>4:20</b> right now in " : '🔥 <b>4:20</b> right now in ';
+        elNow.innerHTML = lead + names.join(' · ');
+      } else {
+        elBox.classList.remove('islit');
+        elNow.classList.remove('lit');
+        elNow.innerHTML = 'Next up: <span class="place">' + target.z.flag + ' ' + target.z.label +
+          '</span> — local time ' + localClock(target.z.tz, now);
+      }
+
+      // Countdown to the next 4:20.
+      elClock.textContent = hhmmss(target.secs);
+      elSub.innerHTML = 'until 4:20 ' + target.ap + ' in <b style="color:#cfd2ff">' +
+        target.z.flag + ' ' + target.z.label + '</b>';
+
+      // Rotating ticker of the next handful of 4:20s.
+      var chips = '';
+      for (var k = 0; k < upcoming.length && k < 6; k++) {
+        var u = upcoming[k];
+        chips += '<span class="chip">' + u.z.flag + ' <b>' + u.z.label.split(',')[0] +
+          '</b> ' + hhmmss(u.secs) + '</span>';
+      }
+      elTicker.innerHTML = chips;
+    }
+
+    tick();
+    setInterval(tick, 1000);
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commands - CertiFried MultiTool</title>
+    <meta name="description" content="Every CertiFried MultiTool command, every alias, every prefix. Search all slash commands and subcommands, with permission requirements and which are slash-only.">
+    <meta name="theme-color" content="#a78bfa">
+    <meta property="og:title" content="Commands - CertiFried MultiTool">
+    <meta property="og:description" content="Every command, every alias, every prefix.">
+    <meta property="og:image" content="/images/CertiFried.png">
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f11; --bg-secondary: #0f1416; --bg-card: rgba(255,255,255,0.03);
+            --border: rgba(255,255,255,0.08); --text: #e7e9ee; --text-dim: #8b93a1;
+            --accent: #a78bfa; --ok: #57F287; --warn: #f0b232; --no: #ED4245;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--bg-primary); color: var(--text); font-family: 'Inter', system-ui, sans-serif;
+            line-height: 1.55; -webkit-font-smoothing: antialiased; }
+        a { color: inherit; text-decoration: none; }
+        .container { max-width: 1180px; margin: 0 auto; padding: 0 1.25rem; }
+
+        /* Nav */
+        .navbar { border-bottom: 1px solid var(--border); background: rgba(11,15,17,.85); backdrop-filter: blur(10px);
+            position: sticky; top: 0; z-index: 50; }
+        .navbar-inner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; height: 64px; }
+        .navbar-brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; }
+        .navbar-logo { width: 32px; height: 32px; border-radius: 8px; }
+        .navbar-links { display: flex; gap: 1.25rem; }
+        .navbar-link { color: var(--text-dim); font-size: .92rem; font-weight: 500; }
+        .navbar-link:hover, .navbar-link.active { color: var(--text); }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; cursor: pointer;
+            border-radius: 8px; padding: .5rem .9rem; font-size: .88rem; font-weight: 600; border: 1px solid var(--border);
+            background: transparent; color: var(--text); font-family: inherit; }
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: #14101f; }
+        @media (max-width: 860px) { .navbar-links { display: none; } }
+
+        /* Header */
+        .head { padding: 3rem 0 1.5rem; }
+        .head h1 { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -.02em; }
+        .head p { color: var(--text-dim); max-width: 60ch; margin-top: .5rem; }
+
+        /* How to run */
+        .runcard { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px;
+            padding: 1.1rem 1.25rem; margin: 1.5rem 0; }
+        .runcard h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text-dim); margin-bottom: .7rem; }
+        .prefixes { display: flex; flex-wrap: wrap; gap: .5rem; }
+        .pfx { font-family: ui-monospace, monospace; background: rgba(167,139,250,.12); border: 1px solid rgba(167,139,250,.3);
+            color: var(--accent); padding: .3rem .6rem; border-radius: 7px; font-size: .85rem; }
+        .runcard .note { color: var(--text-dim); font-size: .85rem; margin-top: .7rem; }
+
+        /* Stats */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin-bottom: 1.5rem; }
+        .stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: .9rem 1rem; }
+        .stat b { display: block; font-size: 1.5rem; font-weight: 800; }
+        .stat span { color: var(--text-dim); font-size: .8rem; }
+
+        /* Controls */
+        .controls { display: grid; grid-template-columns: 1fr auto; gap: .75rem; margin-bottom: 1rem; }
+        @media (max-width: 720px) { .controls { grid-template-columns: 1fr; } }
+        .search { width: 100%; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text);
+            border-radius: 10px; padding: .8rem 1rem; font-size: .95rem; font-family: inherit; }
+        .search:focus { outline: none; border-color: var(--accent); }
+        .filters { display: flex; gap: .4rem; flex-wrap: wrap; }
+        .chip { cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text-dim);
+            border-radius: 999px; padding: .4rem .8rem; font-size: .8rem; font-weight: 600; font-family: inherit; }
+        .chip.on { background: var(--accent); border-color: var(--accent); color: #14101f; }
+
+        .cats { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+
+        /* Cards */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .9rem; }
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 1rem 1.1rem;
+            cursor: pointer; transition: border-color .15s, transform .15s; text-align: left; font-family: inherit; color: inherit; }
+        .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+        .card-top { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+        .card-name { font-family: ui-monospace, monospace; font-weight: 700; font-size: 1rem; }
+        .card-desc { color: var(--text-dim); font-size: .86rem; margin-top: .35rem;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .card-meta { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .7rem; }
+        .shorts { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: .6rem; }
+        .shorts code { font-family: ui-monospace, monospace; font-size: .76rem; color: var(--accent);
+            background: rgba(167,139,250,.1); border: 1px solid rgba(167,139,250,.28);
+            border-radius: 5px; padding: .12rem .38rem; }
+
+        .tag { font-size: .68rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+            padding: .18rem .45rem; border-radius: 5px; border: 1px solid var(--border); color: var(--text-dim); }
+        .tag.cat { color: var(--accent); border-color: rgba(167,139,250,.35); }
+        .tag.gate { color: var(--warn); border-color: rgba(240,178,50,.35); }
+        .tag.slash { color: var(--no); border-color: rgba(237,66,69,.35); }
+        .tag.alias { color: var(--ok); border-color: rgba(87,242,135,.35); }
+
+        /* Modal */
+        .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.72); backdrop-filter: blur(4px);
+            display: none; align-items: flex-start; justify-content: center; padding: 4vh 1rem; z-index: 100; overflow-y: auto; }
+        .backdrop.open { display: flex; }
+        .modal { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px;
+            width: min(760px, 100%); }
+        .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+            padding: 1.25rem 1.4rem; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-secondary);
+            border-radius: 16px 16px 0 0; }
+        .modal-title { font-family: ui-monospace, monospace; font-size: 1.25rem; font-weight: 700; }
+        .modal-body { padding: 1.25rem 1.4rem 1.6rem; }
+        .close { background: none; border: none; color: var(--text-dim); font-size: 1.6rem; cursor: pointer; line-height: 1; }
+        .sec { margin-top: 1.4rem; }
+        .sec:first-child { margin-top: 0; }
+        .sec h3 { font-size: .74rem; text-transform: uppercase; letter-spacing: .09em; color: var(--text-dim); margin-bottom: .55rem; }
+        .path { border: 1px solid var(--border); border-radius: 10px; padding: .75rem .9rem; margin-bottom: .55rem; background: var(--bg-card); }
+        .path-name { font-family: ui-monospace, monospace; font-weight: 600; font-size: .92rem; word-break: break-word; }
+        .path-desc { color: var(--text-dim); font-size: .84rem; margin-top: .2rem; }
+        .opts { margin-top: .5rem; display: grid; gap: .25rem; }
+        .opt { font-size: .8rem; color: var(--text-dim); font-family: ui-monospace, monospace; }
+        .opt b { color: var(--text); font-weight: 600; }
+        .req { color: var(--warn); }
+        .why { font-size: .8rem; color: var(--no); margin-top: .45rem; }
+        .runs { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; }
+        .run { font-family: ui-monospace, monospace; font-size: .78rem; background: rgba(255,255,255,.04);
+            border: 1px solid var(--border); border-radius: 6px; padding: .2rem .45rem; cursor: pointer; }
+        .run:hover { border-color: var(--accent); }
+        .kv { font-size: .87rem; color: var(--text-dim); }
+        .kv b { color: var(--text); }
+        .empty { text-align: center; color: var(--text-dim); padding: 3rem 0; }
+
+        .footer { border-top: 1px solid var(--border); margin-top: 4rem; padding: 2rem 0; }
+        .footer-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+        .footer-links { display: flex; gap: 1.1rem; }
+        .footer-link, .footer-copyright { color: var(--text-dim); font-size: .85rem; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-inner">
+                <a href="/" class="navbar-brand">
+                    <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                    <span>CertiFried</span>
+                </a>
+                <div class="navbar-links">
+                    <a href="/" class="navbar-link">Home</a>
+                    <a href="/commands" class="navbar-link active">Commands</a>
+                    <a href="/cards" class="navbar-link">Cards</a>
+                    <a href="/status" class="navbar-link">Status</a>
+                    <a href="/docs" class="navbar-link">Docs</a>
+                    <a href="/sprites" class="navbar-link">👾 Sprites</a>
+                </div>
+                <div class="navbar-actions">
+                    <% if (user) { %>
+                        <a href="/servers" class="btn btn-primary">Dashboard</a>
+                    <% } else { %>
+                        <a href="/auth/discord" class="btn btn-primary">Login</a>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div class="head">
+            <h1>Commands</h1>
+            <p>
+                Every command, every subcommand, every alias. Search by name, description, alias
+                or option — <code>slash-only</code> and <code>gated</code> also work as searches.
+            </p>
+        </div>
+
+        <div class="runcard">
+            <h2>How to run any command</h2>
+            <div class="prefixes">
+                <span class="pfx">/command</span>
+                <% catalog.prefixes.forEach(p => { %><span class="pfx"><%= p %>command</span><% }) %>
+                <span class="pfx"><%= catalog.mentionForm %> command</span>
+            </div>
+            <p class="note">
+                Every slash command also works from chat with any prefix above. Servers can change
+                their prefixes, disable the chat bridge, or add their own aliases in the dashboard's
+                Command Center. Permission requirements are enforced identically either way —
+                Discord only checks them for <code>/</code>, so the chat bridge re-checks them itself.
+            </p>
+        </div>
+
+        <div class="stats">
+            <div class="stat"><b><%= catalog.stats.commands %></b><span>commands</span></div>
+            <div class="stat"><b><%= catalog.stats.paths %></b><span>runnable paths</span></div>
+            <div class="stat"><b><%= catalog.stats.gated %></b><span>permission gated</span></div>
+            <div class="stat"><b><%= catalog.stats.slashOnly %></b><span>slash-only paths</span></div>
+        </div>
+
+        <div class="controls">
+            <input type="search" id="q" class="search" placeholder="Search commands, aliases, options…" autocomplete="off">
+            <div class="filters">
+                <button class="chip" data-filter="gated">Permission gated</button>
+                <button class="chip" data-filter="slashOnly">Slash-only</button>
+                <button class="chip" data-filter="aliasable">Aliasable</button>
+            </div>
+        </div>
+
+        <div class="cats" id="cats">
+            <button class="chip on" data-cat="all">All</button>
+            <% categories.forEach(c => { %><button class="chip" data-cat="<%= c %>"><%= c %></button><% }) %>
+        </div>
+
+        <div class="grid" id="grid"></div>
+        <div class="empty" id="empty" hidden>Nothing matches that search.</div>
+    </main>
+
+    <div class="backdrop" id="backdrop">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+            <div class="modal-head">
+                <div>
+                    <div class="modal-title" id="mTitle"></div>
+                    <div class="kv" id="mDesc"></div>
+                </div>
+                <button class="close" id="mClose" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body" id="mBody"></div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-links">
+                    <a href="/commands" class="footer-link">Commands</a>
+                    <a href="/status" class="footer-link">Status</a>
+                    <a href="/docs" class="footer-link">Documentation</a>
+                    <a href="/terms" class="footer-link">Terms</a>
+                    <a href="/privacy" class="footer-link">Privacy</a>
+                </div>
+                <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool</p>
+            </div>
+        </div>
+    </footer>
+
+<script>
+(function () {
+  // Every `<` is escaped so a command description cannot emit a closing script tag and break out.
+  const CATALOG = <%- JSON.stringify(catalog).replace(/</g, '\\u003c') %>;
+  const CMDS = CATALOG.commands;
+  const PREFIXES = CATALOG.prefixes;
+  const MENTION = CATALOG.mentionForm;
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // Pre-flatten everything a search should hit, so filtering is a single string test.
+  for (const c of CMDS) {
+    c._hay = [
+      c.name, c.description, c.category,
+      ...c.builtinAliases,
+      ...c.paths.flatMap(p => [p.path, p.description, ...p.shortcuts, ...p.options.map(o => o.name + ' ' + o.choices.join(' '))]),
+      c.gated ? 'gated permission' : '',
+      c.paths.some(p => p.slashOnly) ? 'slash-only slashonly' : '',
+      c.opensModal ? 'modal' : '',
+      // `owoh` is a real, typed form — searching for it must find /owo.
+      ...(c.naturalPrefix ? c.naturalPrefix.forms.flatMap(f => f.forms.map(x => c.naturalPrefix.prefix + x)) : []),
+    ].join(' ').toLowerCase();
+  }
+
+  let cat = 'all';
+  const filters = new Set();
+
+  function tags(c) {
+    const t = [`<span class="tag cat">${esc(c.category)}</span>`];
+    if (c.adminOnly) t.push('<span class="tag gate">admin only</span>');
+    else if (c.gated) t.push(`<span class="tag gate">${esc(c.permissions[0] || 'gated')}</span>`);
+    if (c.paths.some(p => p.slashOnly)) t.push('<span class="tag slash">slash-only paths</span>');
+    if (c.opensModal) t.push('<span class="tag slash">opens a form</span>');
+    if (c.builtinAliases.length) t.push(`<span class="tag alias">${c.builtinAliases.length} alias${c.builtinAliases.length>1?'es':''}</span>`);
+    if (c.paths.length > 1) t.push(`<span class="tag">${c.paths.length} subcommands</span>`);
+    return t.join('');
+  }
+
+  function render() {
+    const q = $('q').value.trim().toLowerCase();
+    const list = CMDS.filter(c => {
+      if (cat !== 'all' && c.category !== cat) return false;
+      if (filters.has('gated') && !c.gated) return false;
+      if (filters.has('slashOnly') && !c.paths.some(p => p.slashOnly)) return false;
+      if (filters.has('aliasable') && !c.aliasable) return false;
+      return !q || c._hay.includes(q);
+    });
+
+    $('empty').hidden = list.length > 0;
+    $('grid').innerHTML = list.map((c) => {
+      // Short chat forms are the whole point of the bridge — show them on the face of the card.
+      const shorts = [...new Set(c.paths.flatMap(p => p.shortcuts))]
+        .sort((a, b) => a.length - b.length || a.localeCompare(b)).slice(0, 4);
+      const shortLine = shorts.length
+        ? `<div class="shorts">${shorts.map(s => `<code>${esc(PREFIXES[0] + s)}</code>`).join('')}</div>` : '';
+
+      return `<button class="card" data-i="${CMDS.indexOf(c)}">
+        <div class="card-top"><span class="card-name">/${esc(c.name)}</span></div>
+        <div class="card-desc">${esc(c.description)}</div>
+        ${shortLine}
+        <div class="card-meta">${tags(c)}</div>
+      </button>`;
+    }).join('');
+  }
+
+  /** The shortest way to type a path from chat. `music play` has the shortcut `p`, so use it. */
+  const shortestName = (p) => p.shortcuts.length
+    ? [...p.shortcuts].sort((a, b) => a.length - b.length || a.localeCompare(b))[0]
+    : p.path;
+
+  function runForms(p) {
+    const name = shortestName(p);
+    const forms = [`/${p.path}`];
+    if (!p.slashOnly) {
+      for (const pf of PREFIXES) forms.push(`${pf}${name}`);
+      forms.push(`${MENTION} ${name}`);
+    }
+    return forms.map(f => `<code class="run" data-copy="${esc(f)}">${esc(f)}</code>`).join('');
+  }
+
+  function pathHtml(p) {
+    const opts = p.options.map(o => {
+      const bits = [o.type];
+      if (o.choices.length) bits.push('one of: ' + o.choices.join(' | '));
+      if (o.min != null || o.max != null) bits.push(`${o.min ?? '−∞'}…${o.max ?? '∞'}`);
+      return `<div class="opt">&lt;<b>${esc(o.name)}</b>&gt; ${o.required ? '<span class="req">required</span>' : 'optional'} — ${esc(bits.join(', '))}</div>`;
+    }).join('');
+
+    const name = shortestName(p);
+    const others = p.shortcuts.filter(s => s !== name);
+    // The full path always works too, but it is the long way round — say so quietly.
+    const longWay = name !== p.path
+      ? `<div class="kv" style="margin-top:.45rem">Also works: ${[...others, p.path].map(s => `<code>${esc(PREFIXES[0] + s)}</code>`).join(', ')}</div>`
+      : '';
+
+    return `<div class="path">
+      <div class="path-name">/${esc(p.path)}</div>
+      ${p.description ? `<div class="path-desc">${esc(p.description)}</div>` : ''}
+      ${opts ? `<div class="opts">${opts}</div>` : ''}
+      <div class="runs">${runForms(p)}</div>
+      ${p.slashOnly ? `<div class="why">Slash-only — ${esc(p.slashOnlyReasons.join('; '))}</div>` : ''}
+      ${longWay}
+    </div>`;
+  }
+
+  function open(c) {
+    $('mTitle').textContent = `/${c.name}`;
+    $('mDesc').textContent = c.description;
+
+    const perms = c.adminOnly
+      ? 'Restricted to <b>Administrators</b> by default. Server owners can override this in Discord under Server Settings → Integrations.'
+      : c.gated
+        ? `Requires <b>${c.permissions.map(esc).join('</b>, <b>')}</b>. Enforced for <code>/</code> by Discord and re-checked by the chat bridge.`
+        : 'Anyone can run this.';
+
+    const aliasNote = c.aliasable
+      ? `You can add your own alias with <code>/alias add &lt;name&gt; ${esc(c.name)}</code>, or point one at a specific subcommand path such as <code>${esc(c.paths[c.paths.length-1].path)}</code>.`
+      : 'This command cannot be given a custom alias — none of its paths can run from chat.';
+
+    $('mBody').innerHTML = `
+      <div class="sec">
+        <h3>Permissions</h3>
+        <div class="kv">${perms}</div>
+        ${c.opensModal ? '<div class="why">At least one subcommand opens a pop-up form. Discord can only open a form from a <code>/</code> command, never from a chat message.</div>' : ''}
+      </div>
+
+      <div class="sec">
+        <h3>Aliases</h3>
+        <div class="kv">
+          ${c.builtinAliases.length ? `Built in: ${c.builtinAliases.map(a => `<b>${esc(PREFIXES[0]+a)}</b>`).join(', ')}<br>` : ''}
+          ${aliasNote}
+        </div>
+      </div>
+
+      ${c.naturalPrefix ? `
+      <div class="sec">
+        <h3>Natural chat prefix</h3>
+        <div class="kv">${esc(c.naturalPrefix.note)}</div>
+        <div style="margin-top:.6rem">
+          ${c.naturalPrefix.forms.map(f => `
+            <div class="path" style="padding:.5rem .7rem;margin-bottom:.35rem">
+              <div class="runs" style="margin:0">
+                ${f.forms.map(x => `<code class="run" data-copy="${esc(c.naturalPrefix.prefix + x)}">${esc(c.naturalPrefix.prefix + x)}</code>`).join('')}
+              </div>
+              <div class="path-desc">runs <code>/${esc(c.name)} ${esc(f.sub)}</code></div>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
+
+      <div class="sec">
+        <h3>${c.paths.length > 1 ? `${c.paths.length} subcommands` : 'Usage'}</h3>
+        ${c.paths.map(pathHtml).join('')}
+      </div>`;
+
+    $('backdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function close() {
+    $('backdrop').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  $('grid').addEventListener('click', (e) => {
+    const card = e.target.closest('.card');
+    if (card) open(CMDS[Number(card.dataset.i)]);
+  });
+  $('mClose').addEventListener('click', close);
+  $('backdrop').addEventListener('click', (e) => { if (e.target === $('backdrop')) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+
+  $('mBody').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-copy]');
+    if (!c) return;
+    navigator.clipboard?.writeText(c.dataset.copy);
+    const was = c.textContent; c.textContent = 'copied'; setTimeout(() => { c.textContent = was; }, 900);
+  });
+
+  $('q').addEventListener('input', render);
+  $('cats').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cat]');
+    if (!b) return;
+    cat = b.dataset.cat;
+    $('cats').querySelectorAll('.chip').forEach(x => x.classList.toggle('on', x === b));
+    render();
+  });
+  document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => {
+    const f = b.dataset.filter;
+    filters.has(f) ? filters.delete(f) : filters.add(f);
+    b.classList.toggle('on', filters.has(f));
+    render();
+  }));
+
+  // Deep link: /commands#music opens that command.
+  render();
+  if (location.hash) {
+    const c = CMDS.find(x => x.name === decodeURIComponent(location.hash.slice(1)));
+    if (c) open(c);
+  }
+})();
+</script>
+</body>
+</html>

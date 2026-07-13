@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Connect your Discord account to CertiFried Movie Theatre for free movie and TV streaming.">
+    <meta name="theme-color" content="#a78bfa">
+    <meta property="og:title" content="Movie Theatre - CertiFried MultiTool">
+    <meta property="og:description" content="Free movie and TV streaming for the CertiFried Discord community.">
+    <meta property="og:image" content="/images/CertiFried.png">
+    <title>Movie Theatre - CertiFried MultiTool</title>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: #a78bfa;
+            --accent-blue: #60a5fa;
+            --accent-green: #34d399;
+            --accent-red: #f87171;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4; animation: float 20s ease-in-out infinite; }
+        .orb-1 { width: clamp(300px, 40vw, 600px); height: clamp(300px, 40vw, 600px); background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); top: -10%; right: -10%; animation-delay: 0s; }
+        .orb-2 { width: clamp(200px, 30vw, 400px); height: clamp(200px, 30vw, 400px); background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); bottom: -10%; left: 10%; animation-delay: -7s; }
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(30px, -30px) scale(1.05); }
+            50% { transform: translate(-20px, 20px) scale(0.95); }
+            75% { transform: translate(20px, 30px) scale(1.02); }
+        }
+
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem); }
+        .navbar-content { display: flex; align-items: center; justify-content: space-between; gap: 2rem; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; font-size: clamp(1rem, 1.2vw, 1.25rem); }
+        .navbar-logo { width: clamp(32px, 2.5rem, 44px); height: clamp(32px, 2.5rem, 44px); border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); box-shadow: 0 0 20px rgba(167, 139, 250, 0.3); }
+        .navbar-links { display: flex; align-items: center; gap: clamp(1rem, 2vw, 2rem); }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .navbar-links a:hover, .navbar-links a.active { color: var(--text-primary); }
+
+        main { position: relative; z-index: 1; padding-top: 100px; padding-bottom: 4rem; }
+        .container { max-width: 640px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 3rem); }
+
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 20px; padding: clamp(2rem, 4vw, 2.5rem); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        .card-header { text-align: center; margin-bottom: 2rem; }
+        .card-header h1 { font-size: clamp(1.5rem, 2.5vw, 2rem); font-weight: 800; margin-bottom: 0.5rem; }
+        .card-header p { color: var(--text-secondary); font-size: 0.95rem; }
+
+        .status-badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.85rem; border-radius: 100px; font-size: 0.8rem; font-weight: 600; }
+        .status-online { background: rgba(52, 211, 153, 0.1); color: var(--accent-green); }
+        .status-offline { background: rgba(248, 113, 113, 0.1); color: var(--accent-red); }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .status-online .status-dot { background: var(--accent-green); animation: pulse 2s ease-in-out infinite; }
+        .status-offline .status-dot { background: var(--accent-red); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+        .info-box { background: rgba(167, 139, 250, 0.06); border: 1px solid rgba(167, 139, 250, 0.15); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--text-secondary); }
+        .info-box strong { color: var(--text-primary); }
+
+        .error-box { background: rgba(248, 113, 113, 0.06); border: 1px solid rgba(248, 113, 113, 0.15); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: var(--accent-red); }
+
+        .account-info { background: rgba(52, 211, 153, 0.06); border: 1px solid rgba(52, 211, 153, 0.15); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; }
+        .account-row { display: flex; justify-content: space-between; align-items: center; padding: 0.35rem 0; }
+        .account-label { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .account-value { font-weight: 600; font-size: 0.95rem; }
+
+        .credential-box { background: rgba(167, 139, 250, 0.08); border: 1px solid rgba(167, 139, 250, 0.2); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; text-align: center; display: none; }
+        .credential-box.visible { display: block; animation: slideUp 0.3s ease-out; }
+        .credential-box h3 { font-size: 1rem; margin-bottom: 0.75rem; color: var(--accent-purple); }
+        .credential-field { display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 0.6rem 1rem; margin-bottom: 0.5rem; }
+        .credential-field code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.9rem; }
+        .credential-field .label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 1rem; }
+        .copy-btn { background: transparent; border: none; color: var(--accent-purple); cursor: pointer; padding: 0.25rem; font-size: 0.8rem; }
+        .copy-btn:hover { color: var(--text-primary); }
+        .warning-text { font-size: 0.8rem; color: var(--accent-red); margin-top: 0.5rem; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; padding: 0.75rem 1.5rem; border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s; text-decoration: none; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+        .btn-primary { background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); color: white; box-shadow: 0 4px 15px rgba(167, 139, 250, 0.35); }
+        .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(167, 139, 250, 0.5); }
+        .btn-secondary { background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-primary); }
+        .btn-secondary:hover:not(:disabled) { background: var(--bg-card-hover); border-color: rgba(255,255,255,0.15); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #f87171); color: white; box-shadow: 0 4px 15px rgba(248, 113, 113, 0.3); }
+        .btn-danger:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(248, 113, 113, 0.4); }
+        .btn-link { background: transparent; color: var(--accent-red); font-size: 0.8rem; padding: 0.5rem; width: auto; margin: 0 auto; }
+        .btn-link:hover { color: var(--text-primary); }
+        .btn-group { display: flex; flex-direction: column; gap: 0.75rem; }
+
+        .guild-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+        .guild-pill { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.75rem; background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.2); border-radius: 100px; font-size: 0.8rem; color: var(--text-secondary); }
+
+        .footer { text-align: center; padding: 2rem 0; position: relative; z-index: 1; }
+        .footer a { color: var(--accent-purple); text-decoration: none; }
+        .footer p { color: var(--text-muted); font-size: 0.8rem; }
+
+        .mobile-menu-btn { display: none; background: transparent; border: none; color: var(--text-primary); cursor: pointer; padding: 0.5rem; }
+        @media (max-width: 768px) {
+            .navbar-links { display: none; }
+            .mobile-menu-btn { display: block; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-effects">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+    </div>
+
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-content">
+                <a href="/" class="navbar-brand">
+                    <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
+                    CertiFried
+                </a>
+                <div class="navbar-links">
+                    <a href="/">Home</a>
+                    <a href="/commands">Commands</a>
+                    <a href="/status">Status</a>
+                    <a href="/jellyfin" class="active">Movie Theatre</a>
+                    <a href="/dashboard">Dashboard</a>
+                </div>
+                <button class="mobile-menu-btn" id="mobileMenuBtn">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <div class="container">
+            <div class="card">
+                <div class="card-header">
+                    <h1>CertiFried Movie Theatre</h1>
+                    <p>Free streaming for the CertiFried community</p>
+                    <div style="margin-top: 0.75rem;">
+                        <% if (jellyfinOnline) { %>
+                            <span class="status-badge status-online"><span class="status-dot"></span> Online</span>
+                        <% } else { %>
+                            <span class="status-badge status-offline"><span class="status-dot"></span> Offline</span>
+                        <% } %>
+                    </div>
+                </div>
+
+                <% if (linked) { %>
+                    <div class="account-info">
+                        <div class="account-row">
+                            <span class="account-label">Jellyfin Username</span>
+                            <span class="account-value"><%= linked.jellyfin_username %></span>
+                        </div>
+                        <div class="account-row">
+                            <span class="account-label">Connected Since</span>
+                            <span class="account-value"><%= new Date(linked.created_at).toLocaleDateString() %></span>
+                        </div>
+                    </div>
+
+                    <div id="credentialBox" class="credential-box"></div>
+
+                    <div class="btn-group">
+                        <a href="<%= jellyfinUrl %>" target="_blank" class="btn btn-primary">Open Movie Theatre</a>
+                        <button class="btn btn-secondary" onclick="resetPassword()" id="resetBtn">Reset Password</button>
+                        <button class="btn-link" onclick="confirmDisconnect()">Disconnect Account</button>
+                    </div>
+
+                <% } else if (eligible) { %>
+                    <div class="info-box">
+                        <strong>You're eligible!</strong> You share
+                        <strong><%= sharedGuilds.length %></strong> server<%= sharedGuilds.length !== 1 ? 's' : '' %>
+                        with a CertiFried bot.
+                        <div class="guild-list">
+                            <% sharedGuilds.slice(0, 5).forEach(function(g) { %>
+                                <span class="guild-pill"><%= g.name %></span>
+                            <% }); %>
+                            <% if (sharedGuilds.length > 5) { %>
+                                <span class="guild-pill">+<%= sharedGuilds.length - 5 %> more</span>
+                            <% } %>
+                        </div>
+                    </div>
+
+                    <div id="credentialBox" class="credential-box"></div>
+
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">
+                        Click below to create a free account on the CertiFried Movie Theatre.
+                        You'll get a username and password to log in.
+                    </p>
+
+                    <button class="btn btn-primary" onclick="connectAccount()" id="connectBtn">Create Movie Theatre Account</button>
+
+                <% } else { %>
+                    <div class="error-box">
+                        You need to be in a Discord server that has a CertiFried bot to access the Movie Theatre.
+                    </div>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">
+                        Join a community that uses CertiFried, or invite a CertiFried bot to your own server, then come back here.
+                    </p>
+                <% } %>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; <%= new Date().getFullYear() %> <a href="/">CertiFried MultiTool</a></p>
+    </footer>
+
+    <script>
+        function showCredentials(username, password) {
+            var box = document.getElementById('credentialBox');
+            // Clear and build safely with DOM methods
+            while (box.firstChild) box.removeChild(box.firstChild);
+
+            var h3 = document.createElement('h3');
+            h3.textContent = 'Your Login Credentials';
+            box.appendChild(h3);
+
+            // Username field
+            var userField = document.createElement('div');
+            userField.className = 'credential-field';
+            var userSpan = document.createElement('span');
+            var userLabel = document.createElement('span');
+            userLabel.className = 'label';
+            userLabel.textContent = 'User ';
+            var userCode = document.createElement('code');
+            userCode.textContent = username;
+            userSpan.appendChild(userLabel);
+            userSpan.appendChild(userCode);
+            var userCopy = document.createElement('button');
+            userCopy.className = 'copy-btn';
+            userCopy.textContent = 'Copy';
+            userCopy.addEventListener('click', function() { navigator.clipboard.writeText(username); });
+            userField.appendChild(userSpan);
+            userField.appendChild(userCopy);
+            box.appendChild(userField);
+
+            // Password field
+            var passField = document.createElement('div');
+            passField.className = 'credential-field';
+            var passSpan = document.createElement('span');
+            var passLabel = document.createElement('span');
+            passLabel.className = 'label';
+            passLabel.textContent = 'Pass ';
+            var passCode = document.createElement('code');
+            passCode.textContent = password;
+            passSpan.appendChild(passLabel);
+            passSpan.appendChild(passCode);
+            var passCopy = document.createElement('button');
+            passCopy.className = 'copy-btn';
+            passCopy.textContent = 'Copy';
+            passCopy.addEventListener('click', function() { navigator.clipboard.writeText(password); });
+            passField.appendChild(passSpan);
+            passField.appendChild(passCopy);
+            box.appendChild(passField);
+
+            var warning = document.createElement('p');
+            warning.className = 'warning-text';
+            warning.textContent = 'Save your password now \u2014 it won\'t be shown again.';
+            box.appendChild(warning);
+
+            var link = document.createElement('a');
+            link.href = '<%= jellyfinUrl %>';
+            link.target = '_blank';
+            link.className = 'btn btn-primary';
+            link.style.marginTop = '1rem';
+            link.style.width = '100%';
+            link.textContent = 'Open Movie Theatre';
+            box.appendChild(link);
+
+            box.classList.add('visible');
+        }
+
+        async function connectAccount() {
+            var btn = document.getElementById('connectBtn');
+            btn.disabled = true;
+            btn.textContent = 'Creating account...';
+            try {
+                var res = await fetch('/jellyfin/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                var data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                showCredentials(data.username, data.password);
+                btn.textContent = 'Account Created!';
+                btn.style.background = 'linear-gradient(135deg, #10b981, #34d399)';
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Create Movie Theatre Account';
+                alert(err.message || 'Failed to create account');
+            }
+        }
+
+        async function resetPassword() {
+            var btn = document.getElementById('resetBtn');
+            btn.disabled = true;
+            btn.textContent = 'Resetting...';
+            try {
+                var res = await fetch('/jellyfin/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                var data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                showCredentials('<%= linked ? linked.jellyfin_username : "" %>', data.password);
+                btn.disabled = false;
+                btn.textContent = 'Reset Password';
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Reset Password';
+                alert(err.message || 'Failed to reset password');
+            }
+        }
+
+        async function confirmDisconnect() {
+            if (!confirm('This will permanently delete your Movie Theatre account and all watch history. Continue?')) return;
+            try {
+                var res = await fetch('/jellyfin/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                var data = await res.json();
+                if (!res.ok) throw new Error(data.error);
+                window.location.reload();
+            } catch (err) {
+                alert(err.message || 'Failed to disconnect');
+            }
+        }
+    </script>
+</body>
+</html>

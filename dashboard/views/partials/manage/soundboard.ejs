@@ -1,0 +1,162 @@
+<%
+  // Soundboard management section. Receives { guild }. All data is loaded
+  // client-side from /api/guilds/:guildId/soundboard/sounds.
+%>
+<style>
+  .sb-wrap { max-width: 920px; }
+  .sb-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+  .sb-drop { position: relative; border: 2px dashed rgba(139,148,255,0.5); border-radius: 14px; padding: 34px 20px; text-align: center; cursor: pointer; transition: all .15s ease; background: rgba(88,101,242,0.05); }
+  .sb-drop:hover, .sb-drop.drag { border-color: #8b94ff; background: rgba(88,101,242,0.14); }
+  .sb-drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .sb-drop-icon { font-size: 34px; color: #8b94ff; margin-bottom: 8px; }
+  .sb-drop-text { font-weight: 600; }
+  .sb-drop-hint { font-size: 12px; opacity: .6; margin-top: 4px; }
+  .sb-fields { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  .sb-fields input { flex: 1; min-width: 140px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.25); color: #fff; }
+  .sb-fields input.sb-emoji { flex: 0 0 90px; min-width: 90px; text-align: center; }
+  .sb-btn { padding: 10px 18px; border-radius: 10px; border: 0; background: #5865f2; color: #fff; font-weight: 600; cursor: pointer; }
+  .sb-btn:disabled { opacity: .5; cursor: default; }
+  .sb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 6px; }
+  .sb-item { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 12px; }
+  .sb-item-emoji { font-size: 22px; width: 26px; text-align: center; }
+  .sb-item-body { flex: 1; min-width: 0; }
+  .sb-item-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-item-meta { font-size: 11px; opacity: .55; }
+  .sb-del { background: transparent; border: 0; color: #f87171; cursor: pointer; font-size: 15px; padding: 4px; }
+  .sb-empty { opacity: .6; padding: 24px; text-align: center; }
+</style>
+
+<div class="sb-wrap" data-guild="<%= guild.id %>">
+  <h2 style="font-size:22px;font-weight:700;margin-bottom:6px;"><i class="fas fa-volume-high" style="color:#8b94ff;margin-right:8px;"></i>Soundboard</h2>
+  <p style="opacity:.65;margin-bottom:18px;">Upload clips (up to 10MB — way past Discord's native limit). Play them in voice with <code>/soundboard play</code> or the <code>/soundboard panel</code> buttons.</p>
+
+  <div class="sb-card">
+    <div class="sb-drop" id="sbDrop">
+      <input type="file" id="sbFile" accept=".mp3,.wav,.ogg,.flac,.m4a,.webm" multiple>
+      <div class="sb-drop-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+      <div class="sb-drop-text" id="sbDropText">Drop audio here or click to browse</div>
+      <div class="sb-drop-hint">mp3, wav, ogg, flac, m4a, webm &middot; up to 10MB &middot; drop several at once for bulk upload</div>
+    </div>
+    <div class="sb-fields">
+      <input type="text" id="sbName" placeholder="Name (optional — defaults to filename)" maxlength="100">
+      <input type="text" id="sbEmoji" class="sb-emoji" placeholder="😀" maxlength="8">
+      <button class="sb-btn" id="sbUpload" disabled>Upload</button>
+    </div>
+  </div>
+
+  <div class="sb-card">
+    <h3 style="font-weight:600;margin-bottom:12px;">Your sounds (<span id="sbCount">0</span>)</h3>
+    <div class="sb-grid" id="sbGrid"></div>
+    <div class="sb-empty" id="sbEmpty" style="display:none;">No sounds yet — drop a clip above to get started.</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var wrap = document.querySelector('.sb-wrap[data-guild]');
+  if (!wrap || wrap.dataset.init) return;
+  wrap.dataset.init = '1';
+  var guildId = wrap.dataset.guild;
+  var API = '/api/guilds/' + guildId + '/soundboard/sounds';
+  var toast = window.showToast || function (m) { alert(m); };
+
+  var drop = document.getElementById('sbDrop');
+  var fileInput = document.getElementById('sbFile');
+  var dropText = document.getElementById('sbDropText');
+  var nameInput = document.getElementById('sbName');
+  var emojiInput = document.getElementById('sbEmoji');
+  var uploadBtn = document.getElementById('sbUpload');
+  var grid = document.getElementById('sbGrid');
+  var empty = document.getElementById('sbEmpty');
+  var countEl = document.getElementById('sbCount');
+  var pending = [];
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+
+  function setPending(files) {
+    pending = Array.prototype.slice.call(files || []);
+    if (!pending.length) { dropText.textContent = 'Drop audio here or click to browse'; uploadBtn.disabled = true; return; }
+    dropText.textContent = pending.length === 1 ? pending[0].name : (pending.length + ' files selected');
+    uploadBtn.disabled = false;
+    if (pending.length === 1 && !nameInput.value) nameInput.value = pending[0].name.replace(/\.[^.]+$/, '');
+  }
+
+  drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('drag'); });
+  drop.addEventListener('dragleave', function () { drop.classList.remove('drag'); });
+  drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('drag'); setPending(e.dataTransfer.files); });
+  fileInput.addEventListener('change', function () { setPending(fileInput.files); });
+
+  async function uploadOne(file, name, emoji) {
+    var fd = new FormData();
+    fd.append('file', file);
+    if (name) fd.append('name', name);
+    if (emoji) fd.append('emoji', emoji);
+    var resp = await fetch(API, { method: 'POST', credentials: 'include', body: fd });
+    var data = await resp.json().catch(function () { return {}; });
+    if (!resp.ok) throw new Error(data.error || ('Upload failed (' + resp.status + ')'));
+    return data.sound;
+  }
+
+  uploadBtn.addEventListener('click', async function () {
+    if (!pending.length) return;
+    uploadBtn.disabled = true;
+    var emoji = emojiInput.value.trim();
+    var ok = 0;
+    try {
+      if (pending.length === 1) {
+        await uploadOne(pending[0], nameInput.value.trim(), emoji);
+        ok = 1;
+      } else {
+        for (var i = 0; i < pending.length; i++) {
+          try { await uploadOne(pending[i], '', emoji); ok++; }
+          catch (e) { toast('“' + pending[i].name + '”: ' + e.message, 'error'); }
+        }
+      }
+      toast(ok + ' sound' + (ok === 1 ? '' : 's') + ' uploaded.', 'success');
+      nameInput.value = ''; emojiInput.value = ''; fileInput.value = ''; setPending([]);
+      load();
+    } catch (e) {
+      toast(e.message, 'error');
+      uploadBtn.disabled = false;
+    }
+  });
+
+  async function del(id, name) {
+    if (!confirm('Delete “' + name + '”?')) return;
+    try {
+      var resp = await fetch(API + '/' + id, { method: 'DELETE', credentials: 'include' });
+      if (!resp.ok) { var d = await resp.json().catch(function () { return {}; }); throw new Error(d.error || 'Delete failed'); }
+      toast('Deleted “' + name + '”.', 'success');
+      load();
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  function render(sounds) {
+    countEl.textContent = sounds.length;
+    empty.style.display = sounds.length ? 'none' : 'block';
+    grid.innerHTML = '';
+    sounds.forEach(function (s) {
+      var el = document.createElement('div');
+      el.className = 'sb-item';
+      el.innerHTML =
+        '<div class="sb-item-emoji">' + esc(s.emoji || '🔊') + '</div>' +
+        '<div class="sb-item-body"><div class="sb-item-name">' + esc(s.name) + '</div>' +
+        '<div class="sb-item-meta">' + (s.play_count ? ('played ' + s.play_count + '×') : 'not played yet') + '</div></div>' +
+        '<button class="sb-del" title="Delete"><i class="fas fa-trash"></i></button>';
+      el.querySelector('.sb-del').addEventListener('click', function () { del(s.id, s.name); });
+      grid.appendChild(el);
+    });
+  }
+
+  async function load() {
+    try {
+      var resp = await fetch(API, { credentials: 'include' });
+      var data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Failed to load');
+      render(data.sounds || []);
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  load();
+})();
+</script>

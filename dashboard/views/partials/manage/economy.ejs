@@ -104,10 +104,10 @@
                     <thead>
                         <tr>
                             <th>Item</th>
-                            <th>Type</th>
+                            <th class="mobile-hide">Type</th>
                             <th>Price</th>
-                            <th>Stock</th>
-                            <th>Properties</th>
+                            <th class="mobile-hide">Stock</th>
+                            <th class="mobile-hide">Properties</th>
                             <th class="text-end">Actions</th>
                         </tr>
                     </thead>
@@ -123,21 +123,21 @@
                                         </div>
                                     </div>
                                 </td>
-                                <td>
+                                <td class="mobile-hide">
                                     <span class="badge badge-secondary" style="text-transform: capitalize;"><%= item.item_type %></span>
                                 </td>
                                 <td>
                                     <strong style="color: var(--color-warning);"><%= item.price.toLocaleString() %></strong>
                                     <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= economyConfig?.currency_name || 'coins' %></span>
                                 </td>
-                                <td>
+                                <td class="mobile-hide">
                                     <% if (item.stock === null) { %>
                                         <span class="badge badge-success">Unlimited</span>
                                     <% } else { %>
                                         <span class="badge badge-primary"><%= item.stock %></span>
                                     <% } %>
                                 </td>
-                                <td>
+                                <td class="mobile-hide">
                                     <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
                                         <% if (item.tradeable) { %><span class="badge" style="background: var(--color-primary-500);">Tradeable</span><% } %>
                                         <% if (item.sellable) { %><span class="badge" style="background: var(--color-warning);">Sellable</span><% } %>
@@ -191,8 +191,8 @@
                         <tr>
                             <th style="width: 60px;">Rank</th>
                             <th>User</th>
-                            <th class="text-end">Wallet</th>
-                            <th class="text-end">Bank</th>
+                            <th class="text-end economy-detail-col">Wallet</th>
+                            <th class="text-end economy-detail-col">Bank</th>
                             <th class="text-end">Total</th>
                         </tr>
                     </thead>
@@ -214,10 +214,10 @@
                                 <td>
                                     <code style="font-size: var(--font-size-sm); color: var(--color-text-secondary);"><%= user.user_id %></code>
                                 </td>
-                                <td class="text-end">
+                                <td class="text-end economy-detail-col">
                                     <span style="color: var(--color-success);"><%= user.wallet.toLocaleString() %></span>
                                 </td>
-                                <td class="text-end">
+                                <td class="text-end economy-detail-col">
                                     <span style="color: var(--color-primary-400);"><%= user.bank.toLocaleString() %></span>
                                 </td>
                                 <td class="text-end">
@@ -454,6 +454,35 @@
 
 .text-end {
     text-align: right;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    /* Hide low-priority columns on mobile */
+    .mobile-hide { display: none !important; }
+
+    /* Touch-friendly inputs */
+    select, input, button { min-height: 44px; }
+
+    /* Table readability */
+    .data-table { font-size: 0.875rem; }
+    .data-table th,
+    .data-table td { padding: var(--spacing-2) var(--spacing-3) !important; }
+
+    /* Stack form grids */
+    .grid.grid-cols-2,
+    .grid.grid-cols-3 {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Full-width buttons */
+    .btn-primary { width: 100%; justify-content: center; }
+
+    /* Leaderboard: hide wallet/bank, keep rank + user + total */
+    .economy-detail-col { display: none !important; }
+
+    /* Shop table: stack actions */
+    .data-table .text-end .btn { margin-bottom: var(--spacing-1); }
 }
 </style>
 

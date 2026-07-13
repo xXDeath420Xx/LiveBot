@@ -1,0 +1,439 @@
+[90m[2026-03-14 00:18:31][0m [44m[37m[1m INFO  [0m [Database] Successfully connected to the database
+  [90mContext:[0m
+    [33mhost[0m: localhost
+    [33mdatabase[0m: cert_CertiFriedUtility
+    [33mattempt[0m: 1
+Logged in as Stab Bot#8487
+(node:237628) DeprecationWarning: The ready event has been renamed to clientReady to distinguish it from the gateway READY event and will only emit under that name in v15. Please use clientReady instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+================================================================================
+  SECTION 1: Server Overview
+================================================================================
+  Name: The Stab Crazies
+  ID: 980331356196311070
+  Owner: stabcrazy (274331594280665088)
+  Created: 2022-05-29T04:46:48.993Z
+  Verification Level: 1
+  2FA Requirement: 0
+  Boost Level: 0 (0 boosts)
+  Content Filter: 2
+  Vanity URL: None
+
+================================================================================
+  SECTION 2: Member Statistics
+================================================================================
+  Total Members: 143
+  Humans: 136
+  Bots: 7 (4.9%)
+  Online: 41
+
+  Bot List:
+    - ♜Lurker.tv#9202 (377796671113003008) [ADMIN]
+    - Daily Quotes#0641 (880237210484506675)
+    - MEE6#4876 (159985870458322944) [ADMIN]
+    - Spoticord Music#4270 (778719049143025664)
+    - Stab Bot#8487 (1482157000426258493) [ADMIN]
+    - Tickets#6981 (508391840525975553) [ADMIN]
+    - Uzox#9688 (760027263046909992) [ADMIN]
+
+================================================================================
+  SECTION 3: 3rd Party Bot Analysis
+================================================================================
+
+  Tickets#6981 (508391840525975553) [REPLACE]
+    Roles: Tickets, 🤖Bot
+    Dangerous Perms: Administrator, ManageGuild, ManageRoles, ManageChannels, KickMembers, BanMembers, ManageWebhooks, ManageMessages, MentionEveryone, ViewAuditLog
+    Managed Roles: Tickets
+
+  Spoticord Music#4270 (778719049143025664)
+    Roles: Spoticord Music, 🤖Bot, ✅Verified
+    Dangerous Perms: MentionEveryone
+    Managed Roles: Spoticord Music
+
+  Daily Quotes#0641 (880237210484506675)
+    Roles: 🤖Bot, Daily Quotes
+    Dangerous Perms: ManageWebhooks, MentionEveryone
+    Managed Roles: Daily Quotes
+
+  Uzox#9688 (760027263046909992) [REPLACE]
+    Roles: 🤖Bot, Uzox
+    Dangerous Perms: Administrator, ManageGuild, ManageRoles, ManageChannels, KickMembers, BanMembers, ManageWebhooks, ManageMessages, MentionEveryone, ViewAuditLog
+    Managed Roles: Uzox
+
+  ♜Lurker.tv#9202 (377796671113003008) [REPLACE]
+    Roles: 🤖Bot, ♜Lurker.tv
+    Dangerous Perms: Administrator, ManageGuild, ManageRoles, ManageChannels, KickMembers, BanMembers, ManageWebhooks, ManageMessages, MentionEveryone, ViewAuditLog
+    Managed Roles: ♜Lurker.tv
+
+  MEE6#4876 (159985870458322944) [REPLACE]
+    Roles: ⭐Viewer〔Level 0⁺〕, (Music bots), 🔒DM close, (MEE6 bot for verification and moderation), 🤖Bot, MEE6
+    Dangerous Perms: Administrator, ManageGuild, ManageRoles, ManageChannels, KickMembers, BanMembers, ManageWebhooks, ManageMessages, MentionEveryone, ViewAuditLog
+    Managed Roles: MEE6
+
+  Stab Bot#8487 (1482157000426258493)
+    Roles: Stab Bot, 🤖Bot
+    Dangerous Perms: Administrator, ManageGuild, ManageRoles, ManageChannels, KickMembers, BanMembers, ManageWebhooks, ManageMessages, MentionEveryone, ViewAuditLog
+    Managed Roles: Stab Bot
+
+  --- Our Bot (1482157000426258493) ---
+    Permissions: CreateInstantInvite, Administrator, AddReactions, Stream, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory, MentionEveryone, UseExternalEmojis, Connect, Speak, UseVAD, ChangeNickname, CreatePublicThreads, CreatePrivateThreads, SendMessagesInThreads, UseEmbeddedActivities, UseSoundboard, UseExternalSounds, SendVoiceMessages, SendPolls, UseExternalApps
+    Highest Role Position: 60 (Stab Bot)
+
+================================================================================
+  SECTION 4: Role Hierarchy
+================================================================================
+   62. Server Maintenance (985365173630029824) #000000 | 2 members [ADMIN, MOD]
+   61. ✴ ⊶▬▬⊶▬Staff Perms▬⊷▬▬⊷ ✴ (980331356267626524) #000000 | 0 members
+   60. Stab Bot (1482157844995510394) #000000 | 1 members (managed) [ADMIN, MOD]
+   59. 👑Owner (980331356267626523) #ffcd4f | 1 members [ADMIN, MOD]
+   58. 👑Co Owner (980331356267626522) #f0c76b | 0 members [ADMIN, MOD]
+   57. 🚨Head Administrator (980331356267626521) #a20000 | 3 members [ADMIN, MOD]
+   56. 🔥Administrator (980331356267626520) #ff0004 | 2 members [ADMIN, MOD]
+   55. 🌐Head Moderator (980331356267626519) #2c00ff | 3 members [ADMIN, MOD]
+   54. 🌀Moderator (980331356267626518) #0082ff | 3 members [MOD]
+   53. ❓Trial Mod (980331356267626517) #ffffff | 0 members [MOD]
+   52. ⚙️Server Staff (980331356267626516) #00ffce | 6 members
+   51. The ban community (981426641492381756) #96ff14 | 4 members [ADMIN, MOD]
+   50. MEE6 (980335344757129268) #000000 | 1 members (managed) [ADMIN, MOD]
+   49. Uzox (1212453616808628341) #000000 | 1 members (managed) [ADMIN, MOD]
+   48. ♜Lurker.tv (985300729944219662) #000000 | 1 members (managed) [ADMIN, MOD]
+   47. Tickets (985058838308880427) #000000 | 1 members (managed) [ADMIN, MOD]
+   46. Daily Quotes (989704352094638083) #000000 | 1 members (managed)
+   45. ✴ ⊶▬▬⊶▬Social▬⊷▬▬⊷ ✴ (980331356246638611) #000000 | 0 members
+   44. HAPPY BIRTHDAY (986685986673156117) #ffff00 | 0 members (hoisted)
+   43. LIVE NOW (985304307400310834) #e91e63 | 3 members (hoisted) [LIVE/STREAM]
+   42. ✴ ⊶▬▬⊶▬Staff Display▬⊷▬▬⊷ ✴ (986686678913650728) #000000 | 0 members
+   41. 👑Owner (986686728930754630) #ffcd4f | 1 members (hoisted)
+   40. 👑Co Owner (986686696366166016) #f0c76b | 0 members (hoisted)
+   39. 🚨Head Administrator (986686773918830672) #a20000 | 3 members (hoisted)
+   38. 🔥Administrator (986686749424091156) #ff0004 | 2 members (hoisted)
+   37. 🌐Head Moderator (986686715886469150) #2c00ff | 3 members (hoisted)
+   36. 🌀Moderator (986686737973641237) #0082ff | 2 members
+   35. ❓Trial Mod (986686761449168946) #ffffff | 0 members (hoisted)
+   34. ✴ ⊶▬▬⊶▬Special▬⊷▬▬⊷ ✴ (980331356246638608) #000000 | 0 members
+   33. 💎Twitch Subscriber (980331356246638607) #a700ff | 4 members (hoisted)
+   32. 🚀Server Booster (980331356246638606) #79bdf1 | 0 members (hoisted)
+   31. KBD Runner (985305689830346784) #1f8b4c | 3 members
+   30. ✴ ⊶▬▬⊶▬Bot▬⊷▬▬⊷ ✴ (980331356246638605) #000000 | 0 members
+   29. 🤖Bot (980331356246638604) #a8b6cc | 7 members (hoisted)
+   28. (MEE6 bot for verification and moderation) (980331356246638603) #56ff00 | 1 members
+   27. (Arcane bot for levels and leaderboard) (980331356246638602) #41ff00 | 0 members
+   26. (ServerStats bot for member count) (980331356217311281) #26ff00 | 0 members
+   25. (Music bots) (980331356217311280) #18ff00 | 1 members
+   24. ✴ ⊶▬▬⊶▬LeaderBoard▬⊷▬▬⊷ ✴ (980331356217311279) #000000 | 0 members
+   23. 🥇First Place〔Leaderboard〕 (980331356217311278) #00ffd6 | 0 members (hoisted)
+   22. ✴ ⊶▬▬⊶▬Member▬⊷▬▬⊷ ✴ (980331356217311277) #000000 | 0 members
+   21. 💯 Godlike Viewer〔Level 100⁺〕 (980331356217311276) #becc04 | 0 members (hoisted)
+   20. ⚜️Mythic Viewer〔Level 80⁺〕 (980331356217311275) #f1ff37 | 1 members (hoisted)
+   19. 🔱Legend Viewer〔Level 60⁺〕 (980331356217311274) #f4ff69 | 4 members (hoisted)
+   18. 🌠Ace Viewer〔Level 40⁺〕 (980331356217311273) #f8ff9b | 2 members (hoisted)
+   17. ✨Good Viewer〔Level 20⁺〕 (980331356217311272) #3769ff | 2 members
+   16. 🌟Active Viewer〔Level 10⁺〕 (980331356196311079) #698eff | 2 members
+   15. ⭐Viewer〔Level 0⁺〕 (980331356196311078) #9bb4ff | 3 members (hoisted)
+   14. ✅Verified (980331356196311077) #00a73b | 134 members (hoisted)
+   13. 🔇Muted (980331356196311076) #8b8b8b | 0 members
+   12. ✴ ⊶▬▬⊶▬DM Status▬⊷▬▬⊷ ✴ (980331356196311075) #000000 | 0 members
+   11. 🔐Ask for DM (980331356196311074) #ffffff | 8 members
+   10. 🔒DM close (980331356196311073) #ff0000 | 2 members
+    9. 🔓DM open (980331356196311072) #00ff6e | 0 members
+    8. ✴ ⊶▬▬⊶▬Streamer Roles▬⊷▬▬⊷ ✴ (986688198891683880) #000000 | 0 members [LIVE/STREAM]
+    7. 🎥Youtuber (980331356246638609) #eb3b36 | 1 members
+    6. 🔴Twitch Streamer (980331356246638610) #7c00b8 | 12 members [LIVE/STREAM]
+    5. ____*gaming notifications*____ (991789197138612234) #f8f8f9 | 0 members
+    4. new role (991789377686622309) #000000 | 0 members
+    3. Code notification (991789471517392917) #25c059 | 0 members
+    2. Spoticord Music (1019022428673949739) #000000 | 1 members (managed)
+    1. Server Booster (1020045109405941821) #f47fff | 0 members (managed)
+    0. @everyone (980331356196311070) #000000 | 143 members
+
+================================================================================
+  SECTION 5: Channel Structure
+================================================================================
+  [No Category]
+    #support (980339550742257725) [text] | Topic: Please don't hesitate to contact us in our support server if
+    #🏆｜meme-of-the-week (980331357131636799) [text] | Topic: The best meme of the week.
+    #🏆｜photo-of-the-week (980331357131636800) [text] | Topic: The best photo of the week.
+    #🏆｜fan-art-of-the-week (980331357131636801) [text] | Topic: The best fan art of the week.
+
+  ✴|〔 SERVER STATS 〕|✴ (980331356695433276)
+    #Total Members: 143 (985355979581448212) [voice]
+    #Humans: 136 (985356099639181363) [voice]
+    #Bots: 7 (985356014989750282) [voice]
+
+  ✴|〔 VERIFICATION 〕|✴ (980331356695433279)
+    #✅｜verify (980331356695433280) [text] | Topic: Channel for member verification.
+
+  ✴|〔 INFORMATION 〕|✴ (980331356695433281)
+    #rules (980339550742257724) [text]
+    #👋🏼｜welcome (980331356695433282) [text] | Topic: Welcome to our discord server!
+    #💬｜faq (980331356695433284) [text] | Topic: Channel for frequently asked questions.
+    #📖｜about-server (980331356695433283) [text] | Topic: Channel with all the information you need to know about our 
+
+  ✴|〔 IMPORTANT 〕|✴ (980331356695433285)
+    #📨｜suggestions (980331356926148659) [text]
+    #🎊｜events (980331356926148661) [text] | Topic: Check here for events!
+    #📰｜announcements (980331356926148658) [announcement] | Topic: Check here for the most important announcements.
+    #📥｜vote (980331356926148662) [text]
+    #🎉｜giveaways (980331356926148660) [text] | Topic: Check here for giveaways!
+
+  ✴|〔 NOTIFICATIONS 〕|✴ (980331356926148663)
+    #🔔｜twitch (980331356926148664) [text] | Topic: Channel for getting notified when someone goes live.
+    #🎬｜twitch-clips (980331356926148665) [text] | Topic: Channel for posting your clips from stream.
+    #🔔｜youtube (980331356926148666) [text] | Topic: Channel for getting notified when someone upload a video.
+
+  ✴|〔 CONNECTION 〕|✴ (980331356926148667)
+    #🔌｜link-your-twitch (980331357131636797) [text] | Topic: Guide for how to link your twitch account with discord.
+
+  ✴|〔 MAIN HALL 〕|✴ (980331357131636802)
+    #👥｜chatting (980331357131636803) [text] | Topic: Channel for chatting with other people.
+    #sexy-chat (1060771766890414180) [text] [NSFW]
+    #swf (1057473429063864340) [text]
+    #🤣｜memes (980331357131636804) [text] | Topic: Channel for posting your favorites memes.
+    #📷｜photos (980331357131636805) [text] | Topic: Channel for posting your favorites photos & wallpapers.
+    #📺｜videos (980331357131636806) [text] | Topic: Channel for posting your favorites videos.
+    #🎨｜fan-art (980331357391695882) [text] | Topic: Channel for posting your fan art.
+    #🎮--gaming (985050268662112307) [text]
+    #quote-of-the-day (988284822248108072) [text]
+    #pc-set-up (1128256383352066098) [text]
+
+  ✴|〔 ADVERTISEMENTS 〕|✴ (980331357391695883) *** SOCIAL/LIVE CATEGORY ***
+    #lurkertv-bot-go-live (985292457279356938) [text] *** SOCIAL/LIVE ***
+    #📢｜self-advertising (980331357391695884) [text] | Topic: Channel for self promote. *** SOCIAL/LIVE ***
+    #🔴｜stream-advertising (980331357391695885) [text] *** SOCIAL/LIVE ***
+    #🎥｜youtube-advertising (980331357391695886) [text] *** SOCIAL/LIVE ***
+    #🐦twitter-ads🐦 (984326533386764358) [text] *** SOCIAL/LIVE ***
+    #💥tiktok💥 (984326641687875584) [text] *** SOCIAL/LIVE ***
+    #instagram (987488966125187153) [text] *** SOCIAL/LIVE ***
+
+  ✴|〔 BOTS 〕|✴ (980331357391695887)
+    #🤖｜bot-commands (980331357391695888) [text] | Topic: Channel for bot commands.
+    #👾｜level (980331357391695889) [text]
+
+  ✴|〔 SERVER BOOSTERS 〕|✴ (980331357391695890)
+    #🚀｜Server Boosters VC 🔒 (980331357559464006) [voice]
+    #🌌｜server-boosters-chat (980331357391695891) [text] | Topic: Private chat for server boosters only.
+
+  ✴|〔 SUBSCRIBERS 〕|✴ (980331357559464007)
+    #🔞｜nsfw (980331357559464009) [text] [NSFW] | Topic: Channel for nsfw content.
+    #💎｜Subscribers VC 🔒 (980331357559464010) [voice]
+    #💵｜subscribers-chat (980331357559464008) [text] | Topic: Private chat for subscribers and server boosters only.
+
+  ✴|〔 VOICE CHATS 〕|✴ (980331357559464011)
+    #⏰｜SWF (980331357559464012) [voice]
+    #🙋｜smokeflix and chill (980331357559464013) [voice]
+    #🔴｜Streaming 🔒 (980331357559464014) [voice]
+    #Recording YT (1268664621192187975) [voice]
+    #👥｜Chilling (980331357559464015) [voice]
+    #🥂｜Bar (980331357785972756) [voice]
+    #-afk- (984149531744686170) [voice]
+    #🚬Smoke Session🚬 (1012611865148391474) [voice] [NSFW]
+    #🚬Smoke Session🚬 (live on twitch) (984276972953804842) [voice] [NSFW]
+    #Hidey Hole (1005630343040213023) [voice]
+    #the hidden society (1198756267779428455) [voice] [NSFW]
+    #sisters (1198824729683955742) [voice]
+
+  ✴|〔 MUSIC〕|✴ (980331357785972758)
+    #song-requests (1019023432404447232) [text]
+    #🎧｜Music VC (980331357785972761) [voice]
+    #spoticord (1019022883336491059) [text]
+    #🎧｜Music VC 2 (980331357785972762) [voice]
+    #🎵｜beat-makers (980331357785972759) [text] | Topic: Channel for posting your beats.
+    #🎧｜Music VC 3 (980331357785972763) [voice]
+    #🎶｜song-request (980331357785972760) [text] | Topic: Channel for requesting a song.
+
+  ✴|〔 MODERATION 〕|✴ (980331357785972764)
+    #admin-setups (985059578502840370) [text]
+    #📞｜Staff VC 🔒 (980331358029246475) [voice]
+    #📝｜logs (980331357785972765) [text]
+    #🚔｜staff-chat (980331358029246474) [text]
+
+  Tech-help (984092848888639498)
+    #kbd-updates (984154210503372822) [text]
+    #🤖--about-kbd (984092925208186910) [text] | Topic: Kuma Bot Defender
+    #🤖❓kbd-requests❓🤖 (984095661387550820) [text]
+    #tech-support (984095740525678602) [text]
+
+  STAGE CHANNELS (984531173772492840)
+    #AFTER STREAM LOUNGE (984531269629132910) [stage]
+    #BEFORE STREAM LOUNGE (984536591966011402) [stage]
+    #open stage channel (987231705813364756) [stage]
+
+================================================================================
+  SECTION 6: Active Threads
+================================================================================
+  No active threads.
+
+================================================================================
+  SECTION 7: Webhook Analysis
+================================================================================
+  MEE6 | Creator: MEE6#4876 (159985870458322944) | Channel: #📝｜logs (980331357785972765)
+  Daily Quotes | Creator: Daily Quotes#0641 (880237210484506675) | Channel: #quote-of-the-day (988284822248108072)
+
+================================================================================
+  SECTION 8: Discord AutoMod
+================================================================================
+  Block Mention Spam (1030554520465440818)
+    Enabled: true
+    Trigger Type: 5
+    Actions: type=1
+    Creator: 1008776202191634432
+
+================================================================================
+  SECTION 9: Permission Analysis
+================================================================================
+  Bot in #🐦twitter-ads🐦: OK
+  Bot in #💥tiktok💥: OK
+  Bot in #🎥｜youtube-advertising: OK
+  Bot in #instagram: OK
+  Bot in #lurkertv-bot-go-live: OK
+  Bot in #🔴｜stream-advertising: OK
+  Bot in #📢｜self-advertising: OK
+  No admin-via-overwrite issues found.
+
+================================================================================
+  SECTION 10: Mee6/Lurker.tv Deep Scan (CRITICAL)
+================================================================================
+  Scanning all channels in Social/Live category...
+
+  Scanning #🐦twitter-ads🐦 (984326533386764358)...
+    3 messages scanned in #🐦twitter-ads🐦
+
+  Scanning #💥tiktok💥 (984326641687875584)...
+    16 messages scanned in #💥tiktok💥
+
+  Scanning #🎥｜youtube-advertising (980331357391695886)...
+    2 messages scanned in #🎥｜youtube-advertising
+
+  Scanning #instagram (987488966125187153)...
+    8 messages scanned in #instagram
+
+  Scanning #lurkertv-bot-go-live (985292457279356938)...
+    31 messages scanned in #lurkertv-bot-go-live
+
+  Scanning #🔴｜stream-advertising (980331357391695885)...
+    102 messages scanned in #🔴｜stream-advertising
+
+  Scanning #📢｜self-advertising (980331357391695884)...
+    123 messages scanned in #📢｜self-advertising
+
+  Total messages scanned: 285
+
+  Bot Message Counts in Social/Live Category:
+    ♜Lurker.tv#9202: 3 messages [REPLACE]
+
+  Unique Streamers Found: 40
+    twitch/darkwolf5 (98 mentions) via kadodarkwolf
+    twitter/shadowraid5 (76 mentions) via kadodarkwolf
+    twitch/glock19_420 (28 mentions) via forbiddendeath420, ultrauwu1015804, ultra_uwu_1019242
+    twitch/ninjamaccaswifi (13 mentions) via polyninja., ultra_uwu_1019242
+    twitch/eggnog92 (9 mentions) via eggnog92, psychotic_doll
+    twitter/i (6 mentions) via kadodarkwolf
+    twitch/stabcrazy (5 mentions) via ♜Lurker.tv#9202, StabCrazy (owner), ultra_uwu_1019242 [STABCRAZY]
+    twitch/ultra_uwu_101 (5 mentions) via ultrauwu1015804, psychotic_doll
+    twitch/vampyfiend3 (3 mentions) via vampy0306
+    twitch/psychotic_doll (3 mentions) via psychotic_doll
+    twitch/dhdannyboy (3 mentions) via polyninja.
+    twitch/hazbin_hotel_husk (3 mentions) via Deleted User
+    youtube/UCxO9jkP8AKox-ujr1gvF57A (2 mentions) via ultrauwu1015804
+    twitch/eevee1787 (2 mentions) via eevee1787
+    twitch/tr3x_06 (2 mentions) via tr3x.1
+    twitch/stonergirl11 (2 mentions) via j_11_
+    twitch/kawaiikitty143 (2 mentions) via Deleted User
+    twitch/ekmirsocial (2 mentions) via ekmirsocial
+    twitter/coleman_ttv (1 mentions) via coleman__ttv7419
+    tiktok/flufffypet (1 mentions) via seachicken_nc_71
+    tiktok/coleman_ttv (1 mentions) via coleman__ttv7419
+    instagram/warrick.colten (1 mentions) via ttv_itscolten101
+    instagram/invites (1 mentions) via ultra_uwu_1019242
+    twitch/crystalredpunx (1 mentions) via ♜Lurker.tv#9202
+    twitch/peachpng (1 mentions) via ♜Lurker.tv#9202
+    twitch/kawaiihamstercosplay (1 mentions) via kawaiihamster
+    twitch/itscolten101 (1 mentions) via ttv_itscolten101
+    twitch/wizardexilettv (1 mentions) via .mysticsky
+    twitch/scottishgamer4312 (1 mentions) via scottishgamer4312.
+    instagram/ultra.uwu.101 (1 mentions) via ultrauwu1015804
+    tiktok/615boro (1 mentions) via ultrauwu1015804
+    twitch/the_spidervenom_guy (1 mentions) via the_spidervenom_guy
+    twitch/cereal_killer_xo (1 mentions) via StabCrazy (owner) [STABCRAZY]
+    twitch/tcbryantcb (1 mentions) via StabCrazy (owner) [STABCRAZY]
+    twitch/00scream (1 mentions) via Deleted User
+    twitch/ttvblessedgaming (1 mentions) via Deleted User
+    twitch/ttv_purpleninja1996 (1 mentions) via StabCrazy (owner) [STABCRAZY]
+    twitch/foxyroxiii (1 mentions) via forbiddendeath420
+    twitch/zealousgorgeouspidgeonspicyboy (1 mentions) via kadodarkwolf
+    twitch/sweet_chicken_nug (1 mentions) via Deleted User
+
+================================================================================
+  SECTION 11: CertiFried DB Config
+================================================================================
+  guilds: 1 row(s)
+    {"guild_id":"980331356196311070","guild_name":"The Stab Crazies","owner_id":"274331594280665088","icon_hash":"7a2273213b21bc738eb4ebe9896e1215","member_count":143,"last_seen":"2026-03-13T23:26:07.000Z","announcement_channel_id":null,"announcement_message":null,"use_webhook_persona":0,"live_role_id":null,"bot_nickname":null,"webhook_avatar_url":null,"enable_stream_summaries":0,"avatar_upload_channel_id":null,"youtube_visibility_level":"public","privacy_setting":"public_only","summary_persistence":"delete_on_offline","members_announcement_channel_id":null,"subscribers_announcement_channel_id":null,"privacy_level":"public","leveling_enabled":1,"leveling_xp_rate":20,"leveling_xp_cooldown":60,"leveling_ignored_channels":null,"leveling_ignored_roles":null,"sticky_roles_enabled":0,"afk_enabled":1,"panic_mode_active":0,"auto_delete_stream_summary":0,"ai_ticket_autoresponder":0,"heat_decay_minutes":5,"heat_action_thresholds":null,"threat_intelligence_sharing":0,"stream_ignored_roles":null}
+  logging_config: NOT CONFIGURED
+  log_event_config: NOT CONFIGURED
+  welcome_settings: NOT CONFIGURED
+  level_config: NOT CONFIGURED
+  ticket_panels: NOT CONFIGURED
+  reaction_role_panels: NOT CONFIGURED
+  reaction_roles: ERROR - Table 'cert_CertiFriedUtility.reaction_roles' doesn't exist
+  subscriptions_streamers: NOT CONFIGURED
+  guild_streamer_auto_track: NOT CONFIGURED
+  anti_nuke_config: NOT CONFIGURED
+  raid_detection_config: NOT CONFIGURED
+  automod_config: ERROR - Table 'cert_CertiFriedUtility.automod_config' doesn't exist
+  phishing_config: NOT CONFIGURED
+  infractions: NOT CONFIGURED
+
+================================================================================
+  SECTION 12: Bot Activity Heatmap
+================================================================================
+  #📝｜logs: 1 bots active, top: MEE6 (100 msgs)
+  #quote-of-the-day: 1 bots active, top: Daily Quotes (100 msgs)
+  #🎮--gaming: 1 bots active, top: DBDLeaks #📦codes (82 msgs)
+  #👾｜level: 1 bots active, top: MEE6#4876 (99 msgs)
+  #✅｜verify: 1 bots active, top: MEE6#4876 (1 msgs)
+  #kbd-updates: 1 bots active, top: Twitch Moderators Community #repo (27 msgs)
+  #support: 1 bots active, top: Tickets#6981 (1 msgs)
+  #song-requests: 2 bots active, top: Uzox#9688 (36 msgs)
+  #🤖｜bot-commands: 1 bots active, top: Stab Bot#8487 (1 msgs)
+  #lurkertv-bot-go-live: 1 bots active, top: ♜Lurker.tv#9202 (3 msgs)
+  #admin-setups: 1 bots active, top: Community Updates (16 msgs)
+
+================================================================================
+  SECTION 13: Logging Channel Detection
+================================================================================
+  Channels with "log" in name: 1
+  #📝｜logs (980331357785972765) in ✴|〔 MODERATION 〕|✴ | MEE6 msgs (last 100): 0
+
+  DB logging_config: NOT CONFIGURED
+
+================================================================================
+  SECTION 14: Recommendations
+================================================================================
+  SECURITY: 5 bots have Administrator permission: Tickets#6981, Uzox#9688, ♜Lurker.tv#9202, MEE6#4876, Stab Bot#8487
+
+  Bot Replacement Plan:
+    REPLACE MEE6 (IN SERVER) -> CertiFried leveling, moderation, logging
+    REPLACE Tickets Bot (IN SERVER) -> CertiFried ticket system
+    REPLACE Uzox (IN SERVER) -> CertiFried utility commands
+    REPLACE Lurker.tv (IN SERVER) -> CertiFried stream manager
+
+  Missing CertiFried Configs:
+    MISSING CONFIG: logging_config not configured for this guild
+    MISSING CONFIG: welcome_settings not configured for this guild
+    MISSING CONFIG: level_config not configured for this guild
+    MISSING CONFIG: ticket_panels not configured for this guild
+    MISSING CONFIG: anti_nuke_config not configured for this guild
+    MISSING CONFIG: phishing_config not configured for this guild
+
+  STREAMER MIGRATION: 40 unique streamers found in social/live channels - import into CertiFried stream manager
+  OWNER STREAMS: 4 StabCrazy streams detected - prioritize these
+
+================================================================================
+  SAVING RESULTS
+================================================================================
+  Results saved to scripts/stabcrazy-audit-result.json
+
+================================================================================
+  Audit complete!
+================================================================================

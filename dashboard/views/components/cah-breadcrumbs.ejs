@@ -1,0 +1,12 @@
+<%# Breadcrumbs partial — pass { crumbs: [{href, label}, ..., {label}] }
+   Last crumb (no href) renders as the "current" page indicator. %>
+<nav class="breadcrumbs container" aria-label="Breadcrumb">
+    <% crumbs.forEach((c, i) => { %>
+        <% if (i > 0) { %><span class="sep">/</span><% } %>
+        <% if (c.href && i < crumbs.length - 1) { %>
+            <a href="<%= c.href %>"><%= c.label %></a>
+        <% } else { %>
+            <span class="current"><%= c.label %></span>
+        <% } %>
+    <% }); %>
+</nav>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>My CAH History — CertiFried MultiTool</title>
+<%- include('components/cah-shell-head') %>
+<style>
+    .hero { padding: 2.5rem 0 1rem; }
+    .hero h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.025em; }
+    .hero p { color: var(--text-secondary); margin-top: 0.4rem; }
+
+    .history-list { display: flex; flex-direction: column; gap: 0.75rem; padding-bottom: 3rem; }
+    .history-row {
+        background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center;
+        transition: border-color 0.15s, background 0.15s;
+    }
+    .history-row:hover { border-color: var(--accent-purple); background: var(--bg-card-hover); }
+    .history-row.won { border-left: 3px solid var(--accent-green); }
+    .history-row .meta { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+    .history-row .game-id { font-family: ui-monospace, monospace; font-size: 0.78rem; color: var(--text-muted); background: var(--bg-secondary); padding: 0.15rem 0.45rem; border-radius: 4px; display: inline-block; }
+    .history-row .when { color: var(--text-muted); font-size: 0.82rem; }
+    .history-row .badges { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.2rem; }
+    .history-row .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
+    .history-row .you-status { font-weight: 700; }
+    .history-row.won .you-status { color: var(--accent-green); }
+    .history-row.lost .you-status { color: var(--text-secondary); }
+    .empty { padding: 3rem; text-align: center; color: var(--text-muted); background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: 12px; }
+</style>
+</head>
+<body>
+<%- include('components/cah-shell-nav', { user, page: 'history' }) %>
+<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'CAH' }, { label: 'My History' }] }) %>
+
+<div class="container">
+    <section class="hero">
+        <h1>📜 My Game History</h1>
+        <p>Last <%= games.length %> games you played in. Click any to view its final state.</p>
+    </section>
+
+    <% if (!games || games.length === 0) { %>
+        <div class="empty">No games yet. <a href="/cah" style="color: var(--accent-purple);">Host one →</a></div>
+    <% } else { %>
+        <div class="history-list">
+            <% games.forEach(g => {
+                const result = g.iWon ? 'won' : (g.state === 'GAME_END' ? 'lost' : 'open');
+                const otherPlayers = (g.players || []).filter(p => p.userId !== user.id && !String(p.userId).startsWith('rando:'));
+            %>
+                <div class="history-row <%= result %>">
+                    <div class="meta">
+                        <div>
+                            <span class="game-id"><%= g.id.slice(0, 8) %></span>
+                            <span style="margin-left:0.5rem;color:var(--text-secondary);font-size:0.9rem;">
+                                vs <%= otherPlayers.length === 0 ? '(solo + randos)' : otherPlayers.map(p => p.displayName).join(', ') %>
+                            </span>
+                        </div>
+                        <div class="when">
+                            <%= g.endedAt ? new Date(g.endedAt).toLocaleString() : 'in progress' %>
+                            <% if (g.guildId) { %> · guild <code style="background:var(--bg-secondary);padding:0.05rem 0.3rem;border-radius:3px;font-size:0.72rem;"><%= g.guildId.slice(0, 8) %></code><% } %>
+                        </div>
+                        <div class="badges">
+                            <% if (g.state === 'GAME_END') { %>
+                                <% if (g.iWon) { %><span class="pill pill-green">🏆 Won</span>
+                                <% } else if (g.winnerUserIds?.length) { %><span class="pill">Won by <%= g.winnerUserIds.length %> player(s)</span><% } %>
+                            <% } else { %>
+                                <span class="pill pill-amber">In progress</span>
+                            <% } %>
+                            <span class="pill"><%= g.myPoints %> pt<%= g.myPoints === 1 ? '' : 's' %></span>
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <span class="you-status"><%= g.iWon ? '🏆 You won' : (g.state === 'GAME_END' ? 'You lost' : 'Open') %></span>
+                        <a href="/cah/<%= g.id %>" class="btn btn-outline btn-sm">Open →</a>
+                    </div>
+                </div>
+            <% }); %>
+        </div>
+    <% } %>
+</div>
+</body>
+</html>

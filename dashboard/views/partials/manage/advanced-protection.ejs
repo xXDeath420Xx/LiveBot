@@ -243,10 +243,10 @@
                 <div>
                     <label class="form-label">
                         <i class="fas fa-exclamation-triangle" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
-                        Pattern Threshold
+                        Strikes Before Action
                     </label>
                     <input type="number" class="form-control" name="pattern_threshold" value="<%= selfbotConfig ? selfbotConfig.pattern_threshold : '3' %>" min="1" max="10" required>
-                    <div class="form-help">Suspicious patterns before action</div>
+                    <div class="form-help">How many suspicious behaviors a user can trigger before the bot takes action. Lower = stricter (may catch false positives), higher = more lenient. Default: 3</div>
                 </div>
                 <div>
                     <label class="form-label">
@@ -423,6 +423,27 @@
                 <div class="form-help">Channel for spam detection alerts</div>
             </div>
 
+            <div style="margin-top: var(--spacing-4);">
+                <label class="form-label">
+                    <i class="fas fa-eye-slash" style="margin-right: var(--spacing-1); color: var(--color-text-muted);"></i>
+                    Exempt Channels
+                </label>
+                <select class="form-select" name="exempt_channels" multiple size="5" style="max-width: 400px;">
+                    <%
+                        let currentExempt = [];
+                        if (adaptiveSpamConfig && adaptiveSpamConfig.exempt_channels) {
+                            try { currentExempt = typeof adaptiveSpamConfig.exempt_channels === 'string' ? JSON.parse(adaptiveSpamConfig.exempt_channels) : adaptiveSpamConfig.exempt_channels; } catch(e) {}
+                        }
+                    %>
+                    <% channels.filter(c => c.type === 0).forEach(channel => { %>
+                        <option value="<%= channel.id %>" <%= currentExempt.includes(channel.id) ? 'selected' : '' %>>
+                            #<%= channel.name %>
+                        </option>
+                    <% }) %>
+                </select>
+                <div class="form-help">Channels exempt from ALL automod (spam, live promotion, phishing). Hold Ctrl/Cmd to select multiple.</div>
+            </div>
+
             <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-primary-400); padding: var(--spacing-4); border-radius: var(--radius-sm); margin: var(--spacing-4) 0;">
                 <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
                     <i class="fas fa-brain" style="margin-right: var(--spacing-2);"></i>
@@ -441,6 +462,168 @@
                 <span>Save Adaptive Spam Settings</span>
             </button>
         </form>
+    </div>
+
+    <!-- Invite Link Filter -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-link-slash" style="color: var(--color-warning); margin-right: var(--spacing-2);"></i>
+            Discord Invite Link Filter
+        </h3>
+        <form action="/manage/<%= guild.id %>/invite-filter/config" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <div style="margin-bottom: var(--spacing-4);">
+                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <input type="checkbox" name="enabled" class="form-check-input" style="width: 48px; height: 24px;" <%= (inviteFilterConfig?.enabled ?? 1) ? 'checked' : '' %>>
+                    <label class="form-check-label" style="flex: 1; cursor: pointer;">
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">Block Discord Invite Links</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
+                            Automatically filter discord.gg / discord.com/invite / invite.gg / discord.me links
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
+                    <input type="checkbox" name="use_whitelist" class="form-check-input" style="width: 48px; height: 24px;" <%= inviteFilterConfig?.use_whitelist ? 'checked' : '' %>>
+                    <label class="form-check-label" style="flex: 1; cursor: pointer;">
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">Allow whitelisted users / roles / channels</div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
+                            When enabled, specific users, roles, or channels you add below bypass the filter and can post invite links.
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Action on detection</label>
+                    <select name="action" class="form-select">
+                        <% const currentAction = inviteFilterConfig?.action || 'delete_warn'; %>
+                        <option value="delete_warn" <%= currentAction === 'delete_warn' ? 'selected' : '' %>>Delete + Warn user</option>
+                        <option value="delete" <%= currentAction === 'delete' ? 'selected' : '' %>>Delete silently</option>
+                        <option value="log_only" <%= currentAction === 'log_only' ? 'selected' : '' %>>Log only (don't delete)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="form-label">Log channel</label>
+                    <select name="log_channel_id" class="form-select">
+                        <option value="">— None —</option>
+                        <% channels.forEach(ch => { %>
+                            <% if (ch.type === 0) { %>
+                                <option value="<%= ch.id %>" <%= inviteFilterConfig?.log_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                            <% } %>
+                        <% }); %>
+                    </select>
+                    <div class="form-help">Where to post a log embed when an invite is blocked.</div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Invite Filter Settings</span>
+            </button>
+        </form>
+
+        <!-- Whitelist Entries -->
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-top: var(--spacing-4);">
+            <h4 style="color: var(--color-text-primary); margin: 0 0 var(--spacing-3);">
+                <i class="fas fa-list-check" style="margin-right: var(--spacing-2);"></i>
+                Whitelist Entries
+            </h4>
+            <p style="color: var(--color-text-muted); font-size: var(--font-size-sm); margin-bottom: var(--spacing-4);">
+                Users, roles, and channels listed here can post invite links when the toggle above is enabled. Admins/Mods (ManageGuild/ManageMessages) always bypass regardless of this list.
+            </p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <!-- Users -->
+                <div>
+                    <label class="form-label"><i class="fas fa-user"></i> Whitelisted Users</label>
+                    <form action="/manage/<%= guild.id %>/invite-filter/whitelist/add" method="POST" style="display: flex; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
+                        <input type="hidden" name="target_type" value="user">
+                        <input type="text" name="target_id" class="form-control" placeholder="User ID" required>
+                        <button type="submit" class="btn btn-primary" style="padding: var(--spacing-2) var(--spacing-3);"><i class="fas fa-plus"></i></button>
+                    </form>
+                    <div style="max-height: 200px; overflow-y: auto;">
+                        <% (inviteFilterEntries?.users || []).forEach(e => { %>
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-2); background: var(--color-dark-700); border-radius: var(--radius-sm); margin-bottom: var(--spacing-1); font-size: var(--font-size-xs);">
+                                <span style="color: var(--color-text-secondary); font-family: monospace;"><%= e.target_id %></span>
+                                <form action="/manage/<%= guild.id %>/invite-filter/whitelist/remove" method="POST" style="display: inline;">
+                                    <input type="hidden" name="target_type" value="user">
+                                    <input type="hidden" name="target_id" value="<%= e.target_id %>">
+                                    <button type="submit" style="background: none; border: none; color: var(--color-danger); cursor: pointer;"><i class="fas fa-times"></i></button>
+                                </form>
+                            </div>
+                        <% }); %>
+                        <% if (!(inviteFilterEntries?.users || []).length) { %>
+                            <div style="color: var(--color-text-muted); font-size: var(--font-size-xs); text-align: center; padding: var(--spacing-2);">No users whitelisted</div>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Roles -->
+                <div>
+                    <label class="form-label"><i class="fas fa-users"></i> Whitelisted Roles</label>
+                    <form action="/manage/<%= guild.id %>/invite-filter/whitelist/add" method="POST" style="display: flex; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
+                        <input type="hidden" name="target_type" value="role">
+                        <select name="target_id" class="form-select" required>
+                            <option value="">Select role...</option>
+                            <% roles.forEach(r => { %>
+                                <option value="<%= r.id %>"><%= r.name %></option>
+                            <% }) %>
+                        </select>
+                        <button type="submit" class="btn btn-primary" style="padding: var(--spacing-2) var(--spacing-3);"><i class="fas fa-plus"></i></button>
+                    </form>
+                    <div style="max-height: 200px; overflow-y: auto;">
+                        <% (inviteFilterEntries?.roles || []).forEach(e => { %>
+                            <% const role = roles.find(r => r.id === e.target_id); %>
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-2); background: var(--color-dark-700); border-radius: var(--radius-sm); margin-bottom: var(--spacing-1); font-size: var(--font-size-xs);">
+                                <span style="color: var(--color-text-secondary);">@<%= role ? role.name : e.target_id %></span>
+                                <form action="/manage/<%= guild.id %>/invite-filter/whitelist/remove" method="POST" style="display: inline;">
+                                    <input type="hidden" name="target_type" value="role">
+                                    <input type="hidden" name="target_id" value="<%= e.target_id %>">
+                                    <button type="submit" style="background: none; border: none; color: var(--color-danger); cursor: pointer;"><i class="fas fa-times"></i></button>
+                                </form>
+                            </div>
+                        <% }); %>
+                        <% if (!(inviteFilterEntries?.roles || []).length) { %>
+                            <div style="color: var(--color-text-muted); font-size: var(--font-size-xs); text-align: center; padding: var(--spacing-2);">No roles whitelisted</div>
+                        <% } %>
+                    </div>
+                </div>
+
+                <!-- Channels -->
+                <div>
+                    <label class="form-label"><i class="fas fa-hashtag"></i> Whitelisted Channels</label>
+                    <form action="/manage/<%= guild.id %>/invite-filter/whitelist/add" method="POST" style="display: flex; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
+                        <input type="hidden" name="target_type" value="channel">
+                        <select name="target_id" class="form-select" required>
+                            <option value="">Select channel...</option>
+                            <% channels.forEach(ch => { if (ch.type === 0) { %>
+                                <option value="<%= ch.id %>">#<%= ch.name %></option>
+                            <% } }) %>
+                        </select>
+                        <button type="submit" class="btn btn-primary" style="padding: var(--spacing-2) var(--spacing-3);"><i class="fas fa-plus"></i></button>
+                    </form>
+                    <div style="max-height: 200px; overflow-y: auto;">
+                        <% (inviteFilterEntries?.channels || []).forEach(e => { %>
+                            <% const ch = channels.find(c => c.id === e.target_id); %>
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-2); background: var(--color-dark-700); border-radius: var(--radius-sm); margin-bottom: var(--spacing-1); font-size: var(--font-size-xs);">
+                                <span style="color: var(--color-text-secondary);">#<%= ch ? ch.name : e.target_id %></span>
+                                <form action="/manage/<%= guild.id %>/invite-filter/whitelist/remove" method="POST" style="display: inline;">
+                                    <input type="hidden" name="target_type" value="channel">
+                                    <input type="hidden" name="target_id" value="<%= e.target_id %>">
+                                    <button type="submit" style="background: none; border: none; color: var(--color-danger); cursor: pointer;"><i class="fas fa-times"></i></button>
+                                </form>
+                            </div>
+                        <% }); %>
+                        <% if (!(inviteFilterEntries?.channels || []).length) { %>
+                            <div style="color: var(--color-text-muted); font-size: var(--font-size-xs); text-align: center; padding: var(--spacing-2);">No channels whitelisted</div>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 

@@ -1,0 +1,297 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fab fa-tiktok"></i>
+                <span>TikTok</span>
+            </div>
+            <div class="page-section-subtitle">
+                Manage TikTok live stream alerts and new video feed notifications
+            </div>
+        </div>
+    </div>
+
+    <!-- TikTok Creators List -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-users" style="color: var(--accent-purple); margin-right: var(--spacing-2);"></i>
+            Tracked TikTok Creators
+        </h3>
+
+        <% if (tiktokSubs.length > 0) { %>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: var(--spacing-4);">
+            <% tiktokSubs.forEach(sub => { %>
+            <div class="tiktok-creator-row">
+            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-3) var(--spacing-4);">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                    <% if (sub.profile_image_url) { %>
+                    <img src="<%= sub.profile_image_url %>" alt="" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover;">
+                    <% } else { %>
+                    <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center;">
+                        <i class="fab fa-tiktok" style="color: var(--color-text-muted);"></i>
+                    </div>
+                    <% } %>
+                    <div>
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm);">
+                            <a href="https://tiktok.com/@<%= sub.username %>" target="_blank" style="color: var(--color-text-primary); text-decoration: none;">@<%= sub.username %></a>
+                        </div>
+                        <div style="display: flex; gap: var(--spacing-3); font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                            <span><i class="fas fa-broadcast-tower" style="margin-right: 3px;"></i> Live alerts: <strong style="color: <%= sub.has_live ? 'var(--accent-green)' : 'var(--color-text-muted)' %>;"><%= sub.has_live ? 'On' : 'Off' %></strong></span>
+                            <span><i class="fas fa-film" style="margin-right: 3px;"></i> Video feed: <strong style="color: <%= sub.tiktok_vod_notifications ? 'var(--accent-green)' : 'var(--color-text-muted)' %>;"><%= sub.tiktok_vod_notifications ? 'On' : 'Off' %></strong></span>
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
+                    <form action="/manage/<%= guild.id %>/tiktok/toggle-feed" method="POST" style="display: inline;">
+                        <input type="hidden" name="subscription_id" value="<%= sub.subscription_id %>">
+                        <input type="hidden" name="enabled" value="<%= sub.tiktok_vod_notifications ? '0' : '1' %>">
+                        <button type="submit" class="btn btn-sm <%= sub.tiktok_vod_notifications ? 'btn-secondary' : 'btn-primary' %>" title="<%= sub.tiktok_vod_notifications ? 'Disable video feed' : 'Enable video feed' %>">
+                            <i class="fas fa-<%= sub.tiktok_vod_notifications ? 'bell-slash' : 'bell' %>"></i>
+                        </button>
+                    </form>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="this.closest('.tiktok-creator-row').querySelector('.tiktok-edit-panel').style.display = this.closest('.tiktok-creator-row').querySelector('.tiktok-edit-panel').style.display === 'none' ? 'block' : 'none'" title="Edit settings">
+                        <i class="fas fa-pen"></i>
+                    </button>
+                    <form action="/manage/<%= guild.id %>/tiktok/remove" method="POST" style="display: inline;" onsubmit="return confirm('Remove @<%= sub.username %> from TikTok tracking?');">
+                        <input type="hidden" name="subscription_id" value="<%= sub.subscription_id %>">
+                        <input type="hidden" name="streamer_id" value="<%= sub.streamer_id %>">
+                        <button type="submit" class="btn btn-sm btn-danger" title="Remove creator">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <!-- Edit panel (hidden by default) -->
+            <div class="tiktok-edit-panel" style="display: none; background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-top: none; border-radius: 0 0 var(--radius-md) var(--radius-md); padding: var(--spacing-3) var(--spacing-4); margin-top: -9px; margin-bottom: 8px;">
+                <form action="/manage/<%= guild.id %>/tiktok/edit" method="POST">
+                    <input type="hidden" name="subscription_id" value="<%= sub.subscription_id %>">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--color-text-muted); display: block; margin-bottom: 3px;">Live Alert Channel</label>
+                            <select name="announcement_channel_id" class="form-select" style="font-size: 0.8rem; padding: 6px 8px;">
+                                <option value="">Same as default</option>
+                                <% channels.forEach(ch => { %>
+                                <option value="<%= ch.id %>" <%= sub.announcement_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--color-text-muted); display: block; margin-bottom: 3px;">Video Feed Channel</label>
+                            <select name="video_announcement_channel_id" class="form-select" style="font-size: 0.8rem; padding: 6px 8px;">
+                                <option value="">Same as live channel</option>
+                                <% channels.forEach(ch => { %>
+                                <option value="<%= ch.id %>" <%= sub.video_announcement_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--color-text-muted); display: block; margin-bottom: 3px;">Live Role</label>
+                            <select name="live_role_id" class="form-select" style="font-size: 0.8rem; padding: 6px 8px;">
+                                <option value="">None</option>
+                                <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>" <%= sub.live_role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: var(--color-text-muted); display: block; margin-bottom: 3px;">Ping Role <span style="font-weight: 400;">(notified on new posts)</span></label>
+                            <select name="ping_role_id" class="form-select" style="font-size: 0.8rem; padding: 6px 8px;">
+                                <option value="">No ping</option>
+                                <option value="everyone" <%= sub.ping_role_id === 'everyone' ? 'selected' : '' %>>@everyone</option>
+                                <% roles.forEach(role => { %>
+                                <option value="<%= role.id %>" <%= sub.ping_role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <label style="font-size: 0.75rem; color: var(--color-text-muted); display: block; margin-bottom: 3px;">Custom Message <span style="font-weight: 400;">(appears above the embed)</span></label>
+                            <input type="text" name="custom_message" value="<%= sub.custom_message || '' %>" class="form-control" style="font-size: 0.8rem; padding: 6px 8px;" placeholder="{streamer} is now LIVE on {platform}! {url}" maxlength="500">
+                            <div style="font-size: 0.65rem; color: var(--color-text-muted); margin-top: 4px; line-height: 1.5;">
+                                <strong>Variables:</strong>
+                                <code>{streamer}</code> username &bull;
+                                <code>{platform}</code> platform name &bull;
+                                <code>{url}</code> stream link &bull;
+                                <code>{title}</code> stream title &bull;
+                                <code>{game}</code> game/category
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <div style="display: flex; gap: 12px;">
+                            <label style="font-size: 0.75rem; color: var(--color-text-muted); display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="checkbox" name="delete_on_end" value="1" <%= sub.delete_on_end ? 'checked' : '' %>>
+                                Delete on end
+                            </label>
+                            <label style="font-size: 0.75rem; color: var(--color-text-muted); display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                <input type="checkbox" name="edit_on_end" value="1" <%= sub.edit_on_end ? 'checked' : '' %>>
+                                Edit on end
+                            </label>
+                            <label style="font-size: 0.75rem; color: var(--color-text-muted); display: flex; align-items: center; gap: 4px; cursor: pointer;" title="When enabled, downloads and embeds the TikTok video directly in Discord. When disabled, only includes a link.">
+                                <input type="checkbox" name="tiktok_embed_video" value="1" <%= sub.tiktok_embed_video !== 0 ? 'checked' : '' %>>
+                                Embed video
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-primary" style="margin-left: auto;">
+                            <i class="fas fa-save"></i> Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+            </div>
+            <% }); %>
+        </div>
+        <% } else { %>
+        <div style="text-align: center; padding: 32px; background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); margin-bottom: var(--spacing-4);">
+            <i class="fab fa-tiktok" style="font-size: 2rem; color: var(--color-text-muted); margin-bottom: var(--spacing-3); display: block;"></i>
+            <div style="color: var(--color-text-secondary); margin-bottom: var(--spacing-2);">No TikTok creators tracked yet</div>
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Add one below to get started</div>
+        </div>
+        <% } %>
+
+        <!-- Add TikTok Creator (directly on this page) -->
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+            <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                <i class="fas fa-plus" style="color: var(--accent-purple); margin-right: var(--spacing-1);"></i>
+                Add TikTok Creator
+            </h4>
+            <form action="/manage/<%= guild.id %>/tiktok/add-creator" method="POST">
+                <!-- Row 1: Username + Channel -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+                    <div>
+                        <label style="font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 4px;">TikTok Username</label>
+                        <input type="text" name="username" class="form-control" required placeholder="@username or username" style="font-size: var(--font-size-sm);">
+                    </div>
+                    <div>
+                        <label style="font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 4px;">Post Videos To</label>
+                        <select name="channel_id" class="form-select" required style="font-size: var(--font-size-sm);">
+                            <option value="">Select channel...</option>
+                            <% channels.forEach(ch => { %>
+                            <option value="<%= ch.id %>">#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Row 2: Ping Role + Custom Message -->
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+                    <div>
+                        <label style="font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 4px;">Ping Role <span style="font-weight: 400; opacity: 0.6;">(optional)</span></label>
+                        <select name="mention_role_id" class="form-select" style="font-size: var(--font-size-sm);">
+                            <option value="">No ping</option>
+                            <% if (typeof roles !== 'undefined') { roles.forEach(role => { %>
+                            <option value="<%= role.id %>">@<%= role.name %></option>
+                            <% }); } %>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: var(--font-size-xs); font-weight: 600; color: var(--color-text-secondary); display: block; margin-bottom: 4px;">Custom Message <span style="font-weight: 400; opacity: 0.6;">(optional)</span></label>
+                        <input type="text" name="custom_message" class="form-control" placeholder="{username} uploaded a new TikTok!" style="font-size: var(--font-size-sm);">
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                    <button type="submit" class="btn btn-primary" style="white-space: nowrap;">
+                        <i class="fab fa-tiktok"></i> Add Creator
+                    </button>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                        Placeholders: <code style="background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">{username}</code> <code style="background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">{description}</code>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Feed Settings -->
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-film" style="color: #ff0050; margin-right: var(--spacing-2);"></i>
+            Video Feed Settings
+        </h3>
+        <form action="/manage/<%= guild.id %>/tiktok/feed-settings" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <div style="background: rgba(255, 0, 80, 0.05); border: 1px solid rgba(255, 0, 80, 0.15); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div style="display: flex; gap: var(--spacing-3); align-items: flex-start;">
+                    <i class="fab fa-tiktok" style="color: #ff0050; margin-top: 2px;"></i>
+                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.5;">
+                        When a tracked TikTok creator uploads a new video, the bot will post it to the configured channel with an embed, a "View on TikTok" button, and the video file (if under 8MB). This works like FreshTok — checking every 5 minutes for new uploads.
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">
+                    <i class="fas fa-hashtag" style="margin-right: var(--spacing-1); color: var(--accent-purple);"></i>
+                    Video Feed Channel
+                </label>
+                <select class="form-select" name="video_channel_id">
+                    <option value="">Same as stream announcement channel</option>
+                    <% channels.forEach(ch => { %>
+                        <option value="<%= ch.id %>" <%= tiktokConfig.video_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                    <% }); %>
+                </select>
+                <div class="form-help">Channel where new TikTok videos will be posted. Leave blank to use each creator's stream announcement channel.</div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i>
+                <span>Save Feed Settings</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Live Stream Settings -->
+    <div>
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-broadcast-tower" style="color: var(--accent-green); margin-right: var(--spacing-2);"></i>
+            Live Stream Settings
+        </h3>
+        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+            <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.5;">
+                TikTok live stream notifications are managed through the main <a href="/manage/<%= guild.id %>?page=streamers" style="color: var(--accent-purple);">Streaming</a> settings.
+                Any TikTok creator added there will automatically be checked for live streams alongside Twitch, Kick, YouTube, and other platforms.
+            </div>
+            <div style="margin-top: var(--spacing-3);">
+                <a href="/manage/<%= guild.id %>?page=streamers" class="btn btn-secondary">
+                    <i class="fas fa-cog"></i>
+                    <span>Open Streaming Settings</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Videos -->
+    <% if (recentVideos.length > 0) { %>
+    <div style="margin-top: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-history" style="color: var(--color-text-muted); margin-right: var(--spacing-2);"></i>
+            Recent Videos
+        </h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--spacing-3);">
+            <% recentVideos.forEach(v => { %>
+            <a href="<%= v.video_url %>" target="_blank" style="text-decoration: none; background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); overflow: hidden; transition: all 0.2s;">
+                <% if (v.thumbnail_url) { %>
+                <div style="width: 100%; height: 160px; background: url('<%= v.thumbnail_url %>') center/cover; position: relative;">
+                    <div style="position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,0.7); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; color: #fff;">
+                        <i class="fas fa-eye" style="margin-right: 3px;"></i><%= (v.view_count || 0).toLocaleString() %>
+                    </div>
+                </div>
+                <% } %>
+                <div style="padding: var(--spacing-3);">
+                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                        <%= v.title || 'Untitled' %>
+                    </div>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                        @<%= v.username %> &middot; <%= v.posted_at ? new Date(v.posted_at).toLocaleDateString() : '' %>
+                    </div>
+                </div>
+            </a>
+            <% }); %>
+        </div>
+    </div>
+    <% } %>
+</div>
+
+<style>
+.form-label { display: block; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2); }
+.form-help { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-2); }
+.btn-sm { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
+</style>

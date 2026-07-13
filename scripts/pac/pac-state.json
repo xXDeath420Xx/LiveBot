@@ -1,0 +1,33 @@
+{
+  "roles": {
+    "Announcements": "1496351029414068364",
+    "ShoutoutEligible": "1496351030277968004",
+    "Music": "1496351030605119619",
+    "ArcRaiders": "1496351031762616330",
+    "CallOfDuty": "1496351032765186218",
+    "HorrorGames": "1496351033549656096",
+    "Marvel": "1496351034526666955",
+    "WorldOfWarcraft": "1496351035453870190",
+    "Fortnite": "1496351036242399413"
+  },
+  "channels": {
+    "welcomeAndRules": "1496351042017824859",
+    "liveStreams": "1496351043372716053",
+    "streamSignup": "1496351044567961620",
+    "music": "1496351045566206002",
+    "selfPromo": "1496351046606262353",
+    "adminLogsCategory": "1496351047386664960",
+    "memberLog": "1496351048166801478",
+    "messageLog": "1496351048942751956",
+    "modLog": "1496351049504657460",
+    "voiceLog": "1496351050767011971",
+    "channelLog": "1496351051547279441",
+    "roleLog": "1496351052457316534",
+    "ticketCategory": "1496351053132857577",
+    "ticketsPanel": "1496351054827229215",
+    "birthdays": "1496362122463154176",
+    "levels": "1496362125776388096",
+    "newFaces": "1496363559314128926"
+  },
+  "notes": "Phase C couldn't delete #pac-rules (1439738126057603122) — it's the Community server's designated Rules channel. Will reassign via guild.setRulesChannel() in Phase F, then delete."
+}

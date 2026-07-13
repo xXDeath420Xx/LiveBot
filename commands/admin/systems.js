@@ -429,7 +429,7 @@ export default {
             FROM subscriptions sub
             JOIN streamers s ON sub.streamer_id = s.streamer_id
             LEFT JOIN twitch_teams ts ON sub.team_subscription_id = ts.id
-            LEFT JOIN guild_config gc ON CAST(sub.guild_id AS CHAR) = CAST(gc.guild_id AS CHAR)
+            LEFT JOIN guild_config gc ON sub.guild_id COLLATE utf8mb4_unicode_ci = gc.guild_id COLLATE utf8mb4_unicode_ci
             WHERE sub.guild_id = ?
             ORDER BY sub.edit_on_end DESC, s.username
         `, [guildId]);

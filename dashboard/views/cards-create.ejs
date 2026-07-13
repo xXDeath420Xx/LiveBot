@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create a Card | CertiFried</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg: #0b0f11; --card-bg: #141a1e; --border: rgba(255,255,255,0.08); --accent: #a78bfa; --text: #ffffff; --muted: rgba(255,255,255,0.5); --pink: #FF69B4; --gold: #FFD700; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        select, select option, select optgroup { background: #1a1f25; color: #e5e7eb; }
+        select option:checked { background: rgba(167,139,250,0.3); }
+        input[type="date"] { color-scheme: dark; }
+
+        .nav { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; border-bottom: 1px solid var(--border); }
+        .nav-brand { font-weight: 800; font-size: 1.1rem; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 8px; }
+
+        .container { max-width: 640px; margin: 0 auto; padding: 40px 16px; }
+        h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 8px; text-align: center; }
+        .subtitle { text-align: center; color: var(--muted); font-size: 0.9rem; margin-bottom: 32px; }
+
+        .form-card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 28px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+            border-radius: 10px; padding: 10px 14px; color: var(--text); font-family: inherit; font-size: 0.9rem;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+        .form-group textarea { resize: vertical; min-height: 60px; }
+        .form-hint { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+
+        .occasion-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 20px; }
+        .occasion-opt { background: rgba(255,255,255,0.03); border: 2px solid var(--border); border-radius: 10px; padding: 12px 8px; text-align: center; cursor: pointer; transition: all 0.15s; }
+        .occasion-opt:hover { border-color: rgba(167,139,250,0.3); }
+        .occasion-opt.selected { border-color: var(--accent); background: rgba(167,139,250,0.1); }
+        .occasion-opt .occ-icon { font-size: 1.3rem; display: block; margin-bottom: 4px; }
+        .occasion-opt .occ-name { font-size: 0.65rem; font-weight: 600; color: var(--muted); }
+        .occasion-opt.selected .occ-name { color: var(--accent); }
+
+        .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border-radius: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; border: none; font-family: inherit; transition: all 0.2s; width: 100%; justify-content: center; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--pink)); color: white; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(167,139,250,0.3); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .error-msg { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 10px; color: #f87171; font-size: 0.85rem; margin-bottom: 16px; display: none; }
+
+        .back-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 0.85rem; margin-bottom: 20px; }
+        .back-link:hover { color: var(--text); }
+
+        @media (max-width: 500px) {
+            .occasion-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/cards" class="nav-brand"><i class="fas fa-bolt" style="color: var(--accent);"></i> CertiFried Cards</a>
+        <div style="display: flex; align-items: center; gap: 16px;">
+            <a href="/cards/my-cards" style="color: var(--muted); text-decoration: none; font-size: 0.85rem;"><i class="fas fa-folder-open"></i> My Cards</a>
+            <% if (user) { %>
+                <span style="font-size: 0.85rem; color: var(--muted);"><i class="fab fa-discord" style="color: #5865F2;"></i> <%= user.username %></span>
+            <% } else { %>
+                <a href="/auth/discord?returnTo=/cards/create" style="color: var(--accent); text-decoration: none; font-size: 0.85rem;"><i class="fab fa-discord"></i> Login</a>
+            <% } %>
+        </div>
+    </nav>
+
+    <div class="container">
+        <a href="/cards" class="back-link"><i class="fas fa-arrow-left"></i> Back to Cards</a>
+
+        <h1>Create a Card</h1>
+        <div class="subtitle">Pick an occasion, name the recipient, and share the link. That's it.</div>
+
+        <div class="form-card">
+            <div id="create-error" class="error-msg"></div>
+
+            <!-- Occasion picker -->
+            <label style="font-size: 0.85rem; font-weight: 600; color: var(--muted); display: block; margin-bottom: 8px;">Occasion</label>
+            <div class="occasion-grid">
+                <%
+                const occs = [
+                    { id: 'birthday', icon: '🎂', name: 'Birthday' },
+                    { id: 'farewell', icon: '👋', name: 'Farewell' },
+                    { id: 'thank-you', icon: '🙏', name: 'Thank You' },
+                    { id: 'congratulations', icon: '🎉', name: 'Congrats' },
+                    { id: 'retirement', icon: '🏖️', name: 'Retirement' },
+                    { id: 'welcome', icon: '🤝', name: 'Welcome' },
+                    { id: 'anniversary', icon: '💍', name: 'Anniversary' },
+                    { id: 'baby', icon: '👶', name: 'Baby' },
+                    { id: 'get-well', icon: '💐', name: 'Get Well' },
+                    { id: 'holidays', icon: '🎄', name: 'Holidays' },
+                    { id: 'graduation', icon: '🎓', name: 'Graduation' },
+                    { id: 'promotion', icon: '📈', name: 'Promotion' },
+                    { id: 'miss-you', icon: '💕', name: 'Miss You' },
+                    { id: 'condolence', icon: '🕊️', name: 'Condolence' },
+                    { id: 'custom', icon: '✨', name: 'Custom' },
+                ];
+                const selectedOccasion = typeof occasion !== 'undefined' ? occasion : 'birthday';
+                %>
+                <% occs.forEach(o => { %>
+                <div class="occasion-opt <%= o.id === selectedOccasion ? 'selected' : '' %>" data-occasion="<%= o.id %>" onclick="selectOccasion(this)">
+                    <span class="occ-icon"><%= o.icon %></span>
+                    <div class="occ-name"><%= o.name %></div>
+                </div>
+                <% }); %>
+            </div>
+
+            <form id="create-form">
+                <input type="hidden" id="occasion" name="occasion" value="<%= selectedOccasion %>">
+                <input type="hidden" id="card_type" name="card_type" value="board">
+
+                <!-- Card Type -->
+                <label style="font-size: 0.85rem; font-weight: 600; color: var(--muted); display: block; margin-bottom: 8px;">Card Type</label>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px;">
+                    <div class="occasion-opt selected" data-type="board" onclick="selectCardType(this)" style="padding: 14px;">
+                        <span class="occ-icon">📋</span>
+                        <div class="occ-name">Group Board</div>
+                        <div style="font-size: 0.6rem; color: var(--muted); margin-top: 4px; line-height: 1.4;">A shared space for everyone to post messages and photos. Perfect for group celebrations.</div>
+                    </div>
+                    <div class="occasion-opt" data-type="greeting_card" onclick="selectCardType(this)" style="padding: 14px;">
+                        <span class="occ-icon">💌</span>
+                        <div class="occ-name">Greeting Card</div>
+                        <div style="font-size: 0.6rem; color: var(--muted); margin-top: 4px; line-height: 1.4;">A classic digital card that opens like a real one. Great for personal, heartfelt messages.</div>
+                    </div>
+                    <div class="occasion-opt" data-type="one_person" onclick="selectCardType(this)" style="padding: 14px;">
+                        <span class="occ-icon">💝</span>
+                        <div class="occ-name">One Person Card</div>
+                        <div style="font-size: 0.6rem; color: var(--muted); margin-top: 4px; line-height: 1.4;">A private card from one person to another. Ideal for personal notes and intimate occasions.</div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Recipient's Name *</label>
+                    <input type="text" id="recipient_name" placeholder="e.g. Matt, The Team, Mom" required maxlength="200" autofocus>
+                </div>
+
+                <div class="form-group">
+                    <label>Card Title</label>
+                    <input type="text" id="card_name" placeholder="Happy Birthday, Matt!" maxlength="200">
+                    <div class="form-hint">Leave blank for auto-generated title based on occasion + name.</div>
+                </div>
+
+                <div class="form-group">
+                    <label>Your Name <span style="font-weight: 400; color: var(--muted);">(as card creator)</span></label>
+                    <input type="text" id="creator_name" value="<%= user ? user.username : '' %>" placeholder="Your name" maxlength="100">
+                </div>
+
+                <!-- Background Library -->
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--muted); display: block; margin-bottom: 8px;">Board Background</label>
+                    <div id="bg-library" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px; margin-bottom: 8px;"></div>
+                    <div id="bg-categories" style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;"></div>
+                    <input type="hidden" id="board_bg_image_url" value="">
+                    <input type="hidden" id="board_bg_color" value="">
+                </div>
+
+                <!-- AI Cover Image Generator -->
+                <div style="background: linear-gradient(135deg, rgba(167,139,250,0.08), rgba(236,72,153,0.08)); border: 1px solid rgba(167,139,250,0.2); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                    <div style="font-size: 0.9rem; font-weight: 700; margin-bottom: 10px; color: var(--accent);"><i class="fas fa-wand-magic-sparkles"></i> AI Cover Image <span style="font-size: 0.65rem; font-weight: 600; background: rgba(34,197,94,0.15); color: #22c55e; padding: 2px 8px; border-radius: 10px; margin-left: 6px;">FREE</span></div>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <input type="text" id="ai_prompt" placeholder="A cosmic birthday cake with neon candles floating in space..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-size: 0.85rem;">
+                        <button type="button" id="ai-generate-btn" onclick="generateAICover()" style="background: linear-gradient(135deg, var(--accent), var(--pink)); border: none; border-radius: 10px; padding: 10px 18px; color: white; cursor: pointer; font-size: 0.85rem; font-weight: 600; white-space: nowrap;"><i class="fas fa-magic"></i> Generate</button>
+                    </div>
+                    <div id="ai-status" style="font-size: 0.75rem; color: var(--muted); display: none;"></div>
+                    <div id="ai-preview" style="display: none; margin-top: 10px; text-align: center;">
+                        <img id="ai-preview-img" style="max-width: 100%; max-height: 200px; border-radius: 10px; border: 2px solid var(--accent);">
+                        <div style="margin-top: 6px;">
+                            <button type="button" onclick="clearAICover()" style="background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 4px 12px; color: #f87171; cursor: pointer; font-size: 0.75rem;"><i class="fas fa-trash"></i> Remove</button>
+                        </div>
+                    </div>
+                    <input type="hidden" id="ai_cover_url" value="">
+                    <div style="font-size: 0.65rem; color: var(--muted); margin-top: 6px;">Powered by Google Gemini. Describe the vibe and we'll create a unique cover image.</div>
+                </div>
+
+                <!-- Custom background URL (alternative to AI) -->
+                <div class="form-group">
+                    <label>Custom Background Image URL <span style="font-weight: 400; color: var(--muted);">(or use AI above)</span></label>
+                    <input type="text" id="background_url" placeholder="https://...image.jpg">
+                </div>
+
+                <details style="margin-bottom: 20px;">
+                    <summary style="cursor: pointer; font-size: 0.85rem; color: var(--muted); font-weight: 600;"><i class="fas fa-cog"></i> Advanced Options</summary>
+                    <div style="margin-top: 12px; display: grid; gap: 14px;">
+                        <div class="form-group" style="margin: 0;">
+                            <label>Password Protection</label>
+                            <input type="text" id="password" placeholder="Leave blank for no password">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label>Background Music URL</label>
+                            <input type="text" id="music_url" placeholder="https://...mp3">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label>Wishlist / Gift Link</label>
+                            <input type="text" id="wishlist_url" placeholder="https://amazon.com/wishlist/...">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label>Scheduled Delivery Date</label>
+                            <input type="date" id="deliver_at">
+                        </div>
+                    </div>
+                </details>
+
+                <div style="background: rgba(88,101,242,0.08); border: 1px solid rgba(88,101,242,0.15); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 10px;">
+                    <i class="fab fa-discord" style="color: #5865F2; font-size: 1.1rem; margin-top: 2px; flex-shrink: 0;"></i>
+                    <div>
+                        <div style="font-size: 0.8rem; font-weight: 600; color: #5865F2; margin-bottom: 2px;">Discord Integration Available</div>
+                        <div style="font-size: 0.75rem; color: var(--muted); line-height: 1.5;">After creating the card, you can connect it to a Discord server to post a signing link, assign birthday roles, and manage it from the bot dashboard. This works even if people have already signed the card.</div>
+                    </div>
+                </div>
+                <button type="submit" id="create-btn" class="btn btn-primary"><i class="fas fa-plus"></i> Create Card</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    function selectOccasion(el) {
+        document.querySelectorAll('.occasion-opt').forEach(function(o) { o.classList.remove('selected'); });
+        el.classList.add('selected');
+        document.getElementById('occasion').value = el.dataset.occasion;
+
+        // Auto-fill title based on occasion + name
+        var name = document.getElementById('recipient_name').value.trim();
+        var titleInput = document.getElementById('card_name');
+        if (name && !titleInput.dataset.userEdited) {
+            var titles = {
+                'birthday': 'Happy Birthday, ' + name + '!',
+                'farewell': 'Farewell, ' + name + '!',
+                'thank-you': 'Thank You, ' + name + '!',
+                'congratulations': 'Congratulations, ' + name + '!',
+                'retirement': 'Happy Retirement, ' + name + '!',
+                'welcome': 'Welcome, ' + name + '!',
+                'anniversary': 'Happy Anniversary, ' + name + '!',
+                'baby': 'Welcome Baby, ' + name + '!',
+                'get-well': 'Get Well Soon, ' + name + '!',
+                'holidays': 'Happy Holidays, ' + name + '!',
+                'graduation': 'Congrats on Graduating, ' + name + '!',
+                'promotion': 'Congrats on the Promotion, ' + name + '!',
+                'miss-you': 'We Miss You, ' + name + '!',
+                'condolence': 'In Memory of ' + name,
+                'custom': 'For ' + name,
+            };
+            titleInput.value = titles[el.dataset.occasion] || 'For ' + name;
+        }
+    }
+
+    // Background Library
+    (function() {
+        fetch('/backgrounds/library.json')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var catContainer = document.getElementById('bg-categories');
+            var libContainer = document.getElementById('bg-library');
+            var selectedBg = null;
+
+            function renderCategory(cat) {
+                libContainer.textContent = '';
+                // Add "None" option
+                var none = document.createElement('div');
+                none.style.cssText = 'width: 80px; height: 50px; border-radius: 8px; cursor: pointer; border: 2px solid ' + (!selectedBg ? 'var(--accent)' : 'var(--border)') + '; background: #000; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--muted);';
+                none.textContent = 'None';
+                none.onclick = function() {
+                    selectedBg = null;
+                    document.getElementById('board_bg_image_url').value = '';
+                    document.getElementById('board_bg_color').value = '';
+                    renderCategory(cat);
+                };
+                libContainer.appendChild(none);
+
+                cat.backgrounds.forEach(function(bg) {
+                    var el = document.createElement('div');
+                    var isSelected = selectedBg === bg.id;
+                    el.style.cssText = 'width: 80px; height: 50px; border-radius: 8px; cursor: pointer; border: 2px solid ' + (isSelected ? 'var(--accent)' : 'var(--border)') + '; overflow: hidden; position: relative;';
+                    if (bg.url) {
+                        el.style.backgroundImage = 'url(' + bg.thumb + ')';
+                        el.style.backgroundSize = 'cover';
+                        el.style.backgroundPosition = 'center';
+                    } else if (bg.color) {
+                        el.style.backgroundColor = bg.color;
+                    }
+                    var label = document.createElement('div');
+                    label.style.cssText = 'position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); font-size: 0.5rem; color: white; padding: 2px 4px; text-align: center;';
+                    label.textContent = bg.label;
+                    el.appendChild(label);
+                    el.onclick = function() {
+                        selectedBg = bg.id;
+                        document.getElementById('board_bg_image_url').value = bg.url || '';
+                        document.getElementById('board_bg_color').value = bg.color || '';
+                        renderCategory(cat);
+                    };
+                    libContainer.appendChild(el);
+                });
+            }
+
+            data.categories.forEach(function(cat, i) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.textContent = cat.name;
+                btn.style.cssText = 'background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; color: var(--muted); cursor: pointer; font-size: 0.7rem;';
+                btn.onclick = function() {
+                    catContainer.querySelectorAll('button').forEach(function(b) { b.style.borderColor = 'var(--border)'; b.style.color = 'var(--muted)'; });
+                    btn.style.borderColor = 'var(--accent)';
+                    btn.style.color = 'var(--accent)';
+                    renderCategory(cat);
+                };
+                catContainer.appendChild(btn);
+                if (i === 0) { btn.click(); }
+            });
+        });
+    })();
+
+    function selectCardType(el) {
+        el.parentElement.querySelectorAll('.occasion-opt').forEach(function(o) { o.classList.remove('selected'); });
+        el.classList.add('selected');
+        document.getElementById('card_type').value = el.dataset.type;
+    }
+
+    // Track if user manually edited the title
+    document.getElementById('card_name').addEventListener('input', function() { this.dataset.userEdited = '1'; });
+
+    // Auto-fill title when name changes
+    document.getElementById('recipient_name').addEventListener('input', function() {
+        var selected = document.querySelector('.occasion-opt.selected');
+        if (selected && !document.getElementById('card_name').dataset.userEdited) {
+            selectOccasion(selected);
+        }
+    });
+
+    document.getElementById('create-form').addEventListener('submit', function(e) {
+        e.preventDefault();
+        var errorDiv = document.getElementById('create-error');
+        var btn = document.getElementById('create-btn');
+        var recipientName = document.getElementById('recipient_name').value.trim();
+
+        if (!recipientName) {
+            errorDiv.textContent = 'Please enter the recipient\'s name.';
+            errorDiv.style.display = 'block';
+            return;
+        }
+
+        errorDiv.style.display = 'none';
+        btn.disabled = true;
+        var icon = btn.querySelector('i');
+        if (icon) icon.className = 'fas fa-spinner fa-spin';
+
+        var aiCover = document.getElementById('ai_cover_url').value.trim();
+        var bgUrl = document.getElementById('background_url').value.trim();
+        var body = {
+            recipient_name: recipientName,
+            card_name: document.getElementById('card_name').value.trim() || null,
+            occasion: document.getElementById('occasion').value,
+            creator_name: document.getElementById('creator_name').value.trim() || null,
+            password: document.getElementById('password').value.trim() || null,
+            background_music_url: document.getElementById('music_url').value.trim() || null,
+            wishlist_url: document.getElementById('wishlist_url').value.trim() || null,
+            deliver_at: document.getElementById('deliver_at').value || null,
+            card_type: document.getElementById('card_type').value || 'board',
+            board_bg_image_url: document.getElementById('board_bg_image_url').value || null,
+            board_bg_color: document.getElementById('board_bg_color').value || null,
+            card_background_url: aiCover || bgUrl || null,
+            ai_cover_url: aiCover || null,
+            ai_prompt: aiCover ? document.getElementById('ai_prompt').value.trim() : null,
+        };
+
+        fetch('/cards/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success && data.url) {
+                window.location.href = data.url;
+            } else {
+                errorDiv.textContent = data.error || 'Failed to create card.';
+                errorDiv.style.display = 'block';
+                btn.disabled = false;
+                if (icon) icon.className = 'fas fa-plus';
+            }
+        })
+        .catch(function() {
+            errorDiv.textContent = 'Network error. Please try again.';
+            errorDiv.style.display = 'block';
+            btn.disabled = false;
+            if (icon) icon.className = 'fas fa-plus';
+        });
+    });
+
+    // AI Cover Generator
+    function generateAICover() {
+        var prompt = document.getElementById('ai_prompt').value.trim();
+        if (!prompt) { document.getElementById('ai_prompt').focus(); return; }
+
+        var status = document.getElementById('ai-status');
+        var btn = document.getElementById('ai-generate-btn');
+        var icon = btn.querySelector('i');
+        status.style.display = 'block';
+        status.textContent = 'Generating your cover image... (this may take 10-20 seconds)';
+        status.style.color = 'var(--accent)';
+        btn.disabled = true;
+        if (icon) icon.className = 'fas fa-spinner fa-spin';
+
+        fetch('/cards/generate-cover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: prompt })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            if (icon) icon.className = 'fas fa-magic';
+            if (data.url) {
+                document.getElementById('ai_cover_url').value = data.url;
+                document.getElementById('ai-preview-img').src = data.url;
+                document.getElementById('ai-preview').style.display = 'block';
+                status.textContent = 'Cover generated! It will be applied to your card.';
+                status.style.color = '#22c55e';
+                // Clear the manual background URL since AI takes priority
+                document.getElementById('background_url').value = '';
+            } else {
+                status.textContent = data.error || 'Failed to generate. Try a different prompt.';
+                status.style.color = '#f87171';
+            }
+        })
+        .catch(function() {
+            btn.disabled = false;
+            if (icon) icon.className = 'fas fa-magic';
+            status.textContent = 'Network error. Please try again.';
+            status.style.color = '#f87171';
+        });
+    }
+
+    function clearAICover() {
+        document.getElementById('ai_cover_url').value = '';
+        document.getElementById('ai-preview').style.display = 'none';
+        document.getElementById('ai-status').style.display = 'none';
+    }
+    </script>
+</body>
+</html>

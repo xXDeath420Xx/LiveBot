@@ -6,6 +6,35 @@ const groupedCommands = commands.reduce((acc, cmd) => {
     return acc;
 }, {});
 
+const restrictions = typeof commandRestrictions !== 'undefined' ? commandRestrictions : {};
+const currentGuildId = typeof guildId !== 'undefined' ? guildId : '';
+
+const pConfig = typeof prefixConfig !== 'undefined' ? prefixConfig : {};
+const pAliases = typeof prefixAliases !== 'undefined' ? prefixAliases : [];
+const currentPrefix = pConfig.prefix || '!';
+
+// Categories that default to mod-only when no explicit restriction exists
+const ADMIN_CATEGORIES = new Set(['admin', 'streams']);
+
+// Build category lookup: command name -> category
+const commandCategoryMap = {};
+commands.forEach(cmd => { commandCategoryMap[cmd.name] = cmd.category || 'General'; });
+
+function getRestrictionState(cmdName) {
+    const r = restrictions[cmdName];
+    if (r) {
+        if (!r.allowed) return 'disabled';
+        if (r.admin_only) return 'mod_only';
+        return 'everyone';
+    }
+    // No explicit restriction — use category default
+    const category = commandCategoryMap[cmdName] || 'General';
+    if (ADMIN_CATEGORIES.has(category)) return 'mod_only';
+    return 'everyone';
+}
+
+const disabledCount = Object.values(restrictions).filter(r => !r.allowed).length;
+
 const categoryIcons = {
     'Streamer': 'fas fa-stream',
     'Team': 'fas fa-users',
@@ -46,7 +75,7 @@ const categoryCount = Object.keys(groupedCommands).length;
     </div>
 
     <!-- Stats Overview -->
-    <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
+    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
         <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
             <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Commands</div>
             <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= totalCommands %></div>
@@ -61,6 +90,10 @@ const categoryCount = Object.keys(groupedCommands).length;
                 <i class="fas fa-slash"></i> Slash Commands
             </div>
         </div>
+        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
+            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Disabled</div>
+            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= disabledCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' %>;"><%= disabledCount %></div>
+        </div>
     </div>
 
     <!-- Search Bar -->
@@ -70,6 +103,24 @@ const categoryCount = Object.keys(groupedCommands).length;
                 <i class="fas fa-search"></i>
             </span>
             <input type="text" id="commandSearch" class="form-control" placeholder="Search commands by name or description...">
+        </div>
+    </div>
+
+    <!-- Save Bar (sticky when changes exist) -->
+    <div id="commandSaveBar" style="display: none;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                <i class="fas fa-exclamation-triangle" style="color: var(--color-primary-400);"></i>
+                <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">You have unsaved changes to command permissions</span>
+            </div>
+            <div style="display: flex; gap: var(--spacing-2);">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="resetAllRestrictions()">
+                    <i class="fas fa-undo"></i> Reset All
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="saveCommandRestrictions()">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
         </div>
     </div>
 
@@ -93,37 +144,167 @@ const categoryCount = Object.keys(groupedCommands).length;
             </div>
 
             <div class="category-commands" id="category-<%= category.replace(/\s+/g, '-') %>">
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 250px;">Command</th>
-                                <th>Description</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% groupedCommands[category].forEach(command => { %>
-                                <tr class="command-row" data-command-name="<%= command.name.toLowerCase() %>" data-description="<%= command.description.toLowerCase() %>" data-category="<%= category.toLowerCase() %>">
-                                    <td>
-                                        <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                                            <span style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; font-weight: var(--font-weight-bold); color: var(--color-primary-400);">
-                                                /<%= command.name %>
-                                            </span>
+                <% groupedCommands[category].forEach(command => {
+                    const hasSubs = command.subcommands && command.subcommands.length > 0;
+                    const totalSubs = hasSubs ? command.subcommands.reduce((sum, s) => sum + (s.type === 'group' ? s.subcommands.length : 1), 0) : 0;
+                %>
+                    <div class="cmd-tree-item command-row" data-command-name="<%= command.name.toLowerCase() %>" data-description="<%= (command.description + ' ' + (command.subcommands || []).map(s => s.type === 'group' ? s.subcommands.map(sc => sc.name + ' ' + sc.description).join(' ') : s.name + ' ' + s.description).join(' ')).toLowerCase() %>" data-category="<%= category.toLowerCase() %>">
+                        <!-- Top-level command header -->
+                        <div class="cmd-tree-header">
+                            <div class="cmd-tree-left">
+                                <% if (hasSubs) { %>
+                                    <button class="cmd-tree-toggle" onclick="toggleCommandTree(this)" title="Expand/Collapse">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </button>
+                                <% } else { %>
+                                    <span class="cmd-tree-toggle-spacer"></span>
+                                <% } %>
+                                <span class="cmd-name-badge">/<%= command.name %></span>
+                                <span class="cmd-desc-inline cmd-desc-col"><%= command.description %></span>
+                                <% if (hasSubs) { %>
+                                    <span class="cmd-sub-count"><%= totalSubs %> subcommand<%= totalSubs !== 1 ? 's' : '' %></span>
+                                <% } %>
+                            </div>
+                            <div class="cmd-tree-right">
+                                <select class="form-select cmd-access-select"
+                                        data-command="<%= command.name %>"
+                                        data-original="<%= getRestrictionState(command.name) %>"
+                                        data-current="<%= getRestrictionState(command.name) %>"
+                                        style="font-size: var(--font-size-sm); width: 140px;">
+                                    <option value="everyone" <%= getRestrictionState(command.name) === 'everyone' ? 'selected' : '' %>>Everyone</option>
+                                    <option value="mod_only" <%= getRestrictionState(command.name) === 'mod_only' ? 'selected' : '' %>>Mod Only</option>
+                                    <option value="disabled" <%= getRestrictionState(command.name) === 'disabled' ? 'selected' : '' %>>Disabled</option>
+                                </select>
+                            </div>
+                        </div>
+                        <!-- Subcommand tree (collapsed by default) -->
+                        <% if (hasSubs) { %>
+                            <div class="cmd-tree-children" style="display: none;">
+                                <% command.subcommands.forEach(sub => { %>
+                                    <% if (sub.type === 'group') { %>
+                                        <div class="cmd-tree-group">
+                                            <div class="cmd-tree-group-header">
+                                                <i class="fas fa-folder" style="color: rgba(167, 139, 250, 0.5); font-size: 0.7rem;"></i>
+                                                <span class="cmd-group-name"><%= sub.name %></span>
+                                                <span class="cmd-group-desc"><%= sub.description %></span>
+                                            </div>
+                                            <% sub.subcommands.forEach(sc => { %>
+                                                <div class="cmd-tree-sub">
+                                                    <span class="cmd-sub-path">/<%= command.name %> <%= sub.name %> <strong><%= sc.name %></strong></span>
+                                                    <span class="cmd-sub-desc"><%= sc.description %></span>
+                                                    <% if (sc.options && sc.options.length > 0) { %>
+                                                        <span class="cmd-sub-args"><% sc.options.forEach(o => { %><span class="cmd-arg <%= o.required ? 'required' : 'optional' %>"><%= o.name %></span> <% }); %></span>
+                                                    <% } %>
+                                                </div>
+                                            <% }); %>
                                         </div>
-                                    </td>
-                                    <td>
-                                        <div style="color: var(--color-text-secondary);">
-                                            <%= command.description %>
+                                    <% } else { %>
+                                        <div class="cmd-tree-sub">
+                                            <span class="cmd-sub-path">/<%= command.name %> <strong><%= sub.name %></strong></span>
+                                            <span class="cmd-sub-desc"><%= sub.description %></span>
+                                            <% if (sub.options && sub.options.length > 0) { %>
+                                                <span class="cmd-sub-args"><% sub.options.forEach(o => { %><span class="cmd-arg <%= o.required ? 'required' : 'optional' %>"><%= o.name %></span> <% }); %></span>
+                                            <% } %>
                                         </div>
-                                    </td>
-                                </tr>
-                            <% }); %>
-                        </tbody>
-                    </table>
-                </div>
+                                    <% } %>
+                                <% }); %>
+                            </div>
+                        <% } %>
+                    </div>
+                <% }); %>
             </div>
         </div>
     <% } %>
+
+    <!-- Prefix Command Aliases Section -->
+    <div class="command-category" id="prefixAliasSection" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
+            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #f59e0b, #d97706); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fas fa-exchange-alt" style="color: white; font-size: 1.25rem;"></i>
+                </div>
+                <div>
+                    <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Prefix Command Aliases</h4>
+                    <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">
+                        Current prefix: <code style="background: var(--color-dark-700); padding: 2px 8px; border-radius: var(--radius-sm); color: #fbbf24; font-weight: var(--font-weight-bold);"><%= currentPrefix %></code>
+                        &mdash; Create custom aliases that map to existing commands
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Alias Form -->
+        <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
+            <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+                <i class="fas fa-plus-circle" style="color: var(--color-primary-400);"></i> Add New Alias
+            </div>
+            <div style="display: flex; gap: var(--spacing-3); align-items: flex-end; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 160px;">
+                    <label style="display: block; font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1); text-transform: uppercase; letter-spacing: 0.05em;">Alias</label>
+                    <div style="display: flex; align-items: center;">
+                        <span style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-right: none; border-radius: var(--radius-md) 0 0 var(--radius-md); padding: 8px 10px; color: #fbbf24; font-weight: var(--font-weight-bold); font-family: 'Courier New', monospace;"><%= currentPrefix %></span>
+                        <input type="text" id="aliasInput" class="form-control" placeholder="e.g. b" style="border-radius: 0 var(--radius-md) var(--radius-md) 0; font-family: 'Courier New', monospace;">
+                    </div>
+                </div>
+                <div style="flex: 1; min-width: 160px;">
+                    <label style="display: block; font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1); text-transform: uppercase; letter-spacing: 0.05em;">Maps To Command</label>
+                    <input type="text" id="aliasCommandInput" class="form-control" placeholder="e.g. balance" style="font-family: 'Courier New', monospace;">
+                </div>
+                <div>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="addAlias()" style="min-height: 38px;">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Aliases Table -->
+        <div class="table-container" id="aliasTableContainer">
+            <table class="data-table" id="aliasTable">
+                <thead>
+                    <tr>
+                        <th style="width: 200px;">Alias</th>
+                        <th>Maps To</th>
+                        <th class="alias-created-col" style="width: 180px;">Created By</th>
+                        <th style="width: 100px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="aliasTableBody">
+                    <% if (pAliases.length === 0) { %>
+                        <tr id="aliasEmptyRow">
+                            <td colspan="4" style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">
+                                <i class="fas fa-inbox" style="font-size: 1.5rem; display: block; margin-bottom: var(--spacing-2);"></i>
+                                No aliases configured. Add one above to get started.
+                            </td>
+                        </tr>
+                    <% } else { %>
+                        <% pAliases.forEach(a => { %>
+                            <tr class="alias-row" data-alias="<%= a.alias %>">
+                                <td>
+                                    <span style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; font-weight: var(--font-weight-bold); color: #fbbf24;">
+                                        <%= currentPrefix %><%= a.alias %>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; color: var(--color-primary-400);">
+                                        /<%= a.command_name %>
+                                    </span>
+                                </td>
+                                <td class="alias-created-col" style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
+                                    <%= a.created_by || 'Unknown' %>
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias('<%= a.alias %>')" title="Delete alias">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        <% }); %>
+                    <% } %>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <!-- Info Banner -->
     <div style="background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: var(--radius-lg); padding: var(--spacing-4);">
@@ -131,10 +312,14 @@ const categoryCount = Object.keys(groupedCommands).length;
             <i class="fas fa-info-circle" style="color: var(--color-primary-400); font-size: 1.25rem; margin-top: 2px;"></i>
             <div>
                 <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
-                    How to use commands
+                    Command Access Levels
                 </div>
                 <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                    All commands use Discord's slash command system. Type <code style="background: var(--color-dark-700); padding: 2px 6px; border-radius: 3px; color: var(--color-primary-400);">/</code> in any channel and Discord will show available commands with auto-complete.
+                    <ul style="margin: 0; padding-left: var(--spacing-4); list-style: disc;">
+                        <li><span style="color: var(--color-success); font-weight: var(--font-weight-medium);">Everyone</span> &mdash; All members can use this command (default)</li>
+                        <li><span style="color: var(--color-warning); font-weight: var(--font-weight-medium);">Mod Only</span> &mdash; Only members with Manage Server permission</li>
+                        <li><span style="color: var(--color-danger); font-weight: var(--font-weight-medium);">Disabled</span> &mdash; Nobody can use this command in this server</li>
+                    </ul>
                 </div>
             </div>
         </div>
@@ -219,13 +404,208 @@ const categoryCount = Object.keys(groupedCommands).length;
 .category-toggle-icon.rotated {
     transform: rotate(-90deg);
 }
+
+/* Command tree styles */
+.cmd-tree-item {
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    background: rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+}
+.cmd-tree-item:hover { border-color: rgba(167, 139, 250, 0.2); }
+.cmd-tree-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    gap: 12px;
+}
+.cmd-tree-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+.cmd-tree-right { flex-shrink: 0; }
+.cmd-tree-toggle {
+    background: none; border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer; padding: 4px;
+    font-size: 0.7rem;
+    transition: transform 0.2s, color 0.2s;
+    width: 20px; text-align: center; flex-shrink: 0;
+}
+.cmd-tree-toggle:hover { color: #a78bfa; }
+.cmd-tree-toggle.expanded i { transform: rotate(90deg); }
+.cmd-tree-toggle-spacer { width: 20px; flex-shrink: 0; }
+.cmd-name-badge {
+    background: rgba(167, 139, 250, 0.15);
+    border: 1px solid rgba(167, 139, 250, 0.25);
+    padding: 3px 10px; border-radius: 5px;
+    font-family: 'Courier New', monospace;
+    font-weight: 700; font-size: 0.82rem;
+    color: #a78bfa; white-space: nowrap; flex-shrink: 0;
+}
+.cmd-desc-inline {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.8rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cmd-sub-count {
+    background: rgba(255, 255, 255, 0.06);
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 0.7rem; color: rgba(255, 255, 255, 0.4);
+    white-space: nowrap; flex-shrink: 0;
+}
+.cmd-tree-children {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 8px 14px 8px 46px;
+    background: rgba(0, 0, 0, 0.1);
+}
+.cmd-tree-group { margin-bottom: 8px; }
+.cmd-tree-group:last-child { margin-bottom: 0; }
+.cmd-tree-group-header {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 0; margin-bottom: 4px;
+}
+.cmd-group-name {
+    font-size: 0.75rem; font-weight: 700;
+    color: rgba(167, 139, 250, 0.7);
+    text-transform: uppercase; letter-spacing: 0.04em;
+}
+.cmd-group-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.3); }
+.cmd-tree-sub {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 5px;
+    margin-bottom: 2px; flex-wrap: wrap;
+}
+.cmd-tree-sub:hover { background: rgba(167, 139, 250, 0.06); }
+.cmd-sub-path {
+    font-family: 'Courier New', monospace;
+    font-size: 0.78rem; color: rgba(255, 255, 255, 0.6); white-space: nowrap;
+}
+.cmd-sub-path strong { color: #a78bfa; }
+.cmd-sub-desc {
+    font-size: 0.75rem; color: rgba(255, 255, 255, 0.35);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.cmd-sub-args { display: flex; gap: 4px; flex-shrink: 0; }
+.cmd-arg {
+    font-size: 0.65rem; padding: 1px 6px;
+    border-radius: 3px; font-family: monospace;
+}
+.cmd-arg.required {
+    background: rgba(248, 113, 113, 0.15); color: #f87171;
+    border: 1px solid rgba(248, 113, 113, 0.2);
+}
+.cmd-arg.optional {
+    background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Color-coded access level selects */
+.cmd-access-select[data-current="everyone"] {
+    border-color: rgba(35, 245, 107, 0.3);
+    color: #23f56b;
+}
+
+.cmd-access-select[data-current="mod_only"] {
+    border-color: rgba(251, 191, 36, 0.3);
+    color: #fbbf24;
+}
+
+.cmd-access-select[data-current="disabled"] {
+    border-color: rgba(248, 113, 113, 0.3);
+    color: #f87171;
+}
+
+/* Color the options inside the select for readability */
+.cmd-access-select option {
+    background: var(--color-dark-700);
+    color: var(--color-text-primary);
+}
+
+/* Sticky save bar */
+#commandSaveBar {
+    position: sticky;
+    bottom: 20px;
+    z-index: 100;
+    background: var(--color-dark-700);
+    border: 1px solid rgba(167, 139, 250, 0.5);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-4);
+    margin-bottom: var(--spacing-6);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    /* Remove fixed widths on table headers */
+    .data-table th { width: auto !important; }
+
+    /* Hide description on mobile */
+    .cmd-desc-col, .cmd-desc-inline { display: none !important; }
+
+    /* Stack tree header on mobile */
+    .cmd-tree-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .cmd-tree-right { align-self: flex-end; }
+    .cmd-tree-children { padding-left: 20px; }
+    .cmd-sub-desc { display: none; }
+
+    /* Hide Created By column on mobile */
+    .alias-created-col { display: none !important; }
+
+    /* Touch-friendly selects and buttons */
+    .cmd-access-select,
+    select, button { min-height: 44px; }
+
+    /* Reduce table cell padding */
+    .data-table th,
+    .data-table td { padding: var(--spacing-2) !important; }
+
+    /* Table font size */
+    .data-table { font-size: 0.875rem; }
+
+    /* Stack save bar buttons */
+    #commandSaveBar > div {
+        flex-direction: column;
+        gap: var(--spacing-3);
+    }
+
+    #commandSaveBar > div > div:last-child {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #commandSaveBar .btn { width: 100%; justify-content: center; }
+
+    /* Category header - stack on small screens */
+    .command-category > div:first-child {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: var(--spacing-2) !important;
+    }
+
+    /* Command name badge smaller */
+    .command-row td:first-child span {
+        font-size: var(--font-size-sm);
+        padding: var(--spacing-1) var(--spacing-2);
+    }
+}
 </style>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
+const CMD_GUILD_ID = '<%= currentGuildId %>';
+const CURRENT_PREFIX = '<%= currentPrefix %>';
+
+// Run immediately — partial is rendered after DOM is already ready
+(function() {
     // Search functionality
     const searchInput = document.getElementById('commandSearch');
-    const commandRows = document.querySelectorAll('.command-row');
     const categories = document.querySelectorAll('.command-category');
 
     if (searchInput) {
@@ -233,9 +613,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const query = e.target.value.toLowerCase();
 
             categories.forEach(category => {
-                let hasVisibleCommand = false;
                 const rows = category.querySelectorAll('.command-row');
 
+                // Skip the prefix alias section (no .command-row elements)
+                if (rows.length === 0) {
+                    category.style.display = query === '' ? '' : 'none';
+                    return;
+                }
+
+                let hasVisibleCommand = false;
                 rows.forEach(row => {
                     const commandName = row.dataset.commandName;
                     const description = row.dataset.description;
@@ -253,12 +639,44 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-});
+
+    // Initialize color-coded selects and bind change events
+    document.querySelectorAll('.cmd-access-select').forEach(select => {
+        select.setAttribute('data-current', select.value);
+        select.addEventListener('change', function() {
+            this.setAttribute('data-current', this.value);
+            checkForChanges();
+        });
+    });
+})();
+
+function checkForChanges() {
+    const selects = document.querySelectorAll('.cmd-access-select');
+    let hasChanges = false;
+
+    selects.forEach(select => {
+        if (select.value !== select.dataset.original) {
+            hasChanges = true;
+        }
+    });
+
+    const saveBar = document.getElementById('commandSaveBar');
+    saveBar.style.display = hasChanges ? '' : 'none';
+}
+
+function toggleCommandTree(btn) {
+    const item = btn.closest('.cmd-tree-item');
+    const children = item.querySelector('.cmd-tree-children');
+    if (!children) return;
+    const isOpen = children.style.display !== 'none';
+    children.style.display = isOpen ? 'none' : '';
+    btn.classList.toggle('expanded', !isOpen);
+}
 
 function toggleCategory(category) {
     const categoryId = category.replace(/\s+/g, '-');
-    const commandsDiv = document.getElementById(`category-${categoryId}`);
-    const toggleIcon = document.getElementById(`toggle-${categoryId}`);
+    const commandsDiv = document.getElementById('category-' + categoryId);
+    const toggleIcon = document.getElementById('toggle-' + categoryId);
 
     if (commandsDiv.classList.contains('collapsed')) {
         commandsDiv.classList.remove('collapsed');
@@ -266,6 +684,195 @@ function toggleCategory(category) {
     } else {
         commandsDiv.classList.add('collapsed');
         toggleIcon.classList.add('rotated');
+    }
+}
+
+async function saveCommandRestrictions() {
+    const selects = document.querySelectorAll('.cmd-access-select');
+    const restrictions = [];
+
+    selects.forEach(select => {
+        const cmdName = select.dataset.command;
+        const state = select.value;
+
+        let allowed = true;
+        let adminOnly = false;
+
+        if (state === 'disabled') {
+            allowed = false;
+            adminOnly = true;
+        } else if (state === 'mod_only') {
+            allowed = true;
+            adminOnly = true;
+        }
+
+        restrictions.push({
+            command_name: cmdName,
+            allowed: allowed,
+            admin_only: adminOnly
+        });
+    });
+
+    try {
+        const response = await fetch('/api/guilds/' + CMD_GUILD_ID + '/commands/restrictions', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ restrictions })
+        });
+
+        if (response.ok) {
+            if (typeof showToast === 'function') showToast('success', 'Command permissions saved');
+            // Update original values and refresh colors
+            selects.forEach(select => {
+                select.dataset.original = select.value;
+                select.setAttribute('data-current', select.value);
+            });
+            checkForChanges();
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (error) {
+        if (typeof showToast === 'function') showToast('error', 'Failed to save command permissions');
+    }
+}
+
+function resetAllRestrictions() {
+    document.querySelectorAll('.cmd-access-select').forEach(select => {
+        select.value = 'everyone';
+        select.setAttribute('data-current', 'everyone');
+    });
+    checkForChanges();
+}
+
+// --- Prefix Command Aliases ---
+
+function createAliasRow(alias, commandName, createdBy) {
+    var tr = document.createElement('tr');
+    tr.className = 'alias-row';
+    tr.dataset.alias = alias;
+
+    var tdAlias = document.createElement('td');
+    var spanAlias = document.createElement('span');
+    spanAlias.style.cssText = 'background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: "Courier New", monospace; font-weight: var(--font-weight-bold); color: #fbbf24;';
+    spanAlias.textContent = CURRENT_PREFIX + alias;
+    tdAlias.appendChild(spanAlias);
+
+    var tdCommand = document.createElement('td');
+    var spanCmd = document.createElement('span');
+    spanCmd.style.cssText = 'background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: "Courier New", monospace; color: var(--color-primary-400);';
+    spanCmd.textContent = '/' + commandName;
+    tdCommand.appendChild(spanCmd);
+
+    var tdCreated = document.createElement('td');
+    tdCreated.className = 'alias-created-col';
+    tdCreated.style.cssText = 'color: var(--color-text-secondary); font-size: var(--font-size-sm);';
+    tdCreated.textContent = createdBy;
+
+    var tdActions = document.createElement('td');
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-danger';
+    btn.title = 'Delete alias';
+    btn.onclick = function() { deleteAlias(alias); };
+    var icon = document.createElement('i');
+    icon.className = 'fas fa-trash';
+    btn.appendChild(icon);
+    tdActions.appendChild(btn);
+
+    tr.appendChild(tdAlias);
+    tr.appendChild(tdCommand);
+    tr.appendChild(tdCreated);
+    tr.appendChild(tdActions);
+
+    return tr;
+}
+
+function createEmptyAliasRow() {
+    var tr = document.createElement('tr');
+    tr.id = 'aliasEmptyRow';
+    var td = document.createElement('td');
+    td.colSpan = 4;
+    td.style.cssText = 'text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);';
+    var icon = document.createElement('i');
+    icon.className = 'fas fa-inbox';
+    icon.style.cssText = 'font-size: 1.5rem; display: block; margin-bottom: var(--spacing-2);';
+    td.appendChild(icon);
+    td.appendChild(document.createTextNode('No aliases configured. Add one above to get started.'));
+    tr.appendChild(td);
+    return tr;
+}
+
+async function addAlias() {
+    var aliasInput = document.getElementById('aliasInput');
+    var commandInput = document.getElementById('aliasCommandInput');
+    var alias = aliasInput.value.trim().toLowerCase();
+    var commandName = commandInput.value.trim().toLowerCase();
+
+    if (!alias) {
+        if (typeof showToast === 'function') showToast('error', 'Please enter an alias name');
+        aliasInput.focus();
+        return;
+    }
+    if (!commandName) {
+        if (typeof showToast === 'function') showToast('error', 'Please enter a command name to map to');
+        commandInput.focus();
+        return;
+    }
+
+    try {
+        var response = await fetch('/api/guilds/' + CMD_GUILD_ID + '/prefix-commands/aliases', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ alias: alias, command_name: commandName })
+        });
+
+        if (response.ok) {
+            if (typeof showToast === 'function') showToast('success', 'Alias ' + CURRENT_PREFIX + alias + ' created');
+            // Remove empty state row if present
+            var emptyRow = document.getElementById('aliasEmptyRow');
+            if (emptyRow) emptyRow.remove();
+
+            // Add new row to table using safe DOM methods
+            var tbody = document.getElementById('aliasTableBody');
+            tbody.appendChild(createAliasRow(alias, commandName, 'You'));
+
+            // Clear inputs
+            aliasInput.value = '';
+            commandInput.value = '';
+        } else {
+            var data = await response.json().catch(function() { return {}; });
+            throw new Error(data.error || 'Failed to create alias');
+        }
+    } catch (error) {
+        if (typeof showToast === 'function') showToast('error', error.message || 'Failed to create alias');
+    }
+}
+
+async function deleteAlias(alias) {
+    if (!confirm('Delete alias ' + CURRENT_PREFIX + alias + '?')) return;
+
+    try {
+        var response = await fetch('/api/guilds/' + CMD_GUILD_ID + '/prefix-commands/aliases/' + encodeURIComponent(alias), {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            if (typeof showToast === 'function') showToast('success', 'Alias ' + CURRENT_PREFIX + alias + ' deleted');
+            // Remove row from table
+            var row = document.querySelector('.alias-row[data-alias="' + alias + '"]');
+            if (row) row.remove();
+
+            // Show empty state if no aliases left
+            var remaining = document.querySelectorAll('.alias-row');
+            if (remaining.length === 0) {
+                var tbody = document.getElementById('aliasTableBody');
+                tbody.appendChild(createEmptyAliasRow());
+            }
+        } else {
+            throw new Error('Failed to delete alias');
+        }
+    } catch (error) {
+        if (typeof showToast === 'function') showToast('error', 'Failed to delete alias');
     }
 }
 </script>

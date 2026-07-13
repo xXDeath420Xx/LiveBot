@@ -1,0 +1,324 @@
+<%# Phishing Detection - Guild Management Partial %>
+
+<style>
+.phish-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(167, 139, 250, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.phish-header {
+    background: rgba(248, 113, 113, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(248, 113, 113, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.phish-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.phish-header-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(248, 113, 113, 0.15);
+    border-radius: 8px;
+}
+
+.phish-header-icon i { font-size: 1rem; color: #f87171; }
+
+.phish-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
+.phish-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
+
+.phish-body { padding: 18px; }
+
+.phish-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+
+@media (max-width: 768px) {
+    .phish-grid { grid-template-columns: 1fr; }
+}
+
+.phish-form-group { margin-bottom: 16px; }
+
+.phish-form-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 6px;
+}
+
+.phish-form-label i { color: #f87171; margin-right: 6px; }
+
+.phish-form-input,
+.phish-form-select {
+    width: 100%;
+    padding: 10px 14px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.phish-form-input:focus,
+.phish-form-select:focus {
+    outline: none;
+    border-color: rgba(248, 113, 113, 0.5);
+    box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.1);
+}
+
+.phish-form-select option { background: #1a1d21; color: #ffffff; }
+
+.phish-form-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.phish-divider {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    margin: 18px 0;
+    padding-top: 18px;
+}
+
+.phish-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.phish-section-title i { font-size: 0.9rem; color: #fbbf24; }
+.phish-section-title h4 { font-size: 0.9rem; font-weight: 600; color: #ffffff; margin: 0; }
+.phish-section-title span { font-size: 0.7rem; color: rgba(255, 255, 255, 0.4); }
+
+.phish-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.phish-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #a78bfa, #7c3aed);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.phish-save-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(167, 139, 250, 0.3);
+}
+
+.phish-save-btn i { font-size: 0.85rem; }
+
+.phish-actions { display: flex; justify-content: flex-end; padding-top: 12px; }
+</style>
+
+<!-- Main Config Card -->
+<div class="phish-card">
+    <div class="phish-header">
+        <div class="phish-header-left">
+            <div class="phish-header-icon"><i class="fas fa-fish"></i></div>
+            <div>
+                <h3>Phishing Detection</h3>
+                <p>Detect and act on known phishing/scam links</p>
+            </div>
+        </div>
+        <div class="toggle-switch">
+            <input type="checkbox" id="phishing_enabled" <%= (locals.phishingConfig && locals.phishingConfig.enabled) ? 'checked' : '' %>>
+            <label class="toggle-slider" for="phishing_enabled"></label>
+        </div>
+    </div>
+
+    <div class="phish-body">
+        <form id="phishing-config-form">
+            <div class="phish-grid">
+                <!-- Action -->
+                <div class="phish-form-group">
+                    <label class="phish-form-label"><i class="fas fa-bolt"></i> Action on Detection</label>
+                    <select name="action" class="phish-form-select">
+                        <option value="delete" <%= (locals.phishingConfig && locals.phishingConfig.action === 'delete') ? 'selected' : (!locals.phishingConfig ? 'selected' : '') %>>Delete Message</option>
+                        <option value="warn" <%= (locals.phishingConfig && locals.phishingConfig.action === 'warn') ? 'selected' : '' %>>Warn User</option>
+                        <option value="mute" <%= (locals.phishingConfig && locals.phishingConfig.action === 'mute') ? 'selected' : '' %>>Mute User</option>
+                        <option value="kick" <%= (locals.phishingConfig && locals.phishingConfig.action === 'kick') ? 'selected' : '' %>>Kick User</option>
+                        <option value="ban" <%= (locals.phishingConfig && locals.phishingConfig.action === 'ban') ? 'selected' : '' %>>Ban User</option>
+                    </select>
+                    <span class="phish-form-hint">What to do when a phishing link is detected</span>
+                </div>
+
+                <!-- Mute Duration -->
+                <div class="phish-form-group" id="mute-duration-group" style="<%= (locals.phishingConfig && locals.phishingConfig.action === 'mute') ? '' : 'display:none' %>">
+                    <label class="phish-form-label"><i class="fas fa-clock"></i> Mute Duration (minutes)</label>
+                    <input type="number" name="mute_duration_minutes" class="phish-form-input" min="1" max="10080" value="<%= (locals.phishingConfig && locals.phishingConfig.mute_duration_minutes) || 30 %>">
+                    <span class="phish-form-hint">How long to mute (max 7 days)</span>
+                </div>
+
+                <!-- Alert Channel -->
+                <div class="phish-form-group">
+                    <label class="phish-form-label"><i class="fas fa-bell"></i> Alert Channel</label>
+                    <select name="alert_channel_id" class="phish-form-select">
+                        <option value="">None</option>
+                        <% if (locals.channels) { channels.filter(c => c.type === 0).forEach(c => { %>
+                            <option value="<%= c.id %>" <%= (locals.phishingConfig && locals.phishingConfig.alert_channel_id === c.id) ? 'selected' : '' %>>#<%= c.name %></option>
+                        <% }); } %>
+                    </select>
+                    <span class="phish-form-hint">Where to send detection alerts to mods</span>
+                </div>
+
+                <!-- Log Detections -->
+                <div class="phish-form-group">
+                    <label class="phish-form-label"><i class="fas fa-database"></i> Detection Logging</label>
+                    <div class="phish-toggle-row">
+                        <div class="toggle-switch">
+                            <input type="checkbox" id="log_detections" <%= (!locals.phishingConfig || locals.phishingConfig.log_detections !== 0) ? 'checked' : '' %>>
+                            <label class="toggle-slider" for="log_detections"></label>
+                        </div>
+                        <span style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">Log detections to database</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Evidence Protection Section -->
+            <div class="phish-divider">
+                <div class="phish-section-title">
+                    <i class="fas fa-shield-alt"></i>
+                    <h4>Evidence Protection</h4>
+                    <span>— Prevents punishing users who share phishing screenshots as evidence</span>
+                </div>
+
+                <div class="phish-grid">
+                    <!-- Report Channel -->
+                    <div class="phish-form-group">
+                        <label class="phish-form-label"><i class="fas fa-share"></i> Report / Evidence Channel</label>
+                        <select name="report_channel_id" class="phish-form-select">
+                            <option value="">None</option>
+                            <% if (locals.channels) { channels.filter(c => c.type === 0).forEach(c => { %>
+                                <option value="<%= c.id %>" <%= (locals.phishingConfig && locals.phishingConfig.report_channel_id === c.id) ? 'selected' : '' %>>#<%= c.name %></option>
+                            <% }); } %>
+                        </select>
+                        <span class="phish-form-hint">Suspected evidence posts are deleted from the original channel and forwarded here</span>
+                    </div>
+
+                    <!-- Exempt Channels -->
+                    <div class="phish-form-group">
+                        <label class="phish-form-label"><i class="fas fa-eye-slash"></i> Exempt Channels</label>
+                        <select name="exempt_channels" class="phish-form-select" multiple size="5">
+                            <%
+                                let exemptList = [];
+                                if (locals.phishingConfig && locals.phishingConfig.exempt_channels) {
+                                    try { exemptList = JSON.parse(locals.phishingConfig.exempt_channels); } catch(e) {}
+                                }
+                            %>
+                            <% if (locals.channels) { channels.filter(c => c.type === 0).forEach(c => { %>
+                                <option value="<%= c.id %>" <%= exemptList.includes(c.id) ? 'selected' : '' %>>#<%= c.name %></option>
+                            <% }); } %>
+                        </select>
+                        <span class="phish-form-hint">Phishing detection completely disabled in these channels (Ctrl/Cmd+click to multi-select). Channels named "evidence", "report", "red-flag", etc. are auto-exempt.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Whitelist Domains -->
+            <div class="phish-divider">
+                <div class="phish-form-group">
+                    <label class="phish-form-label"><i class="fas fa-check-circle"></i> Whitelisted Domains</label>
+                    <%
+                        let whitelistStr = '';
+                        if (locals.phishingConfig && locals.phishingConfig.whitelist_domains) {
+                            try { whitelistStr = JSON.parse(locals.phishingConfig.whitelist_domains).join(', '); } catch(e) {}
+                        }
+                    %>
+                    <input type="text" name="whitelist_domains" class="phish-form-input" value="<%= whitelistStr %>" placeholder="e.g. discord.com, steamcommunity.com">
+                    <span class="phish-form-hint">Comma-separated domains that should never be flagged as phishing</span>
+                </div>
+            </div>
+
+            <!-- Save -->
+            <div class="phish-actions">
+                <button type="submit" class="phish-save-btn">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function() {
+    const form = document.getElementById('phishing-config-form');
+    const actionSelect = form.querySelector('[name="action"]');
+    const muteGroup = document.getElementById('mute-duration-group');
+
+    actionSelect.addEventListener('change', () => {
+        muteGroup.style.display = actionSelect.value === 'mute' ? '' : 'none';
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const enabled = document.getElementById('phishing_enabled').checked;
+        const logDetections = document.getElementById('log_detections').checked;
+
+        const exemptSelect = form.querySelector('[name="exempt_channels"]');
+        const exemptChannels = JSON.stringify(Array.from(exemptSelect.selectedOptions).map(o => o.value));
+
+        const whitelistRaw = form.querySelector('[name="whitelist_domains"]').value;
+        const whitelistDomains = JSON.stringify(
+            whitelistRaw.split(',').map(d => d.trim()).filter(Boolean)
+        );
+
+        const data = {
+            enabled,
+            action: actionSelect.value,
+            mute_duration_minutes: parseInt(form.querySelector('[name="mute_duration_minutes"]').value) || 30,
+            alert_channel_id: form.querySelector('[name="alert_channel_id"]').value || null,
+            whitelist_domains: whitelistDomains,
+            log_detections: logDetections,
+            exempt_channels: exemptChannels,
+            report_channel_id: form.querySelector('[name="report_channel_id"]').value || null
+        };
+
+        try {
+            const res = await fetch(`/api/guilds/<%= guild.id %>/phishing`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await res.json();
+            if (result.success) {
+                showToast('Phishing config saved!', 'success');
+            } else {
+                showToast(result.error || 'Failed to save', 'error');
+            }
+        } catch (err) {
+            showToast('Failed to save phishing config', 'error');
+        }
+    });
+})();
+</script>

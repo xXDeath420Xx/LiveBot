@@ -2,6 +2,7 @@ import { PermissionFlagsBits } from 'discord.js';
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
 import configCache from '../utils/configCache.js';
+import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
 
 class AdvancedAutomodManager {
     constructor(client) {
@@ -206,6 +207,10 @@ class AdvancedAutomodManager {
         try {
             await message.delete().catch(() => {});
 
+            if (isProtectedFromBanCommands(message.author?.id)) {
+                return;
+            }
+
             const reason = pattern.reason || 'Automod pattern match';
 
             if (pattern.action === 'warn') {
@@ -229,6 +234,10 @@ class AdvancedAutomodManager {
     async executeSpamAction(message, config, spamType) {
         try {
             await message.delete().catch(() => {});
+
+            if (isProtectedFromBanCommands(message.author?.id)) {
+                return;
+            }
 
             const reason = `Spam detected: ${spamType}`;
 

@@ -74,14 +74,26 @@
         .invite-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; }
         .invite-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(167, 139, 250, 0.4); }
         .invite-btn svg { width: 18px; height: 18px; }
+        /* Animations */
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes statusPulse { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.4); opacity: 0; } }
         /* Stats Grid */
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-        .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem; display: flex; align-items: center; gap: 1rem; transition: all 0.3s; backdrop-filter: blur(10px); }
-        .stat-card:hover { border-color: var(--stat-color, var(--accent-purple)); transform: translateY(-2px); }
-        .stat-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .stat-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--stat-color, var(--accent-purple)); border-radius: 4px 14px 14px 4px; padding: 1.25rem; display: flex; align-items: center; gap: 1rem; transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1); position: relative; overflow: hidden; animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .stat-card:nth-child(1) { animation-delay: 0.05s; }
+        .stat-card:nth-child(2) { animation-delay: 0.1s; }
+        .stat-card:nth-child(3) { animation-delay: 0.15s; }
+        .stat-card:nth-child(4) { animation-delay: 0.2s; }
+        .stat-card:nth-child(5) { animation-delay: 0.25s; }
+        .stat-card:nth-child(6) { animation-delay: 0.3s; }
+        .stat-card::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at left, color-mix(in srgb, var(--stat-color, #a78bfa) 5%, transparent), transparent 60%); opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+        .stat-card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-2px); box-shadow: 0 8px 20px color-mix(in srgb, var(--stat-color, #a78bfa) 8%, rgba(0,0,0,0.2)); }
+        .stat-card:hover::after { opacity: 1; }
+        .stat-card:hover .stat-icon { transform: scale(1.08); }
+        .stat-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); box-shadow: 0 4px 12px color-mix(in srgb, var(--stat-color, #a78bfa) 20%, transparent); }
         .stat-icon svg { width: 22px; height: 22px; }
         .stat-value { font-size: 1.35rem; font-weight: 700; color: var(--text-primary); }
-        .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+        .stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
         .stat-purple { --stat-color: var(--accent-purple); }
         .stat-purple .stat-icon { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
         .stat-cyan { --stat-color: var(--accent-cyan); }
@@ -98,14 +110,50 @@
         .search-bar { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
         .search-wrapper { position: relative; flex: 1; min-width: 200px; }
         .search-icon { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; color: var(--text-muted); }
-        .search-input { width: 100%; padding: 0.875rem 1rem 0.875rem 3rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-primary); font-size: 0.95rem; font-family: inherit; transition: all 0.2s; }
+        .search-input { width: 100%; padding: 0.875rem 1rem 0.875rem 3rem; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; color: var(--text-primary); font-size: 0.95rem; font-family: inherit; transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
         .search-input::placeholder { color: var(--text-muted); }
-        .search-input:focus { outline: none; border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15); }
+        .search-input:focus { outline: none; border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.12), 0 4px 16px rgba(167, 139, 250, 0.08); background: rgba(255,255,255,0.035); }
         .search-count { display: flex; align-items: center; gap: 0.5rem; padding: 0 1.25rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; font-size: 0.9rem; color: var(--text-secondary); white-space: nowrap; }
         /* Server Grid */
-        .server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 1.5rem; }
-        .server-card { display: block; text-decoration: none; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; transition: all 0.3s; backdrop-filter: blur(10px); }
-        .server-card:hover { border-color: var(--accent-purple); transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 30px rgba(167, 139, 250, 0.1); }
+        .server-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 1.25rem; }
+        .server-card {
+            display: block; text-decoration: none;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-left: 3px solid var(--accent-purple);
+            border-radius: 4px 16px 16px 4px;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+            position: relative;
+            animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .server-card:nth-child(1) { animation-delay: 0.04s; }
+        .server-card:nth-child(2) { animation-delay: 0.08s; }
+        .server-card:nth-child(3) { animation-delay: 0.12s; }
+        .server-card:nth-child(4) { animation-delay: 0.16s; }
+        .server-card:nth-child(5) { animation-delay: 0.20s; }
+        .server-card:nth-child(6) { animation-delay: 0.24s; }
+        .server-card:nth-child(7) { animation-delay: 0.28s; }
+        .server-card:nth-child(8) { animation-delay: 0.32s; }
+        .server-card:nth-child(9) { animation-delay: 0.36s; }
+        .server-card:nth-child(10) { animation-delay: 0.40s; }
+        .server-card:nth-child(11) { animation-delay: 0.44s; }
+        .server-card:nth-child(12) { animation-delay: 0.48s; }
+        .server-card::after {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(ellipse at top left, rgba(167, 139, 250, 0.04), transparent 60%);
+            opacity: 0; transition: opacity 0.3s ease; pointer-events: none;
+        }
+        .server-card:hover {
+            border-color: color-mix(in srgb, var(--accent-purple) 35%, transparent);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 32px rgba(167, 139, 250, 0.08), 0 0 0 0 transparent;
+        }
+        .server-card:hover::after { opacity: 1; }
+        .server-card:hover .server-icon img, .server-card:hover .server-icon .initials {
+            border-color: rgba(167, 139, 250, 0.5);
+            box-shadow: 0 4px 12px rgba(167, 139, 250, 0.2);
+        }
         .server-card-header { padding: 1.5rem; display: flex; align-items: flex-start; gap: 1rem; }
         .server-icon { position: relative; flex-shrink: 0; }
         .server-icon img, .server-icon .initials { width: 60px; height: 60px; border-radius: 14px; object-fit: cover; border: 2px solid var(--border-color); transition: border-color 0.3s; }
@@ -115,6 +163,8 @@
         .server-info { flex: 1; min-width: 0; }
         .server-name { font-size: 1.1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .server-id { font-size: 0.75rem; color: var(--text-muted); font-family: 'SF Mono', monospace; }
+        .server-meta { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem; }
+        .server-meta span { font-size: 0.7rem; color: var(--text-muted); display: inline-flex; align-items: center; white-space: nowrap; }
         .server-stats { padding: 0 1.5rem 1.25rem; display: flex; flex-wrap: wrap; gap: 1rem; }
         .server-stat { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-secondary); }
         .server-stat svg { width: 16px; height: 16px; }
@@ -185,6 +235,9 @@
                 <div class="navbar-links">
                     <a href="/">Home</a>
                     <a href="/commands">Commands</a>
+                    <a href="/cards">Cards</a>
+                    <a href="/cah">🃏 CAH</a>
+                    <a href="/sprites">👾 Sprites</a>
                     <a href="/status">Status</a>
                     <a href="/dashboard" class="active">Dashboard</a>
                 </div>
@@ -221,6 +274,10 @@
                             <i class="fas fa-shield-alt"></i>
                             <span>Super Admin</span>
                         </a>
+                        <a href="/admin/cah" class="dropdown-item text-warning">
+                            <span style="display:inline-block;width:1em;text-align:center;">🃏</span>
+                            <span>CAH Admin</span>
+                        </a>
                         <% } %>
                         <div class="dropdown-divider"></div>
                         <a href="/logout" class="dropdown-item text-danger">
@@ -246,6 +303,7 @@
         <div class="mobile-menu-inner">
             <a href="/" class="mobile-menu-link">Home</a>
             <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/cards" class="mobile-menu-link">Cards</a>
             <a href="/status" class="mobile-menu-link">Status</a>
             <a href="/dashboard" class="mobile-menu-link">Dashboard</a>
             <div class="mobile-menu-divider"></div>
@@ -341,7 +399,14 @@
                         </div>
                         <div class="server-info">
                             <div class="server-name"><%= guild.name %></div>
-                            <div class="server-id">ID: <%= guild.id %></div>
+                            <div class="server-meta">
+                                <% if (guild.ownerName) { %>
+                                <span title="Server Owner"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:-1px;margin-right:2px"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197"/></svg><%= guild.ownerName %></span>
+                                <% } %>
+                                <% if (guild.botJoinedAt) { %>
+                                <span title="Bot joined"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:-1px;margin-right:2px"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg><%= new Date(guild.botJoinedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) %></span>
+                                <% } %>
+                            </div>
                         </div>
                     </div>
                     <div class="server-stats">
@@ -412,10 +477,10 @@
         <div class="container">
             <div class="footer-links">
                 <a href="/commands" class="footer-link">Commands</a>
+                <a href="/cards" class="footer-link">Cards</a>
                 <a href="/status" class="footer-link">Status</a>
                 <a href="/docs" class="footer-link">Documentation</a>
-                <a href="https://discord.com/invite/mJfbDgWA7z" target="_blank" class="footer-link">Support</a>
-                <a href="https://fivem.certifriedmultitool.com" target="_blank" class="footer-link">FiveM Server</a>
+                <a href="https://certifriedmultitool.com/discord" target="_blank" class="footer-link">Support</a>
                 <a href="/terms" class="footer-link">Terms</a>
                 <a href="/privacy" class="footer-link">Privacy</a>
             </div>

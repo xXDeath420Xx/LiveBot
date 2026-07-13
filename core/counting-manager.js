@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, MessageFlags } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 
@@ -6,54 +6,96 @@ export async function handleSetup(interaction) {
     const channel = interaction.options.getChannel('channel');
     const startNum = interaction.options.getInteger('start') || 1;
 
-    // Check if channel already exists
+    // A disabled row must not block re-setup — it's the normal way a channel is retired.
     const [[existing]] = await pool.execute(
         'SELECT * FROM counting_channels WHERE guild_id = ? AND channel_id = ?',
         [interaction.guild.id, channel.id]
     );
 
-    if (existing) {
+    if (existing && existing.is_active) {
         await interaction.reply({
-            content: `❌ ${channel} is already set up as a counting channel! Current count: **${existing.current_count}**`,
-            ephemeral: true
+            content: `❌ ${channel} is already set up as a counting channel! Current count: **${existing.current_count}**\n` +
+                'Use `/arcade counting setcount` to change the number, or `disable` first.',
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
 
-    // Create counting channel
-    await pool.execute(
-        `INSERT INTO counting_channels (guild_id, channel_id, current_count, highest_count, last_user_id, reset_count, is_active)
-         VALUES (?, ?, ?, ?, NULL, 0, TRUE)`,
-        [interaction.guild.id, channel.id, startNum - 1, 0]
-    );
+    // `current_count` holds the LAST number posted, so the next expected is start.
+    if (existing) {
+        await pool.execute(
+            `UPDATE counting_channels
+                SET current_count = ?, highest_count = GREATEST(highest_count, ?),
+                    last_user_id = NULL, is_active = TRUE
+              WHERE guild_id = ? AND channel_id = ?`,
+            [startNum - 1, startNum - 1, interaction.guild.id, channel.id]
+        );
+    } else {
+        await pool.execute(
+            `INSERT INTO counting_channels (guild_id, channel_id, current_count, highest_count, last_user_id, reset_count, is_active)
+             VALUES (?, ?, ?, ?, NULL, 0, TRUE)`,
+            [interaction.guild.id, channel.id, startNum - 1, startNum - 1]
+        );
+    }
 
+    const cfg = await getChannelConfig(interaction.guild.id, channel.id);
     const embed = new EmbedBuilder()
         .setColor('#00FF00')
         .setTitle('✅ Counting Channel Setup')
         .setDescription(`${channel} has been set up as a counting channel!`)
         .addFields(
-            { name: '🔢 Starting Number', value: `${startNum}`, inline: true },
-            { name: '📜 Rules', value: '• Count in order\n• No double counting\n• No skipping numbers\n• Wrong number = reset!', inline: false }
+            { name: '🔢 Next Number', value: `${startNum}`, inline: true },
+            { name: '⚙️ Mode', value: describeMode(cfg), inline: false }
         )
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
+}
 
-    // Send initial message in counting channel
-    try {
-        const rulesEmbed = new EmbedBuilder()
-            .setColor('#3498db')
-            .setTitle('🔢 Counting Game')
-            .setDescription(`Welcome to the counting channel! Start counting from **${startNum}**`)
-            .addFields(
-                { name: '📜 Rules', value: '• Count in sequential order\n• One number per person\n• No double counting by the same user\n• Wrong number resets to 0!\n• Have fun!', inline: false }
-            )
-            .setFooter({ text: 'Good luck!' });
+/** Human-readable summary of a channel's ruleset. */
+export function describeMode(cfg) {
+    const lines = [
+        cfg.fail_mode === 'delete'
+            ? '• Wrong number → **deleted**, count never resets'
+            : '• Wrong number → **count resets to 0**',
+        cfg.allow_same_user ? '• Same person may count twice in a row' : '• No counting twice in a row',
+    ];
+    if (cfg.fail_mode === 'delete' && cfg.delete_chatter) lines.push('• Non-numeric chatter is deleted');
+    if (cfg.react_on_valid) lines.push('• Reacts ✅ on a valid count');
+    if (cfg.announce_milestones) lines.push('• Announces milestones');
+    return lines.join('\n');
+}
 
-        await channel.send({ embeds: [rulesEmbed] });
-    } catch (error) {
-        logger.error('[Counting] Failed to send rules message:', { error: error.message });
-    }
+/** Read a channel's row with its behaviour flags. Returns null when not configured. */
+export async function getChannelConfig(guildId, channelId) {
+    const [[row]] = await pool.execute(
+        'SELECT * FROM counting_channels WHERE guild_id = ? AND channel_id = ?', [guildId, channelId]);
+    return row || null;
+}
+
+/** Change the ruleset. `fields` keys are validated against a fixed allow-list. */
+export async function setMode(guildId, channelId, fields) {
+    const ALLOWED = new Set(['fail_mode', 'allow_same_user', 'react_on_valid', 'announce_milestones', 'delete_chatter']);
+    const keys = Object.keys(fields).filter(k => ALLOWED.has(k));
+    if (!keys.length) return false;
+    const sql = keys.map(k => `${k} = ?`).join(', ');
+    const [r] = await pool.execute(
+        `UPDATE counting_channels SET ${sql} WHERE guild_id = ? AND channel_id = ?`,
+        [...keys.map(k => fields[k]), guildId, channelId]);
+    return r.affectedRows > 0;
+}
+
+/**
+ * Seed the count without resetting stats — used when taking a channel over from another
+ * bot at the exact number it left off on.
+ */
+export async function setCount(guildId, channelId, lastNumber, lastUserId = null) {
+    const [r] = await pool.execute(
+        `UPDATE counting_channels
+            SET current_count = ?, highest_count = GREATEST(highest_count, ?), last_user_id = ?
+          WHERE guild_id = ? AND channel_id = ?`,
+        [lastNumber, lastNumber, lastUserId, guildId, channelId]);
+    return r.affectedRows > 0;
 }
 
 export async function handleDisable(interaction) {
@@ -242,145 +284,124 @@ export async function handleMessage(message) {
     if (message.author.bot) return false;
     if (!message.guild) return false;
 
-    // Check if message is in a counting channel
     const [[channel]] = await pool.execute(
         'SELECT * FROM counting_channels WHERE guild_id = ? AND channel_id = ? AND is_active = TRUE',
         [message.guild.id, message.channel.id]
     );
-
     if (!channel) return false;
 
-    // Check if message is a number
+    const deleteMode = channel.fail_mode === 'delete';
     const content = message.content.trim();
     const numberMatch = content.match(/^(\d+)$/);
 
     if (!numberMatch) {
-        // Not a pure number, ignore
+        // Chatter. Legacy mode ignores it; delete mode may sweep it if configured.
+        if (deleteMode && channel.delete_chatter) {
+            await message.delete().catch(() => {});
+            return true;
+        }
         return false;
     }
 
-    const number = parseInt(numberMatch[1]);
-    const expectedNumber = channel.current_count + 1;
+    const number = parseInt(numberMatch[1], 10);
+    const expectedNumber = Number(channel.current_count) + 1;
+    const sameUser = !channel.allow_same_user && channel.last_user_id === message.author.id;
+    const wrong = number !== expectedNumber;
 
-    // Check if correct number
-    if (number === expectedNumber) {
-        // Check if same user as last
-        if (channel.last_user_id === message.author.id) {
-            await message.react('❌');
-            await message.reply("❌ You can't count twice in a row!");
+    if (wrong || sameUser) {
+        return handleBadCount(message, channel, { number, expectedNumber, sameUser, deleteMode });
+    }
 
-            // Reset count
-            await pool.execute(
-                'UPDATE counting_channels SET current_count = 0, last_user_id = NULL, reset_count = reset_count + 1 WHERE guild_id = ? AND channel_id = ?',
-                [message.guild.id, message.channel.id]
-            );
+    // Correct. Guard the advance on the count we read: two people posting `expected` at the
+    // same moment must not both succeed, or the count would advance once for two ✅.
+    const [adv] = await pool.execute(
+        `UPDATE counting_channels
+            SET current_count = ?, highest_count = GREATEST(highest_count, ?), last_user_id = ?
+          WHERE guild_id = ? AND channel_id = ? AND current_count = ?
+            AND (last_user_id IS NULL OR last_user_id <> ? OR ? = 1)`,
+        [number, number, message.author.id, message.guild.id, message.channel.id,
+         channel.current_count, message.author.id, channel.allow_same_user ? 1 : 0]
+    );
+    if (adv.affectedRows !== 1) {
+        // Someone beat us to this number by microseconds — treat it as a bad count.
+        const [[fresh]] = await pool.execute(
+            'SELECT * FROM counting_channels WHERE guild_id = ? AND channel_id = ?',
+            [message.guild.id, message.channel.id]);
+        return handleBadCount(message, fresh || channel, {
+            number, expectedNumber: Number(fresh?.current_count ?? channel.current_count) + 1,
+            sameUser: false, deleteMode,
+        });
+    }
 
-            // Update stats
-            await updateCountingStats(message.guild.id, message.channel.id, message.author.id, false, 0);
+    if (channel.react_on_valid) await message.react('✅').catch(() => {});
+    await updateCountingStats(message.guild.id, message.channel.id, message.author.id, true, number);
 
-            const resetEmbed = new EmbedBuilder()
-                .setColor('#FF0000')
-                .setTitle('🔄 Count Reset!')
-                .setDescription(`${message.author} counted twice in a row! Count reset to **0**.`)
-                .addFields(
-                    { name: 'Failed At', value: `${channel.current_count}`, inline: true },
-                    { name: 'Next Number', value: '1', inline: true }
-                )
-                .setTimestamp();
+    if (channel.announce_milestones && isMilestone(number)) {
+        const milestoneEmbed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle('🎉 Milestone Reached!')
+            .setDescription(`Congratulations! You've reached **${number}**!`)
+            .setTimestamp();
+        await message.channel.send({ embeds: [milestoneEmbed] }).catch(() => {});
 
-            await message.channel.send({ embeds: [resetEmbed] });
-
-            return true;
-        }
-
-        // Correct number!
-        await message.react('✅');
-
-        const newCount = channel.current_count + 1;
-        const newHighest = Math.max(newCount, channel.highest_count);
-
-        await pool.execute(
-            'UPDATE counting_channels SET current_count = ?, highest_count = ?, last_user_id = ? WHERE guild_id = ? AND channel_id = ?',
-            [newCount, newHighest, message.author.id, message.guild.id, message.channel.id]
-        );
-
-        // Update user stats
-        await updateCountingStats(message.guild.id, message.channel.id, message.author.id, true, newCount);
-
-        // Milestone messages - only for specific milestones
-        if (isMilestone(newCount)) {
-            const milestoneEmbed = new EmbedBuilder()
-                .setColor('#FFD700')
-                .setTitle('🎉 Milestone Reached!')
-                .setDescription(`Congratulations! You've reached **${newCount}**!`)
-                .setTimestamp();
-
-            await message.channel.send({ embeds: [milestoneEmbed] });
-
-            // Award economy coins for milestone
-            try {
-                const [[economyConfig]] = await pool.execute(
-                    'SELECT enabled FROM economy_config WHERE guild_id = ?',
-                    [message.guild.id]
-                );
-
-                if (economyConfig && economyConfig.enabled) {
-                    const reward = newCount; // 100 coins for 100, 200 for 200, etc.
-
-                    await pool.execute(
-                        'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
-                        [reward, reward, message.guild.id, message.author.id]
-                    );
-
-                    await message.channel.send(`💰 ${message.author} earned **${reward} coins** for reaching the milestone!`);
-                }
-            } catch (error) {
-                // Economy not set up, skip
+        try {
+            const [[economyConfig]] = await pool.execute(
+                'SELECT enabled FROM economy_config WHERE guild_id = ?', [message.guild.id]);
+            if (economyConfig && economyConfig.enabled) {
+                await pool.execute(
+                    'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
+                    [number, number, message.guild.id, message.author.id]);
+                await message.channel.send(`💰 ${message.author} earned **${number} coins** for reaching the milestone!`).catch(() => {});
             }
-        }
+        } catch { /* economy not set up */ }
 
-        // New record - only announce if it's a milestone
-        if (newCount > channel.highest_count && isMilestone(newCount)) {
+        if (number > Number(channel.highest_count)) {
             const recordEmbed = new EmbedBuilder()
                 .setColor('#00FF00')
                 .setTitle('🏆 NEW RECORD!')
-                .setDescription(`A new counting record has been set: **${newCount}**!`)
+                .setDescription(`A new counting record has been set: **${number}**!`)
                 .setFooter({ text: `Previous record: ${channel.highest_count}` })
                 .setTimestamp();
-
-            await message.channel.send({ embeds: [recordEmbed] });
+            await message.channel.send({ embeds: [recordEmbed] }).catch(() => {});
         }
+    }
+    return true;
+}
 
-    } else {
-        // Wrong number!
-        await message.react('❌');
-        await message.reply(`❌ Wrong number! Expected **${expectedNumber}** but got **${number}**.`);
+/**
+ * A wrong number, or a double-count.
+ *   delete mode → remove the message; the count is untouched and anyone may retry.
+ *   reset mode  → wipe the count and say so (the original behaviour).
+ */
+async function handleBadCount(message, channel, { number, expectedNumber, sameUser, deleteMode }) {
+    await updateCountingStats(message.guild.id, message.channel.id, message.author.id, false, Number(channel.current_count));
 
-        // Reset count
-        await pool.execute(
-            'UPDATE counting_channels SET current_count = 0, last_user_id = NULL, reset_count = reset_count + 1 WHERE guild_id = ? AND channel_id = ?',
-            [message.guild.id, message.channel.id]
-        );
-
-        // Update stats
-        await updateCountingStats(message.guild.id, message.channel.id, message.author.id, false, channel.current_count);
-
-        const resetEmbed = new EmbedBuilder()
-            .setColor('#FF0000')
-            .setTitle('🔄 Count Reset!')
-            .setDescription(`Wrong number! Count reset to **0**.`)
-            .addFields(
-                { name: 'Failed At', value: `${channel.current_count}`, inline: true },
-                { name: 'Expected', value: `${expectedNumber}`, inline: true },
-                { name: 'Got', value: `${number}`, inline: true },
-                { name: 'Next Number', value: '1', inline: true }
-            )
-            .setFooter({ text: `Counting will resume from 1` })
-            .setTimestamp();
-
-        await message.channel.send({ embeds: [resetEmbed] });
+    if (deleteMode) {
+        // Silent by design: no reply, no reaction, no reset. Deleting is the whole feedback.
+        await message.delete().catch(() => {});
+        return true;
     }
 
+    await message.react('❌').catch(() => {});
+    await pool.execute(
+        'UPDATE counting_channels SET current_count = 0, last_user_id = NULL, reset_count = reset_count + 1 WHERE guild_id = ? AND channel_id = ?',
+        [message.guild.id, message.channel.id]
+    );
+
+    const resetEmbed = new EmbedBuilder()
+        .setColor('#FF0000')
+        .setTitle('🔄 Count Reset!')
+        .setDescription(sameUser
+            ? `${message.author} counted twice in a row! Count reset to **0**.`
+            : 'Wrong number! Count reset to **0**.')
+        .addFields(
+            { name: 'Failed At', value: `${channel.current_count}`, inline: true },
+            { name: 'Expected', value: `${expectedNumber}`, inline: true },
+            { name: 'Got', value: `${number}`, inline: true },
+            { name: 'Next Number', value: '1', inline: true }
+        )
+        .setTimestamp();
+    await message.channel.send({ embeds: [resetEmbed] }).catch(() => {});
     return true;
 }
 

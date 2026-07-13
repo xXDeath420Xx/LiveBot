@@ -1,0 +1,283 @@
+<%/* Greeting Card — multi-page card that opens like a real one */%>
+<%
+    // Group signatures by page number
+    const pageMap = {};
+    signatures.forEach(sig => {
+        const pn = sig.page_number || 1;
+        if (!pageMap[pn]) pageMap[pn] = [];
+        pageMap[pn].push(sig);
+    });
+    const pageNumbers = Object.keys(pageMap).map(Number).sort((a, b) => a - b);
+    const totalPages = Math.max(pageNumbers.length > 0 ? Math.max(...pageNumbers) : 1, 1) + 1; // +1 for cover
+    const likesSet = new Set((typeof userLikes !== 'undefined' ? userLikes : []));
+%>
+
+<style>
+    .gc-container { max-width: 700px; margin: 0 auto; padding: 16px; }
+
+    /* Page carousel */
+    .gc-carousel { position: relative; min-height: 500px; }
+    .gc-page {
+        display: none !important; min-height: 480px; border-radius: 16px; position: relative; overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+        transition: opacity 0.3s ease;
+    }
+    .gc-page.active { display: block !important; }
+
+    /* Cover page */
+    .gc-cover {
+        background: <%= card.header_bg_color || '#1a1a2e' %>;
+        <% if (card.cover_image_url || card.card_background_url) { %>
+        background-image: url('<%= card.cover_image_url || card.card_background_url %>');
+        background-size: cover; background-position: center;
+        <% } %>
+        display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 60px 40px;
+    }
+    .gc-cover-avatar { width: 100px; height: 100px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.2); margin-bottom: 20px; object-fit: cover; }
+    .gc-cover-title {
+        font-size: <%= card.title_font_size || 36 %>px; font-weight: 700; color: <%= card.title_font_color || '#ffffff' %>;
+        <% if (card.title_font) { %>font-family: '<%= card.title_font %>', sans-serif;<% } %>
+        margin-bottom: 8px;
+    }
+    .gc-cover-subtitle {
+        font-size: 16px; color: <%= card.subtitle_font_color || 'rgba(255,255,255,0.6)' %>;
+        <% if (card.subtitle_font) { %>font-family: '<%= card.subtitle_font %>', sans-serif;<% } %>
+    }
+    .gc-cover-badge { margin-top: 20px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 6px 16px; font-size: 0.8rem; color: rgba(255,255,255,0.7); }
+
+    /* Content pages */
+    .gc-content-page {
+        background: #fefef9;
+        <% if (card.board_bg_image_url) { %>
+        background-image: url('<%= card.board_bg_image_url %>');
+        background-size: cover; background-position: center;
+        <% } %>
+        padding: 32px; position: relative;
+    }
+    .gc-page-number { position: absolute; bottom: 12px; right: 16px; font-size: 0.7rem; color: rgba(0,0,0,0.25); }
+
+    /* Messages on content pages — arranged vertically */
+    .gc-messages { display: flex; flex-direction: column; gap: 20px; }
+    .gc-msg {
+        background: #ffffff; border-radius: 8px; padding: 16px 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        <% if (!card.board_bg_image_url) { %>border-left: 3px solid rgba(167,139,250,0.4);<% } %>
+        position: relative;
+    }
+    .gc-msg-name { font-family: 'Roboto', sans-serif; font-size: 16px; font-weight: 500; color: rgba(0,0,0,0.87); margin-bottom: 6px; }
+    .gc-msg-text { font-family: 'Muli', 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 24px; color: rgb(31,41,55); white-space: pre-wrap; word-wrap: break-word; }
+    .gc-msg-gif { max-width: 100%; border-radius: 12px; margin-top: 10px; }
+    .gc-msg-audio { width: 100%; height: 32px; margin-top: 8px; }
+    .gc-msg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+    .gc-msg-actions button { background: #f3f4f6; border: 1px solid #e5e7eb; color: gray; cursor: pointer; font-size: 13px; padding: 3px 10px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+    .gc-msg-actions button:hover { background: #e5e7eb; }
+    .gc-msg-actions button.liked, .gc-msg-actions button.liked i { color: #ef4444; }
+
+    /* Back page */
+    .gc-back {
+        background: <%= card.header_bg_color || '#1a1a2e' %>;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 60px 40px; min-height: 300px;
+    }
+    .gc-back-text { color: rgba(255,255,255,0.6); font-size: 14px; line-height: 1.6; }
+    .gc-back-logo { height: 32px; opacity: 0.5; margin-top: 16px; }
+
+    /* Navigation */
+    .gc-nav { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 16px; padding: 12px; }
+    .gc-nav button { width: 40px; height: 40px; border-radius: 50%; background: var(--card-bg); border: 1px solid var(--border); color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; transition: all 0.15s; }
+    .gc-nav button:hover { background: rgba(167,139,250,0.15); border-color: var(--accent); }
+    .gc-nav button:disabled { opacity: 0.3; cursor: not-allowed; }
+    .gc-nav-label { font-size: 0.85rem; color: var(--muted); min-width: 100px; text-align: center; }
+
+    /* Actions bar */
+    .gc-actions { display: flex; justify-content: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .gc-actions .btn { font-size: 0.75rem; padding: 6px 14px; border-radius: 8px; }
+
+    @media (max-width: 500px) {
+        .gc-content-page { padding: 20px; }
+        .gc-cover { padding: 40px 24px; }
+        .gc-cover-title { font-size: 28px; }
+    }
+    @media print {
+        .gc-nav, .gc-actions, .sign-form { display: none !important; }
+        .gc-page { display: block !important; page-break-after: always; box-shadow: none; }
+    }
+</style>
+
+<div class="gc-container">
+    <div class="gc-carousel" id="gc-carousel">
+        <!-- Cover Page (page 0) -->
+        <div class="gc-page gc-cover active" data-page="0">
+            <% if (card.avatar_url) { %>
+                <img src="<%= card.avatar_url %>" class="gc-cover-avatar" alt="">
+            <% } %>
+            <div class="gc-cover-title"><%= card.card_name || ('Happy Birthday, ' + card.username + '!') %></div>
+            <% if (card.subtitle_text || card.guild_name) { %>
+            <div class="gc-cover-subtitle"><%= card.subtitle_text || card.guild_name || '' %></div>
+            <% } %>
+            <div class="gc-cover-badge"><i class="fas fa-pen-nib"></i> <%= signatures.length %> signature<%= signatures.length !== 1 ? 's' : '' %></div>
+        </div>
+
+        <!-- Content Pages -->
+        <%
+            // Distribute signatures across pages (max 4 per page for readability)
+            const SIGS_PER_PAGE = 4;
+            const contentPages = [];
+            for (let i = 0; i < signatures.length; i += SIGS_PER_PAGE) {
+                contentPages.push(signatures.slice(i, i + SIGS_PER_PAGE));
+            }
+            if (contentPages.length === 0) contentPages.push([]);
+        %>
+        <% contentPages.forEach((pageSigs, pageIdx) => { %>
+        <div class="gc-page gc-content-page" data-page="<%= pageIdx + 1 %>">
+            <div class="gc-messages">
+                <% if (pageSigs.length === 0) { %>
+                <div style="text-align: center; color: rgba(0,0,0,0.3); padding: 60px 20px; font-size: 14px;">
+                    <% if (!card.is_posted && !card.is_frozen) { %>
+                    This page is waiting for messages. Be the first to sign!
+                    <% } else { %>
+                    Empty page
+                    <% } %>
+                </div>
+                <% } %>
+                <% pageSigs.forEach(sig => { %>
+                <div class="gc-msg" style="<% if (sig.card_bg_color) { %>background-color: <%= sig.card_bg_color %>;<% } %><% if (sig.card_border_radius) { %>border-radius: <%= sig.card_border_radius %>px;<% } %><% if (sig.card_border_color) { %>border: 2px solid <%= sig.card_border_color %>; border-left: 2px solid <%= sig.card_border_color %>;<% } %>">
+                    <% if (sig.note_effect) { %>
+                    <div class="note-effect note-effect-<%= sig.note_effect %>" style="z-index: 0;">
+                        <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                    <% } %>
+                    <div class="gc-msg-name"><%= sig.signer_username || 'Anonymous' %></div>
+                    <div class="gc-msg-text" style="<% if (sig.font_color) { %>color: <%= sig.font_color %>;<% } %><% if (sig.font_family) { %>font-family: '<%= sig.font_family %>', sans-serif;<% } %><% if (sig.font_size) { %>font-size: <%= sig.font_size %>px;<% } %>"><%= sig.message %></div>
+                    <% if (sig.gif_url) { %>
+                    <img src="<%= sig.gif_url %>" class="gc-msg-gif" alt="" loading="lazy">
+                    <% } %>
+                    <% if (sig.audio_url) { %>
+                    <audio controls class="gc-msg-audio" preload="none"><source src="<%= sig.audio_url %>" type="audio/webm"></audio>
+                    <% } %>
+                    <div class="gc-msg-actions">
+                        <% const isLiked = likesSet.has(sig.id); const hasLikes = (sig.likes || 0) > 0; %>
+                        <button type="button" class="<%= isLiked || hasLikes ? 'liked' : '' %>" onclick="toggleLike(this, <%= sig.id %>)">
+                            <i class="<%= isLiked || hasLikes ? 'fas' : 'far' %> fa-heart"></i> <span><%= sig.likes || 0 %></span>
+                        </button>
+                        <button type="button" onclick="toggleReply(<%= sig.id %>)"><i class="far fa-comment"></i></button>
+                        <% const canMove = user && (user.id === sig.signer_user_id || user.id === card.user_id || user.id === card.creator_user_id); %>
+                        <% if (canMove && !card.is_posted) { %>
+                        <button type="button" onclick="moveSig(<%= sig.id %>, <%= (sig.page_number || 1) - 1 %>)" title="Move to previous page" <%= (sig.page_number || 1) <= 1 ? 'disabled style="opacity:0.3;"' : '' %>><i class="fas fa-chevron-left"></i><i class="fas fa-chevron-left"></i></button>
+                        <button type="button" onclick="moveSig(<%= sig.id %>, <%= (sig.page_number || 1) + 1 %>)" title="Move to next page"><i class="fas fa-chevron-right"></i><i class="fas fa-chevron-right"></i></button>
+                        <% } %>
+                        <% const canDelete = user && (user.id === sig.signer_user_id || user.id === card.user_id || user.id === card.creator_user_id); %>
+                        <% if (canDelete) { %>
+                        <button type="button" onclick="deleteSig(<%= sig.id %>)" title="Delete"><i class="far fa-trash-alt"></i></button>
+                        <% } %>
+                    </div>
+                    <!-- Replies -->
+                    <% const rMap = typeof repliesMap !== 'undefined' ? repliesMap : {}; %>
+                    <% const sigReplies = rMap[sig.id] || []; %>
+                    <% if (sigReplies.length > 0) { %>
+                    <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb;">
+                        <% sigReplies.forEach(r => { %>
+                        <div style="font-size: 0.75rem; color: #555; margin-bottom: 3px;"><strong style="color: #111;"><%= r.username %></strong> <%= r.message %></div>
+                        <% }); %>
+                    </div>
+                    <% } %>
+                    <!-- Reply form -->
+                    <div id="reply-form-<%= sig.id %>" style="display: none; margin-top: 6px;">
+                        <div style="display: flex; gap: 4px;">
+                            <input type="text" id="reply-input-<%= sig.id %>" placeholder="Write a reply..." maxlength="500" style="flex: 1; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 4px 8px; font-size: 0.75rem; color: #111;">
+                            <button type="button" onclick="sendReply(<%= sig.id %>)" style="background: #a78bfa; border: none; border-radius: 6px; padding: 4px 8px; color: white; cursor: pointer; font-size: 0.7rem;"><i class="fas fa-paper-plane"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <% }); %>
+            </div>
+            <div class="gc-page-number">Page <%= pageIdx + 1 %> of <%= contentPages.length %></div>
+        </div>
+        <% }); %>
+
+        <!-- Back Page -->
+        <div class="gc-page gc-back" data-page="<%= contentPages.length + 1 %>">
+            <div style="font-size: 24px; margin-bottom: 12px;">&#10084;</div>
+            <div class="gc-back-text">
+                <% if (card.credits_text) { %><%= card.credits_text %><% } else { %>
+                Made with love for <%= card.username %><br>
+                <% if (card.guild_name) { %><%= card.guild_name %><% } %>
+                <% } %>
+            </div>
+            <% if (card.custom_logo_url) { %>
+            <img src="<%= card.custom_logo_url %>" class="gc-back-logo" alt="">
+            <% } %>
+            <div style="margin-top: 20px; font-size: 0.7rem; color: rgba(255,255,255,0.25);">Powered by CertiFried</div>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <div class="gc-nav">
+        <button id="gc-prev" onclick="gcNavigate(-1)" disabled><i class="fas fa-chevron-left"></i></button>
+        <div class="gc-nav-label" id="gc-label">Cover</div>
+        <button id="gc-next" onclick="gcNavigate(1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+
+    <!-- Actions -->
+    <div class="gc-actions">
+        <% if (!card.is_posted && !card.is_frozen) { %>
+        <button type="button" class="btn btn-primary" onclick="toggleSignForm()" style="font-size: 0.8rem;"><i class="fas fa-plus"></i> Write a message</button>
+        <% } %>
+        <button type="button" class="btn btn-outline" onclick="window.print()"><i class="fas fa-file-pdf"></i> PDF</button>
+        <button type="button" class="btn btn-outline" onclick="downloadAsImage()"><i class="fas fa-image"></i> JPEG</button>
+    </div>
+</div>
+
+<script>
+(function() {
+    var currentPage = 0;
+    var pages = document.querySelectorAll('.gc-page');
+    var totalPages = pages.length;
+    var label = document.getElementById('gc-label');
+    var prevBtn = document.getElementById('gc-prev');
+    var nextBtn = document.getElementById('gc-next');
+
+    function showPage(n) {
+        for (var i = 0; i < pages.length; i++) {
+            pages[i].style.display = 'none';
+            pages[i].classList.remove('active');
+        }
+        pages[n].style.display = 'block';
+        pages[n].classList.add('active');
+        currentPage = n;
+        prevBtn.disabled = n === 0;
+        nextBtn.disabled = n === totalPages - 1;
+        if (n === 0) label.textContent = 'Cover';
+        else if (n === totalPages - 1) label.textContent = 'Back';
+        else label.textContent = 'Page ' + n + ' of ' + (totalPages - 2);
+    }
+
+    // Initialize — hide all except cover
+    showPage(0);
+
+    // Move signature between pages
+    window.moveSig = function(sigId, newPage) {
+        if (newPage < 1) return;
+        fetch('/card/<%= card.slug || card.share_token %>/move/' + sigId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ page_number: newPage })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) window.location.reload();
+            else alert(data.error || 'Failed to move');
+        });
+    };
+
+    window.gcNavigate = function(dir) {
+        var next = currentPage + dir;
+        if (next >= 0 && next < totalPages) showPage(next);
+    };
+
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); window.gcNavigate(1); }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); window.gcNavigate(-1); }
+    });
+})();
+</script>

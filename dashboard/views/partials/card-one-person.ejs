@@ -1,0 +1,100 @@
+<%/* One Person Card — single sender, single recipient, elegant presentation */%>
+<% const sig = signatures[0]; %>
+
+<style>
+    .opc-wrapper { display: flex; justify-content: center; align-items: center; min-height: 80vh; padding: 40px 20px; }
+    .opc-card {
+        max-width: 550px; width: 100%;
+        background: <%= card.board_bg_color || '#1a1a2e' %>;
+        <% if (card.board_bg_image_url) { %>background-image: url('<%= card.board_bg_image_url %>'); background-size: cover; background-position: center;<% } %>
+        border-radius: 24px; padding: 48px 40px; text-align: center; position: relative; overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+    }
+    .opc-recipient { margin-bottom: 32px; }
+    .opc-recipient-avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); margin: 0 auto 12px; display: block; object-fit: cover; }
+    .opc-recipient-name { font-size: 14px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 2px; }
+    .opc-title { font-size: <%= card.title_font_size || 28 %>px; font-weight: 700; color: <%= card.title_font_color || '#ffffff' %>; margin-bottom: 8px; <% if (card.title_font) { %>font-family: '<%= card.title_font %>', sans-serif;<% } %> }
+    .opc-subtitle { font-size: 14px; color: <%= card.subtitle_font_color || 'rgba(255,255,255,0.4)' %>; margin-bottom: 32px; <% if (card.subtitle_font) { %>font-family: '<%= card.subtitle_font %>', sans-serif;<% } %> }
+    .opc-divider { width: 60px; height: 2px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent); margin: 0 auto 32px; }
+    .opc-message {
+        font-size: <%= (sig && sig.font_size) || 18 %>px;
+        line-height: 1.8; color: <%= (sig && sig.font_color) || 'rgba(255,255,255,0.9)' %>;
+        <% if (sig && sig.font_family) { %>font-family: '<%= sig.font_family %>', sans-serif;<% } else { %>font-family: 'Georgia', serif;<% } %>
+        white-space: pre-wrap; word-wrap: break-word; text-align: left; margin-bottom: 24px;
+    }
+    .opc-gif { max-width: 100%; border-radius: 16px; margin-bottom: 24px; }
+    .opc-audio { width: 100%; margin-bottom: 24px; height: 36px; opacity: 0.8; }
+    .opc-signer { display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .opc-signer-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+    .opc-signer-name { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.7); }
+    .opc-signer-date { font-size: 11px; color: rgba(255,255,255,0.3); }
+    .opc-empty { color: rgba(255,255,255,0.4); font-size: 16px; padding: 40px; }
+    .opc-actions { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
+    .opc-actions .btn { font-size: 0.75rem; padding: 6px 14px; border-radius: 8px; }
+    @media (max-width: 500px) { .opc-card { padding: 32px 24px; } .opc-message { font-size: 16px; } }
+    @media print { .opc-actions, .sign-form { display: none !important; } }
+</style>
+
+<div class="opc-wrapper">
+    <div class="opc-card">
+        <% if (sig && sig.note_effect) { %>
+        <div class="note-effect note-effect-<%= sig.note_effect %>">
+            <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <% } %>
+
+        <!-- Recipient -->
+        <div class="opc-recipient">
+            <% if (card.avatar_url) { %>
+                <img src="<%= card.avatar_url %>" class="opc-recipient-avatar" alt="">
+            <% } %>
+            <div class="opc-recipient-name">For <%= card.username %></div>
+        </div>
+
+        <!-- Title -->
+        <div class="opc-title"><%= card.card_name || ('Happy Birthday, ' + card.username + '!') %></div>
+        <% if (card.subtitle_text) { %>
+        <div class="opc-subtitle"><%= card.subtitle_text %></div>
+        <% } %>
+
+        <div class="opc-divider"></div>
+
+        <% if (sig) { %>
+            <!-- The single message -->
+            <div class="opc-message"><%= sig.message %></div>
+
+            <% if (sig.gif_url) { %>
+                <img src="<%= sig.gif_url %>" class="opc-gif" alt="" loading="lazy">
+            <% } %>
+
+            <% if (sig.audio_url) { %>
+                <audio controls class="opc-audio" preload="none"><source src="<%= sig.audio_url %>" type="audio/webm"></audio>
+            <% } %>
+
+            <!-- Signer -->
+            <div class="opc-signer">
+                <% if (sig.signer_avatar_url) { %>
+                    <img src="<%= sig.signer_avatar_url %>" class="opc-signer-avatar" alt="">
+                <% } %>
+                <div>
+                    <div class="opc-signer-name"><%= sig.signer_username || 'Anonymous' %></div>
+                    <div class="opc-signer-date"><%= new Date(sig.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) %></div>
+                </div>
+            </div>
+        <% } else { %>
+            <div class="opc-empty">
+                <% if (!card.is_posted && !card.is_frozen) { %>
+                    This card is waiting for someone special to write a message.
+                <% } else { %>
+                    This card has no message yet.
+                <% } %>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Actions -->
+<div class="opc-actions">
+    <button type="button" class="btn btn-outline" onclick="window.print()"><i class="fas fa-file-pdf"></i> PDF</button>
+    <button type="button" class="btn btn-outline" onclick="downloadAsImage()"><i class="fas fa-image"></i> JPEG</button>
+</div>

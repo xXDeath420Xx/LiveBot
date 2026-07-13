@@ -245,4 +245,60 @@ router.get('/logs', async (req, res) => {
     }
 });
 
+// ─── Automod User Whitelist ─────────────────────────────────────
+
+/**
+ * GET /api/guilds/:guildId/automod/whitelist
+ */
+router.get('/whitelist', async (req, res) => {
+    try {
+        const { guildId } = req.params;
+        const [rows] = await pool.execute(
+            'SELECT user_id, added_by, reason, created_at FROM automod_user_whitelist WHERE guild_id = ? ORDER BY created_at DESC',
+            [guildId]
+        );
+        res.json({ success: true, whitelist: rows });
+    } catch (error) {
+        logger.error('[API Automod Whitelist GET] Error:', error);
+        res.status(500).json({ error: 'Failed to fetch whitelist' });
+    }
+});
+
+/**
+ * POST /api/guilds/:guildId/automod/whitelist
+ */
+router.post('/whitelist', async (req, res) => {
+    try {
+        const { guildId } = req.params;
+        const { userId, reason } = req.body;
+        if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+        await pool.execute(
+            'INSERT IGNORE INTO automod_user_whitelist (guild_id, user_id, added_by, reason) VALUES (?, ?, ?, ?)',
+            [guildId, userId, req.user?.id || null, reason || null]
+        );
+        res.json({ success: true, message: 'User added to whitelist' });
+    } catch (error) {
+        logger.error('[API Automod Whitelist POST] Error:', error);
+        res.status(500).json({ error: 'Failed to add user to whitelist' });
+    }
+});
+
+/**
+ * DELETE /api/guilds/:guildId/automod/whitelist/:userId
+ */
+router.delete('/whitelist/:userId', async (req, res) => {
+    try {
+        const { guildId, userId } = req.params;
+        await pool.execute(
+            'DELETE FROM automod_user_whitelist WHERE guild_id = ? AND user_id = ?',
+            [guildId, userId]
+        );
+        res.json({ success: true, message: 'User removed from whitelist' });
+    } catch (error) {
+        logger.error('[API Automod Whitelist DELETE] Error:', error);
+        res.status(500).json({ error: 'Failed to remove user from whitelist' });
+    }
+});
+
 export default router;

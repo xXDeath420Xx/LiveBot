@@ -196,7 +196,7 @@ router.post('/:guildId/streaming/subscriptions/bulk-update', ensureAuth, ensureG
     // Validate all subscription IDs belong to this guild
     const placeholders = subscriptionIds.map(() => '?').join(',');
     const [owned] = await pool.execute(
-      `SELECT id FROM subscriptions WHERE id IN (${placeholders}) AND guild_id = ?`,
+      `SELECT subscription_id FROM subscriptions WHERE subscription_id IN (${placeholders}) AND guild_id = ?`,
       [...subscriptionIds, req.guildId]
     );
 
@@ -213,7 +213,8 @@ router.post('/:guildId/streaming/subscriptions/bulk-update', ensureAuth, ensureG
       values.push(announcement_channel_id);
     }
     if (role_to_mention !== undefined) {
-      updates.push('role_to_mention = ?');
+      // Column is live_role_id in the subscriptions table
+      updates.push('live_role_id = ?');
       values.push(role_to_mention);
     }
     if (custom_message !== undefined) {
@@ -227,7 +228,7 @@ router.post('/:guildId/streaming/subscriptions/bulk-update', ensureAuth, ensureG
 
     values.push(...subscriptionIds, req.guildId);
     const [result] = await pool.execute(
-      `UPDATE subscriptions SET ${updates.join(', ')} WHERE id IN (${placeholders}) AND guild_id = ?`,
+      `UPDATE subscriptions SET ${updates.join(', ')} WHERE subscription_id IN (${placeholders}) AND guild_id = ?`,
       values
     );
 

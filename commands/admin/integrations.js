@@ -50,6 +50,24 @@ export default {
               option.setName('streamer').setDescription('Twitch username to sync (optional, syncs all if not provided)')
             )
         )
+        .addSubcommand(sub =>
+          sub
+            .setName('viewmode')
+            .setDescription('Switch the calendar between full-month and 7-day weekly view')
+            .addStringOption(option =>
+              option.setName('mode')
+                .setDescription('Calendar layout to use')
+                .setRequired(true)
+                .addChoices(
+                  { name: 'Monthly — full month grid', value: 'monthly' },
+                  { name: 'Weekly — 7-day view',       value: 'weekly' }
+                )
+            )
+            .addStringOption(option =>
+              option.setName('streamer')
+                .setDescription('Apply to a specific streamer (optional — applies to all when omitted)')
+            )
+        )
     ),
 
   async execute(interaction) {
@@ -70,7 +88,53 @@ export default {
         case 'sync':
           await this.twitchSync(interaction);
           break;
+        case 'viewmode':
+          await this.twitchViewMode(interaction);
+          break;
       }
+    }
+  },
+
+  async twitchViewMode(interaction) {
+    await interaction.deferReply();
+    const mode = interaction.options.getString('mode', true);
+    const streamerUsername = interaction.options.getString('streamer');
+
+    try {
+      let result;
+      if (streamerUsername) {
+        [result] = await pool.execute(
+          `UPDATE twitch_schedule_sync_config tss
+              JOIN streamers s ON s.streamer_id = tss.streamer_id
+              SET tss.view_mode = ?
+            WHERE tss.guild_id = ?
+              AND s.platform = 'twitch'
+              AND LOWER(s.username) = LOWER(?)`,
+          [mode, interaction.guild.id, streamerUsername]
+        );
+      } else {
+        [result] = await pool.execute(
+          'UPDATE twitch_schedule_sync_config SET view_mode = ? WHERE guild_id = ?',
+          [mode, interaction.guild.id]
+        );
+      }
+
+      if (!result.affectedRows) {
+        return interaction.editReply({
+          content: streamerUsername
+            ? `❌ No schedule sync found for **${streamerUsername}** in this server.`
+            : '📅 No schedule syncs configured for this server. Use `/integrations twitch add` first.'
+        });
+      }
+
+      const label = mode === 'weekly' ? '7-day weekly' : 'full-month';
+      const scope = streamerUsername ? `for **${streamerUsername}**` : `(${result.affectedRows} sync(s))`;
+      await interaction.editReply({
+        content: `✅ Calendar view set to **${label}** ${scope}. The new layout will appear on the next sync.`
+      });
+    } catch (error) {
+      logger.error('[integrations twitch viewmode] Error:', error);
+      await interaction.editReply({ content: '❌ Failed to update view mode. Please try again.' });
     }
   },
 

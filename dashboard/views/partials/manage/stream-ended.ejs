@@ -39,6 +39,7 @@ const seSubscriptions = typeof streamEndedSubs !== 'undefined' ? streamEndedSubs
     border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 .se-table tr:hover td { background: rgba(255,255,255,0.02); }
+.se-table tr.se-selected td { background: rgba(245, 158, 11, 0.06); }
 .se-platform-badge {
     display: inline-block;
     padding: 2px 8px;
@@ -89,6 +90,48 @@ const seSubscriptions = typeof streamEndedSubs !== 'undefined' ? streamEndedSubs
 }
 .se-status-msg.success { display: block; background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
 .se-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+.se-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: #f59e0b;
+    cursor: pointer;
+}
+.se-bulk-bar {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 18px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+.se-bulk-bar.visible { display: flex; }
+.se-bulk-bar .se-bulk-count {
+    font-size: 0.85rem;
+    color: #fbbf24;
+    font-weight: 600;
+}
+.se-bulk-bar .se-bulk-actions { display: flex; gap: 8px; margin-left: auto; }
+.se-bulk-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: 0.15s;
+}
+.se-bulk-btn-on {
+    background: rgba(245, 158, 11, 0.25);
+    color: #fbbf24;
+}
+.se-bulk-btn-on:hover { background: rgba(245, 158, 11, 0.4); }
+.se-bulk-btn-off {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+}
+.se-bulk-btn-off:hover { background: rgba(255, 255, 255, 0.15); }
 </style>
 
 <div class="page-section">
@@ -106,6 +149,18 @@ const seSubscriptions = typeof streamEndedSubs !== 'undefined' ? streamEndedSubs
 
     <div id="se-status" class="se-status-msg"></div>
 
+    <div id="se-bulk-bar" class="se-bulk-bar">
+        <span class="se-bulk-count"><span id="se-bulk-count">0</span> selected</span>
+        <div class="se-bulk-actions">
+            <button class="se-bulk-btn se-bulk-btn-on" onclick="bulkSetEditOnEnd(true)">
+                <i class="fas fa-check"></i> Enable All
+            </button>
+            <button class="se-bulk-btn se-bulk-btn-off" onclick="bulkSetEditOnEnd(false)">
+                <i class="fas fa-times"></i> Disable All
+            </button>
+        </div>
+    </div>
+
     <div class="se-card">
         <div class="se-card-header">
             <i class="fas fa-list"></i>
@@ -122,15 +177,23 @@ const seSubscriptions = typeof streamEndedSubs !== 'undefined' ? streamEndedSubs
             <table class="se-table">
                 <thead>
                     <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" class="se-checkbox" id="se-select-all" onchange="toggleSelectAll(this)">
+                        </th>
                         <th>Streamer</th>
                         <th>Platform</th>
                         <th>Channel</th>
                         <th>Edit on End</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="se-tbody">
                     <% seSubscriptions.forEach(sub => { %>
-                        <tr>
+                        <tr data-sub-id="<%= sub.subscription_id %>">
+                            <td>
+                                <input type="checkbox" class="se-checkbox se-row-check"
+                                    value="<%= sub.subscription_id %>"
+                                    onchange="updateBulkBar()">
+                            </td>
                             <td><%= sub.username %></td>
                             <td>
                                 <span class="se-platform-badge se-platform-<%= sub.platform || 'default' %>">
@@ -157,6 +220,86 @@ const seSubscriptions = typeof streamEndedSubs !== 'undefined' ? streamEndedSubs
 </div>
 
 <script>
+function getSelectedIds() {
+    return [...document.querySelectorAll('.se-row-check:checked')].map(cb => cb.value);
+}
+
+function updateBulkBar() {
+    const selected = getSelectedIds();
+    const bar = document.getElementById('se-bulk-bar');
+    const count = document.getElementById('se-bulk-count');
+    const selectAll = document.getElementById('se-select-all');
+    const allChecks = document.querySelectorAll('.se-row-check');
+
+    count.textContent = selected.length;
+    bar.classList.toggle('visible', selected.length > 0);
+
+    // Update select-all state
+    if (allChecks.length > 0) {
+        selectAll.checked = selected.length === allChecks.length;
+        selectAll.indeterminate = selected.length > 0 && selected.length < allChecks.length;
+    }
+
+    // Highlight selected rows
+    document.querySelectorAll('#se-tbody tr').forEach(tr => {
+        const cb = tr.querySelector('.se-row-check');
+        tr.classList.toggle('se-selected', cb && cb.checked);
+    });
+}
+
+function toggleSelectAll(selectAllCb) {
+    document.querySelectorAll('.se-row-check').forEach(cb => {
+        cb.checked = selectAllCb.checked;
+    });
+    updateBulkBar();
+}
+
+async function bulkSetEditOnEnd(editOnEnd) {
+    const ids = getSelectedIds();
+    if (ids.length === 0) return;
+
+    const status = document.getElementById('se-status');
+
+    try {
+        const res = await fetch('/api/guilds/<%= guild.id %>/stream-ended/subscriptions/bulk', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscription_ids: ids, edit_on_end: editOnEnd })
+        });
+        const data = await res.json();
+        if (data.success) {
+            // Update toggles for affected rows
+            ids.forEach(id => {
+                const row = document.querySelector(`tr[data-sub-id="${id}"]`);
+                if (!row) return;
+                const toggle = row.querySelector('.se-toggle input[data-sub-id]');
+                if (toggle) {
+                    toggle.checked = editOnEnd;
+                    const track = toggle.parentElement.querySelector('.se-toggle-track');
+                    const dot = toggle.parentElement.querySelector('.se-toggle-dot');
+                    track.style.background = editOnEnd ? '#f59e0b' : 'rgba(255,255,255,0.1)';
+                    dot.style.left = editOnEnd ? '18px' : '2px';
+                }
+            });
+
+            status.textContent = `Updated ${ids.length} subscriptions!`;
+            status.className = 'se-status-msg success';
+
+            // Clear selection
+            document.querySelectorAll('.se-row-check').forEach(cb => cb.checked = false);
+            document.getElementById('se-select-all').checked = false;
+            updateBulkBar();
+        } else {
+            status.textContent = data.error || 'Failed to update';
+            status.className = 'se-status-msg error';
+        }
+    } catch (err) {
+        status.textContent = 'Network error';
+        status.className = 'se-status-msg error';
+    }
+    setTimeout(() => { status.className = 'se-status-msg'; }, 3000);
+}
+
 async function toggleEditOnEnd(checkbox) {
     const subId = checkbox.dataset.subId;
     const editOnEnd = checkbox.checked;

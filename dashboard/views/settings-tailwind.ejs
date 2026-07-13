@@ -66,19 +66,26 @@
         .page-subtitle { color: var(--text-secondary); font-size: 1rem; }
 
         /* Settings Section */
-        .settings-section { margin-bottom: 2rem; }
+        .settings-section { margin-bottom: 2rem; animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .settings-section:nth-child(1) { animation-delay: 0.05s; }
+        .settings-section:nth-child(2) { animation-delay: 0.1s; }
+        .settings-section:nth-child(3) { animation-delay: 0.15s; }
+        .settings-section:nth-child(4) { animation-delay: 0.2s; }
+        .settings-section:nth-child(5) { animation-delay: 0.25s; }
         .section-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
         .section-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
         .section-icon svg { width: 20px; height: 20px; }
-        .section-icon.purple { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
-        .section-icon.yellow { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); }
-        .section-icon.green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
-        .section-icon.blue { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); }
-        .section-icon.cyan { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); }
+        .section-icon { transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+        .section-icon.purple { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); box-shadow: 0 4px 12px rgba(167,139,250,0.15); --section-accent: var(--accent-purple); }
+        .section-icon.yellow { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); box-shadow: 0 4px 12px rgba(251,191,36,0.15); --section-accent: var(--accent-yellow); }
+        .section-icon.green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); box-shadow: 0 4px 12px rgba(52,211,153,0.15); --section-accent: var(--accent-green); }
+        .section-icon.blue { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); box-shadow: 0 4px 12px rgba(96,165,250,0.15); --section-accent: var(--accent-blue); }
+        .section-icon.cyan { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); box-shadow: 0 4px 12px rgba(34,211,238,0.15); --section-accent: var(--accent-cyan); }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         .section-title { font-size: 1.25rem; font-weight: 700; }
 
         /* Settings Card */
-        .settings-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        .settings-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--section-accent, var(--accent-purple)); border-radius: 4px 16px 16px 4px; overflow: hidden; animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
         /* Theme Options */
         .theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; padding: 1.25rem; }
@@ -252,6 +259,7 @@
                 <a href="/">Home</a>
                 <a href="/servers">Servers</a>
                 <a href="/commands">Commands</a>
+                <a href="/cards">Cards</a>
                 <a href="/status">Status</a>
             </div>
             <% if (user) { %>
@@ -277,6 +285,7 @@
             <a href="/" class="mobile-menu-link">Home</a>
             <a href="/servers" class="mobile-menu-link">Servers</a>
             <a href="/commands" class="mobile-menu-link">Commands</a>
+            <a href="/cards" class="mobile-menu-link">Cards</a>
             <a href="/status" class="mobile-menu-link">Status</a>
             <div class="mobile-menu-divider"></div>
             <% if (user) { %>
@@ -495,6 +504,7 @@
         <div class="container" style="max-width: 900px; margin: 0 auto; padding: 0 1.5rem;">
             <div class="footer-links">
                 <a href="/commands" class="footer-link">Commands</a>
+                <a href="/cards" class="footer-link">Cards</a>
                 <a href="/status" class="footer-link">Status</a>
                 <a href="/docs" class="footer-link">Documentation</a>
                 <a href="/terms" class="footer-link">Terms</a>

@@ -534,8 +534,8 @@ async function loadEmojiStats() {
                                 <i class="fas fa-user"></i>
                             </div>
                             <div>
-                                <div class="emoji-name">User</div>
-                                <div class="user-id">${user.user_id}</div>
+                                <div class="emoji-name">${user.username || 'User'}</div>
+                                <div class="user-id">${user.username ? '' : user.user_id}</div>
                             </div>
                         </div>
                         <div class="emoji-count">

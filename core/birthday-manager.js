@@ -504,11 +504,18 @@ class BirthdayManager {
    */
   async getUpcomingBirthdays(guildId, days = 7) {
     try {
-      const today = new Date();
+      const now = new Date();
+      // Compare date-to-date, never date-to-timestamp. `new Date(y, m, d)` is midnight, so a
+      // birthday that IS today would otherwise test as already past and roll to next year —
+      // making it show up as "in 364 days" instead of "Today!".
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const upcomingBirthdays = [];
 
+      // `year` is optional (nobody is forced to reveal their age), but it must be SELECTed —
+      // it was previously dropped here, so the year could never be displayed downstream even
+      // for the members who had set one.
       const [allBirthdays] = await pool.execute(
-        'SELECT user_id, month, day FROM user_birthdays WHERE guild_id = ?',
+        'SELECT user_id, month, day, year FROM user_birthdays WHERE guild_id = ?',
         [guildId]
       );
 
@@ -520,13 +527,18 @@ class BirthdayManager {
           birthdayDate.setFullYear(today.getFullYear() + 1);
         }
 
-        const daysUntil = Math.floor((birthdayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const daysUntil = Math.round((birthdayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
         if (daysUntil <= days) {
+          const year = birthday.year ?? null;
           upcomingBirthdays.push({
             userId: birthday.user_id,
             month: birthday.month,
             day: birthday.day,
+            year,
+            // The age they are turning ON that birthday — which is in birthdayDate's year,
+            // not necessarily the current one.
+            turningAge: year ? birthdayDate.getFullYear() - year : null,
             daysUntil
           });
         }

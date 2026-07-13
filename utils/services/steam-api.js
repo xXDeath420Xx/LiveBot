@@ -345,11 +345,19 @@ export default class SteamAPIService {
   }
 
   /**
-   * Get latest news item for an app (for checking updates)
+   * Get latest OFFICIAL news item for an app — skips third-party syndicated posts
+   * (PC Gamer, VG247, Gamemag.ru etc.) which Steam mixes in via /externalpost/.
+   * Returns the first item where is_external_url=false OR feedname is the canonical
+   * "steam_community_announcements". Falls back to null if none found in top 25.
    * @param {string} appId - Steam app ID
    */
   async getLatestNews(appId) {
-    const news = await this.getAppNews(appId, 1);
-    return news.length > 0 ? news[0] : null;
+    const news = await this.getAppNews(appId, 25);
+    if (!news.length) return null;
+    const official = news.find(n =>
+      n.is_external_url === false ||
+      n.feedname === 'steam_community_announcements'
+    );
+    return official || null;
   }
 }

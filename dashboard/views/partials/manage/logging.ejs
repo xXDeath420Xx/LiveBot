@@ -2,6 +2,27 @@
 const currentSettings = settings || {};
 const enabledLogs = JSON.parse(currentSettings.enabled_logs || '[]');
 const categoryChannels = JSON.parse(currentSettings.log_categories || '{}');
+const eventColors = JSON.parse(currentSettings.event_colors || '{}');
+const defaultColorMap = {
+    messageDelete: '#ED4245', messageUpdate: '#ED4245',
+    memberJoin: '#57F287', memberUpdate: '#5865F2', memberLeave: '#ED4245', memberKick: '#ED4245',
+    voiceUpdate: '#FEE75C', voiceServerMute: '#ED4245', voiceServerDeaf: '#ED4245',
+    voiceSelfMute: '#5865F2', voiceStream: '#593695', voiceVideo: '#57F287',
+    inviteCreate: '#57F287', inviteDelete: '#ED4245',
+    channelCreate: '#57F287', channelDelete: '#ED4245', channelUpdate: '#5865F2',
+    threadCreate: '#57F287', threadDelete: '#ED4245', threadUpdate: '#5865F2',
+    guildUpdate: '#5865F2',
+    ban: '#ED4245', unban: '#57F287',
+    roleCreate: '#57F287', roleDelete: '#ED4245', roleUpdate: '#5865F2',
+    emojiCreate: '#57F287', emojiDelete: '#ED4245', emojiUpdate: '#5865F2',
+    stickerCreate: '#57F287', stickerDelete: '#ED4245', stickerUpdate: '#5865F2',
+    webhookUpdate: '#5865F2', integrationUpdate: '#5865F2',
+    moderation: '#ED4245', 'join-gate': '#FEE75C', system: '#5865F2',
+    xp: '#57F287', giveaway: '#FEE75C', poll: '#5865F2', starboard: '#FEE75C',
+    'sticky-roles': '#5865F2', 'temp-channels': '#5865F2',
+    'twitch-schedule': '#5865F2', 'auto-publisher': '#5865F2', autorole: '#5865F2',
+    tickets: '#5865F2', backup: '#5865F2', 'team-sync': '#5865F2', http: '#5865F2'
+};
 const auditLogsData = auditLogs || [];
 const logCategories = [
     // Core Message Events
@@ -9,12 +30,18 @@ const logCategories = [
     { key: 'messageUpdate', label: '✏️ Message Edits', category: 'Messages' },
 
     // Member Events
+    { key: 'memberJoin', label: '📥 Member Join', category: 'Members' },
     { key: 'memberUpdate', label: '👤 Member Updates (Roles, Nicknames)', category: 'Members' },
-    { key: 'memberLeave', label: '👋 Member Leave', category: 'Members' },
+    { key: 'memberLeave', label: '📤 Member Leave', category: 'Members' },
     { key: 'memberKick', label: '🚪 Member Kicks', category: 'Members' },
 
     // Voice Events
-    { key: 'voiceUpdate', label: '🔊 Voice Channel Join/Leave/Move', category: 'Voice' },
+    { key: 'voiceUpdate', label: '🔊 Voice Join / Leave / Move', category: 'Voice' },
+    { key: 'voiceServerMute', label: '🔇 Server Mute / Unmute', category: 'Voice' },
+    { key: 'voiceServerDeaf', label: '🔇 Server Deafen / Undeafen', category: 'Voice' },
+    { key: 'voiceSelfMute', label: '🎙️ Self Mute / Deafen', category: 'Voice' },
+    { key: 'voiceStream', label: '📡 Stream Start / Stop', category: 'Voice' },
+    { key: 'voiceVideo', label: '📹 Camera On / Off', category: 'Voice' },
 
     // Channel Events (NEW)
     { key: 'channelCreate', label: '➕ Channel Created', category: 'Channels' },
@@ -36,6 +63,10 @@ const logCategories = [
     { key: 'roleDelete', label: '❌ Role Deleted', category: 'Roles' },
     { key: 'roleUpdate', label: '🎨 Role Updated', category: 'Roles' },
 
+    // OwO events
+    { key: 'owoRareCatch', label: '🐾 OwO Rare+ Catch (Epic / Mythical / Legendary)', category: 'OwO' },
+    { key: 'owoAdminAction', label: '🛠️ OwO Admin Action (reset, grant, wipe)', category: 'OwO' },
+
     // Emoji/Sticker Events (NEW)
     { key: 'emojiCreate', label: '😀 Emoji Added', category: 'Emojis & Stickers' },
     { key: 'emojiDelete', label: '😢 Emoji Removed', category: 'Emojis & Stickers' },
@@ -44,7 +75,11 @@ const logCategories = [
     { key: 'stickerDelete', label: '🗑️ Sticker Removed', category: 'Emojis & Stickers' },
     { key: 'stickerUpdate', label: '✨ Sticker Updated', category: 'Emojis & Stickers' },
 
-    // Webhook/Integration Events (NEW)
+    // Invite Events
+    { key: 'inviteCreate', label: '🔗 Invite Created', category: 'Invites' },
+    { key: 'inviteDelete', label: '🗑️ Invite Deleted / Expired', category: 'Invites' },
+
+    // Webhook/Integration Events
     { key: 'webhookUpdate', label: '🔗 Webhook Modified', category: 'Integrations' },
     { key: 'integrationUpdate', label: '🤖 Integration/Bot Added/Removed', category: 'Integrations' },
 
@@ -143,9 +178,10 @@ logCategories.forEach(cat => {
                 <table class="data-table">
                     <thead>
                     <tr>
-                        <th style="width: 40%;">Log Category</th>
-                        <th style="width: 15%; text-align: center;">Enable</th>
-                        <th style="width: 45%;">Channel Override</th>
+                        <th style="width: 35%;">Log Category</th>
+                        <th style="width: 12%; text-align: center;">Enable</th>
+                        <th style="width: 10%; text-align: center;">Color</th>
+                        <th style="width: 43%;">Channel Override</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -162,6 +198,13 @@ logCategories.forEach(cat => {
                                     <input type="checkbox" name="enabled_logs" value="<%= cat.key %>" id="log-<%= cat.key %>" <%= enabledLogs.includes(cat.key) ? 'checked' : '' %>>
                                     <span class="toggle-slider"></span>
                                 </label>
+                            </td>
+                            <td style="text-align: center;">
+                                <input type="color"
+                                    name="event_colors[<%= cat.key %>]"
+                                    value="<%= eventColors[cat.key] || defaultColorMap[cat.key] || '#5865F2' %>"
+                                    style="width: 32px; height: 32px; border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); background: transparent; cursor: pointer; padding: 2px;"
+                                    title="Embed color for <%= cat.label %>">
                             </td>
                             <td>
                                 <select class="form-select" name="log_categories[<%= cat.key %>]" style="font-size: var(--font-size-sm);">
@@ -319,5 +362,40 @@ logCategories.forEach(cat => {
 
 .data-table tbody tr:last-child td {
     border-bottom: none;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    /* Hide category badge column on mobile */
+    .data-table .mobile-hide { display: none !important; }
+
+    /* Touch-friendly color inputs */
+    input[type="color"] {
+        width: 44px !important;
+        height: 44px !important;
+        min-height: 44px;
+    }
+
+    /* Touch-friendly selects and buttons */
+    select, button { min-height: 44px; }
+
+    /* Reduce table padding */
+    .data-table th,
+    .data-table td { padding: var(--spacing-2) var(--spacing-3) !important; }
+
+    /* Stack log category label */
+    .data-table td label {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: var(--spacing-1) !important;
+    }
+
+    .data-table td label .badge { display: none; }
+
+    /* Full-width save button */
+    .btn-primary { width: 100%; justify-content: center; }
+
+    /* Table font size */
+    .data-table { font-size: 0.875rem; }
 }
 </style>

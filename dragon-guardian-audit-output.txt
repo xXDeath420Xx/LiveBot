@@ -1,0 +1,118 @@
+Logged in as Dragon Guardian#0698
+
+═══════════════════════════════════════════
+SERVER: Anoraks Army (880656752297783347)
+Owner: 727730062404747284
+Members: 107
+Boost Level: 0 (0 boosts)
+Created: 2021-08-27
+Verification: 1
+Features: THREADS_ENABLED, NEWS, COMMUNITY, NEW_THREAD_PERMISSIONS, SOUNDBOARD, CHANNEL_ICON_EMOJIS_GENERATED, TIERLESS_BOOSTING_SYSTEM_MESSAGE
+═══════════════════════════════════════════
+
+Approx Members: 107 (privileged intents not enabled — using approximation)
+
+── ROLES ──
+  [14] Anorak (Owner) (880847157366771712) — color: #00fa9b — ADMIN, MANAGE_GUILD, MANAGE_CHANNELS, MANAGE_ROLES, BAN, KICK, MANAGE_MSGS [HOISTED, MENTIONABLE]
+  [13] Discord Developer (880845573194936430) — color: #1591fd — ADMIN, MANAGE_GUILD, MANAGE_CHANNELS, MANAGE_ROLES, BAN, KICK, MANAGE_MSGS [HOISTED, MENTIONABLE]
+  [12] Dragon Guardian (1486198810341544149) — color: #000000 — ADMIN, MANAGE_GUILD, MANAGE_CHANNELS, MANAGE_ROLES, BAN, KICK, MANAGE_MSGS [BOT]
+  [11] Streamcord (880847506542571551) — color: #000000 — ADMIN, MANAGE_GUILD, MANAGE_CHANNELS, MANAGE_ROLES, BAN, KICK, MANAGE_MSGS [BOT]
+  [10] Legends Live (939755705022443631) — color: #ff0000 [HOISTED]
+  [ 9] Legends (939749961380298783) — color: #9b59b6 [HOISTED]
+  [ 8] Hydra (880847944000106517) — color: #000000 — ADMIN, MANAGE_GUILD, MANAGE_CHANNELS, MANAGE_ROLES, BAN, KICK, MANAGE_MSGS [BOT]
+  [ 7] MEE6 (880848112795680909) — color: #000000 — ADMIN, MANAGE_GUILD, MANAGE_CHANNELS, MANAGE_ROLES, BAN, KICK, MANAGE_MSGS [BOT]
+  [ 6] Members (880848690879791156) — color: #206694 [HOISTED]
+  [ 5] Bots (880848651491082340) — color: #f1c40f [HOISTED]
+  [ 4] Stepsis (939760722521513994) — color: #ff0000
+  [ 3] mobile users (969696100409815120) — color: #000000
+  [ 2] Server Booster (1040040616098283541) — color: #f47fff [BOT]
+  [ 1] Admin (cause cody made me) (1164230478694453318) — color: #000000 — ADMIN, MANAGE_GUILD, MANAGE_CHANNELS, MANAGE_ROLES, BAN, KICK, MANAGE_MSGS
+  [ 0] @everyone (880656752297783347) — color: #000000
+
+── CHANNELS ──
+  📁 Server Stats (880848462592245810)
+    🔊 Total Members: 107 (880848371198332958)
+    🔊 Online Members: 34 (880848333978107984)
+    🔊 Bots: 4 (880848305666551848)
+    🔊 Total Channels: 38 (880848354291089418)
+  📁 Administration (880847812068257842)
+    # admin-discussion (880848548881657906)
+    # discord-updates (880847657998880859)
+    🔊 Admin VC (880848583740506142)
+  📁 Welcome (880847725975990362)
+    # introductions (880853333953355796)
+    # joins (880847770716614686)
+    # rules (880847657998880858)
+  📁 Stream Stuff (880853864352448602)
+    📢 announcements (881913924562354176)
+    # achievement-tracker (880854007080452128)
+    # army-going-live (880854192107950140)
+    # self-promo (952380129903009812)
+    # affiliate-links (880661092060258364)
+    # clips-and-highlights (880656752297783350)
+    # pushing-for-affiliate (880660984220512316)
+    # social-media-links (880661629681954856)
+  📁 Text Channels (880656752297783348)
+    # chat (880656752297783349)
+    # art (1389811630694596618)
+    # pets (880661294448001105)
+    # desserts (880661342435029023)
+    # memes (880661404179394570)
+    # setups (880661523893207060)
+    # smoke-spot (880659041628598282)
+    # anime--manga (880661715094749214)
+    # yu-gi-oh-pulls (934352934257459271)
+    # lost-ark-guild-chat (946272421395181648)
+    # book-club (946929837312974898)
+    # destiny-2 (952369693442838528)
+  📁 Voice Channels (880656752297783351)
+    🔊 Lobby (880656752297783352)
+    🔊 Royals Lounge (974150046318747658)
+    🔊 smoke spot (947578368537284679)
+    🔊 Gaming (880656752297783353)
+    🔊 stream (966064396663156767)
+    🔊 Ooooo Look at me. Im a secret chat. (1478275345009475696)
+  📁 Music (880848025801609297)
+    🔊 Music VC (880848059599319090)
+    # music-without-spam (880848006063218698)
+
+── BOTS IN SERVER (from integrations) ──
+
+── INTEGRATIONS ──
+(node:493903) DeprecationWarning: The ready event has been renamed to clientReady to distinguish it from the gateway READY event and will only emit under that name in v15. Please use clientReady instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  MEE6 (discord) — enabled: true, id: 880848112795680908
+  Dragon Guardian (discord) — enabled: true, id: 1486198810341544146
+  Hydra (discord) — enabled: true, id: 880847944000106516
+  Streamcord (discord) — enabled: true, id: 880847506542571550
+
+── AUTOMOD RULES ──
+  Block Mention Spam (1030554520465440818) — enabled: true, trigger: 5, creator: 1008776202191634432
+
+── WEBHOOKS ──
+  (none)
+
+── EMOJIS ──
+  Total: 0 (0 animated)
+
+── STICKERS ──
+  Total: 0
+
+── SCHEDULED EVENTS ──
+  (none)
+
+── ACTIVE INVITES ──
+  DqsdMh479e — 33 uses — by anorakswrath — channel: admin-discussion
+  F7hr9Hn3 — 0 uses — by anorakswrath — channel: stream
+  StBWn7cErg — 14 uses — by death420 — channel: rules
+  Vs9c59xNVp — 31 uses — by anorakswrath — channel: announcements
+  mrmcFVS8rA — 0 uses — by anorakswrath — channel: admin-discussion
+  nrr3E4TNHZ — 1 uses — by anorakswrath — channel: announcements
+  u39hYm9Tu — 0 uses — by anorakswrath — channel: chat
+
+── OWNER ──
+  Owner ID: 727730062404747284
+
+═══════════════════════════════════════════
+AUDIT COMPLETE
+═══════════════════════════════════════════

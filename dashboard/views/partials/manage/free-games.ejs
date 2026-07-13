@@ -1,0 +1,499 @@
+<%
+const fgSubs = typeof freeGamesSubs !== 'undefined' ? freeGamesSubs : [];
+%>
+
+<style>
+.fg-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(34, 197, 94, 0.15);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+.fg-card-header {
+    background: rgba(34, 197, 94, 0.08);
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(34, 197, 94, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.fg-card-header i { font-size: 1rem; color: #22c55e; }
+.fg-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #fff; margin: 0; }
+.fg-card-header span { font-size: 0.75rem; color: rgba(255,255,255,0.5); }
+.fg-card-body { padding: 18px; }
+.fg-form-group { margin-bottom: 16px; }
+.fg-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
+.fg-form-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-top: 4px; }
+.fg-form-select, .fg-form-input {
+    width: 100%;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #fff;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+}
+.fg-form-input::placeholder { color: rgba(255,255,255,0.3); }
+.fg-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(0,0,0,0.15);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+.fg-toggle-label { font-size: 0.85rem; color: rgba(255,255,255,0.8); }
+.fg-toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    display: inline-block;
+    cursor: pointer;
+}
+.fg-toggle input { opacity: 0; width: 0; height: 0; }
+.fg-toggle-track {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    transition: 0.2s;
+}
+.fg-toggle-dot {
+    position: absolute;
+    top: 2px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+.fg-sub-card {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.fg-sub-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.fg-sub-channel { font-size: 0.9rem; font-weight: 600; color: #22c55e; }
+.fg-sub-status { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+.fg-sub-enabled { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+.fg-sub-disabled { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.fg-filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+.fg-filter-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+.fg-filter-on { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+.fg-filter-off { background: rgba(255, 255, 255, 0.05); color: rgba(255,255,255,0.3); text-decoration: line-through; }
+.fg-section-label { font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.fg-empty {
+    text-align: center;
+    padding: 32px;
+    color: rgba(255,255,255,0.4);
+    font-size: 0.9rem;
+}
+.fg-status-msg {
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+    display: none;
+}
+.fg-status-msg.success { display: block; background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+.fg-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+.fg-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: 0.15s;
+}
+.fg-btn-primary { background: rgba(34, 197, 94, 0.25); color: #4ade80; }
+.fg-btn-primary:hover { background: rgba(34, 197, 94, 0.4); }
+.fg-btn-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.fg-btn-danger:hover { background: rgba(239, 68, 68, 0.35); }
+.fg-btn-sm { padding: 4px 10px; font-size: 0.75rem; }
+.fg-actions { display: flex; gap: 8px; margin-top: 12px; }
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-gamepad"></i>
+                <span>Free Game Alerts</span>
+            </div>
+            <div class="page-section-subtitle">
+                Get notified when free games appear on Epic Games, Steam, GOG, and Prime Gaming
+            </div>
+        </div>
+    </div>
+
+    <div id="fg-status" class="fg-status-msg"></div>
+
+    <!-- Add New Subscription -->
+    <div class="fg-card">
+        <div class="fg-card-header">
+            <i class="fas fa-plus-circle"></i>
+            <h3>Add Subscription</h3>
+        </div>
+        <div class="fg-card-body">
+            <form id="fg-add-form">
+                <div class="fg-form-group">
+                    <label class="fg-form-label">Notification Channel</label>
+                    <select class="fg-form-select" name="channel_id" required>
+                        <option value="">Select a channel...</option>
+                        <% channels.forEach(function(ch) { %>
+                            <option value="<%= ch.id %>">#<%= ch.name %></option>
+                        <% }); %>
+                    </select>
+                    <div class="fg-form-hint">Channel where free game alerts will be posted</div>
+                </div>
+                <div class="fg-form-group">
+                    <label class="fg-form-label">Mention Role (optional)</label>
+                    <select class="fg-form-select" name="mention_role_id">
+                        <option value="">No role mention</option>
+                        <% roles.forEach(function(role) { %>
+                            <option value="<%= role.id %>"><%= role.name %></option>
+                        <% }); %>
+                    </select>
+                    <div class="fg-form-hint">Role to ping when a new free game is found</div>
+                </div>
+                <div class="fg-form-group">
+                    <label class="fg-form-label">Custom Message (optional)</label>
+                    <input type="text" class="fg-form-input" name="custom_message" placeholder="e.g. New free game available!" maxlength="200">
+                    <div class="fg-form-hint">Custom text prepended to the notification (default: "Free Game Alert!")</div>
+                </div>
+                <button type="submit" class="fg-btn fg-btn-primary">
+                    <i class="fas fa-plus"></i> Add Subscription
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Existing Subscriptions -->
+    <div class="fg-card">
+        <div class="fg-card-header">
+            <i class="fas fa-list"></i>
+            <h3>Subscriptions</h3>
+            <span>(<%= fgSubs.length %> total)</span>
+        </div>
+
+        <% if (fgSubs.length === 0) { %>
+            <div class="fg-empty">
+                <i class="fas fa-gamepad" style="font-size: 2rem; margin-bottom: 8px; display: block;"></i>
+                No free game subscriptions yet. Add one above!
+            </div>
+        <% } else { %>
+            <div class="fg-card-body" id="fg-subs-list">
+                <% fgSubs.forEach(function(sub) { %>
+                    <div class="fg-sub-card" data-sub-id="<%= sub.id %>">
+                        <div class="fg-sub-header">
+                            <span class="fg-sub-channel">
+                                #<%= channels.find(function(c) { return c.id === sub.discord_channel_id; })?.name || sub.discord_channel_id %>
+                            </span>
+                            <span class="fg-sub-status <%= sub.is_enabled ? 'fg-sub-enabled' : 'fg-sub-disabled' %>">
+                                <%= sub.is_enabled ? 'Enabled' : 'Disabled' %>
+                            </span>
+                        </div>
+
+                        <% if (sub.mention_role_id) { %>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-bottom: 8px;">
+                                Mention: @<%= roles.find(function(r) { return r.id === sub.mention_role_id; })?.name || sub.mention_role_id %>
+                            </div>
+                        <% } %>
+                        <% if (sub.custom_message) { %>
+                            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-bottom: 8px;">
+                                Message: "<%= sub.custom_message %>"
+                            </div>
+                        <% } %>
+
+                        <div class="fg-section-label">Notification Types</div>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;">
+                            <span class="fg-filter-badge <%= sub.notify_free ? 'fg-filter-on' : 'fg-filter-off' %>">Free to Keep</span>
+                            <span class="fg-filter-badge <%= sub.notify_weekend ? 'fg-filter-on' : 'fg-filter-off' %>">Free Weekend</span>
+                            <span class="fg-filter-badge <%= sub.notify_dlc ? 'fg-filter-on' : 'fg-filter-off' %>">DLC</span>
+                        </div>
+
+                        <div class="fg-section-label">Store Filters</div>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;">
+                            <span class="fg-filter-badge <%= sub.filter_steam ? 'fg-filter-on' : 'fg-filter-off' %>">Steam</span>
+                            <span class="fg-filter-badge <%= sub.filter_epic ? 'fg-filter-on' : 'fg-filter-off' %>">Epic Games</span>
+                            <span class="fg-filter-badge <%= sub.filter_gog ? 'fg-filter-on' : 'fg-filter-off' %>">GOG</span>
+                            <span class="fg-filter-badge <%= sub.filter_humble ? 'fg-filter-on' : 'fg-filter-off' %>">Humble</span>
+                            <span class="fg-filter-badge <%= sub.filter_prime ? 'fg-filter-on' : 'fg-filter-off' %>">Prime Gaming</span>
+                        </div>
+
+                        <div class="fg-section-label">Platform Filters</div>
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <span class="fg-filter-badge <%= sub.filter_windows ? 'fg-filter-on' : 'fg-filter-off' %>">Windows</span>
+                            <span class="fg-filter-badge <%= sub.filter_mac ? 'fg-filter-on' : 'fg-filter-off' %>">Mac</span>
+                            <span class="fg-filter-badge <%= sub.filter_linux ? 'fg-filter-on' : 'fg-filter-off' %>">Linux</span>
+                        </div>
+
+                        <div class="fg-actions">
+                            <button class="fg-btn fg-btn-primary fg-btn-sm" onclick="fgToggle('<%= sub.id %>', <%= sub.is_enabled ? 'false' : 'true' %>)">
+                                <i class="fas fa-<%= sub.is_enabled ? 'pause' : 'play' %>"></i> <%= sub.is_enabled ? 'Disable' : 'Enable' %>
+                            </button>
+                            <button class="fg-btn fg-btn-primary fg-btn-sm" onclick="fgEditFilters('<%= sub.id %>')">
+                                <i class="fas fa-filter"></i> Edit Filters
+                            </button>
+                            <button class="fg-btn fg-btn-danger fg-btn-sm" onclick="fgDelete('<%= sub.id %>')">
+                                <i class="fas fa-trash"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+                <% }); %>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Edit Filters Modal -->
+<div class="modal fade" id="fgFiltersModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" style="background: #1a1b2e; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;">
+            <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding: 16px 20px;">
+                <h5 class="modal-title" style="color: #fff; font-size: 1rem;">Edit Filters</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <form id="fg-filters-form">
+                    <input type="hidden" name="sub_id" id="fg-filter-sub-id">
+
+                    <div class="fg-section-label" style="margin-bottom: 8px;">Notification Types</div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">Free to Keep</span>
+                        <label class="fg-toggle"><input type="checkbox" name="notify_free" id="fg-f-notify-free"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">Free Weekend</span>
+                        <label class="fg-toggle"><input type="checkbox" name="notify_weekend" id="fg-f-notify-weekend"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">DLC</span>
+                        <label class="fg-toggle"><input type="checkbox" name="notify_dlc" id="fg-f-notify-dlc"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+
+                    <div class="fg-section-label" style="margin-top: 16px; margin-bottom: 8px;">Store Filters</div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">Steam</span>
+                        <label class="fg-toggle"><input type="checkbox" name="filter_steam" id="fg-f-steam"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">Epic Games</span>
+                        <label class="fg-toggle"><input type="checkbox" name="filter_epic" id="fg-f-epic"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">GOG</span>
+                        <label class="fg-toggle"><input type="checkbox" name="filter_gog" id="fg-f-gog"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">Humble Bundle</span>
+                        <label class="fg-toggle"><input type="checkbox" name="filter_humble" id="fg-f-humble"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">Prime Gaming</span>
+                        <label class="fg-toggle"><input type="checkbox" name="filter_prime" id="fg-f-prime"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+
+                    <div class="fg-section-label" style="margin-top: 16px; margin-bottom: 8px;">Platform Filters</div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">Windows</span>
+                        <label class="fg-toggle"><input type="checkbox" name="filter_windows" id="fg-f-windows"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">Mac</span>
+                        <label class="fg-toggle"><input type="checkbox" name="filter_mac" id="fg-f-mac"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+                    <div class="fg-toggle-row">
+                        <span class="fg-toggle-label">Linux</span>
+                        <label class="fg-toggle"><input type="checkbox" name="filter_linux" id="fg-f-linux"><span class="fg-toggle-track" style="background: rgba(255,255,255,0.1);"></span><span class="fg-toggle-dot" style="left: 2px;"></span></label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid rgba(255,255,255,0.08); padding: 12px 20px;">
+                <button type="button" class="fg-btn" style="color: rgba(255,255,255,0.6);" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="fg-btn fg-btn-primary" onclick="fgSaveFilters()">
+                    <i class="fas fa-save"></i> Save Filters
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var fgGuildId = '<%= guild.id %>';
+var fgSubsData = <%- JSON.stringify(fgSubs) %>;
+
+function fgStatus(msg, type) {
+    var el = document.getElementById('fg-status');
+    el.textContent = msg;
+    el.className = 'fg-status-msg ' + type;
+    setTimeout(function() { el.className = 'fg-status-msg'; }, 4000);
+}
+
+// Style toggles on load and change
+document.querySelectorAll('.fg-toggle input').forEach(function(cb) {
+    function update() {
+        var track = cb.parentElement.querySelector('.fg-toggle-track');
+        var dot = cb.parentElement.querySelector('.fg-toggle-dot');
+        track.style.background = cb.checked ? '#22c55e' : 'rgba(255,255,255,0.1)';
+        dot.style.left = cb.checked ? '18px' : '2px';
+    }
+    cb.addEventListener('change', update);
+});
+
+// Add subscription
+document.getElementById('fg-add-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var form = new FormData(this);
+    var channelId = form.get('channel_id');
+    if (!channelId) { fgStatus('Please select a channel', 'error'); return; }
+
+    try {
+        var res = await fetch('/api/guilds/' + fgGuildId + '/free-games', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                channel_id: channelId,
+                mention_role_id: form.get('mention_role_id') || null,
+                custom_message: form.get('custom_message') || null
+            })
+        });
+        var data = await res.json();
+        if (data.success) {
+            fgStatus('Subscription added!', 'success');
+            setTimeout(function() { location.reload(); }, 500);
+        } else {
+            fgStatus(data.error || 'Failed to add', 'error');
+        }
+    } catch (err) {
+        fgStatus('Network error', 'error');
+    }
+});
+
+// Toggle enabled/disabled
+async function fgToggle(subId, enable) {
+    try {
+        var res = await fetch('/api/guilds/' + fgGuildId + '/free-games/' + subId, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_enabled: enable })
+        });
+        var data = await res.json();
+        if (data.success) {
+            fgStatus(enable ? 'Enabled!' : 'Disabled!', 'success');
+            setTimeout(function() { location.reload(); }, 500);
+        } else {
+            fgStatus(data.error || 'Failed', 'error');
+        }
+    } catch (err) {
+        fgStatus('Network error', 'error');
+    }
+}
+
+// Delete subscription
+async function fgDelete(subId) {
+    if (!confirm('Remove this free game subscription?')) return;
+    try {
+        var res = await fetch('/api/guilds/' + fgGuildId + '/free-games/' + subId, {
+            method: 'DELETE'
+        });
+        var data = await res.json();
+        if (data.success) {
+            fgStatus('Subscription removed', 'success');
+            var card = document.querySelector('.fg-sub-card[data-sub-id="' + subId + '"]');
+            if (card) card.remove();
+        } else {
+            fgStatus(data.error || 'Failed to remove', 'error');
+        }
+    } catch (err) {
+        fgStatus('Network error', 'error');
+    }
+}
+
+// Edit filters modal
+function fgEditFilters(subId) {
+    var sub = fgSubsData.find(function(s) { return String(s.id) === String(subId); });
+    if (!sub) return;
+
+    document.getElementById('fg-filter-sub-id').value = subId;
+    document.getElementById('fg-f-notify-free').checked = !!sub.notify_free;
+    document.getElementById('fg-f-notify-weekend').checked = !!sub.notify_weekend;
+    document.getElementById('fg-f-notify-dlc').checked = !!sub.notify_dlc;
+    document.getElementById('fg-f-steam').checked = !!sub.filter_steam;
+    document.getElementById('fg-f-epic').checked = !!sub.filter_epic;
+    document.getElementById('fg-f-gog').checked = !!sub.filter_gog;
+    document.getElementById('fg-f-humble').checked = !!sub.filter_humble;
+    document.getElementById('fg-f-prime').checked = !!sub.filter_prime;
+    document.getElementById('fg-f-windows').checked = !!sub.filter_windows;
+    document.getElementById('fg-f-mac').checked = !!sub.filter_mac;
+    document.getElementById('fg-f-linux').checked = !!sub.filter_linux;
+
+    // Update toggle visual state
+    document.querySelectorAll('#fgFiltersModal .fg-toggle input').forEach(function(cb) {
+        var track = cb.parentElement.querySelector('.fg-toggle-track');
+        var dot = cb.parentElement.querySelector('.fg-toggle-dot');
+        track.style.background = cb.checked ? '#22c55e' : 'rgba(255,255,255,0.1)';
+        dot.style.left = cb.checked ? '18px' : '2px';
+    });
+
+    var modal = new bootstrap.Modal(document.getElementById('fgFiltersModal'));
+    modal.show();
+}
+
+// Save filters
+async function fgSaveFilters() {
+    var subId = document.getElementById('fg-filter-sub-id').value;
+    var payload = {
+        notify_free: document.getElementById('fg-f-notify-free').checked,
+        notify_weekend: document.getElementById('fg-f-notify-weekend').checked,
+        notify_dlc: document.getElementById('fg-f-notify-dlc').checked,
+        filter_steam: document.getElementById('fg-f-steam').checked,
+        filter_epic: document.getElementById('fg-f-epic').checked,
+        filter_gog: document.getElementById('fg-f-gog').checked,
+        filter_humble: document.getElementById('fg-f-humble').checked,
+        filter_prime: document.getElementById('fg-f-prime').checked,
+        filter_windows: document.getElementById('fg-f-windows').checked,
+        filter_mac: document.getElementById('fg-f-mac').checked,
+        filter_linux: document.getElementById('fg-f-linux').checked
+    };
+
+    try {
+        var res = await fetch('/api/guilds/' + fgGuildId + '/free-games/' + subId + '/filters', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        var data = await res.json();
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('fgFiltersModal')).hide();
+            fgStatus('Filters saved!', 'success');
+            setTimeout(function() { location.reload(); }, 500);
+        } else {
+            fgStatus(data.error || 'Failed to save filters', 'error');
+        }
+    } catch (err) {
+        fgStatus('Network error', 'error');
+    }
+}
+</script>

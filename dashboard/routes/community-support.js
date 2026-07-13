@@ -39,6 +39,8 @@ router.get('/supporters/:guildId', async (req, res) => {
             return res.status(404).render('community-support-leaderboard', {
                 title: 'Supporters Not Found',
                 guild: null,
+                user: req.user || null,
+                isAdmin: false,
                 users: [],
                 pagination: null,
                 monthKey,
@@ -63,6 +65,8 @@ router.get('/supporters/:guildId', async (req, res) => {
                     icon: guild.icon,
                     memberCount: guild.memberCount
                 },
+                user: req.user || null,
+                isAdmin: false,
                 users: [],
                 pagination: null,
                 monthKey,
@@ -166,7 +170,7 @@ router.get('/supporters/:guildId', async (req, res) => {
             const pageUserIds = users.map(u => u.userId);
             const placeholders = pageUserIds.map(() => '?').join(',');
             const [entryRows] = await pool.execute(
-                `SELECT user_id, entry_type, target_username, target_is_affiliate, points_awarded, message_id, channel_id, created_at
+                `SELECT id, user_id, entry_type, target_username, target_twitch_id, target_is_affiliate, points_awarded, message_id, channel_id, created_at
                  FROM community_support_entries
                  WHERE guild_id = ? AND month_key = ? AND user_id IN (${placeholders})
                  ORDER BY created_at DESC`,
@@ -175,8 +179,10 @@ router.get('/supporters/:guildId', async (req, res) => {
             for (const entry of entryRows) {
                 if (!entriesByUser[entry.user_id]) entriesByUser[entry.user_id] = [];
                 entriesByUser[entry.user_id].push({
+                    id: entry.id,
                     type: entry.entry_type,
                     target: entry.target_username,
+                    targetTwitchId: entry.target_twitch_id,
                     isAffiliate: !!entry.target_is_affiliate,
                     points: entry.points_awarded,
                     messageLink: `https://discord.com/channels/${guildId}/${entry.channel_id}/${entry.message_id}`,
@@ -184,6 +190,18 @@ router.get('/supporters/:guildId', async (req, res) => {
                     date: entry.created_at
                 });
             }
+        }
+
+        // Check if logged-in user is an admin of this guild
+        let isAdmin = false;
+        if (req.user && guild) {
+            try {
+                const botClient = global.botManager?.getClientForGuild(guildId);
+                const member = await guild.members.fetch(req.user.id).catch(() => null);
+                if (member && (member.permissions.has('ManageGuild') || member.permissions.has('Administrator'))) {
+                    isAdmin = true;
+                }
+            } catch {}
         }
 
         res.render('community-support-leaderboard', {
@@ -194,6 +212,8 @@ router.get('/supporters/:guildId', async (req, res) => {
                 icon: guild.icon,
                 memberCount: guild.memberCount
             },
+            user: req.user || null,
+            isAdmin,
             users,
             entriesByUser,
             pagination: {
@@ -212,12 +232,210 @@ router.get('/supporters/:guildId', async (req, res) => {
         res.status(500).render('community-support-leaderboard', {
             title: 'Supporters Error',
             guild: null,
+            user: req.user || null,
+            isAdmin: false,
             users: [],
             pagination: null,
             monthKey: null,
             availableMonths: [],
+            entriesByUser: {},
             error: 'Something went wrong loading the leaderboard.'
         });
+    }
+});
+
+/**
+ * POST /supporters/:guildId/rename-streamer
+ * Rename a target_username across ALL entries (admin only)
+ */
+router.post('/supporters/:guildId/rename-streamer', async (req, res) => {
+    const { guildId } = req.params;
+    const { old_username, new_username, new_twitch_id, new_is_affiliate } = req.body;
+
+    if (!req.user) return res.status(401).json({ error: 'Not logged in' });
+    if (!old_username || !new_username) return res.status(400).json({ error: 'Both old and new username required' });
+
+    try {
+        // Verify user is admin of this guild
+        let isAdmin = false;
+        if (global.botManager) {
+            const botClient = global.botManager.getClientForGuild(guildId);
+            const guild = botClient?.guilds?.cache?.get(guildId);
+            if (guild) {
+                const member = await guild.members.fetch(req.user.id).catch(() => null);
+                if (member && (member.permissions.has('ManageGuild') || member.permissions.has('Administrator'))) {
+                    isAdmin = true;
+                }
+            }
+        }
+
+        if (!isAdmin) return res.status(403).json({ error: 'Not an admin of this server' });
+
+        const cleanOld = old_username.trim().toLowerCase();
+        const cleanNew = new_username.trim().toLowerCase();
+
+        // Get all affected entries (need message_id and channel_id for Discord edits)
+        const [entries] = await pool.execute(
+            'SELECT id, message_id, channel_id FROM community_support_entries WHERE guild_id = ? AND LOWER(target_username) = ?',
+            [guildId, cleanOld]
+        );
+
+        // Build update for entries — always update username, optionally twitch_id and affiliate
+        const entryUpdates = ['target_username = ?'];
+        const entryValues = [cleanNew];
+        if (new_twitch_id !== undefined && new_twitch_id !== null) {
+            entryUpdates.push('target_twitch_id = ?');
+            entryValues.push(new_twitch_id || null);
+        }
+        if (new_is_affiliate !== undefined && new_is_affiliate !== null) {
+            entryUpdates.push('target_is_affiliate = ?');
+            entryValues.push(new_is_affiliate ? 1 : 0);
+
+            // Recalculate points — affiliate raids=5, non-affiliate raids=10, support=3
+            if (new_is_affiliate) {
+                // Changed TO affiliate: raid entries change from 10 → 5
+                await pool.execute(
+                    "UPDATE community_support_entries SET points_awarded = 5 WHERE guild_id = ? AND LOWER(target_username) = ? AND entry_type = 'raid' AND target_is_affiliate = 0",
+                    [guildId, cleanOld]
+                ).catch(() => {});
+            } else {
+                // Changed FROM affiliate: raid entries change from 5 → 10
+                await pool.execute(
+                    "UPDATE community_support_entries SET points_awarded = 10 WHERE guild_id = ? AND LOWER(target_username) = ? AND entry_type = 'raid' AND target_is_affiliate = 1",
+                    [guildId, cleanOld]
+                ).catch(() => {});
+            }
+        }
+        entryValues.push(guildId, cleanOld);
+
+        const [result] = await pool.execute(
+            `UPDATE community_support_entries SET ${entryUpdates.join(', ')} WHERE guild_id = ? AND LOWER(target_username) = ?`,
+            entryValues
+        );
+
+        // Update community_twitch_links
+        const linkUpdates = ['twitch_username = ?'];
+        const linkValues = [cleanNew];
+        if (new_twitch_id !== undefined) {
+            linkUpdates.push('twitch_user_id = ?');
+            linkValues.push(new_twitch_id || null);
+        }
+        if (new_is_affiliate !== undefined) {
+            linkUpdates.push('is_affiliate = ?');
+            linkValues.push(new_is_affiliate ? 1 : 0);
+        }
+        linkValues.push(guildId, cleanOld);
+        await pool.execute(
+            `UPDATE community_twitch_links SET ${linkUpdates.join(', ')} WHERE guild_id = ? AND LOWER(twitch_username) = ?`,
+            linkValues
+        ).catch(() => {});
+
+        // Update shoutouts
+        await pool.execute(
+            'UPDATE community_support_shoutouts SET twitch_username = ? WHERE guild_id = ? AND LOWER(twitch_username) = ?',
+            [cleanNew, guildId, cleanOld]
+        ).catch(() => {});
+
+        // Edit Discord messages containing the old username
+        // Search ALL messages from the bot in the raid/support channels, not just tracked entries
+        let editedMessages = 0;
+        try {
+            const botClient = global.botManager?.getClientForGuild(guildId) || req.app?.locals?.client;
+            const guild = botClient?.guilds?.cache?.get(guildId);
+            if (guild) {
+                const oldRegex = new RegExp(cleanOld.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+
+                // Collect all unique channel IDs from entries + config
+                const channelIds = new Set(entries.map(e => e.channel_id).filter(Boolean));
+                try {
+                    const [cfgRows] = await pool.execute('SELECT raid_channel_id, support_channel_id, shoutout_channel_id FROM community_support_config WHERE guild_id = ?', [guildId]);
+                    if (cfgRows.length) {
+                        if (cfgRows[0].raid_channel_id) channelIds.add(cfgRows[0].raid_channel_id);
+                        if (cfgRows[0].support_channel_id) channelIds.add(cfgRows[0].support_channel_id);
+                        if (cfgRows[0].shoutout_channel_id) channelIds.add(cfgRows[0].shoutout_channel_id);
+                    }
+                } catch {}
+
+                for (const channelId of channelIds) {
+                    try {
+                        const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+                        if (!channel) continue;
+
+                        // Fetch last 100 messages and check for old username
+                        const messages = await channel.messages.fetch({ limit: 100 });
+                        const botMessages = messages.filter(m => m.author.id === botClient.user.id);
+
+                        for (const [, msg] of botMessages) {
+                            let changed = false;
+                            let editPayload = {};
+
+                            // Check content
+                            if (msg.content && oldRegex.test(msg.content)) {
+                                editPayload.content = msg.content.replace(oldRegex, cleanNew);
+                                changed = true;
+                            }
+
+                            // Check embeds
+                            if (msg.embeds.length > 0) {
+                                const embeds = msg.embeds.map(e => {
+                                    const json = e.toJSON();
+                                    let embedChanged = false;
+
+                                    // Replace in every text field
+                                    for (const key of ['title', 'description', 'url']) {
+                                        if (json[key] && oldRegex.test(json[key])) {
+                                            json[key] = json[key].replace(oldRegex, cleanNew);
+                                            embedChanged = true;
+                                        }
+                                    }
+                                    if (json.author?.name && oldRegex.test(json.author.name)) {
+                                        json.author.name = json.author.name.replace(oldRegex, cleanNew);
+                                        embedChanged = true;
+                                    }
+                                    if (json.author?.url && oldRegex.test(json.author.url)) {
+                                        json.author.url = json.author.url.replace(oldRegex, cleanNew);
+                                        embedChanged = true;
+                                    }
+                                    if (json.footer?.text && oldRegex.test(json.footer.text)) {
+                                        json.footer.text = json.footer.text.replace(oldRegex, cleanNew);
+                                        embedChanged = true;
+                                    }
+                                    if (json.fields) {
+                                        for (const field of json.fields) {
+                                            if (field.name && oldRegex.test(field.name)) { field.name = field.name.replace(oldRegex, cleanNew); embedChanged = true; }
+                                            if (field.value && oldRegex.test(field.value)) { field.value = field.value.replace(oldRegex, cleanNew); embedChanged = true; }
+                                        }
+                                    }
+
+                                    if (embedChanged) changed = true;
+                                    return json;
+                                });
+                                if (changed) editPayload.embeds = embeds;
+                            }
+
+                            if (changed) {
+                                try {
+                                    await msg.edit(editPayload);
+                                    editedMessages++;
+                                    // Rate limit — pause every 3 edits
+                                    if (editedMessages % 3 === 0) await new Promise(r => setTimeout(r, 1500));
+                                } catch { /* edit failed — message may be webhook-owned */ }
+                            }
+                        }
+                    } catch (chErr) {
+                        logger.warn(`[CommunitySupport] Error scanning channel ${channelId}:`, { error: chErr.message });
+                    }
+                }
+            }
+        } catch (err) {
+            logger.warn(`[CommunitySupport] Error editing Discord messages during rename:`, { error: err.message });
+        }
+
+        logger.info(`[CommunitySupport] Renamed "${cleanOld}" → "${cleanNew}" in guild ${guildId}: ${result.affectedRows} DB entries, ${editedMessages} Discord messages edited by ${req.user.username}`);
+        res.json({ success: true, updated: result.affectedRows, messagesEdited: editedMessages });
+    } catch (error) {
+        logger.error('[CommunitySupport] Rename error:', { error: error.message, guildId });
+        res.status(500).json({ error: 'Failed to rename' });
     }
 });
 

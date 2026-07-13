@@ -1,0 +1,112 @@
+[
+  {
+    "id": "04966979-e71b-4853-823a-83f8e06630d5",
+    "guild_id": null,
+    "channel_id": null,
+    "host_user_id": "365905620060340224",
+    "state": "GAME_END",
+    "current_round": 8,
+    "winner_user_ids": "[\"365905620060340224\",\"rando:2\"]",
+    "created_at": "2026-05-23T23:37:17.000Z",
+    "ended_at": "2026-05-23T23:39:51.000Z"
+  },
+  {
+    "id": "2265eef1-a2a8-4185-a0a5-9f66581d90d5",
+    "guild_id": null,
+    "channel_id": null,
+    "host_user_id": "365905620060340224",
+    "state": "GAME_END",
+    "current_round": 3,
+    "winner_user_ids": "[\"rando:1\",\"rando:2\"]",
+    "created_at": "2026-05-25T23:41:21.000Z",
+    "ended_at": "2026-05-25T23:43:34.000Z"
+  },
+  {
+    "id": "876cd7a9-89cb-4a09-9735-83d22986b878",
+    "guild_id": null,
+    "channel_id": null,
+    "host_user_id": "365905620060340224",
+    "state": "GAME_END",
+    "current_round": 10,
+    "winner_user_ids": "[\"rando:1\"]",
+    "created_at": "2026-05-23T21:53:55.000Z",
+    "ended_at": "2026-05-23T21:55:04.000Z"
+  },
+  {
+    "id": "88b43bd9-149e-4744-a41b-6e5743f24c6d",
+    "guild_id": null,
+    "channel_id": null,
+    "host_user_id": "365905620060340224",
+    "state": "ABANDONED",
+    "current_round": 4,
+    "winner_user_ids": null,
+    "created_at": "2026-05-23T22:36:34.000Z",
+    "ended_at": "2026-05-23T22:40:37.000Z"
+  },
+  {
+    "id": "89c40a1a-56ce-4596-a0d5-fbb41938fd7a",
+    "guild_id": null,
+    "channel_id": null,
+    "host_user_id": "365905620060340224",
+    "state": "ABANDONED",
+    "current_round": 2,
+    "winner_user_ids": null,
+    "created_at": "2026-05-23T13:57:07.000Z",
+    "ended_at": "2026-05-23T22:10:06.000Z"
+  },
+  {
+    "id": "9f2170f4-614b-4e89-a051-28b065b567ef",
+    "guild_id": null,
+    "channel_id": null,
+    "host_user_id": "365905620060340224",
+    "state": "ABANDONED",
+    "current_round": 1,
+    "winner_user_ids": null,
+    "created_at": "2026-05-23T12:59:35.000Z",
+    "ended_at": "2026-05-23T13:17:12.000Z"
+  },
+  {
+    "id": "a7ffd3f5-233a-4675-ad1c-e37d8aa49a31",
+    "guild_id": null,
+    "channel_id": null,
+    "host_user_id": "365905620060340224",
+    "state": "ABANDONED",
+    "current_round": 2,
+    "winner_user_ids": null,
+    "created_at": "2026-05-26T00:16:34.000Z",
+    "ended_at": "2026-05-26T00:19:01.000Z"
+  },
+  {
+    "id": "c492cd4b-a4a8-4f17-85bf-2aa5bced15be",
+    "guild_id": null,
+    "channel_id": null,
+    "host_user_id": "365905620060340224",
+    "state": "ABANDONED",
+    "current_round": 2,
+    "winner_user_ids": null,
+    "created_at": "2026-05-26T00:08:46.000Z",
+    "ended_at": "2026-05-26T00:15:55.000Z"
+  },
+  {
+    "id": "f2faaa0f-76c0-471c-84e0-404c891b8210",
+    "guild_id": "1414753158999179286",
+    "channel_id": "1507505623527456949",
+    "host_user_id": "365905620060340224",
+    "state": "GAME_END",
+    "current_round": 2,
+    "winner_user_ids": "[\"365905620060340224\"]",
+    "created_at": "2026-05-25T23:59:37.000Z",
+    "ended_at": "2026-05-26T00:06:44.000Z"
+  },
+  {
+    "id": "f35d56b4-af2a-4d80-ba93-566a2bc7b248",
+    "guild_id": "1414753158999179286",
+    "channel_id": "1507505623527456949",
+    "host_user_id": "365905620060340224",
+    "state": "GAME_END",
+    "current_round": 0,
+    "winner_user_ids": "[]",
+    "created_at": "2026-05-25T23:45:41.000Z",
+    "ended_at": "2026-05-25T23:58:31.000Z"
+  }
+]

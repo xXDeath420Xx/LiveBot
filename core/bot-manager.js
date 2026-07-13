@@ -1,4 +1,4 @@
-import { Client, Collection, GatewayIntentBits, Partials, REST, Routes } from 'discord.js';
+import { Client, Collection, GatewayIntentBits, Partials, REST, Routes, Options } from 'discord.js';
 import logger from '../utils/logger.js';
 import encryption from '../utils/encryption.js';
 
@@ -45,7 +45,23 @@ class BotManager {
                 Partials.Reaction,
                 Partials.User,
                 Partials.GuildMember
-            ]
+            ],
+            makeCache: Options.cacheWithLimits({
+                ...Options.DefaultMakeCacheSettings,
+                MessageManager: 50,           // 50 messages per channel (default unlimited)
+                GuildMemberManager: 200,      // 200 members per guild (default unlimited)
+                PresenceManager: 200,         // Limit cached presences per guild (startup scan reads from cache)
+                GuildEmojiManager: 0,         // Rarely needed from cache
+                GuildStickerManager: 0,       // Rarely needed from cache
+                ThreadManager: 0,             // Rarely needed from cache
+            }),
+            sweepers: {
+                ...Options.DefaultSweeperSettings,
+                messages: {
+                    interval: 300,   // Sweep every 5 minutes
+                    lifetime: 1800,  // Remove messages older than 30 minutes
+                },
+            },
         });
     }
 
@@ -194,45 +210,121 @@ class BotManager {
                 return;
             }
 
-            logger.info(`[BotManager] Deploying ${commandData.length} commands for bot ${botId}`);
+            // Hash the payload so we can skip re-deploys when nothing changed.
+            // Discord rate-limits command creates at ~200/day per guild — every
+            // PM2 restart used to burn through that budget for no benefit.
+            const { createHash } = await import('crypto');
+            const hash = createHash('sha256').update(JSON.stringify(commandData)).digest('hex');
+            const pool = (await import('../utils/db.js')).default;
 
-            const rest = new REST().setToken(client.token);
+            // retries: 0 — without this, discord.js silently auto-retries 429s
+            // forever, masking rate-limits as "timeout after Xms" so we can't
+            // tell whether Discord is rate-limiting us or actually slow.
+            // timeout: 60s — large enough for legitimate slow bulk PUTs.
+            const rest = new REST({ retries: 0, timeout: 60_000 }).setToken(client.token);
 
-            // For custom bots, deploy to specific guilds instead of globally
-            // This ensures instant command availability and proper visibility
+            // For custom bots, deploy to specific guilds instead of globally.
+            // Wrapped in a hard timeout because discord.js's REST handler will
+            // silently auto-retry 429s forever — without this, a rate-limited
+            // bot's deploy never resolves AND never rejects, hanging Step 7/7
+            // for that bot's whole uptime.
+            // 90s timeout: bulk PUT to applicationGuildCommands can legitimately
+            // take 30-60s when the bot has 80+ commands and Discord is busy.
+            // 20s was too aggressive — Kitsune kept timing out on real deploys.
+            const DEPLOY_TIMEOUT_MS = 90_000;
+            const BLOCK_BACKOFF_MS = 30 * 60 * 1000;   // 30 min (was 1h — too long for transient slowness)
+            const withTimeout = (p, ms, label) => Promise.race([
+                p,
+                new Promise((_, rej) => setTimeout(() => rej(new Error(`${label} timeout after ${ms}ms`)), ms))
+            ]);
+
             if (!client.isDefaultBot && client.assignedGuilds && client.assignedGuilds.length > 0) {
-                logger.info(`[BotManager] Deploying commands to ${client.assignedGuilds.length} guild(s) for custom bot ${botId}`);
-
-                let successCount = 0;
+                let successCount = 0, skipped = 0, blocked = 0;
                 for (const guildId of client.assignedGuilds) {
                     try {
-                        await rest.put(
-                            Routes.applicationGuildCommands(botId, guildId),
-                            { body: commandData }
+                        const [[prev]] = await pool.execute(
+                            'SELECT hash, blocked_until FROM command_deploy_hashes WHERE bot_id = ? AND guild_id = ?',
+                            [botId, guildId]
+                        );
+                        if (prev?.hash === hash) { skipped++; continue; }
+                        // Honor active block (rate-limited recently — don't pile on)
+                        if (prev?.blocked_until && new Date(prev.blocked_until) > new Date()) {
+                            blocked++;
+                            logger.warn(`[BotManager] bot ${botId} guild ${guildId}: skipping (blocked until ${prev.blocked_until})`);
+                            continue;
+                        }
+                        await withTimeout(
+                            rest.put(Routes.applicationGuildCommands(botId, guildId), { body: commandData }),
+                            DEPLOY_TIMEOUT_MS,
+                            `deploy ${botId}/${guildId}`
+                        );
+                        await pool.execute(
+                            `INSERT INTO command_deploy_hashes (bot_id, guild_id, hash, blocked_until, last_block_reason)
+                             VALUES (?, ?, ?, NULL, NULL)
+                             ON DUPLICATE KEY UPDATE hash = VALUES(hash), deployed_at = NOW(), blocked_until = NULL, last_block_reason = NULL`,
+                            [botId, guildId, hash]
                         );
                         successCount++;
-                        logger.debug(`[BotManager] Deployed commands to guild ${guildId} for bot ${botId}`);
                     } catch (guildError) {
-                        logger.error(`[BotManager] Failed to deploy commands to guild ${guildId}:`, {
-                            error: guildError.message,
-                            botId,
-                            guildId
-                        });
+                        const isTimeout = /timeout/i.test(guildError.message);
+                        const isRateLimit = guildError.code === 429 || guildError.status === 429 || /rate.?limit/i.test(guildError.message);
+                        // Discord error 30034 = daily command-create budget exhausted.
+                        // Resets 24h after first create of the day. Block 25h to be safe —
+                        // any earlier retry just burns future budget and re-extends the block.
+                        const isDailyLimit = guildError.code === 30034
+                            || /daily application command creates/i.test(guildError.message)
+                            || /max number of daily/i.test(guildError.message);
+                        if (isDailyLimit) {
+                            const until = new Date(Date.now() + 25 * 60 * 60 * 1000);
+                            await pool.execute(
+                                `INSERT INTO command_deploy_hashes (bot_id, guild_id, hash, blocked_until, last_block_reason)
+                                 VALUES (?, ?, '', ?, ?)
+                                 ON DUPLICATE KEY UPDATE blocked_until = VALUES(blocked_until), last_block_reason = VALUES(last_block_reason)`,
+                                [botId, guildId, until, `DAILY-LIMIT-30034: ${guildError.message}`.slice(0, 240)]
+                            );
+                            logger.error(`[BotManager] bot ${botId} guild ${guildId}: DAILY COMMAND-CREATE BUDGET EXHAUSTED (200/day Discord cap) — blocking deploys for 25h until ${until.toISOString()}`);
+                        } else if (isTimeout || isRateLimit) {
+                            const until = new Date(Date.now() + BLOCK_BACKOFF_MS);
+                            await pool.execute(
+                                `INSERT INTO command_deploy_hashes (bot_id, guild_id, hash, blocked_until, last_block_reason)
+                                 VALUES (?, ?, '', ?, ?)
+                                 ON DUPLICATE KEY UPDATE blocked_until = VALUES(blocked_until), last_block_reason = VALUES(last_block_reason)`,
+                                [botId, guildId, until, guildError.message.slice(0, 240)]
+                            );
+                            logger.warn(`[BotManager] bot ${botId} guild ${guildId}: ${isTimeout ? 'TIMEOUT' : 'RATE LIMIT'} — backing off until ${until.toISOString()}`);
+                        } else {
+                            logger.error(`[BotManager] Failed to deploy commands to guild ${guildId}:`, {
+                                error: guildError.message, botId, guildId
+                            });
+                        }
                     }
                 }
-                logger.info(`[BotManager] Successfully deployed commands to ${successCount}/${client.assignedGuilds.length} guild(s) for bot ${botId}`);
+                logger.info(`[BotManager] bot ${botId}: deployed ${successCount}, skipped ${skipped} unchanged, ${blocked} blocked of ${client.assignedGuilds.length} guild(s)`);
 
                 // Hide the default bot's global commands in this guild by deploying
                 // empty guild commands for the default bot. Guild commands override
                 // global commands, so this prevents users from seeing duplicate commands.
                 await this.hideDefaultBotCommandsInGuilds(client.assignedGuilds);
             } else {
-                // Default bot uses global commands
-                const deployed = await rest.put(
-                    Routes.applicationCommands(botId),
-                    { body: commandData }
+                // Default bot uses global commands — same hash-skip pattern.
+                const [[prev]] = await pool.execute(
+                    `SELECT hash FROM command_deploy_hashes WHERE bot_id = ? AND guild_id = ''`,
+                    [botId]
                 );
-                logger.info(`[BotManager] Successfully deployed ${deployed.length} global slash commands for bot ${botId}`);
+                if (prev?.hash === hash) {
+                    logger.info(`[BotManager] bot ${botId}: global commands unchanged, skipping deploy`);
+                } else {
+                    const deployed = await rest.put(
+                        Routes.applicationCommands(botId),
+                        { body: commandData }
+                    );
+                    await pool.execute(
+                        `INSERT INTO command_deploy_hashes (bot_id, guild_id, hash) VALUES (?, '', ?)
+                         ON DUPLICATE KEY UPDATE hash = VALUES(hash), deployed_at = NOW()`,
+                        [botId, hash]
+                    );
+                    logger.info(`[BotManager] Deployed ${deployed.length} global slash commands for bot ${botId}`);
+                }
             }
         } catch (error) {
             logger.error(`[BotManager] Failed to deploy commands for bot ${botId}:`, {
@@ -285,6 +377,49 @@ class BotManager {
     }
 
     /**
+     * Retry deployments that were blocked but whose backoff has now expired.
+     * Without this, a bot that fails its boot deploy stays without commands
+     * until the next PM2 restart — even after the block clears in DB.
+     * Called by a 5-min scheduler in index.js.
+     */
+    async retryBlockedDeployments() {
+        const pool = (await import('../utils/db.js')).default;
+        try {
+            // Rows with empty hash that were blocked but the block has now lapsed.
+            // (deployed rows have a real hash; never-deployed rows have '')
+            const [rows] = await pool.execute(
+                `SELECT bot_id, guild_id FROM command_deploy_hashes
+                 WHERE hash = '' AND blocked_until IS NOT NULL AND blocked_until < NOW()`
+            );
+            if (rows.length === 0) return;
+
+            const grouped = new Map();
+            for (const r of rows) {
+                if (!grouped.has(r.bot_id)) grouped.set(r.bot_id, []);
+                grouped.get(r.bot_id).push(r.guild_id);
+            }
+
+            for (const [botId, guildIds] of grouped.entries()) {
+                const client = this.clients.get(botId);
+                if (!client || !client.token) continue;
+                logger.info(`[BotManager] Retrying blocked deploy for bot ${botId} (${guildIds.length} guild(s))`);
+                // Clear stale block so deployCommandsForBot doesn't immediately skip
+                await pool.execute(
+                    `UPDATE command_deploy_hashes
+                     SET blocked_until = NULL, last_block_reason = NULL
+                     WHERE bot_id = ? AND guild_id IN (${guildIds.map(() => '?').join(',')})`,
+                    [botId, ...guildIds]
+                );
+                await this.deployCommandsForBot(client, botId).catch(err => {
+                    logger.error(`[BotManager] Retry deploy failed for ${botId}:`, { error: err.message });
+                });
+            }
+        } catch (err) {
+            logger.error('[BotManager] retryBlockedDeployments error:', { error: err.message });
+        }
+    }
+
+    /**
      * Remove a custom bot
      */
     async removeCustomBot(botId) {
@@ -317,16 +452,19 @@ class BotManager {
      * 3. Fall back to default bot only as last resort
      */
     getClientForGuild(guildId) {
-        // Try mapped bot first
+        // Try mapped bot first — but only if it actually has the guild cached.
+        // A mapped bot may be "ready" (gateway handshake done) yet still not
+        // have this guild, e.g. right after self-service creation before the
+        // user completes the OAuth invite. Cache presence is the truth check.
         const botId = this.guildBotMapping.get(guildId);
         if (botId && this.clients.has(botId)) {
             const client = this.clients.get(botId);
-            if (client.isReady()) {
+            if (client.isReady() && client.guilds.cache.has(guildId)) {
                 return client;
             }
         }
 
-        // Search all clients for one that actually has this guild cached
+        // Fall through: find any ready client that actually has this guild cached
         for (const [id, client] of this.clients) {
             if (client.isReady() && client.guilds.cache.has(guildId)) {
                 return client;

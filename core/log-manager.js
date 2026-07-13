@@ -37,6 +37,9 @@ async function getLogWebhookClient(client, channelId) {
  */
 async function sendLogEmbed(guild, eventType, embed) {
     try {
+        // Never log emoji / sticker / soundboard changes — the owner does not
+        // want these categories logged in any guild.
+        if (/^(emoji|sticker|soundboard)/i.test(eventType || '')) return;
         // Get logging configuration for this guild
         const [configRows] = await db.execute(
             'SELECT log_channel_id, enabled_events, enabled FROM logging_config WHERE guild_id = ?',
@@ -58,8 +61,8 @@ async function sendLogEmbed(guild, eventType, embed) {
 
         const enabledEvents = safeJsonArray(config.enabled_events, 'logging enabled_events');
 
-        // Check if this event type is enabled
-        if (!enabledEvents.includes(eventType)) {
+        // Check if this event type is enabled (null/empty = all events allowed, defer to log_event_config)
+        if (enabledEvents.length > 0 && !enabledEvents.includes(eventType)) {
             logger.debug(`[sendLogEmbed] Event type '${eventType}' not enabled for guild ${guild.id}. Enabled: ${enabledEvents.join(', ')}`);
             return;
         }
@@ -87,6 +90,11 @@ async function sendLogEmbed(guild, eventType, embed) {
             if (eventConfig.log_channel_id) {
                 targetChannelId = eventConfig.log_channel_id;
                 logger.debug(`[sendLogEmbed] Using override channel ${targetChannelId} for event ${eventType}`);
+            }
+
+            // Apply custom embed color if configured
+            if (eventConfig.embed_color) {
+                embed.setColor(parseInt(eventConfig.embed_color.replace('#', ''), 16));
             }
         }
 
@@ -177,24 +185,26 @@ async function logMessageDelete(message) {
     let authorInfo;
     let authorDisplay;
 
-    if (message.content || message.author) {
-        // Discord.js cache hit — use cached data
-        content = message.content || 'No content';
-        authorInfo = message.author
-            ? `${message.author.tag} (${message.author.id})`
-            : 'Unknown User';
-        authorDisplay = message.author || 'Unknown User';
+    if (message.author) {
+        // Discord.js in-memory cache hit — message was seen by this session
+        content = message.content ?? 'No text content';
+        authorInfo = `${message.author.tag} (${message.author.id})`;
+        authorDisplay = message.author;
     } else {
-        // Cache miss — look up from database
+        // Partial message — Discord.js didn't have it cached (bot restarted since it was sent)
+        // Fall back to our DB message cache
         const cached = await getMessageById(messageId);
         if (cached) {
-            content = cached.content || 'No content';
+            // Skip bot messages from DB cache too
+            if (cached.author_id === message.client.user?.id) return;
+
+            content = cached.content ?? 'No text content';
             authorInfo = `${cached.author_tag} (${cached.author_id})`;
             authorDisplay = cached.author_tag;
         } else {
-            content = 'Message not cached';
-            authorInfo = 'Unknown User';
-            authorDisplay = 'Unknown User';
+            content = 'Content unavailable (sent before bot restart)';
+            authorInfo = 'Unknown (sent before bot restart)';
+            authorDisplay = 'Unknown';
         }
     }
 
@@ -834,6 +844,15 @@ async function logChannelDelete(channel) {
 async function logChannelUpdate(oldChannel, newChannel) {
     if (!newChannel.guild) return;
 
+    // Skip stat display channel renames (automated updates, not user actions)
+    if (oldChannel.name !== newChannel.name) {
+        const [statCh] = await db.execute(
+            'SELECT 1 FROM stat_display_channels WHERE channel_id = ? LIMIT 1',
+            [newChannel.id]
+        );
+        if (statCh.length > 0) return;
+    }
+
     const changes = [];
 
     // Name change
@@ -858,17 +877,11 @@ async function logChannelUpdate(oldChannel, newChannel) {
         changes.push(`**Slowmode:** ${oldChannel.rateLimitPerUser}s → ${newChannel.rateLimitPerUser}s`);
     }
 
-    // Category/parent change
-    if (oldChannel.parentId !== newChannel.parentId) {
-        const oldParent = oldChannel.parent?.name || '(none)';
-        const newParent = newChannel.parent?.name || '(none)';
-        changes.push(`**Category:** ${oldParent} → ${newParent}`);
-    }
-
-    // Skip position-only changes — too noisy (reordering channels fires for every channel)
-    // if (oldChannel.position !== newChannel.position) {
-    //     changes.push(`**Position:** ${oldChannel.position} → ${newChannel.position}`);
-    // }
+    // Hierarchy / placement changes intentionally skipped — moving channels between
+    // categories or reordering fires cascading channelUpdate events for every affected
+    // channel. Renames, topic, NSFW, slowmode, perms, etc. still log.
+    // if (oldChannel.parentId !== newChannel.parentId) { ... }
+    // if (oldChannel.position !== newChannel.position) { ... }
 
     // Voice channel specific
     if ('bitrate' in oldChannel && 'bitrate' in newChannel && oldChannel.bitrate !== newChannel.bitrate) {
@@ -1445,9 +1458,15 @@ async function logRoleUpdate(oldRole, newRole) {
 // ===========================
 
 async function logEmojiCreate(emoji) {
+    // DISABLED ENTIRELY. The emoji cache is off (GuildEmojiManager: 0), so
+    // discord.js re-fires emojiCreate/Delete/Update for every existing emoji on
+    // every emoji-list update/reconnect across all guilds — a relentless log
+    // storm. Emoji logging is low-value, so it is turned off at the source.
+    return;
+    // eslint-disable-next-line no-unreachable
     if (!emoji.guild) return;
 
-    logger.info(`[EMOJI CREATE] :${emoji.name}: (${emoji.id})`, {
+    logger.debug(`[EMOJI CREATE] :${emoji.name}: (${emoji.id})`, {
         guildId: emoji.guild.id,
         emojiId: emoji.id,
         category: 'emojiCreate'
@@ -1483,9 +1502,11 @@ async function logEmojiCreate(emoji) {
 }
 
 async function logEmojiDelete(emoji) {
+    return; // DISABLED — see logEmojiCreate note (cache-off emoji storm)
+    // eslint-disable-next-line no-unreachable
     if (!emoji.guild) return;
 
-    logger.info(`[EMOJI DELETE] :${emoji.name}: (${emoji.id})`, {
+    logger.debug(`[EMOJI DELETE] :${emoji.name}: (${emoji.id})`, {
         guildId: emoji.guild.id,
         emojiId: emoji.id,
         category: 'emojiDelete'
@@ -1521,11 +1542,13 @@ async function logEmojiDelete(emoji) {
 }
 
 async function logEmojiUpdate(oldEmoji, newEmoji) {
+    return; // DISABLED — see logEmojiCreate note (cache-off emoji storm)
+    // eslint-disable-next-line no-unreachable
     if (!newEmoji.guild) return;
 
     if (oldEmoji.name === newEmoji.name) return;
 
-    logger.info(`[EMOJI UPDATE] :${oldEmoji.name}: → :${newEmoji.name}:`, {
+    logger.debug(`[EMOJI UPDATE] :${oldEmoji.name}: → :${newEmoji.name}:`, {
         guildId: newEmoji.guild.id,
         emojiId: newEmoji.id,
         category: 'emojiUpdate'

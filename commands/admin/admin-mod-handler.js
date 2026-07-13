@@ -8,6 +8,7 @@ import logger from '../../utils/logger.js';
 import { logInfraction } from '../../core/moderation-manager.js';
 import crypto from 'crypto';
 import { parseTimeToSeconds, parseTimeToMs as parseDuration } from '../../utils/timeParser.js';
+import { isProtectedFromBanCommands } from '../../utils/owner-protection.js';
 
 function verifyPassword(plainPassword, hash) {
     const [salt, key] = hash.split(':');
@@ -21,6 +22,16 @@ export async function handleBan(interaction) {
 
     const targetUser = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason');
+
+    if (isProtectedFromBanCommands(targetUser.id)) {
+        logger.warn('[Ban Command] Blocked attempt to ban protected bot owner', {
+            guildId: interaction.guild.id,
+            actor: interaction.user.id,
+            target: targetUser.id
+        });
+        return interaction.editReply('This user is the bot owner / developer and cannot be banned through this bot.');
+    }
+
     const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
     if (member && !member.bannable) {
@@ -88,6 +99,16 @@ export async function handleKick(interaction) {
 
     const targetUser = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason');
+
+    if (isProtectedFromBanCommands(targetUser.id)) {
+        logger.warn('[Kick Command] Blocked attempt to kick protected bot owner', {
+            guildId: interaction.guild.id,
+            actor: interaction.user.id,
+            target: targetUser.id
+        });
+        return interaction.editReply('This user is the bot owner / developer and cannot be kicked through this bot.');
+    }
+
     const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
     if (!member) {
@@ -132,6 +153,16 @@ export async function handleMute(interaction) {
     const targetUser = interaction.options.getUser('user');
     const durationStr = interaction.options.getString('duration');
     const reason = interaction.options.getString('reason');
+
+    if (isProtectedFromBanCommands(targetUser.id)) {
+        logger.warn('[Mute Command] Blocked attempt to mute protected bot owner', {
+            guildId: interaction.guild.id,
+            actor: interaction.user.id,
+            target: targetUser.id
+        });
+        return interaction.editReply('This user is the bot owner / developer and cannot be muted through this bot.');
+    }
+
     const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
     if (!member) {
@@ -234,6 +265,15 @@ export async function handleWarn(interaction) {
 
     const targetUser = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason');
+
+    if (isProtectedFromBanCommands(targetUser.id)) {
+        logger.warn('[Warn Command] Blocked attempt to warn protected bot owner', {
+            guildId: interaction.guild.id,
+            actor: interaction.user.id,
+            target: targetUser.id
+        });
+        return interaction.editReply('This user is the bot owner / developer and cannot be warned through this bot.');
+    }
 
     if (targetUser.id === interaction.user.id) {
         return interaction.editReply('You cannot warn yourself.');

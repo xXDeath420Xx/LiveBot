@@ -1,0 +1,240 @@
+<style>
+.todo-list-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(45,212,191,0.15);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.todo-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.todo-list-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+.todo-list-channel { font-size: 0.8rem; color: var(--text-muted); }
+.todo-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: 8px; margin-bottom: 4px; transition: background 0.15s;
+}
+.todo-item:hover { background: rgba(255,255,255,0.03); }
+.todo-item-num { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); min-width: 22px; }
+.todo-item-text { flex: 1; font-size: 0.85rem; color: var(--text-secondary); }
+.todo-item.completed .todo-item-text { text-decoration: line-through; color: var(--text-muted); }
+.todo-item-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+.todo-item:hover .todo-item-actions { opacity: 1; }
+.todo-action-btn {
+    width: 26px; height: 26px; border: none; border-radius: 6px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; font-size: 0.65rem; transition: all 0.15s;
+}
+.todo-btn-done { background: rgba(35,245,107,0.15); color: #23f56b; }
+.todo-btn-done:hover { background: rgba(35,245,107,0.3); }
+.todo-btn-undo { background: rgba(251,191,36,0.15); color: #fbbf24; }
+.todo-btn-undo:hover { background: rgba(251,191,36,0.3); }
+.todo-btn-delete { background: rgba(248,113,113,0.15); color: #f87171; }
+.todo-btn-delete:hover { background: rgba(248,113,113,0.3); }
+.todo-add-form { display: flex; gap: 8px; margin-top: 12px; }
+.todo-add-form input {
+    flex: 1; padding: 8px 12px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; color: #fff; font-size: 0.85rem;
+}
+.todo-add-form input:focus { outline: none; border-color: #2dd4bf; }
+.todo-add-form button {
+    padding: 8px 16px; background: linear-gradient(135deg, #14b8a6, #2dd4bf);
+    color: #fff; border: none; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+}
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title"><i class="fas fa-tasks"></i> <span>Task Lists</span></div>
+            <div class="page-section-subtitle">Create and manage persistent task list embeds in your channels. Use /todo commands in Discord or manage here.</div>
+        </div>
+    </div>
+
+    <div style="background: rgba(45,212,191,0.06); border: 1px solid rgba(45,212,191,0.2); border-radius: 14px; padding: 20px; margin-bottom: 24px;">
+        <h4 style="margin: 0 0 12px; font-size: 0.95rem; font-weight: 700; color: var(--text-primary);">
+            <i class="fas fa-plus" style="color: #2dd4bf; margin-right: 8px;"></i>Create New Task List
+        </h4>
+        <form id="todoCreateForm" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;" data-no-ajax>
+            <div style="flex: 1; min-width: 200px;">
+                <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Title</label>
+                <input type="text" id="todoTitle" class="form-control" placeholder="Task List" style="font-size: 0.85rem; padding: 8px 12px;">
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+                <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Channel</label>
+                <select id="todoChannel" class="form-select" style="font-size: 0.85rem; padding: 8px 12px;">
+                    <% channels.forEach(ch => { %>
+                    <option value="<%= ch.id %>">#<%= ch.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" style="padding: 8px 20px; font-size: 0.85rem;">Create</button>
+        </form>
+    </div>
+
+    <div id="todoListsContainer">
+        <div style="text-align:center;padding:40px;color:var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var GUILD_ID = '<%= guild.id %>';
+    var API = '/api/guilds/' + GUILD_ID + '/todo';
+
+    function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+    async function loadLists() {
+        try {
+            var resp = await fetch(API, { credentials: 'include' });
+            var data = await resp.json();
+            if (!data.success) throw new Error(data.error);
+            renderLists(data.lists);
+        } catch(e) {
+            document.getElementById('todoListsContainer').textContent = 'Failed to load: ' + e.message;
+        }
+    }
+
+    function renderLists(lists) {
+        var container = document.getElementById('todoListsContainer');
+        container.textContent = '';
+
+        if (!lists.length) {
+            var empty = document.createElement('div');
+            empty.style.cssText = 'text-align:center;padding:40px;color:var(--text-muted);font-size:0.9rem;';
+            empty.textContent = 'No task lists yet. Create one above or use /todo create in Discord.';
+            container.appendChild(empty);
+            return;
+        }
+
+        lists.forEach(function(list) {
+            var card = document.createElement('div');
+            card.className = 'todo-list-card';
+
+            // Header
+            var header = document.createElement('div');
+            header.className = 'todo-list-header';
+            var headerInfo = document.createElement('div');
+            var titleEl = document.createElement('div');
+            titleEl.className = 'todo-list-title';
+            titleEl.textContent = list.title;
+            var chanEl = document.createElement('div');
+            chanEl.className = 'todo-list-channel';
+            var completed = list.items.filter(function(i) { return i.completed; }).length;
+            chanEl.textContent = '#' + (list.channel_name || list.channel_id) + ' \u2022 ' + completed + '/' + list.items.length + ' done';
+            headerInfo.appendChild(titleEl);
+            headerInfo.appendChild(chanEl);
+            header.appendChild(headerInfo);
+            var delBtn = document.createElement('button');
+            delBtn.style.cssText = 'background:rgba(248,113,113,0.15);color:#f87171;border:none;border-radius:6px;padding:6px 12px;font-size:0.75rem;cursor:pointer;';
+            delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            delBtn.addEventListener('click', function() { deleteList(list.id); });
+            header.appendChild(delBtn);
+            card.appendChild(header);
+
+            // Items
+            list.items.forEach(function(item, idx) {
+                var row = document.createElement('div');
+                row.className = 'todo-item' + (item.completed ? ' completed' : '');
+
+                var num = document.createElement('span');
+                num.className = 'todo-item-num';
+                num.textContent = (idx + 1) + '.';
+                row.appendChild(num);
+
+                var emoji = document.createElement('span');
+                emoji.textContent = item.completed ? '\u2705' : '\u23F3';
+                row.appendChild(emoji);
+
+                var text = document.createElement('span');
+                text.className = 'todo-item-text';
+                text.textContent = item.task;
+                row.appendChild(text);
+
+                var actions = document.createElement('div');
+                actions.className = 'todo-item-actions';
+                if (item.completed) {
+                    var undoBtn = document.createElement('button');
+                    undoBtn.className = 'todo-action-btn todo-btn-undo';
+                    undoBtn.title = 'Undo';
+                    undoBtn.innerHTML = '<i class="fas fa-undo"></i>';
+                    undoBtn.addEventListener('click', function() { toggleItem(list.id, item.id, 0); });
+                    actions.appendChild(undoBtn);
+                } else {
+                    var doneBtn = document.createElement('button');
+                    doneBtn.className = 'todo-action-btn todo-btn-done';
+                    doneBtn.title = 'Complete';
+                    doneBtn.innerHTML = '<i class="fas fa-check"></i>';
+                    doneBtn.addEventListener('click', function() { toggleItem(list.id, item.id, 1); });
+                    actions.appendChild(doneBtn);
+                }
+                var rmBtn = document.createElement('button');
+                rmBtn.className = 'todo-action-btn todo-btn-delete';
+                rmBtn.title = 'Remove';
+                rmBtn.innerHTML = '<i class="fas fa-times"></i>';
+                rmBtn.addEventListener('click', function() { removeItem(list.id, item.id); });
+                actions.appendChild(rmBtn);
+                row.appendChild(actions);
+
+                card.appendChild(row);
+            });
+
+            // Add form
+            var addForm = document.createElement('div');
+            addForm.className = 'todo-add-form';
+            var addInput = document.createElement('input');
+            addInput.type = 'text';
+            addInput.placeholder = 'Add a task...';
+            addInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { addItem(list.id, addInput); } });
+            addForm.appendChild(addInput);
+            var addBtn = document.createElement('button');
+            addBtn.innerHTML = '<i class="fas fa-plus"></i> Add';
+            addBtn.addEventListener('click', function() { addItem(list.id, addInput); });
+            addForm.appendChild(addBtn);
+            card.appendChild(addForm);
+
+            container.appendChild(card);
+        });
+    }
+
+    async function addItem(listId, input) {
+        var task = input.value.trim();
+        if (!task) return;
+        input.value = '';
+        await fetch(API + '/' + listId + '/items', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: task }) });
+        loadLists();
+    }
+
+    async function toggleItem(listId, itemId, completed) {
+        await fetch(API + '/' + listId + '/items/' + itemId, { method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: completed }) });
+        loadLists();
+    }
+
+    async function removeItem(listId, itemId) {
+        await fetch(API + '/' + listId + '/items/' + itemId, { method: 'DELETE', credentials: 'include' });
+        loadLists();
+    }
+
+    async function deleteList(listId) {
+        if (!confirm('Delete this task list?')) return;
+        await fetch(API + '/' + listId, { method: 'DELETE', credentials: 'include' });
+        loadLists();
+    }
+
+    document.getElementById('todoCreateForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var title = document.getElementById('todoTitle').value.trim() || 'Task List';
+        var channelId = document.getElementById('todoChannel').value;
+        await fetch(API, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title, channel_id: channelId }) });
+        document.getElementById('todoTitle').value = '';
+        loadLists();
+    });
+
+    loadLists();
+})();
+</script>

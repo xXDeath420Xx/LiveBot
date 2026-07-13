@@ -1,7 +1,3 @@
-<%
-const actionLogsData = actionLogs || auditLogs || [];
-%>
-
 <div class="page-section">
     <div class="page-section-header">
         <div>
@@ -15,277 +11,203 @@ const actionLogsData = actionLogs || auditLogs || [];
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Events</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= actionLogsData.length %></div>
+    <!-- Stats -->
+    <div class="grid grid-cols-3" style="margin-bottom: 1.5rem;">
+        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--accent-purple, #a78bfa); border-radius: 4px 12px 12px 4px;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Total Events</div>
+            <div id="al-total" style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary);">-</div>
         </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Moderation Events</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= actionLogsData.filter(l => l.event_type === 'moderation' || l.moderator_id).length %></div>
+        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--accent-blue, #60a5fa); border-radius: 4px 12px 12px 4px;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Event Types</div>
+            <div id="al-types" style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary);">-</div>
         </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">User Events</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= actionLogsData.filter(l => l.user_id).length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Retention Period</div>
-            <div style="font-size: var(--font-size-xl); font-weight: var(--font-weight-bold); color: var(--color-success);">90 Days</div>
+        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--accent-green, #23f56b); border-radius: 4px 12px 12px 4px;">
+            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Page</div>
+            <div id="al-page" style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary);">-</div>
         </div>
     </div>
 
-    <!-- Search Bar -->
-    <div style="margin-bottom: var(--spacing-4);">
-        <div class="input-group">
-            <span class="input-group-icon">
-                <i class="fas fa-search"></i>
-            </span>
-            <input type="text" id="action-log-search" class="form-control" placeholder="Search by event type, user ID, action, or details...">
-        </div>
+    <!-- Filters -->
+    <div style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+        <select id="al-type-filter" class="form-select" style="max-width: 240px; font-size: 0.85rem;">
+            <option value="">All Event Types</option>
+        </select>
+        <input type="text" id="al-user-filter" class="form-control" placeholder="Filter by User ID..." style="max-width: 220px; font-size: 0.85rem;">
+        <button onclick="loadAuditLogs(1)" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.5rem 1rem;">
+            <i class="fas fa-search"></i> Filter
+        </button>
     </div>
 
-    <!-- Action Log Table -->
-    <% if (actionLogsData.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th style="width: 12%;">Event Type</th>
-                        <th style="width: 18%;">Action</th>
-                        <th style="width: 12%;">User</th>
-                        <th style="width: 12%;">Target</th>
-                        <th style="width: 12%;">Moderator</th>
-                        <th style="width: 22%;">Details</th>
-                        <th style="width: 12%;">Timestamp</th>
-                    </tr>
-                </thead>
-                <tbody id="action-log-table-body">
-                    <% actionLogsData.forEach(log => { %>
-                        <tr class="action-log-row" data-search="<%= log.event_type %> <%= log.action %> <%= log.user_id || '' %> <%= log.target_id || '' %>">
-                            <td>
-                                <%
-                                const eventColors = {
-                                    'moderation': 'var(--color-danger)',
-                                    'messageDelete': 'var(--color-warning)',
-                                    'messageUpdate': 'var(--color-primary-400)',
-                                    'memberUpdate': 'var(--color-accent-purple)',
-                                    'memberLeave': 'var(--color-text-muted)',
-                                    'ban': 'var(--color-danger)',
-                                    'unban': 'var(--color-success)'
-                                };
-                                const bgColor = eventColors[log.event_type] || 'var(--color-text-muted)';
-                                %>
-                                <span class="badge" style="background: <%= bgColor %>; color: white; font-size: var(--font-size-xs);">
-                                    <%= log.event_type %>
-                                </span>
-                            </td>
-                            <td>
-                                <span style="font-weight: var(--font-weight-medium); color: var(--color-text-primary);">
-                                    <%= log.action %>
-                                </span>
-                            </td>
-                            <td>
-                                <% if (log.user_id) { %>
-                                    <code style="font-size: var(--font-size-xs); background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
-                                        <%= log.user_id.substring(0, 8) %>...
-                                    </code>
-                                <% } else { %>
-                                    <span style="color: var(--color-text-muted); font-size: var(--font-size-sm);">N/A</span>
-                                <% } %>
-                            </td>
-                            <td>
-                                <% if (log.target_id) { %>
-                                    <code style="font-size: var(--font-size-xs); background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
-                                        <%= log.target_id.substring(0, 8) %>...
-                                    </code>
-                                <% } else { %>
-                                    <span style="color: var(--color-text-muted); font-size: var(--font-size-sm);">N/A</span>
-                                <% } %>
-                            </td>
-                            <td>
-                                <% if (log.moderator_id) { %>
-                                    <code style="font-size: var(--font-size-xs); background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
-                                        <%= log.moderator_id.substring(0, 8) %>...
-                                    </code>
-                                <% } else { %>
-                                    <span style="color: var(--color-text-muted); font-size: var(--font-size-sm);">N/A</span>
-                                <% } %>
-                            </td>
-                            <td>
-                                <% if (log.old_value || log.new_value) { %>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">
-                                        <% if (log.old_value) { %>
-                                            <div style="margin-bottom: var(--spacing-1);">
-                                                <strong style="color: var(--color-text-muted);">Old:</strong>
-                                                <%= log.old_value.substring(0, 30) %><%= log.old_value.length > 30 ? '...' : '' %>
-                                            </div>
-                                        <% } %>
-                                        <% if (log.new_value) { %>
-                                            <div>
-                                                <strong style="color: var(--color-text-muted);">New:</strong>
-                                                <%= log.new_value.substring(0, 30) %><%= log.new_value.length > 30 ? '...' : '' %>
-                                            </div>
-                                        <% } %>
-                                    </div>
-                                <% } else if (log.reason) { %>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">
-                                        <strong style="color: var(--color-text-muted);">Reason:</strong> <%= log.reason %>
-                                    </div>
-                                <% } else if (log.details) { %>
-                                    <%
-                                    let details;
-                                    try {
-                                        details = typeof log.details === 'string' ? JSON.parse(log.details) : log.details;
-                                    } catch (e) {
-                                        details = {};
-                                    }
-                                    %>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">
-                                        <%= Object.entries(details).slice(0, 2).map(([k, v]) => `${k}: ${String(v).substring(0, 20)}`).join(', ') %>
-                                    </div>
-                                <% } else { %>
-                                    <span style="color: var(--color-text-muted);">-</span>
-                                <% } %>
-                            </td>
-                            <td>
-                                <span style="font-size: var(--font-size-xs); color: var(--color-text-secondary);">
-                                    <%= new Date(log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) %>
-                                </span>
-                            </td>
-                        </tr>
-                    <% }); %>
-                </tbody>
-            </table>
-        </div>
+    <!-- Log Table -->
+    <div style="overflow-x: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;">
+        <table class="data-table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Event</th>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Action</th>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">User</th>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Target</th>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Details</th>
+                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">When</th>
+                </tr>
+            </thead>
+            <tbody id="al-body">
+                <tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
 
-        <div style="margin-top: var(--spacing-4); padding: var(--spacing-3); background: var(--color-dark-600); border-radius: var(--radius-md); border-left: 3px solid var(--color-primary-500);">
-            <div style="display: flex; align-items: center; gap: var(--spacing-2); color: var(--color-text-secondary); font-size: var(--font-size-sm);">
-                <i class="fas fa-info-circle" style="color: var(--color-primary-400);"></i>
-                <span>Showing <%= actionLogsData.length %> most recent entries. Action logs are retained for 90 days.</span>
-            </div>
-        </div>
-    <% } else { %>
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="fas fa-history"></i>
-            </div>
-            <div class="empty-state-title">No Action Logs</div>
-            <div class="empty-state-description">
-                Server events and actions will appear here once logging is enabled
-            </div>
-        </div>
-    <% } %>
+    <!-- Pagination -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+        <button id="al-prev" onclick="loadAuditLogs(currentPage - 1)" class="btn btn-secondary" style="font-size: 0.8rem;" disabled>
+            <i class="fas fa-chevron-left"></i> Previous
+        </button>
+        <span id="al-page-info" style="font-size: 0.8rem; color: var(--text-muted);"></span>
+        <button id="al-next" onclick="loadAuditLogs(currentPage + 1)" class="btn btn-secondary" style="font-size: 0.8rem;">
+            Next <i class="fas fa-chevron-right"></i>
+        </button>
+    </div>
 </div>
 
-<style>
-.input-group {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.input-group-icon {
-    position: absolute;
-    left: var(--spacing-3);
-    color: var(--color-text-muted);
-    z-index: 1;
-}
-
-.input-group .form-control {
-    padding-left: var(--spacing-10);
-}
-
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-700);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-    vertical-align: top;
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-700);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-</style>
-
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const searchInput = document.getElementById('action-log-search');
-    const tableBody = document.getElementById('action-log-table-body');
+(function() {
+    var GUILD_ID = '<%= guild.id %>';
+    var currentPage = 1;
+    var totalPages = 1;
+    window.currentPage = currentPage;
 
-    if (searchInput && tableBody) {
-        searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            const rows = tableBody.querySelectorAll('.action-log-row');
+    loadAuditLogs(1);
 
-            rows.forEach(row => {
-                const searchData = row.dataset.search.toLowerCase();
-                const cells = Array.from(row.querySelectorAll('td')).map(td => td.textContent.toLowerCase()).join(' ');
+    window.loadAuditLogs = async function(page) {
+        if (page < 1) return;
+        currentPage = page;
+        window.currentPage = page;
 
-                if (searchData.includes(query) || cells.includes(query)) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
+        var typeFilter = document.getElementById('al-type-filter').value;
+        var userFilter = document.getElementById('al-user-filter').value.trim();
+
+        var url = '/manage/' + GUILD_ID + '/audit-logs?page=' + page + '&limit=50';
+        if (typeFilter) url += '&type=' + encodeURIComponent(typeFilter);
+        if (userFilter) url += '&user=' + encodeURIComponent(userFilter);
+
+        try {
+            var resp = await fetch(url, { credentials: 'include' });
+            var data = await resp.json();
+
+            document.getElementById('al-total').textContent = data.total.toLocaleString();
+            document.getElementById('al-types').textContent = data.eventTypes.length;
+            document.getElementById('al-page').textContent = data.page + '/' + data.totalPages;
+            totalPages = data.totalPages;
+
+            // Populate type filter on first load
+            var select = document.getElementById('al-type-filter');
+            if (select.options.length <= 1 && data.eventTypes.length) {
+                data.eventTypes.forEach(function(t) {
+                    var opt = document.createElement('option');
+                    opt.value = t; opt.textContent = t.replace(/_/g, ' ');
+                    select.appendChild(opt);
+                });
+            }
+
+            renderLogs(data.logs);
+
+            document.getElementById('al-prev').disabled = page <= 1;
+            document.getElementById('al-next').disabled = page >= totalPages;
+            document.getElementById('al-page-info').textContent = 'Page ' + page + ' of ' + totalPages + ' (' + data.total + ' events)';
+        } catch (err) {
+            document.getElementById('al-body').textContent = '';
+            var tr = document.createElement('tr');
+            var td = document.createElement('td');
+            td.colSpan = 6;
+            td.style.cssText = 'text-align:center;padding:2rem;color:var(--accent-red)';
+            td.textContent = 'Error loading logs: ' + err.message;
+            tr.appendChild(td);
+            document.getElementById('al-body').appendChild(tr);
+        }
+    };
+
+    var eventColors = {
+        'MEMBER_BAN_ADD': '#ef4444', 'MEMBER_BAN_REMOVE': '#23f56b', 'MEMBER_KICK': '#fb923c',
+        'MEMBER_ROLES_ADDED': '#a78bfa', 'MEMBER_ROLES_REMOVED': '#f87171',
+        'MEMBER_JOIN': '#22d3ee', 'MEMBER_LEAVE': '#6b7280',
+        'MESSAGE_DELETE': '#fbbf24', 'MESSAGE_UPDATE': '#60a5fa',
+        'CHANNEL_CREATE': '#23f56b', 'CHANNEL_DELETE': '#f87171', 'CHANNEL_UPDATE': '#60a5fa',
+        'ROLE_CREATE': '#a78bfa', 'ROLE_DELETE': '#f87171', 'ROLE_UPDATE': '#818cf8'
+    };
+
+    function renderLogs(logs) {
+        var tbody = document.getElementById('al-body');
+        tbody.textContent = '';
+
+        if (!logs.length) {
+            var tr = document.createElement('tr');
+            var td = document.createElement('td');
+            td.colSpan = 6;
+            td.style.cssText = 'text-align:center;padding:2rem;color:var(--text-muted)';
+            td.textContent = 'No events found';
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+            return;
+        }
+
+        logs.forEach(function(log) {
+            var tr = document.createElement('tr');
+            tr.style.transition = 'background 0.15s';
+            tr.onmouseenter = function() { tr.style.background = 'rgba(255,255,255,0.02)'; };
+            tr.onmouseleave = function() { tr.style.background = ''; };
+
+            var tdStyle = 'padding:0.6rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;vertical-align:top;';
+
+            // Event type badge
+            var td1 = document.createElement('td');
+            td1.style.cssText = tdStyle;
+            var badge = document.createElement('span');
+            var color = eventColors[log.event_type] || '#6b7280';
+            badge.style.cssText = 'background:' + color + '20;color:' + color + ';padding:0.2rem 0.5rem;border-radius:4px;font-size:0.7rem;font-weight:600;white-space:nowrap;';
+            badge.textContent = log.event_type.replace(/_/g, ' ');
+            td1.appendChild(badge);
+
+            // Action
+            var td2 = document.createElement('td');
+            td2.style.cssText = tdStyle + 'color:var(--text-primary);font-weight:500;';
+            td2.textContent = log.action || '-';
+
+            // User
+            var td3 = document.createElement('td');
+            td3.style.cssText = tdStyle;
+            td3.textContent = log.userName || (log.user_id ? log.user_id.substring(0, 8) + '...' : '-');
+
+            // Target
+            var td4 = document.createElement('td');
+            td4.style.cssText = tdStyle;
+            td4.textContent = log.targetName || (log.target_id ? log.target_id.substring(0, 8) + '...' : '-');
+
+            // Details
+            var td5 = document.createElement('td');
+            td5.style.cssText = tdStyle + 'color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            if (log.old_value || log.new_value) {
+                td5.textContent = (log.old_value ? 'Old: ' + String(log.old_value).substring(0, 30) : '') + (log.new_value ? ' New: ' + String(log.new_value).substring(0, 30) : '');
+            } else if (log.reason) {
+                td5.textContent = log.reason;
+            } else {
+                td5.textContent = '-';
+            }
+            td5.title = td5.textContent;
+
+            // Timestamp
+            var td6 = document.createElement('td');
+            td6.style.cssText = tdStyle + 'color:var(--text-muted);white-space:nowrap;';
+            var d = new Date(log.timestamp);
+            td6.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+            tr.appendChild(td1);
+            tr.appendChild(td2);
+            tr.appendChild(td3);
+            tr.appendChild(td4);
+            tr.appendChild(td5);
+            tr.appendChild(td6);
+            tbody.appendChild(tr);
         });
     }
-});
+})();
 </script>

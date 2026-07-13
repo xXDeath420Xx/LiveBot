@@ -66,11 +66,35 @@
                 <div style="display: flex; gap: var(--spacing-3);">
                     <i class="fas fa-info-circle" style="color: var(--color-primary-400); margin-top: 2px;"></i>
                     <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                        Backups include: roles, channels, categories, permissions, and basic settings. Messages and user data are not included.
+                        Backups include: roles, channels, categories, permission overwrites, server settings, emojis, stickers, webhooks, bans, member role assignments, all bot configuration, and a full member snapshot for rejoin restoration.
                     </div>
                 </div>
             </div>
         </form>
+
+        <!-- Restore Settings -->
+        <div style="margin-top: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);">
+            <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
+                <i class="fas fa-user-clock" style="color: var(--color-primary-400); font-size: 1.1rem;"></i>
+                <div>
+                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Rejoin Restoration Window</div>
+                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">When restoring, members who rejoin within this period get their roles automatically reassigned</div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
+                <select id="restore-grace-period" class="form-select" style="max-width: 200px;">
+                    <option value="7">7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30" selected>30 days (default)</option>
+                    <option value="60">60 days</option>
+                    <option value="90">90 days</option>
+                    <option value="0">Disabled</option>
+                </select>
+                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                    Applied when you click Restore on a backup below
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Backups List -->
@@ -115,8 +139,13 @@
                             </td>
                             <td class="text-end">
                                 <div style="display: flex; gap: var(--spacing-2); justify-content: flex-end;">
-                                    <form action="/manage/<%= guild.id %>/restore-backup" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to restore this backup? This will overwrite current server settings!');">
+                                    <button type="button" class="btn btn-sm btn-secondary" title="Compare with current" onclick="showDiff('<%= guild.id %>', '<%= backup.id %>')">
+                                        <i class="fas fa-code-branch"></i>
+                                        <span>Diff</span>
+                                    </button>
+                                    <form action="/manage/<%= guild.id %>/restore-backup" method="POST" style="display: inline;" onsubmit="this.querySelector('[name=gracePeriod]').value = document.getElementById('restore-grace-period').value; return confirm('Are you sure you want to restore this backup? This will overwrite current server settings!');">
                                         <input type="hidden" name="backupId" value="<%= backup.id %>">
+                                        <input type="hidden" name="gracePeriod" value="30">
                                         <button type="submit" class="btn btn-sm btn-secondary" title="Restore">
                                             <i class="fas fa-undo"></i>
                                             <span>Restore</span>
@@ -244,4 +273,89 @@
     color: var(--color-text-muted);
     margin-top: var(--spacing-2);
 }
+.diff-overlay { display:none; position:fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,0.7); z-index:10000; justify-content:center; align-items:center; backdrop-filter:blur(4px); }
+.diff-overlay.active { display:flex; }
+.diff-modal { background:#1a1d23; border:1px solid rgba(167,139,250,0.3); border-radius:16px; width:90%; max-width:600px; max-height:85vh; overflow-y:auto; box-shadow:0 24px 48px rgba(0,0,0,0.5); }
+.diff-header { padding:1.25rem 1.5rem; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; }
+.diff-header h3 { margin:0; font-size:1.1rem; font-weight:700; color:#fff; }
+.diff-close { background:none; border:none; color:rgba(255,255,255,0.5); font-size:1.2rem; cursor:pointer; }
+.diff-body { padding:1.5rem; }
+.diff-section { margin-bottom:1.25rem; }
+.diff-section-title { font-size:0.8rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:rgba(255,255,255,0.5); margin-bottom:0.5rem; }
+.diff-item { padding:0.4rem 0.75rem; border-radius:6px; font-size:0.82rem; margin-bottom:0.25rem; }
+.diff-added { background:rgba(35,245,107,0.1); color:#23f56b; }
+.diff-removed { background:rgba(248,113,113,0.1); color:#f87171; }
+.diff-changed { background:rgba(251,191,36,0.1); color:#fbbf24; }
+.diff-identical { text-align:center; padding:2rem; color:rgba(255,255,255,0.4); }
+.diff-summary { padding:1rem 1.5rem; border-top:1px solid rgba(255,255,255,0.08); font-size:0.8rem; color:rgba(255,255,255,0.5); }
 </style>
+
+<div class="diff-overlay" id="diffOverlay">
+    <div class="diff-modal">
+        <div class="diff-header">
+            <h3 id="diffTitle">Backup Diff</h3>
+            <button class="diff-close" onclick="closeDiff()">&times;</button>
+        </div>
+        <div class="diff-body" id="diffBody"></div>
+        <div class="diff-summary" id="diffSummary"></div>
+    </div>
+</div>
+
+<script>
+async function showDiff(guildId, backupId) {
+    document.getElementById('diffOverlay').classList.add('active');
+    document.getElementById('diffBody').textContent = 'Comparing...';
+    document.getElementById('diffSummary').textContent = '';
+    try {
+        var resp = await fetch('/api/guilds/' + guildId + '/backup-diff/' + backupId, { credentials: 'include' });
+        var data = await resp.json();
+        if (!data.success) throw new Error(data.error);
+        renderDiff(data.diff);
+    } catch (err) {
+        document.getElementById('diffBody').textContent = 'Error: ' + err.message;
+    }
+}
+function closeDiff() { document.getElementById('diffOverlay').classList.remove('active'); }
+function renderDiff(diff) {
+    var body = document.getElementById('diffBody');
+    var summary = document.getElementById('diffSummary');
+    document.getElementById('diffTitle').textContent = 'Diff: ' + (diff.summary.backupName || 'Backup');
+    if (diff.summary.identical) {
+        body.textContent = 'Server matches this backup perfectly. No differences found.';
+        summary.textContent = '0 changes';
+        return;
+    }
+    body.textContent = '';
+    function addItems(title, items) {
+        if (!items.length) return;
+        var sec = document.createElement('div'); sec.className = 'diff-section';
+        var t = document.createElement('div'); t.className = 'diff-section-title'; t.textContent = title; sec.appendChild(t);
+        items.forEach(function(item) {
+            var el = document.createElement('div'); el.className = 'diff-item ' + item.c;
+            el.textContent = item.t; sec.appendChild(el);
+        });
+        body.appendChild(sec);
+    }
+    var ri = [];
+    diff.roles.removed.forEach(function(r) { ri.push({c:'diff-removed',t:'- Missing: '+r}); });
+    diff.roles.added.forEach(function(r) { ri.push({c:'diff-added',t:'+ New: '+r}); });
+    diff.roles.changed.forEach(function(r) { ri.push({c:'diff-changed',t:'~ '+r.name+': '+r.changes.join(', ')}); });
+    addItems('Roles', ri);
+    var ci = [];
+    diff.categories.removed.forEach(function(c) { ci.push({c:'diff-removed',t:'- Missing: '+c}); });
+    diff.categories.added.forEach(function(c) { ci.push({c:'diff-added',t:'+ New: '+c}); });
+    addItems('Categories', ci);
+    var ch = [];
+    diff.channels.removed.forEach(function(c) { ch.push({c:'diff-removed',t:'- Missing: #'+c}); });
+    diff.channels.added.forEach(function(c) { ch.push({c:'diff-added',t:'+ New: '+c}); });
+    addItems('Channels', ch);
+    var si = [];
+    diff.settings.forEach(function(s) { si.push({c:'diff-changed',t:'~ '+s}); });
+    addItems('Settings', si);
+    var ei = [];
+    if (diff.emojis.removed) ei.push({c:'diff-removed',t:'- '+diff.emojis.removed+' emoji(s) removed since backup'});
+    if (diff.emojis.added) ei.push({c:'diff-added',t:'+ '+diff.emojis.added+' emoji(s) added since backup'});
+    addItems('Emojis', ei);
+    summary.textContent = diff.summary.totalChanges + ' change(s) \u00b7 Backup v' + diff.summary.backupVersion + ' from ' + new Date(diff.summary.backupDate).toLocaleDateString();
+}
+</script>

@@ -232,6 +232,32 @@ async function getLatestVod(twitchUsername) {
     }
 }
 
+async function getFollowerCount(twitchUsername) {
+    if (!twitchUsername || typeof twitchUsername !== 'string') return null;
+
+    try {
+        const user = await getTwitchUser(twitchUsername);
+        if (!user) return null;
+
+        const token = await getAccessToken();
+        const response = await axios.get(
+            `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${user.id}`,
+            {
+                headers: {
+                    'Client-ID': process.env.TWITCH_CLIENT_ID,
+                    'Authorization': `Bearer ${token}`
+                }
+            }
+        );
+
+        return response.data.total ?? null;
+    } catch (error) {
+        const errorData = axios.isAxiosError(error) ? (error.response?.data || error.message) : 'Unknown error';
+        logger.error(`[Twitch Followers] Error fetching follower count for ${twitchUsername}:`, { error: errorData, category: 'twitch' });
+        return null;
+    }
+}
+
 async function getApiStatus() {
     try {
         await getAccessToken();
@@ -239,6 +265,66 @@ async function getApiStatus() {
     } catch (error) {
         return false;
     }
+}
+
+/**
+ * Get all VIPs for a channel using broadcaster's OAuth token.
+ */
+async function getChannelVIPs(broadcasterId, accessToken) {
+    const vips = [];
+    let cursor = null;
+    do {
+        const params = new URLSearchParams({ broadcaster_id: broadcasterId, first: '100' });
+        if (cursor) params.set('after', cursor);
+        const response = await axios.get(`https://api.twitch.tv/helix/channels/vips?${params}`, {
+            headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${accessToken}` }
+        });
+        vips.push(...(response.data.data || []));
+        cursor = response.data.pagination?.cursor || null;
+    } while (cursor);
+    return vips;
+}
+
+/**
+ * Get all Moderators for a channel using broadcaster's OAuth token.
+ */
+async function getChannelModerators(broadcasterId, accessToken) {
+    const mods = [];
+    let cursor = null;
+    do {
+        const params = new URLSearchParams({ broadcaster_id: broadcasterId, first: '100' });
+        if (cursor) params.set('after', cursor);
+        const response = await axios.get(`https://api.twitch.tv/helix/moderation/moderators?${params}`, {
+            headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${accessToken}` }
+        });
+        mods.push(...(response.data.data || []));
+        cursor = response.data.pagination?.cursor || null;
+    } while (cursor);
+    return mods;
+}
+
+/**
+ * Remove a VIP from a channel using broadcaster's OAuth token.
+ */
+async function removeChannelVIP(broadcasterId, userId, broadcasterAccessToken) {
+    await axios.delete(`https://api.twitch.tv/helix/channels/vips?broadcaster_id=${broadcasterId}&user_id=${userId}`, {
+        headers: { 'Client-ID': process.env.TWITCH_CLIENT_ID, 'Authorization': `Bearer ${broadcasterAccessToken}` }
+    });
+}
+
+/**
+ * Refresh a broadcaster's OAuth token.
+ */
+async function refreshBroadcasterToken(refreshToken) {
+    const response = await axios.post('https://id.twitch.tv/oauth2/token', null, {
+        params: {
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken,
+            client_id: process.env.TWITCH_CLIENT_ID,
+            client_secret: process.env.TWITCH_CLIENT_SECRET
+        }
+    });
+    return response.data;
 }
 
 export {
@@ -249,5 +335,10 @@ export {
     getTwitchUsers,
     getTwitchTeamMembers,
     getLatestVod,
-    getApiStatus
+    getFollowerCount,
+    getApiStatus,
+    getChannelVIPs,
+    getChannelModerators,
+    removeChannelVIP,
+    refreshBroadcasterToken
 };

@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>CAH — Game <%= game.id.slice(0, 8) %> — CertiFried MultiTool</title>
+<%- include('components/cah-shell-head') %>
+<style>
+    .game-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 0 0.75rem; gap: 1rem; flex-wrap: wrap; }
+    .game-header h2 { font-size: 1.4rem; font-weight: 700; }
+    .game-header .game-id { color: var(--text-muted); font-family: ui-monospace, monospace; font-size: 0.85rem; margin-left: 0.5rem; }
+
+    #status { display: inline-flex; align-items: center; padding: 0.5rem 0.85rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem; color: var(--text-secondary); }
+
+    .meta-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.75rem 0 1.25rem; }
+
+    .czar-banner { background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(167, 139, 250, 0.2)); border: 1px solid rgba(251, 191, 36, 0.4); color: var(--accent-amber); padding: 0.85rem 1.25rem; border-radius: 10px; font-weight: 600; text-align: center; margin-bottom: 1rem; }
+    .spectator-banner { background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.3); color: var(--accent-blue); padding: 0.75rem 1.25rem; border-radius: 10px; text-align: center; margin-bottom: 1rem; font-size: 0.9rem; }
+    .countdown-banner { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--accent-red); padding: 0.65rem 1rem; border-radius: 8px; text-align: center; font-weight: 600; margin-bottom: 1rem; display: none; }
+
+    .layout { display: grid; grid-template-columns: 1fr 320px; gap: 1.5rem; padding-bottom: 3rem; }
+    @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+    /* Scoreboard */
+    .scoreboard { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+    .scoreboard h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .scoreboard ul { list-style: none; }
+    .scoreboard li { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
+    .scoreboard li:last-child { border-bottom: none; }
+    .scoreboard .crown { color: var(--accent-amber); }
+    .scoreboard .points { margin-left: auto; color: var(--accent-purple); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .scoreboard .check { color: var(--accent-green); }
+    #lobby-controls { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+    /* Black card */
+    .black-card-wrap { padding: 0.5rem 0 1rem; }
+    .black-card {
+        background: #000; color: #fff; padding: 2rem 1.5rem;
+        border-radius: 16px; font-size: 1.5rem; line-height: 1.4; font-weight: 700;
+        min-height: 160px; border: 1px solid #222;
+        display: flex; align-items: center; justify-content: center; text-align: center;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        position: relative;
+    }
+    .black-card::before { content: '🃏'; position: absolute; top: 0.75rem; left: 1rem; font-size: 0.85rem; opacity: 0.5; }
+    .black-card .pick-badge { position: absolute; bottom: 0.75rem; right: 1rem; background: #fff; color: #000; font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* Hand grid */
+    .hand-section h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 1rem 0 0.75rem; }
+    .hand { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.6rem; }
+    .white-card {
+        background: #f5f5f0; color: #111; padding: 0.85rem;
+        border-radius: 10px; cursor: pointer; user-select: none;
+        min-height: 80px; font-size: 0.9rem; font-weight: 500;
+        border: 2px solid transparent;
+        transition: transform 0.1s, box-shadow 0.15s, border-color 0.15s;
+        position: relative;
+        display: flex; align-items: flex-start;
+    }
+    .white-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3); }
+    .white-card.selected { border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.3); }
+    .white-card.blank { background: linear-gradient(135deg, #e6dcff, #f5f5f0); font-style: italic; color: #6d28d9; }
+    .white-card .order-badge { position: absolute; top: 6px; right: 8px; background: var(--accent-purple); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; }
+
+    #btn-submit { margin-top: 1rem; }
+    #btn-burn-hand { margin-top: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--accent-red); padding: 0.5rem 0.85rem; border-radius: 6px; font-size: 0.78rem; cursor: pointer; font-family: inherit; display: none; }
+    #btn-burn-hand:hover { background: rgba(239, 68, 68, 0.2); }
+
+    /* Card-flip animation on submission reveal */
+    .submissions .white-card { animation: cardFlip 0.4s ease-out backwards; }
+    @keyframes cardFlip { from { transform: rotateY(90deg); opacity: 0; } to { transform: rotateY(0); opacity: 1; } }
+    .submissions .white-card:nth-child(2) { animation-delay: 0.08s; }
+    .submissions .white-card:nth-child(3) { animation-delay: 0.16s; }
+    .submissions .white-card:nth-child(4) { animation-delay: 0.24s; }
+    .submissions .white-card:nth-child(5) { animation-delay: 0.32s; }
+    .submissions .white-card:nth-child(6) { animation-delay: 0.40s; }
+
+    /* Confetti */
+    #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 9999; display: none; }
+    #confetti-canvas.firing { display: block; }
+
+    /* Judging submissions */
+    .judging-section { margin-top: 1rem; }
+    .judging-section h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.75rem; }
+    .submissions { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.6rem; }
+    .submissions .white-card { font-size: 0.92rem; padding: 1rem; }
+    .submissions .sub-num { display: inline-block; background: var(--accent-purple); color: #fff; font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; margin-right: 0.4rem; }
+
+    /* Chat panel */
+    .chat-panel { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; height: fit-content; max-height: 600px; min-height: 420px; }
+    .chat-panel h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .chat-messages { flex: 1; overflow-y: auto; min-height: 200px; max-height: 420px; padding: 0.4rem; background: var(--bg-secondary); border-radius: 8px; font-size: 0.85rem; border: 1px solid var(--border-color); }
+    .chat-msg { padding: 0.4rem 0.2rem; border-bottom: 1px solid var(--border-color); }
+    .chat-msg:last-child { border-bottom: none; }
+    .chat-msg .from { font-weight: 600; color: var(--accent-blue); }
+    .chat-msg.spectator .from { color: var(--text-muted); font-style: italic; }
+    .chat-msg .time { color: var(--text-muted); font-size: 0.7rem; margin-left: 0.5rem; }
+    .chat-msg .body { color: var(--text-primary); margin-top: 0.15rem; word-wrap: break-word; line-height: 1.4; }
+    .chat-input { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+    .chat-input input { flex: 1; padding: 0.55rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.85rem; font-family: inherit; }
+    .chat-input input:focus { outline: none; border-color: var(--accent-purple); }
+    .chat-empty { color: var(--text-muted); text-align: center; padding: 1rem 0; font-style: italic; font-size: 0.85rem; }
+
+    /* Blank-card modal */
+    .modal-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--bg-secondary); padding: 1.75rem; border-radius: 14px; max-width: 500px; width: 90%; border: 1px solid var(--border-color); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); }
+    .modal h3 { font-size: 1.1rem; margin-bottom: 0.4rem; }
+    .modal p { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.75rem; }
+    .modal textarea { width: 100%; padding: 0.7rem; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; min-height: 80px; font-family: inherit; font-size: 0.95rem; resize: vertical; }
+    .modal textarea:focus { outline: none; border-color: var(--accent-purple); }
+    .modal-actions { margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end; }
+</style>
+</head>
+<body>
+<%- include('components/cah-shell-nav', { user, page: 'game' }) %>
+<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'CAH' }, { href: '/cah', label: 'Lobbies' }, { label: 'Game ' + game.id.slice(0, 8) }] }) %>
+
+<div class="container">
+    <div class="game-header">
+        <div>
+            <h2>🃏 CAH<span class="game-id"><%= game.id.slice(0, 8) %></span></h2>
+        </div>
+        <div id="status">Connecting…</div>
+    </div>
+
+    <% if (typeof user === 'undefined' || !user) { %>
+        <div class="spectator-banner" id="guest-banner" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
+            <span id="guest-banner-text">👀 Watching as a guest — pick a name to join the game.</span>
+            <div style="display:flex;gap:0.5rem;">
+                <button class="btn btn-primary btn-sm" onclick="guestPickName()">Pick a name</button>
+                <a href="/auth/discord" class="btn btn-outline btn-sm">Or sign in</a>
+            </div>
+        </div>
+    <% } %>
+
+    <!-- Guest username prompt (also on the game page so anonymous users can join from here) -->
+    <div class="modal-bg" id="guest-modal" style="display:none;align-items:center;justify-content:center;">
+        <div class="modal">
+            <h3 style="margin-top:0;">👋 Pick a name to play</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Other players will see this in the game.</p>
+            <input id="guest-username" type="text" maxlength="24" minlength="2" placeholder="e.g. Bean Goblin" style="width:100%;padding:0.7rem;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:8px;font-family:inherit;" autocomplete="off">
+            <div id="guest-error" style="display:none;color:var(--accent-red);font-size:0.85rem;margin-top:0.5rem;"></div>
+            <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:flex-end;">
+                <button class="btn btn-ghost" onclick="document.getElementById('guest-modal').style.display='none'">Cancel</button>
+                <button class="btn btn-primary" onclick="submitGuestName()">Join Game →</button>
+            </div>
+        </div>
+    </div>
+    <div id="spectator-banner" class="spectator-banner" style="display:none;">👀 You're spectating. The game host can let you join when a slot opens.</div>
+    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom: 0.5rem;">
+        <div class="turn-timer" id="turn-timer">
+            <span class="phase-pill" id="phase-pill">Round</span>
+            <span class="time-left" id="time-left">--:--</span>
+        </div>
+    </div>
+    <div id="countdown-banner" class="countdown-banner">⏰ <span id="countdown-text">10 seconds left to act!</span></div>
+
+    <div class="meta-row">
+        <span class="pill pill-purple"><%= game.settings.pointsToWin %> pts to win</span>
+        <span class="pill"><%= game.settings.maxRounds %> rounds max</span>
+        <span class="pill"><%= game.settings.czarRotation %> czar</span>
+        <% if (game.settings.timeoutEnabled) { %><span class="pill">⏱️ <%= game.settings.timeoutSeconds %>s</span><% } %>
+        <% if (game.settings.blankCardCount > 0) { %><span class="pill pill-amber">✍️ <%= game.settings.blankCardCount %> blanks</span><% } %>
+        <% if (game.settings.randoCount > 0) { %><span class="pill">🤖 <%= game.settings.randoCount %> Rando</span><% } %>
+        <% if (game.settings.nsfw) { %><span class="pill pill-red">🔞 NSFW</span><% } %>
+    </div>
+
+    <div class="layout">
+        <div>
+            <div class="scoreboard">
+                <h3>Players</h3>
+                <ul id="player-list"></ul>
+                <div id="lobby-controls" style="display:none; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <button class="btn btn-primary btn-sm" id="btn-join">Join Game</button>
+                    <button class="btn btn-primary btn-sm" id="btn-start" style="display:none;">Start Game</button>
+                    <span id="start-hint" style="display:none; color: var(--text-muted); font-size: 0.8rem;"></span>
+                </div>
+                <div class="host-controls" id="host-controls" style="display:none;">
+                    <span class="host-pill">👑 Host</span>
+                    <button class="btn btn-outline btn-sm" id="btn-end" onclick="confirmEnd()">End Game</button>
+                </div>
+            </div>
+
+            <div id="czar-banner" class="czar-banner" style="display:none;">👑 You're the Card Czar this round — wait for everyone to submit.</div>
+
+            <div class="black-card-wrap">
+                <div class="black-card" id="black-card">Waiting for game to start…</div>
+            </div>
+
+            <div class="hand-section" id="hand-section">
+                <h3>Your Hand</h3>
+                <div id="hand" class="hand"></div>
+                <button class="btn btn-primary" id="btn-submit" style="display:none;">Submit selected card(s)</button>
+                <button type="button" id="btn-burn-hand" onclick="confirmBurnHand()" title="Sacrifice 1 point to get a fresh hand">🔥 Burn hand (-1 pt)</button>
+            </div>
+
+            <div class="judging-section" id="judging-section" style="display:none;">
+                <h3>Submissions</h3>
+                <div id="submissions" class="submissions"></div>
+            </div>
+        </div>
+
+        <aside class="chat-panel">
+            <h3>💬 Game Chat</h3>
+            <div id="chat-messages" class="chat-messages">
+                <div class="chat-empty">No messages yet.</div>
+            </div>
+            <div class="chat-input">
+                <input id="chat-input" type="text" maxlength="500" placeholder="Type a message…">
+                <button class="btn btn-primary btn-sm" id="chat-send">Send</button>
+            </div>
+        </aside>
+    </div>
+</div>
+
+<div class="modal-bg" id="blank-modal">
+    <div class="modal">
+        <h3>✍️ Fill in your blank card</h3>
+        <p>Write whatever answer you want — up to 200 characters.</p>
+        <textarea id="blank-text" maxlength="200" placeholder="Type your answer..."></textarea>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="cancelBlank()">Cancel</button>
+            <button class="btn btn-primary" id="blank-confirm">Use this answer</button>
+        </div>
+    </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const GAME_ID = <%- JSON.stringify(game.id) %>;
+    let ME = <%- JSON.stringify(user?.id || null) %>;
+    let IS_GUEST = ME === null;
+
+    // Anonymous users can become guests on this page too — if they pick a name,
+    // reload picks up the session and they're now a player.
+    function guestPickName() {
+        document.getElementById('guest-modal').style.display = 'flex';
+        setTimeout(() => document.getElementById('guest-username')?.focus(), 50);
+    }
+    async function submitGuestName() {
+        const username = document.getElementById('guest-username').value.trim();
+        const err = document.getElementById('guest-error');
+        err.style.display = 'none';
+        if (username.length < 2 || username.length > 24) { err.textContent = 'Name must be 2–24 characters.'; err.style.display = 'block'; return; }
+        const r = await cfetch('/cah/guest/identity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) });
+        const d = await r.json();
+        if (!d.ok) { err.textContent = d.message || d.reason; err.style.display = 'block'; return; }
+        // Reload so socket.io picks up the new session identity. Cleaner than
+        // trying to hot-swap ME mid-connection.
+        location.reload();
+    }
+    const INITIAL = <%- JSON.stringify(game) %>;
+
+    const socket = io({ withCredentials: true });
+    let myHand = [];
+    let blackCard = INITIAL.blackCard || null;
+    let selectedIds = [];
+    let pendingBlankIdx = null;
+    let blankTexts = {};
+    let isCzar = false;
+    let isHost = INITIAL.hostUserId === ME;
+    let inLobby = INITIAL.state === 'LOBBY';
+    // Randos are added at startGame() time, not visible in players list yet.
+    // Use the setting to know what the effective player count will be.
+    const PENDING_RANDOS = Math.min(3, INITIAL.settings.randoCount || 0);
+
+    const $ = (id) => document.getElementById(id);
+    const setStatus = (s) => $('status').textContent = s;
+
+    function el(tag, props = {}, ...children) {
+        const e = document.createElement(tag);
+        for (const [k, v] of Object.entries(props)) {
+            if (k === 'class') e.className = v;
+            else if (k === 'dataset') Object.assign(e.dataset, v);
+            else if (k === 'on') Object.assign(e, v);
+            else if (k === 'style') Object.assign(e.style, v);
+            else e.setAttribute(k, v);
+        }
+        for (const c of children) {
+            if (c == null || c === false) continue;
+            e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+        }
+        return e;
+    }
+
+    function renderPlayers(players) {
+        const ul = $('player-list');
+        ul.replaceChildren(...players.map(p => {
+            const children = [
+                p.isCzar ? el('span', { class: 'crown' }, '👑') : el('span', {}, '•'),
+                el('strong', {}, p.displayName),
+                p.hasSubmitted ? el('span', { class: 'check' }, '✅') : null,
+                el('span', { class: 'points' }, `${p.points} pt${p.points === 1 ? '' : 's'}`)
+            ];
+            // Host gets a kick button per non-self, non-rando player (randos can't be kicked usefully — game would re-add them)
+            if (isHost && p.userId !== ME && p.platform !== 'rando') {
+                children.push(el('button', {
+                    class: 'kick-btn',
+                    title: 'Kick ' + p.displayName,
+                    on: { onclick: (ev) => { ev.preventDefault(); ev.stopPropagation(); kickPlayer(p.userId, p.displayName); } }
+                }, '✕'));
+            }
+            return el('li', {}, ...children);
+        }));
+        const haveMe = players.some(p => p.userId === ME);
+        const humanCount = players.filter(p => p.platform !== 'rando').length;
+        const effectiveTotal = humanCount + PENDING_RANDOS;
+        $('lobby-controls').style.display = inLobby ? 'flex' : 'none';
+        $('btn-join').style.display = (inLobby && !haveMe) ? 'inline-flex' : 'none';
+        const canStart = inLobby && isHost && humanCount >= 1 && effectiveTotal >= 3;
+        $('btn-start').style.display = canStart ? 'inline-flex' : 'none';
+        $('btn-start').textContent = `Start Game (${humanCount} human${humanCount === 1 ? '' : 's'}${PENDING_RANDOS ? ' + ' + PENDING_RANDOS + ' rando' + (PENDING_RANDOS === 1 ? '' : 's') : ''})`;
+        const hint = $('start-hint');
+        if (hint) {
+            if (inLobby && isHost && !canStart) {
+                const need = 3 - effectiveTotal;
+                hint.textContent = `Need ${need} more player${need === 1 ? '' : 's'} to start (or invite a Rando)`;
+                hint.style.display = 'inline-block';
+            } else {
+                hint.style.display = 'none';
+            }
+        }
+        $('spectator-banner').style.display = (!inLobby && !haveMe) ? 'block' : 'none';
+        // Host controls visible to the host at every stage — they need the
+        // cancel/end button in the lobby too, not just mid-game.
+        $('host-controls').style.display = isHost ? 'flex' : 'none';
+        const endBtn = $('btn-end');
+        if (endBtn) endBtn.textContent = inLobby ? 'Cancel Lobby' : 'End Game';
+    }
+
+    function renderBlack(bc) {
+        blackCard = bc;
+        const wrap = $('black-card');
+        wrap.replaceChildren();
+        wrap.appendChild(document.createTextNode(bc ? bc.text.replace(/_____/g, '_______') : 'Waiting for the game to start…'));
+        if (bc && bc.pick) wrap.appendChild(el('span', { class: 'pick-badge' }, `Pick ${bc.pick}`));
+    }
+
+    function renderHand() {
+        const wrap = $('hand');
+        if (isCzar || !myHand.length) { wrap.replaceChildren(); $('btn-submit').style.display = 'none'; return; }
+        const pick = blackCard?.pick || 1;
+        wrap.replaceChildren(...myHand.map(c => {
+            const sel = selectedIds.includes(c.id);
+            const order = selectedIds.indexOf(c.id);
+            const text = c.isBlank ? '✍️ [BLANK — click to write]' : c.text;
+            const node = el('div', {
+                class: `white-card${sel ? ' selected' : ''}${c.isBlank ? ' blank' : ''}`,
+                dataset: { id: String(c.id) },
+                on: { onclick: () => toggleCard(c.id) }
+            }, text);
+            if (sel && pick > 1) node.appendChild(el('span', { class: 'order-badge' }, String(order + 1)));
+            return node;
+        }));
+        const btn = $('btn-submit');
+        btn.disabled = selectedIds.length !== pick;
+        btn.textContent = selectedIds.length === pick ? `Submit ${pick} card${pick === 1 ? '' : 's'}` : `Submit (${selectedIds.length}/${pick})`;
+        btn.style.display = 'inline-flex';
+        // Show "Burn hand" only when actively in SUBMITTING and we have a hand and ace rule is on
+        const burnBtn = $('btn-burn-hand');
+        if (burnBtn) burnBtn.style.display = (myHand.length > 0) ? 'inline-block' : 'none';
+    }
+    function confirmBurnHand() {
+        if (!confirm('Discard your current hand for a fresh 10 cards? Costs 1 point.')) return;
+        socket.emit('cah:burn', { gameId: GAME_ID });
+    }
+
+    function toggleCard(id) {
+        const i = selectedIds.indexOf(id);
+        if (i >= 0) { selectedIds.splice(i, 1); delete blankTexts[id]; }
+        else if (selectedIds.length < (blackCard?.pick || 1)) {
+            if (id < 0) {
+                pendingBlankIdx = id;
+                $('blank-modal').style.display = 'flex';
+                $('blank-text').value = '';
+                $('blank-text').focus();
+                return;
+            }
+            selectedIds.push(id);
+        }
+        renderHand();
+    }
+
+    function cancelBlank() { pendingBlankIdx = null; $('blank-modal').style.display = 'none'; }
+    $('blank-confirm').onclick = () => {
+        const txt = $('blank-text').value.trim();
+        if (!txt || pendingBlankIdx === null) return;
+        blankTexts[pendingBlankIdx] = txt;
+        selectedIds.push(pendingBlankIdx);
+        pendingBlankIdx = null;
+        $('blank-modal').style.display = 'none';
+        renderHand();
+    };
+
+    $('btn-submit').onclick = () => {
+        const picks = selectedIds.map(id => id < 0 ? { id, text: blankTexts[id] } : id);
+        socket.emit('cah:submit', { gameId: GAME_ID, picks });
+    };
+    $('btn-join').onclick = () => doJoin();
+    function doJoin(password) {
+        socket.emit('cah:joinPlayer', { gameId: GAME_ID, password });
+    }
+    $('btn-start').onclick = () => socket.emit('cah:start', { gameId: GAME_ID });
+
+    const REACTIONS = ['👍', '😂', '🤢', '🔥', '💀'];
+    let myReactions = {};   // submissionId -> emoji
+    let allTallies = {};    // submissionId -> { emoji: count }
+
+    function renderJudging(submissions) {
+        const wrap = $('submissions');
+        wrap.classList.toggle('spectate', !isCzar);
+        myReactions = {}; allTallies = {};
+        currentSubmissions = submissions;
+        wrap.replaceChildren(...submissions.map((s, i) => {
+            const text = s.cards.map(c => c.text).join(' / ');
+            const textRow = el('div', { class: 'sub-text' },
+                el('span', { class: 'sub-num' }, String(i + 1)),
+                document.createTextNode(text)
+            );
+            const reactRow = el('div', { class: 'sub-reactions', dataset: { sid: String(s.submissionId) } });
+            REACTIONS.forEach(emoji => {
+                const btn = el('button', {
+                    class: 'react-btn',
+                    dataset: { emoji },
+                    on: { onclick: (ev) => { ev.stopPropagation(); sendReaction(s.submissionId, emoji); } }
+                }, emoji, el('span', { class: 'count' }, ''));
+                reactRow.appendChild(btn);
+            });
+            const node = el('div', { class: 'white-card', dataset: { sid: String(s.submissionId) } }, textRow, reactRow);
+            if (isCzar) {
+                // Click on the text area picks the winner; reaction buttons are separate (stopPropagation above)
+                textRow.style.cursor = 'pointer';
+                textRow.onclick = () => socket.emit('cah:judge', { gameId: GAME_ID, submissionId: s.submissionId });
+            }
+            return node;
+        }));
+        $('judging-section').style.display = 'block';
+    }
+
+    let currentSubmissions = [];
+    function sendReaction(submissionId, emoji) {
+        // Optimistic local toggle so the UI feels snappy
+        const was = myReactions[submissionId];
+        if (was === emoji) delete myReactions[submissionId];
+        else myReactions[submissionId] = emoji;
+        socket.emit('cah:react', { gameId: GAME_ID, submissionId, emoji });
+    }
+
+    function applyTallies(tallies) {
+        allTallies = tallies || {};
+        document.querySelectorAll('.sub-reactions').forEach(row => {
+            const sid = parseInt(row.dataset.sid, 10);
+            const subTally = allTallies[sid] || {};
+            row.querySelectorAll('.react-btn').forEach(btn => {
+                const emoji = btn.dataset.emoji;
+                const count = subTally[emoji] || 0;
+                btn.querySelector('.count').textContent = count > 0 ? String(count) : '';
+                btn.classList.toggle('mine', myReactions[sid] === emoji);
+            });
+        });
+    }
+
+    socket.on('cah:reactionUpdated', (p) => applyTallies(p.tallies));
+
+    socket.on('connect', () => {
+        setStatus('Connected · joining room…');
+        socket.emit('cah:joinGame', { gameId: GAME_ID });
+    });
+
+    socket.on('cah:state', (s) => {
+        inLobby = s.state === 'LOBBY';
+        isCzar = s.czarUserId === ME;
+        renderPlayers(s.players);
+        renderBlack(s.blackCard);
+        renderHand();   // re-check isCzar — fixes "czar sees their hand" when joining mid-round
+        $('czar-banner').style.display = isCzar && s.state === 'SUBMITTING' ? 'block' : 'none';
+        setStatus(`${s.state}${s.round ? ' · Round ' + s.round : ''}`);
+    });
+    socket.on('cah:playerJoined', (p) => renderPlayers(p.players));
+    socket.on('cah:playerLeft',   (p) => renderPlayers(p.players));
+    socket.on('cah:gameStarted',  () => { inLobby = false; selectedIds = []; blankTexts = {}; $('judging-section').style.display = 'none'; });
+    socket.on('cah:roundStarted', (p) => {
+        inLobby = false; selectedIds = []; blankTexts = {};
+        isCzar = p.czarUserId === ME;
+        renderBlack(p.blackCard); renderPlayers(p.players); renderHand();
+        $('czar-banner').style.display = isCzar ? 'block' : 'none';
+        $('judging-section').style.display = 'none';
+        setStatus(`Round ${p.round} · ${isCzar ? 'You judge' : 'Pick ' + p.blackCard.pick}`);
+        startTurnTimer(p.timeoutSeconds || <%= game.settings.timeoutSeconds || 90 %>, 'SUBMIT');
+    });
+    socket.on('cah:hand', (p) => { myHand = p.hand; renderHand(); });
+    socket.on('cah:cardsSubmitted', (p) => {
+        setStatus(`${p.submittedCount}/${p.expectedCount} submitted`);
+        if (p.players) renderPlayers(p.players);
+    });
+    socket.on('cah:judgingStarted', (p) => { selectedIds = []; renderJudging(p.submissions); setStatus(isCzar ? 'Pick the winner →' : 'Czar is judging…'); });
+    socket.on('cah:roundWon', (p) => {
+        setStatus(`🏆 ${p.winnerUserId === ME ? 'You' : 'A player'} won round ${p.round}`);
+        if (p.scores) renderPlayers(p.scores);
+    });
+    socket.on('cah:gameEnded', (p) => {
+        if (p.cancelled) {
+            setStatus('🛑 Lobby cancelled by host.');
+            // Pull the host controls + lobby buttons since the game is over
+            inLobby = false; isHost = false;
+            $('lobby-controls').style.display = 'none';
+            $('host-controls').style.display = 'none';
+            return;
+        }
+        setStatus(`🎉 Game over! Winner${p.winnerUserIds.length > 1 ? 's' : ''}: ${p.winnerUserIds.join(', ')}`);
+    });
+    socket.on('cah:submitAck', () => { selectedIds = []; renderHand(); });
+    socket.on('cah:error', (e) => {
+        if (e.needsPassword || e.reason === 'wrong_password') {
+            const pw = window.prompt('🔒 This lobby is password-protected. Enter the password to join:');
+            if (pw) doJoin(pw);
+            return;
+        }
+        // Friendlier text for common reasons
+        const reasons = {
+            need_3_players: e.neededMore ? `Need ${e.neededMore} more player(s) to start.` : 'Need at least 3 players to start.',
+            need_host: 'A host must join before the game can start.',
+            not_host: 'Only the host can do that.',
+            insufficient_cards: 'Not enough cards for the selected packs + players. Pick more decks.',
+            already_joined: "You're already in this game.",
+            no_such_game: 'This game no longer exists.',
+            start_threw: `Start failed: ${e.message || 'unknown error'}`,
+            czar_cannot_submit: "You're the Card Czar this round — you'll pick the winner after others submit.",
+            not_submitting: 'Not in submission phase right now.',
+            already_submitted: "You've already submitted this round.",
+            wrong_pick_count: 'Wrong number of cards selected.',
+            card_not_in_hand: 'Card not in your hand.'
+        };
+        setStatus('⚠️ ' + (reasons[e.reason] || e.reason));
+    });
+    socket.on('cah:hostTransferred', (p) => { isHost = p.newHostUserId === ME; setStatus(`👑 Host transferred${p.newHostUserId === ME ? ' to YOU' : ''}`); });
+
+    // ─── Always-visible turn timer ──────────────────────────────────
+    // Ticks every second. Server gave us `timeoutSeconds` at round/judging
+    // start — we just count down. Color shifts to amber at 30s, red at 10s.
+    let turnTimerInterval = null;
+    function startTurnTimer(totalSeconds, phase) {
+        stopTurnTimer();
+        if (!totalSeconds || totalSeconds <= 0) return;
+        const wrap = $('turn-timer');
+        const timeEl = $('time-left');
+        const phaseEl = $('phase-pill');
+        let remaining = totalSeconds;
+        wrap.classList.remove('warning', 'danger');
+        wrap.classList.add('show');
+        phaseEl.textContent = phase === 'JUDGE' ? 'Judging' : 'Submitting';
+        const render = () => {
+            const m = Math.floor(remaining / 60);
+            const s = Math.max(0, remaining % 60);
+            timeEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+            wrap.classList.toggle('danger', remaining <= 10);
+            wrap.classList.toggle('warning', remaining > 10 && remaining <= 30);
+        };
+        render();
+        turnTimerInterval = setInterval(() => {
+            remaining--;
+            if (remaining < 0) { stopTurnTimer(); return; }
+            render();
+        }, 1000);
+    }
+    function stopTurnTimer() {
+        if (turnTimerInterval) { clearInterval(turnTimerInterval); turnTimerInterval = null; }
+        $('turn-timer').classList.remove('show', 'warning', 'danger');
+    }
+
+    // ─── Host-only actions ──────────────────────────────────────────
+    function confirmEnd() {
+        const msg = inLobby
+            ? 'Cancel this lobby? Players will be kicked out and the game removed.'
+            : 'End this game for everyone? Final scores will be recorded.';
+        if (!confirm(msg)) return;
+        socket.emit('cah:hostEnd', { gameId: GAME_ID });
+    }
+    function kickPlayer(userId, name) {
+        if (!confirm(`Kick ${name} from the game?`)) return;
+        socket.emit('cah:hostKick', { gameId: GAME_ID, targetUserId: userId });
+    }
+
+    // Countdown (existing 10s-warning banner — kept for the explicit warning)
+    const cdBanner = $('countdown-banner'); const cdText = $('countdown-text'); let cdTimer = null;
+    socket.on('cah:timeoutWarning', (p) => {
+        if (isCzar && p.phase === 'JUDGING') showCountdown(p.secondsLeft);
+        else if (!isCzar && p.phase === 'SUBMITTING' && !selectedIds.length) showCountdown(p.secondsLeft);
+    });
+    function showCountdown(secs) {
+        if (cdTimer) clearInterval(cdTimer);
+        cdBanner.style.display = 'block';
+        let n = secs;
+        cdText.textContent = n + ' seconds left to act!';
+        cdTimer = setInterval(() => {
+            n--;
+            if (n <= 0) { clearInterval(cdTimer); cdBanner.style.display = 'none'; }
+            else cdText.textContent = n + ' seconds left to act!';
+        }, 1000);
+    }
+    ['cah:roundStarted', 'cah:judgingStarted', 'cah:gameEnded'].forEach(ev =>
+        socket.on(ev, () => { if (cdTimer) clearInterval(cdTimer); cdBanner.style.display = 'none'; })
+    );
+
+    // Chat
+    const chatMessages = $('chat-messages'); const chatInput = $('chat-input');
+    let chatHasMsgs = false;
+    function appendChat({ from, isPlayer, text, ts }) {
+        if (!chatHasMsgs) { chatMessages.replaceChildren(); chatHasMsgs = true; }
+        const wasNearBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight < 80;
+        const msg = el('div', { class: 'chat-msg' + (isPlayer ? '' : ' spectator') },
+            el('span', { class: 'from' }, from),
+            el('span', { class: 'time' }, new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+            el('div', { class: 'body' }, text)
+        );
+        chatMessages.appendChild(msg);
+        if (wasNearBottom) chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    socket.on('cah:chat', appendChat);
+    function sendChat() {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        socket.emit('cah:chat:send', { gameId: GAME_ID, text });
+        chatInput.value = '';
+    }
+    $('chat-send').onclick = sendChat;
+    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+
+    renderPlayers(INITIAL.players);
+    renderBlack(blackCard);
+
+    // ─── Confetti (tiny pure-canvas implementation) ──────────────────
+    function fireConfetti() {
+        const canvas = document.getElementById('confetti-canvas');
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        canvas.classList.add('firing');
+        const ctx = canvas.getContext('2d');
+        const colors = ['#a78bfa', '#23f56b', '#fbbf24', '#ec4899', '#60a5fa', '#ef4444'];
+        const pieces = Array.from({ length: 120 }, () => ({
+            x: window.innerWidth / 2, y: window.innerHeight / 3,
+            vx: (Math.random() - 0.5) * 12, vy: (Math.random() - 1) * 14 - 6,
+            rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.3,
+            size: 6 + Math.random() * 6, color: colors[Math.floor(Math.random() * colors.length)]
+        }));
+        const start = Date.now();
+        function tick() {
+            const t = Date.now() - start;
+            if (t > 3500) { canvas.classList.remove('firing'); return; }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (const p of pieces) {
+                p.vy += 0.4;   // gravity
+                p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+                ctx.save();
+                ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+                ctx.restore();
+            }
+            requestAnimationFrame(tick);
+        }
+        tick();
+    }
+</script>
+<canvas id="confetti-canvas"></canvas>
+</body>
+</html>

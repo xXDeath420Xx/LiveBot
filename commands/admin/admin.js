@@ -214,8 +214,17 @@ export default {
                             opt.setName('category').setDescription('The category where new temp channels will be created.')
                                 .addChannelTypes(ChannelType.GuildCategory).setRequired(true))
                         .addStringOption(opt =>
-                            opt.setName('naming-template').setDescription('The name for new channels. Use {user} for the user\'s name.')))
-                .addSubcommand(sub => sub.setName('disable').setDescription('Disables the temp channel system.'))
+                            opt.setName('naming-template').setDescription('The name for new channels. Use {user} for the user\'s name.'))
+                        .addRoleOption(opt =>
+                            opt.setName('required-role').setDescription('Optional: only members with this role can spawn a temp VC from this creator.'))
+                        .addIntegerOption(opt =>
+                            opt.setName('default-user-limit').setDescription('Optional: default user limit for spawned VCs (1-99).')
+                                .setMinValue(1).setMaxValue(99)))
+                .addSubcommand(sub =>
+                    sub.setName('disable').setDescription('Disables a temp channel creator (or all if no creator-channel given).')
+                        .addChannelOption(opt =>
+                            opt.setName('creator-channel').setDescription('The specific creator channel to disable. Omit to disable all.')
+                                .addChannelTypes(ChannelType.GuildVoice)))
         )
 
         // ─── verification group (1 subcmd) ───
@@ -402,16 +411,38 @@ export default {
                         const creatorChannel = interaction.options.getChannel('creator-channel');
                         const category = interaction.options.getChannel('category');
                         const template = interaction.options.getString('naming-template') || "{user}'s Channel";
+                        const requiredRole = interaction.options.getRole('required-role');
+                        const defaultUserLimit = interaction.options.getInteger('default-user-limit');
 
                         await pool.execute(
-                            'INSERT INTO temp_channel_config (guild_id, creator_channel_id, category_id, naming_template) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE creator_channel_id = VALUES(creator_channel_id), category_id = VALUES(category_id), naming_template = VALUES(naming_template)',
-                            [interaction.guild.id, creatorChannel.id, category.id, template]
+                            `INSERT INTO temp_channel_config
+                                (guild_id, creator_channel_id, category_id, naming_template, required_role_id, default_user_limit)
+                             VALUES (?, ?, ?, ?, ?, ?)
+                             ON DUPLICATE KEY UPDATE
+                                category_id = VALUES(category_id),
+                                naming_template = VALUES(naming_template),
+                                required_role_id = VALUES(required_role_id),
+                                default_user_limit = VALUES(default_user_limit)`,
+                            [interaction.guild.id, creatorChannel.id, category.id, template, requiredRole?.id || null, defaultUserLimit ?? null]
                         );
 
-                        await interaction.editReply(`System enabled! Users joining ${creatorChannel} will now create a temporary channel in the **${category.name}** category.`);
+                        const gateNote = requiredRole ? ` Only members with **${requiredRole.name}** can spawn a VC.` : '';
+                        const limitNote = defaultUserLimit ? ` Default limit: ${defaultUserLimit}.` : '';
+                        await interaction.editReply(`Creator configured! Users joining ${creatorChannel} will spawn a temp VC under **${category.name}**.${gateNote}${limitNote}`);
                     } else if (subcommand === 'disable') {
-                        await pool.execute('DELETE FROM temp_channel_config WHERE guild_id = ?', [interaction.guild.id]);
-                        await interaction.editReply('The temporary channel system has been disabled.');
+                        const creatorChannel = interaction.options.getChannel('creator-channel');
+                        if (creatorChannel) {
+                            const [res] = await pool.execute(
+                                'DELETE FROM temp_channel_config WHERE guild_id = ? AND creator_channel_id = ?',
+                                [interaction.guild.id, creatorChannel.id]
+                            );
+                            await interaction.editReply(res.affectedRows
+                                ? `Disabled creator ${creatorChannel}.`
+                                : `No creator config found for ${creatorChannel}.`);
+                        } else {
+                            await pool.execute('DELETE FROM temp_channel_config WHERE guild_id = ?', [interaction.guild.id]);
+                            await interaction.editReply('All temp channel creators for this guild have been disabled.');
+                        }
                     }
                 } catch (error) {
                     logger.error('[Admin Command] Temp channel error', { error: error.message, stack: error.stack, subcommand });

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Havendock Mods - CertiFried</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0e0e0e; color: #eee; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; min-height: 100vh; }
+
+        .header { background: linear-gradient(135deg, #141414 0%, #1a2a1a 100%); border-bottom: 1px solid #27ae60; padding: 40px 0; text-align: center; }
+        .header h1 { font-size: 2.5rem; font-weight: 800; letter-spacing: 2px; }
+        .header h1 span { color: #27ae60; }
+        .header p { color: #888; font-size: 1.1rem; margin-top: 8px; }
+        .header .badge { display: inline-block; background: #27ae60; color: #fff; padding: 4px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; margin-top: 12px; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; }
+
+        /* Top downloads section */
+        .top-downloads { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 40px; }
+        .dl-card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 24px; text-align: center; transition: border-color 0.2s; }
+        .dl-card:hover { border-color: #27ae60; }
+        .dl-card h3 { font-size: 1.15rem; margin-bottom: 6px; }
+        .dl-card .size { color: #666; font-size: 0.85rem; margin-bottom: 14px; }
+        .dl-card p { color: #999; font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px; min-height: 45px; }
+        a.btn { display: inline-block; color: #fff; text-decoration: none; padding: 10px 24px; border-radius: 6px; font-weight: 600; font-size: 0.95rem; transition: background 0.2s, transform 0.1s; }
+        a.btn:hover { transform: translateY(-1px); }
+        .btn-green { background: #27ae60; }
+        .btn-green:hover { background: #219a52; }
+        .btn-blue { background: #2980b9; }
+        .btn-blue:hover { background: #2471a3; }
+        .btn-purple { background: #6b4c8a; }
+        .btn-purple:hover { background: #5a3d7a; }
+
+        /* Install guide */
+        .install-guide { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 28px; margin-bottom: 40px; }
+        .install-guide h2 { font-size: 1.2rem; margin-bottom: 14px; }
+        .install-guide ol { padding-left: 24px; line-height: 2; color: #ccc; }
+        .install-guide code { background: #252525; padding: 2px 8px; border-radius: 4px; font-size: 0.9rem; color: #27ae60; }
+
+        /* Category filter bar */
+        .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; align-items: center; }
+        .filter-bar label { color: #888; font-size: 0.9rem; margin-right: 4px; }
+        .filter-btn { background: #252525; border: 1px solid #333; color: #aaa; padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 0.85rem; transition: all 0.2s; }
+        .filter-btn:hover, .filter-btn.active { background: #27ae60; border-color: #27ae60; color: #fff; }
+
+        /* Mod cards grid */
+        .mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 48px; }
+        .mod-card { background: #1a1a1a; border: 1px solid #252525; border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; transition: border-color 0.2s; }
+        .mod-card:hover { border-color: #444; }
+        .mod-card .top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+        .mod-card .name { font-weight: 700; font-size: 1.05rem; }
+        .mod-card .cat { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; padding: 2px 8px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+        .cat-core { background: #27ae6022; color: #27ae60; }
+        .cat-auto { background: #f39c1222; color: #f39c12; }
+        .cat-info { background: #2980b922; color: #2980b9; }
+        .cat-build { background: #8e44ad22; color: #8e44ad; }
+        .cat-animal { background: #e67e2222; color: #e67e22; }
+        .cat-explore { background: #e74c3c22; color: #e74c3c; }
+        .cat-visual { background: #1abc9c22; color: #1abc9c; }
+        .cat-wizard { background: #9b59b622; color: #9b59b6; }
+        .mod-card .desc { color: #888; font-size: 0.88rem; line-height: 1.5; flex: 1; margin-bottom: 10px; }
+        .mod-card .bottom { display: flex; justify-content: space-between; align-items: center; }
+        .mod-card .hotkey { color: #27ae60; font-family: 'Consolas', monospace; font-size: 0.8rem; }
+        .mod-card .dl-link { color: #2980b9; text-decoration: none; font-size: 0.85rem; font-weight: 600; transition: color 0.2s; }
+        .mod-card .dl-link:hover { color: #3498db; }
+        .mod-card .size-small { color: #555; font-size: 0.75rem; }
+
+        .footer { text-align: center; padding: 24px; color: #555; font-size: 0.85rem; border-top: 1px solid #222; }
+        .footer a { color: #2980b9; text-decoration: none; }
+
+        @media (max-width: 700px) { .top-downloads { grid-template-columns: 1fr; } .mod-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>HAVENDOCK <span>MODS</span></h1>
+    <p>31 quality-of-life mods + mod manager for Havendock</p>
+    <div class="badge">v1.0.0 — 31 mods, fully tested</div>
+    <nav style="margin-top:14px"><a href="./" style="color:#27ae60;margin:0 12px;font-weight:600">Downloads</a><a href="guide.html" style="color:#27ae60;margin:0 12px;font-weight:600">Installation Guide</a></nav>
+</div>
+
+<div class="container">
+
+    <!-- Top download options -->
+    <div class="top-downloads">
+        <div class="dl-card">
+            <h3>Mod Manager</h3>
+            <div class="size">68 MB — standalone .exe</div>
+            <p>Desktop app to manage, configure, and toggle all mods. No dependencies needed.</p>
+            <a href="HavendockModManager-v1.0.0.zip" class="btn btn-green">Download Manager</a>
+        </div>
+        <div class="dl-card">
+            <h3>All 31 Mods</h3>
+            <div class="size">144 KB — BepInEx plugins</div>
+            <p>Every mod in one zip. Extract to BepInEx/plugins/.</p>
+            <a href="HavendockMods-AllMods-v1.0.0.zip" class="btn btn-blue">Download All</a>
+        </div>
+        <div class="dl-card">
+            <h3>Pick &amp; Choose</h3>
+            <div class="size">Individual downloads below</div>
+            <p>Download only the mods you want. Each is a standalone plugin.</p>
+            <a href="#mods" class="btn btn-purple">Browse Mods</a>
+        </div>
+    </div>
+
+    <div class="install-guide">
+        <h2>Quick Install</h2>
+        <ol>
+            <li>Install <strong>BepInEx 6</strong> (Unity Mono) into your Havendock game folder, or use the Mod Manager which installs it automatically</li>
+            <li>Download individual mods below or the full pack above</li>
+            <li>Extract each mod folder into <code>Havendock/BepInEx/plugins/</code></li>
+            <li>Launch the game — mods load automatically</li>
+        </ol>
+    </div>
+
+    <!-- Filter bar -->
+    <div id="mods"></div>
+    <div class="filter-bar">
+        <label>Filter:</label>
+        <span class="filter-btn active" onclick="filterMods('all', this)">All</span>
+        <span class="filter-btn" onclick="filterMods('core', this)">Core QoL</span>
+        <span class="filter-btn" onclick="filterMods('auto', this)">Automation</span>
+        <span class="filter-btn" onclick="filterMods('info', this)">Information</span>
+        <span class="filter-btn" onclick="filterMods('build', this)">Building</span>
+        <span class="filter-btn" onclick="filterMods('animal', this)">Animals</span>
+        <span class="filter-btn" onclick="filterMods('explore', this)">Exploration</span>
+        <span class="filter-btn" onclick="filterMods('visual', this)">Visual</span>
+        <span class="filter-btn" onclick="filterMods('wizard', this)">Wizard</span>
+    </div>
+
+    <!-- Mod cards -->
+    <div class="mod-grid" id="modGrid">
+        <!-- Core QoL -->
+        <div class="mod-card" data-cat="core"><div class="top"><span class="name">Audio Toggles</span><span class="cat cat-core">Core</span></div><div class="desc">Independent music and sound effect mute toggles</div><div class="bottom"><span class="hotkey">; / '</span><a href="mods/AudioToggles.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="core"><div class="top"><span class="name">Bulk Storage</span><span class="cat cat-core">Core</span></div><div class="desc">Set all 4 storage slots to the same item at once</div><div class="bottom"><span class="hotkey">=</span><a href="mods/BulkStorage.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="core"><div class="top"><span class="name">Auto Replant</span><span class="cat cat-core">Core</span></div><div class="desc">Farms never run out of seeds — auto-refills after harvest</div><div class="bottom"><span class="hotkey">Auto</span><a href="mods/AutoReplant.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="core"><div class="top"><span class="name">Population Cap</span><span class="cat cat-core">Core</span></div><div class="desc">Hard breeding caps for seagulls and clownfish</div><div class="bottom"><span class="hotkey">Config</span><a href="mods/PopulationCap.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="core"><div class="top"><span class="name">Resource Reserves</span><span class="cat cat-core">Core</span></div><div class="desc">Minimum item reserves — production pauses at threshold</div><div class="bottom"><span class="hotkey">-</span><a href="mods/ResourceReserves.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="core"><div class="top"><span class="name">Island Compass</span><span class="cat cat-core">Core</span></div><div class="desc">Compass bar + minimap for boat navigation between islands</div><div class="bottom"><span class="hotkey">`</span><a href="mods/IslandCompass.zip" class="dl-link">Download</a></div></div>
+
+        <!-- Automation -->
+        <div class="mod-card" data-cat="auto"><div class="top"><span class="name">Auto Prioritize</span><span class="cat cat-auto">Automation</span></div><div class="desc">New buildings auto-prioritized for settler jobs</div><div class="bottom"><span class="hotkey">Auto</span><a href="mods/AutoPrioritize.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="auto"><div class="top"><span class="name">Smart Delivery</span><span class="cat cat-auto">Automation</span></div><div class="desc">Delivery diagnostics overlay showing job assignments</div><div class="bottom"><span class="hotkey">F8</span><a href="mods/SmartDelivery.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="auto"><div class="top"><span class="name">Batch Craft</span><span class="cat cat-auto">Automation</span></div><div class="desc">Queue multiple production runs at once</div><div class="bottom"><span class="hotkey">[ / ]</span><a href="mods/BatchCraft.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="auto"><div class="top"><span class="name">Auto Sell Surplus</span><span class="cat cat-auto">Automation</span></div><div class="desc">Auto-donate excess items when trader arrives</div><div class="bottom"><span class="hotkey">\</span><a href="mods/AutoSellSurplus.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="auto"><div class="top"><span class="name">Speed Toggle</span><span class="cat cat-auto">Automation</span></div><div class="desc">Cycle game speed: 1x / 2x / 5x / 10x</div><div class="bottom"><span class="hotkey">.</span><a href="mods/SpeedToggle.zip" class="dl-link">Download</a></div></div>
+
+        <!-- Information -->
+        <div class="mod-card" data-cat="info"><div class="top"><span class="name">Production Stats</span><span class="cat cat-info">Info</span></div><div class="desc">Items/minute per building overlay. Stalled buildings in red.</div><div class="bottom"><span class="hotkey">F3</span><a href="mods/ProductionStats.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="info"><div class="top"><span class="name">Storage Overview</span><span class="cat cat-info">Info</span></div><div class="desc">Total items across all storage in one panel</div><div class="bottom"><span class="hotkey">F4</span><a href="mods/StorageOverview.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="info"><div class="top"><span class="name">Settler Status</span><span class="cat cat-info">Info</span></div><div class="desc">All settlers table with hunger, happiness, rest, jobs</div><div class="bottom"><span class="hotkey">F5</span><a href="mods/SettlerStatus.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="info"><div class="top"><span class="name">Build Cost Preview</span><span class="cat cat-info">Info</span></div><div class="desc">Shows cost at cursor while placing buildings</div><div class="bottom"><span class="hotkey">Auto</span><a href="mods/BuildCostPreview.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="info"><div class="top"><span class="name">Research Planner</span><span class="cat cat-info">Info</span></div><div class="desc">Research tree viewer with prereqs and unlocks</div><div class="bottom"><span class="hotkey">F6</span><a href="mods/ResearchPlanner.zip" class="dl-link">Download</a></div></div>
+
+        <!-- Building -->
+        <div class="mod-card" data-cat="build"><div class="top"><span class="name">Blueprint System</span><span class="cat cat-build">Building</span></div><div class="desc">Save and load building layouts as reusable templates</div><div class="bottom"><span class="hotkey">F7 / F8</span><a href="mods/BlueprintSystem.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="build"><div class="top"><span class="name">Undo Last Build</span><span class="cat cat-build">Building</span></div><div class="desc">Undo within 5 seconds with full resource refund</div><div class="bottom"><span class="hotkey">End</span><a href="mods/UndoLastBuild.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="build"><div class="top"><span class="name">Auto Bridge</span><span class="cat cat-build">Building</span></div><div class="desc">Auto-fill adjacent water tiles when placing decks</div><div class="bottom"><span class="hotkey">Auto</span><a href="mods/AutoBridge.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="build"><div class="top"><span class="name">Mass Delete</span><span class="cat cat-build">Building</span></div><div class="desc">Area-select and bulk delete buildings with refund</div><div class="bottom"><span class="hotkey">ScrollLock+drag</span><a href="mods/MassDelete.zip" class="dl-link">Download</a></div></div>
+
+        <!-- Animals -->
+        <div class="mod-card" data-cat="animal"><div class="top"><span class="name">Auto Assign Ranch</span><span class="cat cat-animal">Animals</span></div><div class="desc">Seagulls auto-assigned to empty ranches</div><div class="bottom"><span class="hotkey">Auto</span><a href="mods/AutoAssignRanch.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="animal"><div class="top"><span class="name">Crop Alert</span><span class="cat cat-animal">Animals</span></div><div class="desc">"NO SEEDS!" warning above idle farms</div><div class="bottom"><span class="hotkey">F9</span><a href="mods/CropRotationAlert.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="animal"><div class="top"><span class="name">Pet Tracker</span><span class="cat cat-animal">Animals</span></div><div class="desc">Arrows pointing to off-screen pets</div><div class="bottom"><span class="hotkey">Auto</span><a href="mods/PetTracker.zip" class="dl-link">Download</a></div></div>
+
+        <!-- Exploration -->
+        <div class="mod-card" data-cat="explore"><div class="top"><span class="name">Expedition Log</span><span class="cat cat-explore">Explore</span></div><div class="desc">Persistent boathouse expedition history with rewards</div><div class="bottom"><span class="hotkey">Insert</span><a href="mods/ExpeditionLog.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="explore"><div class="top"><span class="name">Ship Presets</span><span class="cat cat-explore">Explore</span></div><div class="desc">Save/load named ship upgrade configurations</div><div class="bottom"><span class="hotkey">F10</span><a href="mods/ShipLoadoutPresets.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="explore"><div class="top"><span class="name">Loot Radar</span><span class="cat cat-explore">Explore</span></div><div class="desc">Highlight all floating debris in the water</div><div class="bottom"><span class="hotkey">/</span><a href="mods/LootRadar.zip" class="dl-link">Download</a></div></div>
+
+        <!-- Visual -->
+        <div class="mod-card" data-cat="visual"><div class="top"><span class="name">Custom Time</span><span class="cat cat-visual">Visual</span></div><div class="desc">Lock the day/night cycle to any time</div><div class="bottom"><span class="hotkey">PgUp</span><a href="mods/CustomTimeOfDay.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="visual"><div class="top"><span class="name">Weather Control</span><span class="cat cat-visual">Visual</span></div><div class="desc">Manually toggle rain on/off</div><div class="bottom"><span class="hotkey">PgDn</span><a href="mods/WeatherControl.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="visual"><div class="top"><span class="name">Screenshot+</span><span class="cat cat-visual">Visual</span></div><div class="desc">Enhanced screenshot mode with free camera</div><div class="bottom"><span class="hotkey">F12</span><a href="mods/ScreenshotPlus.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="visual"><div class="top"><span class="name">Building Skins</span><span class="cat cat-visual">Visual</span></div><div class="desc">Recolor any building with a color picker</div><div class="bottom"><span class="hotkey">\</span><a href="mods/BuildingSkins.zip" class="dl-link">Download</a></div></div>
+
+        <!-- Wizard -->
+        <div class="mod-card" data-cat="wizard"><div class="top"><span class="name">Spell Quick Cast</span><span class="cat cat-wizard">Wizard</span></div><div class="desc">4 configurable spell hotkey slots</div><div class="bottom"><span class="hotkey">6/7/8/9</span><a href="mods/SpellQuickCast.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="wizard"><div class="top"><span class="name">Mana Display</span><span class="cat cat-wizard">Wizard</span></div><div class="desc">Mana bar with regen rate and time-to-full</div><div class="bottom"><span class="hotkey">Auto</span><a href="mods/ManaRegenDisplay.zip" class="dl-link">Download</a></div></div>
+        <div class="mod-card" data-cat="wizard"><div class="top"><span class="name">Auto Potion</span><span class="cat cat-wizard">Wizard</span></div><div class="desc">Cauldrons auto-craft highest tier potion</div><div class="bottom"><span class="hotkey">Auto</span><a href="mods/AutoPotion.zip" class="dl-link">Download</a></div></div>
+    </div>
+</div>
+
+<div class="footer">
+    <p>Built by <a href="https://certifriedmultitool.com">CertiFried</a> — All mods are open source and free</p>
+</div>
+
+<script>
+function filterMods(cat, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.mod-card').forEach(card => {
+        card.style.display = (cat === 'all' || card.dataset.cat === cat) ? '' : 'none';
+    });
+}
+</script>
+
+</body>
+</html>

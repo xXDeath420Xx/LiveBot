@@ -1,7 +1,35 @@
-import { AttachmentBuilder } from 'discord.js';
+import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { safeJsonArray } from '../utils/safeJson.js';
+
+// Discord-style random quirky join phrases. {user} is replaced with the member mention.
+const QUIRKY_JOINS = [
+  "{user} just showed up!",
+  "Everyone welcome {user}!",
+  "A wild {user} appeared!",
+  "{user} just slid into the server.",
+  "Look who it is — {user}!",
+  "{user} hopped in. Say hi!",
+  "Roll out the carpet, {user} has arrived.",
+  "{user} just joined the party. 🎉",
+  "Glad you could make it, {user}.",
+  "Welcome aboard, {user}.",
+  "{user} landed. Brace for awesome.",
+  "{user} has entered the chat.",
+  "It's dangerous to go alone — take {user}!",
+  "{user} just logged on.",
+  "{user}, welcome to the pack.",
+  "A new friend joined: {user}.",
+  "{user} just materialized out of thin air.",
+  "{user} rolled a 20 on initiative and joined.",
+  "Please give a warm welcome to {user}.",
+  "{user} is here. The server is now cooler.",
+];
+
+function pickQuirky() {
+  return QUIRKY_JOINS[Math.floor(Math.random() * QUIRKY_JOINS.length)];
+}
 
 let Canvas;
 try {
@@ -35,6 +63,8 @@ setInterval(() => {
  * @param {import('discord.js').GuildMember} member - The member who joined
  */
 export async function handleGuildMemberAdd(member) {
+  if (member.user?.bot) return;
+
   const guildId = member.guild.id;
   const memberId = member.id;
   const botIdentifier = member.client.isDefaultBot ? 'DEFAULT BOT' : `CUSTOM BOT (${member.client.botId})`;
@@ -91,124 +121,135 @@ export async function handleGuildMemberAdd(member) {
 
     logger.info(`[GreetingManager] ${botIdentifier} preparing to send welcome message to channel ${config.channel_id}`);
 
+    // Pre-compute a random quirky phrase once per join so it stays consistent across
+    // message body, embed title, and card title if all three reference it.
+    const quirkyPhrase = pickQuirky()
+      .replace(/{user}/g, `<@${member.id}>`);
+    const quirkyPlain = QUIRKY_JOINS[Math.floor(Math.random() * QUIRKY_JOINS.length)]
+      .replace(/{user}/g, member.user.username);
+
     // Use default message if none configured
     let messageContent = (config.message || `Welcome ${member}!`)
       .replace(/{mention}/g, `<@${member.id}>`)
+      .replace(/{username}/g, member.user.username)
       .replace(/{user}/g, member.user.tag)
       .replace(/{server}/g, member.guild.name)
-      .replace(/{memberCount}/g, member.guild.memberCount.toString());
+      .replace(/{memberCount}/g, member.guild.memberCount.toString())
+      .replace(/{member_count}/g, member.guild.memberCount.toString())
+      .replace(/{count}/g, member.guild.memberCount.toString())
+      .replace(/{quirky}/g, quirkyPhrase)
+      .replace(/{quirky_plain}/g, quirkyPlain);
 
     if (config.banner_enabled && Canvas) {
-      // Enhanced banner design with better quality
-      const width = 1024;
-      const height = 450;
+      const width = 1100;
+      const height = 400;
+      const padding = 40;
       const canvas = Canvas.createCanvas(width, height);
       const ctx = canvas.getContext('2d');
 
-      // Background
-      try {
-        // Check both card_background_url (new column) and banner_background_url (legacy)
-        const backgroundUrl = config.card_background_url || config.banner_background_url;
-        if (backgroundUrl) {
+      // Background — custom image or black card with rounded corners
+      const backgroundUrl = config.card_background_url || config.banner_background_url;
+      const radius = 30;
+
+      // Draw rounded rectangle helper
+      const drawRoundedRect = (x, y, w, h, r) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.lineTo(x + w - r, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+        ctx.lineTo(x + w, y + h - r);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        ctx.lineTo(x + r, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+        ctx.lineTo(x, y + r);
+        ctx.quadraticCurveTo(x, y, x + r, y);
+        ctx.closePath();
+      };
+
+      if (backgroundUrl) {
+        try {
           const background = await Canvas.loadImage(backgroundUrl);
-          // Draw background, scale to cover entire canvas
+          drawRoundedRect(0, 0, width, height, radius);
+          ctx.clip();
           ctx.drawImage(background, 0, 0, width, height);
-          // Add semi-transparent overlay for better text visibility
           ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
           ctx.fillRect(0, 0, width, height);
-        } else {
-          // Default gradient background
-          const gradient = ctx.createLinearGradient(0, 0, width, height);
-          gradient.addColorStop(0, '#5865F2');
-          gradient.addColorStop(1, '#7289DA');
-          ctx.fillStyle = gradient;
-          ctx.fillRect(0, 0, width, height);
-        }
-      } catch (e) {
-        logger.error('Failed to load welcome card background.', {
-          guildId,
-          category: 'greeting',
-          backgroundUrl: backgroundUrl,
-          error: e.message,
-          stack: e.stack
-        });
-        // Fallback to gradient
-        const gradient = ctx.createLinearGradient(0, 0, width, height);
-        gradient.addColorStop(0, '#5865F2');
-        gradient.addColorStop(1, '#7289DA');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, width, height);
-
-        // Log a warning to the channel if it's a format issue
-        if (e.message.includes('Unsupported') || e.message.includes('type')) {
-          logger.warn('Background image format not supported. Please use JPG or PNG format.', {
-            guildId,
-            category: 'greeting',
-            url: backgroundUrl
+        } catch (e) {
+          logger.error('Failed to load welcome card background.', {
+            guildId, category: 'greeting', error: e.message
           });
+          ctx.fillStyle = '#000000';
+          drawRoundedRect(0, 0, width, height, radius);
+          ctx.fill();
         }
+      } else {
+        ctx.fillStyle = '#000000';
+        drawRoundedRect(0, 0, width, height, radius);
+        ctx.fill();
       }
 
-      // Load and draw circular avatar with border
-      const avatarSize = 200;
-      const avatarX = width / 2 - avatarSize / 2;
-      const avatarY = 80;
+      // Circular avatar with white border — centered in upper portion
+      const avatarSize = 180;
+      const avatarCenterX = width / 2;
+      const avatarCenterY = padding + avatarSize / 2 + 10;
 
       try {
         const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 256 });
         const avatar = await Canvas.loadImage(avatarUrl);
 
-        // Draw circular avatar
         ctx.save();
         ctx.beginPath();
-        ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
+        ctx.arc(avatarCenterX, avatarCenterY, avatarSize / 2, 0, Math.PI * 2, true);
         ctx.closePath();
         ctx.clip();
-        ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
+        ctx.drawImage(avatar, avatarCenterX - avatarSize / 2, avatarCenterY - avatarSize / 2, avatarSize, avatarSize);
         ctx.restore();
 
-        // Draw avatar border
         ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 6;
+        ctx.lineWidth = 4;
         ctx.beginPath();
-        ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
+        ctx.arc(avatarCenterX, avatarCenterY, avatarSize / 2 + 2, 0, Math.PI * 2, true);
         ctx.closePath();
         ctx.stroke();
       } catch (err) {
         logger.error(`Failed to load avatar for ${member.user.tag}:`, {
-          error: err.message,
-          category: 'greeting'
+          error: err.message, category: 'greeting'
         });
       }
 
-      // Text setup
+      // Title text — "{username} just joined the server"
+      const textY = avatarCenterY + avatarSize / 2 + 45;
       ctx.textAlign = 'center';
       ctx.fillStyle = '#FFFFFF';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 4;
+      const titleText = (config.card_title_text || '{user} just joined the server')
+        .replace(/{user}/g, member.user.username)
+        .replace(/{server}/g, member.guild.name);
+      ctx.font = '42px Arial';
+      ctx.fillText(titleText, width / 2, textY);
 
-      // Welcome text
-      ctx.font = 'bold 56px Arial';
-      ctx.strokeText('WELCOME', width / 2, 320);
-      ctx.fillText('WELCOME', width / 2, 320);
-
-      // Username
-      ctx.font = 'bold 42px Arial';
-      const username = member.user.username;
-      const truncatedUsername = username.length > 20 ? username.substring(0, 20) + '...' : username;
-      ctx.strokeText(truncatedUsername, width / 2, 380);
-      ctx.fillText(truncatedUsername, width / 2, 380);
-
-      // Member count
-      ctx.font = '32px Arial';
+      // Subtitle — "Member #N"
+      ctx.fillStyle = '#DCDDDE';
       const memberCount = member.guild.memberCount;
-      const memberText = `Member #${memberCount}`;
-      ctx.strokeText(memberText, width / 2, 420);
-      ctx.fillText(memberText, width / 2, 420);
+      const subtitleText = (config.card_subtitle_text || 'Member #{memberCount}')
+        .replace(/{user}/g, member.user.username)
+        .replace(/{server}/g, member.guild.name)
+        .replace(/{memberCount}/g, memberCount.toString());
+      ctx.font = '24px Arial';
+      ctx.fillText(subtitleText, width / 2, textY + 35);
 
       const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'welcome-image.png' });
       logger.info(`[GreetingManager] ${botIdentifier} SENDING enhanced welcome banner for ${member.user.tag} to channel ${config.channel_id}`);
-      await channel.send({ content: messageContent, files: [attachment] });
+
+      // Wrap the card in an embed so it renders with a colored side-bar + footer member count.
+      const embed = new EmbedBuilder()
+        .setColor(0xCDC3FF)
+        .setTitle(`👋 ${quirkyPlain}`)
+        .setDescription(messageContent)
+        .setImage('attachment://welcome-image.png')
+        .setFooter({ text: `${member.guild.name} • Member #${member.guild.memberCount}` })
+        .setTimestamp();
+
+      await channel.send({ content: `<@${member.id}>`, embeds: [embed], files: [attachment] });
       logger.info(`[GreetingManager] ${botIdentifier} SENT enhanced welcome banner for ${member.user.tag}.`, {
         guildId,
         category: 'greeting'
@@ -239,6 +280,8 @@ export async function handleGuildMemberAdd(member) {
  * @param {import('discord.js').GuildMember} member - The member who left
  */
 export async function handleGuildMemberRemove(member) {
+  if (member.user?.bot) return;
+
   const guildId = member.guild.id;
   try {
     const [rows] = await pool.execute(
@@ -252,10 +295,15 @@ export async function handleGuildMemberRemove(member) {
     const channel = member.guild.channels.cache.get(config.goodbye_channel_id);
     if (!channel) return;
 
+    const memberCount = member.guild.memberCount;
     let messageContent = (config.goodbye_message || '')
       .replace(/{mention}/g, `<@${member.id}>`)
+      .replace(/{username}/g, member.user.username)
       .replace(/{user}/g, member.user.tag)
-      .replace(/{server}/g, member.guild.name);
+      .replace(/{server}/g, member.guild.name)
+      .replace(/{memberCount}/g, memberCount.toString())
+      .replace(/{member_count}/g, memberCount.toString())
+      .replace(/{count}/g, memberCount.toString());
 
     await channel.send(messageContent);
     logger.info(`Sent goodbye message for ${member.user.tag}.`, {

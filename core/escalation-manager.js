@@ -1,6 +1,7 @@
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { EmbedBuilder } from 'discord.js';
+import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
 
 /**
  * Check if a user has met escalation criteria and apply automatic actions
@@ -85,6 +86,15 @@ export async function checkEscalations(guild, user) {
  * @param {Object} rule - The escalation rule
  */
 async function applyAction(guild, member, user, rule) {
+  if (isProtectedFromBanCommands(user?.id)) {
+    logger.warn('[EscalationManager] Refusing to apply escalation to protected bot owner', {
+      userId: user.id,
+      guildId: guild.id,
+      action: rule?.action
+    });
+    return;
+  }
+
   const reason = `Automatic action: ${rule.infraction_count} infractions in ${rule.time_period_hours} hours.`;
 
   try {

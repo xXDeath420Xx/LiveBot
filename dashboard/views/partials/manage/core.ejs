@@ -12,29 +12,194 @@
     </div>
 
     <form id="core-settings-form" action="/manage/<%= guild.id %>/update-core-settings" method="POST">
-        <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-6);">
+        <div style="margin-bottom: var(--spacing-6);">
             <div>
                 <label class="form-label">Timezone</label>
+                <%
+                    const currentTz = (settings && settings.timezone) ? settings.timezone : 'UTC';
+                    let currentTimeStr = '';
+                    try {
+                        // Try IANA timezone first (handles DST automatically)
+                        const nowUtc = new Date();
+                        const fmt = new Intl.DateTimeFormat('en-US', {
+                            timeZone: currentTz,
+                            weekday: 'long', month: 'short', day: 'numeric',
+                            hour: 'numeric', minute: '2-digit', hour12: true
+                        });
+                        currentTimeStr = fmt.format(nowUtc);
+                    } catch {
+                        // Legacy UTC±N fallback
+                        const tzMatch = currentTz.match(/UTC([+-])(\d+)(?::(\d+))?/);
+                        const offsetSign = tzMatch ? (tzMatch[1] === '-' ? -1 : 1) : 1;
+                        const offsetH = tzMatch ? parseInt(tzMatch[2], 10) : 0;
+                        const offsetM = tzMatch && tzMatch[3] ? parseInt(tzMatch[3], 10) : 0;
+                        const offsetMs = offsetSign * ((offsetH * 3600000) + (offsetM * 60000));
+                        const nowUtc = new Date();
+                        const localMs = nowUtc.getTime() + (nowUtc.getTimezoneOffset() * 60000) + offsetMs;
+                        const localDate = new Date(localMs);
+                        const hours = localDate.getHours();
+                        const minutes = localDate.getMinutes().toString().padStart(2, '0');
+                        const ampm = hours >= 12 ? 'PM' : 'AM';
+                        const h12 = hours % 12 || 12;
+                        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        currentTimeStr = days[localDate.getDay()] + ', ' + months[localDate.getMonth()] + ' ' + localDate.getDate() + ' — ' + h12 + ':' + minutes + ' ' + ampm;
+                    }
+                %>
+                <div style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md); margin-bottom: var(--spacing-3);">
+                    <i class="fas fa-clock" style="color: var(--accent-purple); font-size: var(--font-size-lg);"></i>
+                    <div>
+                        <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= currentTimeStr %></div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Current server time (<%= currentTz %>)</div>
+                    </div>
+                </div>
                 <select class="form-select" name="timezone">
-                    <% const timezones = ["UTC-12", "UTC-11", "UTC-10", "UTC-9", "UTC-8", "UTC-7", "UTC-6", "UTC-5", "UTC-4", "UTC-3", "UTC-2", "UTC-1", "UTC+0", "UTC+1", "UTC+2", "UTC+3", "UTC+4", "UTC+5", "UTC+6", "UTC+7", "UTC+8", "UTC+9", "UTC+10", "UTC+11", "UTC+12"]; %>
-                    <% timezones.forEach(tz => { %>
-                        <option value="<%= tz %>" <%= (settings && settings.timezone === tz) ? 'selected' : '' %>><%= tz %></option>
+                    <%
+                    const tzGroups = {
+                        'North America': [
+                            { value: 'America/New_York', label: 'Eastern (New York)' },
+                            { value: 'America/Chicago', label: 'Central (Chicago)' },
+                            { value: 'America/Denver', label: 'Mountain (Denver)' },
+                            { value: 'America/Los_Angeles', label: 'Pacific (Los Angeles)' },
+                            { value: 'America/Phoenix', label: 'Arizona (no DST)' },
+                            { value: 'America/Anchorage', label: 'Alaska' },
+                            { value: 'Pacific/Honolulu', label: 'Hawaii (no DST)' },
+                            { value: 'America/Toronto', label: 'Eastern (Toronto)' },
+                            { value: 'America/Vancouver', label: 'Pacific (Vancouver)' },
+                            { value: 'America/Edmonton', label: 'Mountain (Edmonton)' },
+                            { value: 'America/Winnipeg', label: 'Central (Winnipeg)' },
+                            { value: 'America/Halifax', label: 'Atlantic (Halifax)' },
+                            { value: 'America/St_Johns', label: 'Newfoundland' },
+                        ],
+                        'Europe': [
+                            { value: 'Europe/London', label: 'London (GMT/BST)' },
+                            { value: 'Europe/Paris', label: 'Paris (CET/CEST)' },
+                            { value: 'Europe/Berlin', label: 'Berlin (CET/CEST)' },
+                            { value: 'Europe/Amsterdam', label: 'Amsterdam' },
+                            { value: 'Europe/Madrid', label: 'Madrid' },
+                            { value: 'Europe/Rome', label: 'Rome' },
+                            { value: 'Europe/Stockholm', label: 'Stockholm' },
+                            { value: 'Europe/Helsinki', label: 'Helsinki (EET)' },
+                            { value: 'Europe/Athens', label: 'Athens (EET)' },
+                            { value: 'Europe/Moscow', label: 'Moscow (no DST)' },
+                            { value: 'Europe/Istanbul', label: 'Istanbul (no DST)' },
+                        ],
+                        'Asia & Pacific': [
+                            { value: 'Asia/Dubai', label: 'Dubai (GST)' },
+                            { value: 'Asia/Kolkata', label: 'India (IST)' },
+                            { value: 'Asia/Bangkok', label: 'Bangkok (ICT)' },
+                            { value: 'Asia/Singapore', label: 'Singapore (SGT)' },
+                            { value: 'Asia/Hong_Kong', label: 'Hong Kong (HKT)' },
+                            { value: 'Asia/Shanghai', label: 'China (CST)' },
+                            { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
+                            { value: 'Asia/Seoul', label: 'Seoul (KST)' },
+                            { value: 'Asia/Manila', label: 'Manila (PHT)' },
+                            { value: 'Asia/Jakarta', label: 'Jakarta (WIB)' },
+                        ],
+                        'Australia & NZ': [
+                            { value: 'Australia/Perth', label: 'Perth (AWST)' },
+                            { value: 'Australia/Adelaide', label: 'Adelaide (ACST/ACDT)' },
+                            { value: 'Australia/Sydney', label: 'Sydney (AEST/AEDT)' },
+                            { value: 'Australia/Melbourne', label: 'Melbourne (AEST/AEDT)' },
+                            { value: 'Australia/Brisbane', label: 'Brisbane (no DST)' },
+                            { value: 'Australia/Lord_Howe', label: 'Lord Howe Island' },
+                            { value: 'Pacific/Auckland', label: 'Auckland (NZST/NZDT)' },
+                        ],
+                        'South America': [
+                            { value: 'America/Sao_Paulo', label: 'São Paulo (BRT)' },
+                            { value: 'America/Argentina/Buenos_Aires', label: 'Buenos Aires (ART)' },
+                            { value: 'America/Bogota', label: 'Bogotá (COT)' },
+                            { value: 'America/Santiago', label: 'Santiago (CLT/CLST)' },
+                            { value: 'America/Lima', label: 'Lima (PET)' },
+                        ],
+                        'Other': [
+                            { value: 'UTC', label: 'UTC (no DST)' },
+                            { value: 'Pacific/Pago_Pago', label: 'Pago Pago (SST, UTC-11)' },
+                            { value: 'Etc/GMT+12', label: 'Baker Island (UTC-12)' },
+                            { value: 'Pacific/Fiji', label: 'Fiji' },
+                        ]
+                    };
+                    %>
+                    <option value="UTC" <%= !currentTz || currentTz === 'UTC' ? 'selected' : '' %>>UTC</option>
+                    <% Object.entries(tzGroups).forEach(([group, zones]) => { %>
+                    <optgroup label="<%= group %>">
+                        <% zones.forEach(tz => { %>
+                        <option value="<%= tz.value %>" <%= currentTz === tz.value ? 'selected' : '' %>><%= tz.label %></option>
+                        <% }); %>
+                    </optgroup>
                     <% }); %>
                 </select>
-                <div class="form-help">Select timezone for scheduled announcements</div>
+                <div class="form-help">Select timezone for scheduled announcements, stat display clocks, and time-based features. Uses real timezone names so Daylight Saving Time is handled automatically.</div>
+            </div>
+        </div>
+
+        <!-- Prefix Commands Section -->
+        <div style="border-top: 1px solid var(--color-border); padding-top: var(--spacing-6); margin-top: var(--spacing-4); margin-bottom: var(--spacing-6);">
+            <div style="margin-bottom: var(--spacing-4);">
+                <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin: 0 0 var(--spacing-1) 0;">
+                    <i class="fas fa-exclamation" style="margin-right: var(--spacing-2); color: var(--color-brand);"></i>
+                    Prefix Commands
+                </h3>
+                <div class="form-help" style="margin-top: 0;">Allow users to run commands with a text prefix (e.g. !play, !ban) instead of slash commands</div>
             </div>
 
-            <div>
-                <label class="form-label">Live Role</label>
-                <select class="form-select" name="live_role_id">
-                    <option value="">None</option>
-                    <% if (typeof roles !== 'undefined') { %>
-                        <% roles.forEach(role => { %>
-                            <option value="<%= role.id %>" <%= (settings && settings.live_role_id === role.id) ? 'selected' : '' %>>@<%= role.name %></option>
+            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Command Prefix</label>
+                    <input type="text" class="form-input" name="prefix" value="<%= (typeof prefixConfig !== 'undefined' && prefixConfig.prefix) ? prefixConfig.prefix : '!' %>" maxlength="5" style="width: 80px; font-family: monospace; font-size: var(--font-size-lg); text-align: center;">
+                    <div class="form-help">1-5 characters (default: !)</div>
+                </div>
+
+                <div>
+                    <label class="form-label">Prefix Commands</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" name="prefix_enabled" value="1" <%= (typeof prefixConfig === 'undefined' || prefixConfig.enabled) ? 'checked' : '' %>>
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <div class="form-help">Enable or disable prefix commands server-wide</div>
+                </div>
+            </div>
+
+            <div style="border-top: 1px solid var(--color-border); padding-top: var(--spacing-4); margin-top: var(--spacing-2);">
+                <div style="margin-bottom: var(--spacing-4);">
+                    <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin: 0 0 var(--spacing-1) 0;">
+                        <i class="fas fa-broom" style="margin-right: var(--spacing-2); color: var(--color-warning);"></i>
+                        Auto-Cleanup
+                    </h4>
+                    <div class="form-help" style="margin-top: 0;">Automatically clean up prefix command messages</div>
+                </div>
+
+                <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                    <div>
+                        <label class="form-label">Delete Trigger Messages</label>
+                        <label class="toggle-switch">
+                            <input type="checkbox" name="delete_trigger" value="1" <%= (typeof prefixConfig !== 'undefined' && prefixConfig.delete_trigger) ? 'checked' : '' %>>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <div class="form-help">Delete the user's command message (e.g. "!ban @user") after executing</div>
+                    </div>
+
+                    <div>
+                        <label class="form-label">Self-Destruct Delay (seconds)</label>
+                        <input type="number" class="form-input" name="cleanup_delay" value="<%= (typeof prefixConfig !== 'undefined' && prefixConfig.cleanup_delay) ? prefixConfig.cleanup_delay : 0 %>" min="0" max="300" style="width: 100px;">
+                        <div class="form-help">Bot response auto-deletes after this many seconds in private categories (0 = off)</div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="form-label">Private Categories</label>
+                    <% const allCategories = ['music', 'moderation', 'economy', 'leveling', 'fun', 'games', 'cannabis', 'social', 'tools', 'info', 'utility']; %>
+                    <% const privateList = (typeof prefixConfig !== 'undefined' && prefixConfig.private_categories) ? JSON.parse(typeof prefixConfig.private_categories === 'string' ? prefixConfig.private_categories : '[]') : []; %>
+                    <div style="display: flex; flex-wrap: wrap; gap: var(--spacing-2);">
+                        <% allCategories.forEach(cat => { %>
+                            <label style="display: flex; align-items: center; gap: var(--spacing-1); padding: var(--spacing-1) var(--spacing-3); background: var(--color-bg-secondary); border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-sm); border: 1px solid var(--color-border);">
+                                <input type="checkbox" name="private_categories" value="<%= cat %>" <%= privateList.includes(cat) ? 'checked' : '' %>>
+                                <span><%= cat.charAt(0).toUpperCase() + cat.slice(1) %></span>
+                            </label>
                         <% }); %>
-                    <% } %>
-                </select>
-                <div class="form-help">Role given to members when they go live</div>
+                    </div>
+                    <div class="form-help">Bot responses in these categories will self-destruct after the delay above</div>
+                </div>
             </div>
         </div>
 
@@ -59,4 +224,26 @@
     color: var(--color-text-muted);
     margin-top: var(--spacing-2);
 }
+
+.form-input {
+    display: block;
+    padding: var(--spacing-2) var(--spacing-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent-purple);
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.25);
+}
+
+/* Override global toggle for better off-state contrast */
+#core-settings-form .toggle-switch { display: inline-block; }
+#core-settings-form .toggle-slider { background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); }
+#core-settings-form .toggle-switch input:checked + .toggle-slider { background: var(--accent-green); border-color: var(--accent-green); }
+#core-settings-form .toggle-switch input:checked + .toggle-slider::before { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
 </style>

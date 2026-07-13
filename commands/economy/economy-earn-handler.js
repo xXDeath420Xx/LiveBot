@@ -3,7 +3,16 @@ import economyManager from '../../core/economy-manager.js';
 
 export async function handleDaily(interaction) {
     const config = await economyManager.getEconomyConfig(interaction.guild.id);
-    const result = await economyManager.claimDaily(interaction.guild.id, interaction.user.id);
+    let result;
+    try {
+        result = await economyManager.claimDaily(interaction.guild.id, interaction.user.id);
+    } catch (err) {
+        // Cooldown / disabled / etc \u2014 economy-manager throws on these.
+        return interaction.reply({
+            content: `\u23f3 ${err.message}`,
+            flags: 64, // ephemeral
+        });
+    }
 
     if (interaction.client.achievementManager) {
         if (result.streak >= 7) {

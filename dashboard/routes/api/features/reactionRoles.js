@@ -46,62 +46,69 @@ router.get('/panels', async (req, res) => {
 router.post('/panels', async (req, res) => {
     try {
         const { guildId } = req.params;
+        // Accept both new (correct) and legacy (wrong) field names from clients,
+        // so the Tailwind UI and any older callers both work.
         const {
             channel_id,
-            title,
+            panel_name, title,
             description,
-            color,
+            embed_color, color,
+            thumbnail_url,
+            image_url,
             panel_mode,
             interaction_type,
-            max_roles,
+            max_selections, max_roles,
+            placeholder_text,
             mappings
         } = req.body;
 
-        if (!channel_id || !title) {
-            return res.status(400).json({ error: 'Channel and title are required' });
+        const resolvedName = panel_name || title;
+        const resolvedColor = embed_color || color || '#a78bfa';
+        const resolvedMaxSel = max_selections ?? max_roles ?? 1;
+
+        if (!channel_id || !resolvedName) {
+            return res.status(400).json({ error: 'Channel and panel name are required' });
         }
 
-        // Create panel
         const [result] = await pool.execute(`
             INSERT INTO reaction_role_panels
-                (guild_id, channel_id, title, description, color, panel_mode, interaction_type, max_roles)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (guild_id, channel_id, message_id, panel_name, description,
+                 embed_color, thumbnail_url, image_url, panel_mode,
+                 interaction_type, max_selections, placeholder_text)
+            VALUES (?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
             guildId,
             channel_id,
-            title,
-            description || '',
-            color || '#a78bfa',
+            resolvedName,
+            description || null,
+            resolvedColor,
+            thumbnail_url || null,
+            image_url || null,
             panel_mode || 'normal',
             interaction_type || 'button',
-            max_roles || 0
+            resolvedMaxSel,
+            placeholder_text || 'Choose your roles'
         ]);
 
         const panelId = result.insertId;
 
-        // Add mappings if provided
         if (mappings && Array.isArray(mappings)) {
             for (const mapping of mappings) {
                 await pool.execute(`
                     INSERT INTO reaction_role_mappings
-                        (panel_id, role_id, emoji, label, description, style)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                        (panel_id, role_id, emoji_id, label, button_style)
+                    VALUES (?, ?, ?, ?, ?)
                 `, [
                     panelId,
                     mapping.role_id,
-                    mapping.emoji || null,
+                    mapping.emoji_id || mapping.emoji || null,
                     mapping.label || null,
-                    mapping.description || null,
-                    mapping.style || 'primary'
+                    mapping.button_style || mapping.style || 'primary'
                 ]);
             }
         }
 
-        res.json({
-            success: true,
-            message: 'Panel created',
-            panelId
-        });
+        res.json({ success: true, message: 'Panel created', panelId });
     } catch (error) {
         logger.error('[API Reaction Roles Panels POST] Error:', error);
         res.status(500).json({ error: 'Failed to create panel' });
@@ -115,54 +122,56 @@ router.post('/panels', async (req, res) => {
 router.put('/panels/:panelId', async (req, res) => {
     try {
         const { guildId, panelId } = req.params;
+        // Accept new + legacy field names (see POST handler).
         const {
-            title,
+            panel_name, title,
             description,
-            color,
+            embed_color, color,
+            thumbnail_url,
+            image_url,
             panel_mode,
             interaction_type,
-            max_roles,
+            max_selections, max_roles,
+            placeholder_text,
             mappings
         } = req.body;
 
-        // Update panel
-        await pool.execute(`
-            UPDATE reaction_role_panels
-            SET title = ?, description = ?, color = ?, panel_mode = ?,
-                interaction_type = ?, max_roles = ?
-            WHERE id = ? AND guild_id = ?
-        `, [
-            title,
-            description || '',
-            color || '#a78bfa',
-            panel_mode || 'normal',
-            interaction_type || 'button',
-            max_roles || 0,
-            panelId,
-            guildId
-        ]);
+        // Build dynamic UPDATE so untouched fields aren't clobbered to defaults.
+        const fields = [];
+        const values = [];
+        const set = (col, val) => { fields.push(`${col} = ?`); values.push(val); };
 
-        // Update mappings if provided
-        if (mappings && Array.isArray(mappings)) {
-            // Delete existing mappings
+        if (panel_name !== undefined || title !== undefined) set('panel_name', panel_name ?? title);
+        if (description !== undefined) set('description', description || null);
+        if (embed_color !== undefined || color !== undefined) set('embed_color', embed_color ?? color);
+        if (thumbnail_url !== undefined) set('thumbnail_url', thumbnail_url || null);
+        if (image_url !== undefined) set('image_url', image_url || null);
+        if (panel_mode !== undefined) set('panel_mode', panel_mode);
+        if (interaction_type !== undefined) set('interaction_type', interaction_type);
+        if (max_selections !== undefined || max_roles !== undefined) set('max_selections', max_selections ?? max_roles);
+        if (placeholder_text !== undefined) set('placeholder_text', placeholder_text);
+
+        if (fields.length > 0) {
+            values.push(panelId, guildId);
             await pool.execute(
-                'DELETE FROM reaction_role_mappings WHERE panel_id = ?',
-                [panelId]
+                `UPDATE reaction_role_panels SET ${fields.join(', ')} WHERE id = ? AND guild_id = ?`,
+                values
             );
+        }
 
-            // Add new mappings
+        if (mappings && Array.isArray(mappings)) {
+            await pool.execute('DELETE FROM reaction_role_mappings WHERE panel_id = ?', [panelId]);
             for (const mapping of mappings) {
                 await pool.execute(`
                     INSERT INTO reaction_role_mappings
-                        (panel_id, role_id, emoji, label, description, style)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                        (panel_id, role_id, emoji_id, label, button_style)
+                    VALUES (?, ?, ?, ?, ?)
                 `, [
                     panelId,
                     mapping.role_id,
-                    mapping.emoji || null,
+                    mapping.emoji_id || mapping.emoji || null,
                     mapping.label || null,
-                    mapping.description || null,
-                    mapping.style || 'primary'
+                    mapping.button_style || mapping.style || 'primary'
                 ]);
             }
         }

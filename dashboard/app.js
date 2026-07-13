@@ -105,8 +105,11 @@ export function createApp(options = {}) {
             function makeInclude(callerFile) {
                 return (templatePath, data = {}) => {
                     const ext = templatePath.endsWith('.ejs') ? '' : '.ejs';
-                    const baseDir = callerFile ? path.dirname(callerFile) : viewsDir;
-                    const fullPath = path.resolve(baseDir, templatePath + ext);
+                    const callerDir = callerFile ? path.dirname(callerFile) : viewsDir;
+                    let fullPath = path.resolve(callerDir, templatePath + ext);
+                    if (!fs.existsSync(fullPath)) {
+                        fullPath = path.resolve(viewsDir, templatePath + ext);
+                    }
                     const template = fs.readFileSync(fullPath, 'utf8');
                     return ejs.render(template, { ...options, ...data, filename: fullPath, include: makeInclude(fullPath) });
                 };

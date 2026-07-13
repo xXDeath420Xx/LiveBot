@@ -1,0 +1,130 @@
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-clock"></i>
+                <span>Scheduled Channel Purge</span>
+            </div>
+            <div class="page-section-subtitle">
+                Automatically clear messages from channels on a schedule
+            </div>
+        </div>
+    </div>
+
+    <!-- Existing purge configs -->
+    <% const configs = typeof purgeConfigs !== 'undefined' ? purgeConfigs : []; %>
+    <% if (configs.length > 0) { %>
+    <div style="margin-bottom: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
+            Active Schedules (<%= configs.length %>)
+        </h3>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <% configs.forEach(cfg => {
+                const ch = channels.find(c => c.id === cfg.channel_id);
+            %>
+            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-3) var(--spacing-4);">
+                <div style="display: flex; align-items: center; gap: var(--spacing-3); flex: 1;">
+                    <div style="width: 36px; height: 36px; background: <%= cfg.enabled ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)' %>; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fas fa-<%= cfg.enabled ? 'check' : 'pause' %>" style="font-size: 0.85rem; color: <%= cfg.enabled ? '#22c55e' : 'var(--color-text-muted)' %>;"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm);">
+                            #<%= ch ? ch.name : cfg.channel_id %>
+                        </div>
+                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                            <% if (cfg.interval_hours) { %>
+                                Every <%= cfg.interval_hours %> hour<%= cfg.interval_hours > 1 ? 's' : '' %>
+                            <% } else { %>
+                                Daily at <%= cfg.purge_time %> (server time)
+                            <% } %>
+                            <% if (cfg.last_purge_at) { %>
+                                &middot; Last purge: <%= new Date(cfg.last_purge_at).toLocaleString() %>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                    <form action="/manage/<%= guild.id %>/toggle-purge" method="POST" style="display: inline;">
+                        <input type="hidden" name="purgeId" value="<%= cfg.id %>">
+                        <input type="hidden" name="enabled" value="<%= cfg.enabled ? '0' : '1' %>">
+                        <button type="submit" style="background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.2); border-radius: var(--radius-md); padding: 6px 12px; color: #a78bfa; cursor: pointer; font-size: 0.75rem;">
+                            <i class="fas fa-<%= cfg.enabled ? 'pause' : 'play' %>"></i>
+                        </button>
+                    </form>
+                    <form action="/manage/<%= guild.id %>/remove-purge" method="POST" style="display: inline;" onsubmit="return confirm('Remove this auto-purge schedule?')">
+                        <input type="hidden" name="purgeId" value="<%= cfg.id %>">
+                        <button type="submit" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); border-radius: var(--radius-md); padding: 6px 12px; color: #f87171; cursor: pointer; font-size: 0.75rem;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <% }); %>
+        </div>
+    </div>
+    <% } else { %>
+    <div style="text-align: center; padding: 40px 20px; color: var(--color-text-muted); margin-bottom: var(--spacing-6);">
+        <i class="fas fa-clock" style="font-size: 2.5rem; margin-bottom: var(--spacing-3); display: block; opacity: 0.25;"></i>
+        <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); margin-bottom: 4px;">No auto-purge schedules</div>
+        <div style="font-size: var(--font-size-sm);">Add one below to automatically clear a channel on a schedule</div>
+    </div>
+    <% } %>
+
+    <!-- Add new purge -->
+    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
+        <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
+            <i class="fas fa-plus" style="color: var(--accent-purple); margin-right: var(--spacing-2);"></i>
+            Add Auto-Purge Schedule
+        </h3>
+
+        <form action="/manage/<%= guild.id %>/add-purge" method="POST">
+            <!-- Channel -->
+            <div style="margin-bottom: var(--spacing-4);">
+                <label class="form-label">Channel to Purge</label>
+                <select name="channel_id" class="form-select" required>
+                    <option value="">Select a channel...</option>
+                    <% channels.forEach(ch => { %>
+                    <option value="<%= ch.id %>">#<%= ch.name %></option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <!-- Schedule mode -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+                <div>
+                    <label class="form-label">Schedule Mode</label>
+                    <select name="mode" class="form-select" id="purge-mode" onchange="document.getElementById('time-row').style.display = this.value === 'daily' ? 'block' : 'none'; document.getElementById('interval-row').style.display = this.value === 'interval' ? 'block' : 'none';">
+                        <option value="daily">Daily at a specific time</option>
+                        <option value="interval">Every X hours</option>
+                    </select>
+                </div>
+                <div id="time-row">
+                    <label class="form-label">Purge Time (server timezone)</label>
+                    <input type="time" name="purge_time" class="form-control" value="00:00">
+                    <div class="form-help">Uses your server's timezone from Core Settings</div>
+                </div>
+                <div id="interval-row" style="display: none;">
+                    <label class="form-label">Interval (hours)</label>
+                    <input type="number" name="interval_hours" class="form-control" min="1" max="168" value="24" placeholder="24">
+                    <div class="form-help">Purge every N hours (1-168)</div>
+                </div>
+            </div>
+
+            <!-- Info -->
+            <div style="background: var(--color-dark-700); border-left: 4px solid var(--accent-purple); padding: var(--spacing-3); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4); font-size: var(--font-size-xs); color: var(--color-text-muted);">
+                <i class="fas fa-info-circle" style="color: var(--accent-purple); margin-right: 4px;"></i>
+                Pinned messages are never deleted. Messages older than 14 days are deleted individually (slower due to Discord API limits).
+            </div>
+
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-plus"></i>
+                <span>Add Schedule</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<style>
+.form-label { display: block; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2); }
+.form-help { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-2); }
+</style>

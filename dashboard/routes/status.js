@@ -690,35 +690,5 @@ router.get('/incidents', apiCheckSuperAdmin, async (req, res) => {
   }
 });
 
-// FiveM server status proxy (avoids CORS issues)
-let fivemCache = { data: null, lastFetch: 0 };
-router.get('/fivem', async (req, res) => {
-  try {
-    const now = Date.now();
-    // Cache for 15 seconds
-    if (fivemCache.data && (now - fivemCache.lastFetch) < 15000) {
-      return res.json(fivemCache.data);
-    }
-
-    const response = await fetch('https://fivem.certifriedmultitool.com/api/server/stats', {
-      signal: AbortSignal.timeout(5000)
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      fivemCache.data = { success: true, ...data };
-      fivemCache.lastFetch = now;
-      return res.json(fivemCache.data);
-    }
-
-    res.json({ success: false, online: false });
-  } catch (error) {
-    // Return cached data if available
-    if (fivemCache.data) {
-      return res.json({ ...fivemCache.data, stale: true });
-    }
-    res.json({ success: false, online: false, error: 'Failed to fetch FiveM status' });
-  }
-});
 
 export default router;

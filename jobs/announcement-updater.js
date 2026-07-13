@@ -1,8 +1,9 @@
 import cron from 'node-cron';
 import logger from '../utils/logger.js';
-import { getLiveAnnouncements } from '../core/stream-manager.js';
-import { updateAnnouncement } from '../utils/announcer.js';
+import { getLiveAnnouncements, updateOfflineCheckCount, deleteAnnouncementFromDatabase } from '../core/stream-manager.js';
+import { updateAnnouncement, deleteAnnouncement, editAnnouncementStreamEnded } from '../utils/announcer.js';
 import pool from '../utils/db.js';
+import platformCache from '../utils/platformCache.js';
 
 // Platform API modules
 import * as twitchApi from '../utils/platforms/twitch.js';
@@ -36,31 +37,15 @@ export function startAnnouncementUpdater(client) {
         return;
     }
 
-    // Run every 5 minutes
+    // Run every 5 minutes — iterate the shared announcement Map ONCE with proper client resolution
+    // (iterating per-bot caused double-processing since all bots share the same Map)
     schedulerTask = cron.schedule('*/5 * * * *', async () => {
-        logger.info('[Announcement Updater] Running scheduled announcement update for all bots', { category: 'streams' });
+        logger.info('[Announcement Updater] Running scheduled announcement update', { category: 'streams' });
 
-        // Update for default bot
-        const defaultClient = global.botManager?.getDefaultClient() || client;
-        if (defaultClient) {
-            try {
-                await updateLiveAnnouncements(defaultClient);
-            } catch (error) {
-                logger.error('[Announcement Updater] Error during scheduled update (default bot):', { error, category: 'streams' });
-            }
-        }
-
-        // Update for all custom bots
-        if (global.botManager?.clients) {
-            for (const [botId, botClient] of global.botManager.clients.entries()) {
-                if (botId === 'default') continue;
-
-                try {
-                    await updateLiveAnnouncements(botClient);
-                } catch (error) {
-                    logger.error(`[Announcement Updater] Error during scheduled update (bot ${botId}):`, { error, botId, category: 'streams' });
-                }
-            }
+        try {
+            await updateLiveAnnouncements(client);
+        } catch (error) {
+            logger.error('[Announcement Updater] Error during scheduled update:', { error, category: 'streams' });
         }
     });
 
@@ -107,11 +92,27 @@ async function updateLiveAnnouncements(client) {
                     continue;
                 }
 
-                // Check if still live and get updated data
-                const isLive = await api.isStreamerLive(announcement.username);
+                // Extract guild_id and channel_id from the key: "guildId-platform-username-channelId"
+                const keyParts = key.split('-');
+                const guildId = keyParts[0];
+                const channelId = keyParts[keyParts.length - 1];
+
+                // Check if still live using the shared platform cache
+                // (same cache the stream-check-scheduler uses — prevents conflicting API results)
+                const isLive = await platformCache.get(
+                    announcement.platform,
+                    'isLive',
+                    announcement.username,
+                    () => api.isStreamerLive(announcement.username)
+                );
+
                 if (!isLive) {
-                    logger.info(`[Announcement Updater] Streamer ${announcement.username} is no longer live, skipping update`, {
-                        category: 'streams'
+                    // Stream appears offline — DO NOT handle cleanup here.
+                    // The stream-check-scheduler is the single authority for offline detection
+                    // and announcement cleanup. If we also do it here, the two systems race
+                    // and cause false "stream ended" → new post duplicates.
+                    logger.info(`[Announcement Updater] ${announcement.username} appears offline — skipping embed update (stream checker handles cleanup)`, {
+                        category: 'streams', guildId
                     });
                     continue;
                 }
@@ -123,11 +124,6 @@ async function updateLiveAnnouncements(client) {
                     });
                     continue;
                 }
-
-                // Extract guild_id and channel_id from the key: "guildId-platform-username-channelId"
-                const keyParts = key.split('-');
-                const guildId = keyParts[0];
-                const channelId = keyParts[keyParts.length - 1];
 
                 // Get subscription and guild settings
                 const [subscriptions] = await connection.query(

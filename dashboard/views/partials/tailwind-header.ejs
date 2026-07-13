@@ -59,6 +59,7 @@
         <div class="hidden md:flex items-center gap-1">
             <a href="/" class="px-4 py-2 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Home</a>
             <a href="/commands" class="px-4 py-2 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Commands</a>
+            <a href="/cah" class="px-4 py-2 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">🃏 CAH</a>
             <a href="/status" class="px-4 py-2 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Status</a>
             <a href="/docs" class="px-4 py-2 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Docs</a>
             <a href="/donate" class="px-4 py-2 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Donate</a>
@@ -108,6 +109,10 @@
                             </svg>
                             Super Admin
                         </a>
+                        <a href="/admin/cah" class="flex items-center gap-2 px-4 py-2.5 text-amber-400 hover:text-amber-300 hover:bg-dark-500 transition-colors">
+                            <span class="w-4 h-4 inline-flex items-center justify-center text-base">🃏</span>
+                            CAH Admin
+                        </a>
                         <a href="/bot-management" class="flex items-center gap-2 px-4 py-2.5 text-amber-400 hover:text-amber-300 hover:bg-dark-500 transition-colors">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
@@ -148,12 +153,16 @@
         <div class="px-4 py-3 space-y-1">
             <a href="/" class="block px-4 py-2.5 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Home</a>
             <a href="/commands" class="block px-4 py-2.5 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Commands</a>
+            <a href="/cah" class="block px-4 py-2.5 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">🃏 CAH</a>
             <a href="/status" class="block px-4 py-2.5 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Status</a>
             <a href="/docs" class="block px-4 py-2.5 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Docs</a>
             <a href="/donate" class="block px-4 py-2.5 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Donate</a>
             <% if (typeof user !== 'undefined' && user) { %>
                 <hr class="border-dark-400 my-2">
                 <a href="/servers" class="block px-4 py-2.5 text-gray-300 hover:text-white hover:bg-dark-600 rounded-lg transition-all">Dashboard</a>
+                <% if (user.isSuperAdmin) { %>
+                    <a href="/admin/cah" class="block px-4 py-2.5 text-amber-400 hover:text-amber-300 hover:bg-dark-600 rounded-lg transition-all">🃏 CAH Admin</a>
+                <% } %>
             <% } %>
         </div>
     </div>

@@ -28,6 +28,15 @@ export function isSuperAdmin(userId) {
     return SUPER_ADMIN_IDS.has(userId);
 }
 
+/**
+ * The Bot Developer role. Its colour is fixed so the role looks identical in every server it is
+ * created in — sits directly below the bot's highest role, above the bot's own managed role.
+ */
+export const BOT_DEVELOPER_ROLE = Object.freeze({
+    name: 'Bot Developer',
+    color: 0x1591fd, // #1591fd — do not change
+});
+
 // ==============================================
 // INPUT VALIDATION LIMITS
 // ==============================================

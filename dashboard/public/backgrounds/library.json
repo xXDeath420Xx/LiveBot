@@ -1,0 +1,52 @@
+{
+  "categories": [
+    {
+      "name": "Abstract",
+      "id": "abstract",
+      "backgrounds": [
+        { "id": "abstract-1", "url": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=300&q=60", "label": "Purple Gradient" },
+        { "id": "abstract-2", "url": "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=300&q=60", "label": "Rainbow Gradient" },
+        { "id": "abstract-3", "url": "https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=300&q=60", "label": "Pink Waves" },
+        { "id": "abstract-4", "url": "https://images.unsplash.com/photo-1620121692029-d088224ddc74?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1620121692029-d088224ddc74?w=300&q=60", "label": "Blue Mesh" },
+        { "id": "abstract-5", "url": "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=300&q=60", "label": "Neon Lines" },
+        { "id": "abstract-6", "url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&q=60", "label": "Warm Swirl" }
+      ]
+    },
+    {
+      "name": "Nature",
+      "id": "nature",
+      "backgrounds": [
+        { "id": "nature-1", "url": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=300&q=60", "label": "Beach Sunset" },
+        { "id": "nature-2", "url": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=300&q=60", "label": "Misty Forest" },
+        { "id": "nature-3", "url": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=300&q=60", "label": "Mountains" },
+        { "id": "nature-4", "url": "https://images.unsplash.com/photo-1516339901601-2e1b62dc0c45?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1516339901601-2e1b62dc0c45?w=300&q=60", "label": "Cherry Blossoms" },
+        { "id": "nature-5", "url": "https://images.unsplash.com/photo-1418065460487-3e41a6c84dc5?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1418065460487-3e41a6c84dc5?w=300&q=60", "label": "Autumn Path" },
+        { "id": "nature-6", "url": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=300&q=60", "label": "Starry Night" }
+      ]
+    },
+    {
+      "name": "Festive",
+      "id": "festive",
+      "backgrounds": [
+        { "id": "festive-1", "url": "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=300&q=60", "label": "Confetti" },
+        { "id": "festive-2", "url": "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1513151233558-d860c5398176?w=300&q=60", "label": "Balloons" },
+        { "id": "festive-3", "url": "https://images.unsplash.com/photo-1464349095431-e9a21285b5f3?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1464349095431-e9a21285b5f3?w=300&q=60", "label": "Sparklers" },
+        { "id": "festive-4", "url": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&q=60", "label": "Party Lights" },
+        { "id": "festive-5", "url": "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=300&q=60", "label": "Celebration" },
+        { "id": "festive-6", "url": "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=1920&q=80", "thumb": "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=300&q=60", "label": "Festival" }
+      ]
+    },
+    {
+      "name": "Minimal",
+      "id": "minimal",
+      "backgrounds": [
+        { "id": "minimal-1", "url": "", "color": "#000000", "thumb": "", "label": "Black" },
+        { "id": "minimal-2", "url": "", "color": "#1a1a2e", "thumb": "", "label": "Dark Navy" },
+        { "id": "minimal-3", "url": "", "color": "#2d1b69", "thumb": "", "label": "Deep Purple" },
+        { "id": "minimal-4", "url": "", "color": "#1b4332", "thumb": "", "label": "Forest Green" },
+        { "id": "minimal-5", "url": "", "color": "#6b1c23", "thumb": "", "label": "Dark Red" },
+        { "id": "minimal-6", "url": "", "color": "#f5f5f5", "thumb": "", "label": "Light Gray" }
+      ]
+    }
+  ]
+}

@@ -77,6 +77,62 @@ function mapTrack(t) {
     };
 }
 
+/** Words that carry no matching signal, so they should not count for or against a match. */
+const STOPWORDS = new Set(['the', 'a', 'an', 'of', 'and', 'by', 'feat', 'ft', 'official', 'video',
+    'audio', 'lyrics', 'hd', 'remix', 'live', 'music']);
+
+const tokens = (s) => String(s || '').toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/).filter(t => t && !STOPWORDS.has(t));
+
+/**
+ * How much of the query is actually present in a candidate's "artist title"?
+ * Spotify's search NEVER returns empty — ask it for "lofi hip hop radio 24/7" and it will
+ * cheerfully hand back some unrelated song. Without this guard, Spotify-first would hijack
+ * every query that was really meant for YouTube.
+ */
+export function matchScore(query, candidate) {
+    const q = tokens(query);
+    if (!q.length) return 0;
+    const hay = new Set(tokens(`${candidate.title} ${candidate.artist}`));
+    return q.filter(t => hay.has(t)).length / q.length;
+}
+
+/** Below this share of query words matched, we do not trust the Spotify hit. */
+const MIN_MATCH = 0.6;
+
+/**
+ * Find the best Spotify track for a free-text query, so a plain `?play <song>` starts life as a
+ * Spotify track rather than a YouTube one. Returns `mapTrack()` shape, or null when Spotify has
+ * no confident match, credentials are absent, or the API is unreachable — every one of which
+ * must fall through silently to the yt-dlp path rather than fail the command.
+ */
+export async function searchSpotifyTrack(query) {
+    const q = String(query || '').trim();
+    if (!q) return null;
+    if (!process.env.SPOTIFY_CLIENT_ID || !process.env.SPOTIFY_CLIENT_SECRET) return null;
+
+    try {
+        const data = await spGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=5`);
+        const candidates = (data?.tracks?.items || []).map(mapTrack).filter(Boolean);
+        if (!candidates.length) return null;
+
+        let best = null, bestScore = 0;
+        for (const c of candidates) {
+            const score = matchScore(q, c);
+            if (score > bestScore) { best = c; bestScore = score; }
+        }
+        if (!best || bestScore < MIN_MATCH) {
+            logger.info(`[Spotify] no confident match for "${q}" (best ${bestScore.toFixed(2)}) — using yt-dlp`);
+            return null;
+        }
+        return best;
+    } catch (err) {
+        logger.warn(`[Spotify] text search failed for "${q}": ${err.message}`);
+        return null;
+    }
+}
+
 async function pageThrough(firstPath) {
     const items = [];
     let data = await spGet(firstPath);

@@ -8,6 +8,17 @@ const groupedCommands = commands.reduce((acc, cmd) => {
     return acc;
 }, {});
 
+const restrictions = typeof commandRestrictions !== 'undefined' ? commandRestrictions : {};
+const currentGuildId = typeof guildId !== 'undefined' ? guildId : '';
+
+function getRestrictionState(cmdName) {
+    const r = restrictions[cmdName];
+    if (!r) return 'everyone';
+    if (!r.allowed) return 'disabled';
+    if (r.admin_only) return 'mod_only';
+    return 'everyone';
+}
+
 const categoryIcons = {
     'Streamer': 'M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z',
     'Team': 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
@@ -27,11 +38,12 @@ const categoryIcons = {
 
 const totalCommands = Object.values(groupedCommands).reduce((sum, cmds) => sum + cmds.length, 0);
 const categoryCount = Object.keys(groupedCommands).length;
+const disabledCount = Object.values(restrictions).filter(r => !r.allowed).length;
 %>
 
 <div class="space-y-6">
     <!-- Stats -->
-    <div class="grid grid-cols-3 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <%- include('../../components/cards/statCard', {
             title: 'Total Commands',
             value: totalCommands,
@@ -50,6 +62,12 @@ const categoryCount = Object.keys(groupedCommands).length;
             icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>',
             color: 'success'
         }) %>
+        <%- include('../../components/cards/statCard', {
+            title: 'Disabled',
+            value: disabledCount,
+            icon: '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>',
+            color: disabledCount > 0 ? 'warning' : 'success'
+        }) %>
     </div>
 
     <!-- Search -->
@@ -59,6 +77,29 @@ const categoryCount = Object.keys(groupedCommands).length;
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
             </svg>
             <input type="text" id="commandSearch" class="form-input w-full pl-10" placeholder="Search commands by name or description...">
+        </div>
+    </div>
+
+    <!-- Save Bar -->
+    <div id="commandSaveBar" class="card bg-dark-700 border-primary-500/50 hidden">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                </svg>
+                <span class="text-sm text-gray-300">You have unsaved changes to command permissions</span>
+            </div>
+            <div class="flex gap-2">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="resetAllRestrictions()">
+                    Reset All
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="saveCommandRestrictions()">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                    Save Changes
+                </button>
+            </div>
         </div>
     </div>
 
@@ -89,8 +130,9 @@ const categoryCount = Object.keys(groupedCommands).length;
                     <table class="w-full">
                         <thead>
                             <tr class="border-b border-dark-400">
-                                <th class="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider w-48">Command</th>
+                                <th class="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider w-44">Command</th>
                                 <th class="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Description</th>
+                                <th class="text-left py-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider w-40">Access</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-dark-500">
@@ -101,6 +143,16 @@ const categoryCount = Object.keys(groupedCommands).length;
                                     </td>
                                     <td class="py-2 px-3 text-sm text-gray-400">
                                         <%= command.description %>
+                                    </td>
+                                    <td class="py-2 px-3">
+                                        <select name="cmd_access_<%= command.name %>"
+                                                class="cmd-access-select form-input w-full text-sm"
+                                                data-command="<%= command.name %>"
+                                                data-original="<%= getRestrictionState(command.name) %>">
+                                            <option value="everyone" <%= getRestrictionState(command.name) === 'everyone' ? 'selected' : '' %>>Everyone</option>
+                                            <option value="mod_only" <%= getRestrictionState(command.name) === 'mod_only' ? 'selected' : '' %>>Mod Only</option>
+                                            <option value="disabled" <%= getRestrictionState(command.name) === 'disabled' ? 'selected' : '' %>>Disabled</option>
+                                        </select>
                                     </td>
                                 </tr>
                             <% }); %>
@@ -120,10 +172,12 @@ const categoryCount = Object.keys(groupedCommands).length;
                 </svg>
             </div>
             <div>
-                <h4 class="font-semibold text-white mb-1">How to use commands</h4>
-                <p class="text-sm text-gray-300">
-                    All commands use Discord's slash command system. Type <code class="px-1.5 py-0.5 rounded bg-dark-700 text-primary-400">/</code> in any channel and Discord will show available commands with auto-complete.
-                </p>
+                <h4 class="font-semibold text-white mb-1">Command Access Levels</h4>
+                <ul class="text-sm text-gray-300 space-y-1">
+                    <li><span class="text-green-400 font-medium">Everyone</span> &mdash; All members can use this command (default)</li>
+                    <li><span class="text-yellow-400 font-medium">Mod Only</span> &mdash; Only members with Manage Server permission can use it</li>
+                    <li><span class="text-red-400 font-medium">Disabled</span> &mdash; Nobody can use this command in this server</li>
+                </ul>
             </div>
         </div>
     </div>
@@ -143,9 +197,22 @@ const categoryCount = Object.keys(groupedCommands).length;
 .category-toggle.rotated {
     transform: rotate(-90deg);
 }
+
+.cmd-access-select option[value="everyone"] { color: #57F287; }
+.cmd-access-select option[value="mod_only"] { color: #FEE75C; }
+.cmd-access-select option[value="disabled"] { color: #ED4245; }
+
+.cmd-access-select[data-state="disabled"] {
+    border-color: rgba(237, 66, 69, 0.4);
+}
+.cmd-access-select[data-state="mod_only"] {
+    border-color: rgba(254, 231, 92, 0.4);
+}
 </style>
 
 <script>
+const CMD_GUILD_ID = '<%= currentGuildId %>';
+
 document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('commandSearch');
     const categories = document.querySelectorAll('.command-category');
@@ -174,7 +241,38 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    // Track changes to show save bar
+    document.querySelectorAll('.cmd-access-select').forEach(select => {
+        updateSelectStyle(select);
+        select.addEventListener('change', () => {
+            updateSelectStyle(select);
+            checkForChanges();
+        });
+    });
 });
+
+function updateSelectStyle(select) {
+    select.setAttribute('data-state', select.value);
+}
+
+function checkForChanges() {
+    const selects = document.querySelectorAll('.cmd-access-select');
+    let hasChanges = false;
+
+    selects.forEach(select => {
+        if (select.value !== select.dataset.original) {
+            hasChanges = true;
+        }
+    });
+
+    const saveBar = document.getElementById('commandSaveBar');
+    if (hasChanges) {
+        saveBar.classList.remove('hidden');
+    } else {
+        saveBar.classList.add('hidden');
+    }
+}
 
 function toggleCategory(categoryId) {
     const commandsDiv = document.getElementById(`category-${categoryId}`);
@@ -187,5 +285,61 @@ function toggleCategory(categoryId) {
         commandsDiv.classList.add('collapsed');
         toggleIcon.classList.add('rotated');
     }
+}
+
+async function saveCommandRestrictions() {
+    const selects = document.querySelectorAll('.cmd-access-select');
+    const restrictions = [];
+
+    selects.forEach(select => {
+        const cmdName = select.dataset.command;
+        const state = select.value;
+
+        let allowed = true;
+        let adminOnly = false;
+
+        if (state === 'disabled') {
+            allowed = false;
+            adminOnly = true;
+        } else if (state === 'mod_only') {
+            allowed = true;
+            adminOnly = true;
+        }
+
+        restrictions.push({
+            command_name: cmdName,
+            allowed: allowed,
+            admin_only: adminOnly
+        });
+    });
+
+    try {
+        const response = await fetch(`/api/guilds/${CMD_GUILD_ID}/commands/restrictions`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ restrictions })
+        });
+
+        if (response.ok) {
+            showToast('success', 'Command permissions saved');
+            // Update original values so save bar hides
+            selects.forEach(select => {
+                select.dataset.original = select.value;
+            });
+            checkForChanges();
+        } else {
+            throw new Error('Failed to save');
+        }
+    } catch (error) {
+        showToast('error', 'Failed to save command permissions');
+    }
+}
+
+function resetAllRestrictions() {
+    document.querySelectorAll('.cmd-access-select').forEach(select => {
+        select.value = 'everyone';
+        updateSelectStyle(select);
+    });
+    checkForChanges();
 }
 </script>

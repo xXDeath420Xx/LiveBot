@@ -1,0 +1,2393 @@
+{
+  "overview": {
+    "name": "The Stab Crazies",
+    "id": "980331356196311070",
+    "owner": "stabcrazy (274331594280665088)",
+    "created": "2022-05-29T04:46:48.993Z",
+    "verificationLevel": 1,
+    "mfaLevel": 0,
+    "boostLevel": 0,
+    "boostCount": 0,
+    "contentFilter": 2,
+    "vanityUrl": "None",
+    "memberCount": 143
+  },
+  "memberStats": {
+    "total": 143,
+    "humans": 136,
+    "bots": 7,
+    "botRatio": "4.9%",
+    "online": 41,
+    "botList": [
+      {
+        "tag": "♜Lurker.tv#9202",
+        "id": "377796671113003008",
+        "admin": true
+      },
+      {
+        "tag": "Daily Quotes#0641",
+        "id": "880237210484506675",
+        "admin": false
+      },
+      {
+        "tag": "MEE6#4876",
+        "id": "159985870458322944",
+        "admin": true
+      },
+      {
+        "tag": "Spoticord Music#4270",
+        "id": "778719049143025664",
+        "admin": false
+      },
+      {
+        "tag": "Stab Bot#8487",
+        "id": "1482157000426258493",
+        "admin": true
+      },
+      {
+        "tag": "Tickets#6981",
+        "id": "508391840525975553",
+        "admin": true
+      },
+      {
+        "tag": "Uzox#9688",
+        "id": "760027263046909992",
+        "admin": true
+      }
+    ]
+  },
+  "bots": [
+    {
+      "tag": "Tickets#6981",
+      "id": "508391840525975553",
+      "replace": true,
+      "roles": [
+        {
+          "name": "Tickets",
+          "id": "985058838308880427"
+        },
+        {
+          "name": "🤖Bot",
+          "id": "980331356246638604"
+        }
+      ],
+      "dangerousPerms": [
+        "Administrator",
+        "ManageGuild",
+        "ManageRoles",
+        "ManageChannels",
+        "KickMembers",
+        "BanMembers",
+        "ManageWebhooks",
+        "ManageMessages",
+        "MentionEveryone",
+        "ViewAuditLog"
+      ],
+      "managedRoles": [
+        {
+          "name": "Tickets",
+          "id": "985058838308880427"
+        }
+      ]
+    },
+    {
+      "tag": "Spoticord Music#4270",
+      "id": "778719049143025664",
+      "replace": false,
+      "roles": [
+        {
+          "name": "Spoticord Music",
+          "id": "1019022428673949739"
+        },
+        {
+          "name": "🤖Bot",
+          "id": "980331356246638604"
+        },
+        {
+          "name": "✅Verified",
+          "id": "980331356196311077"
+        }
+      ],
+      "dangerousPerms": [
+        "MentionEveryone"
+      ],
+      "managedRoles": [
+        {
+          "name": "Spoticord Music",
+          "id": "1019022428673949739"
+        }
+      ]
+    },
+    {
+      "tag": "Daily Quotes#0641",
+      "id": "880237210484506675",
+      "replace": false,
+      "roles": [
+        {
+          "name": "🤖Bot",
+          "id": "980331356246638604"
+        },
+        {
+          "name": "Daily Quotes",
+          "id": "989704352094638083"
+        }
+      ],
+      "dangerousPerms": [
+        "ManageWebhooks",
+        "MentionEveryone"
+      ],
+      "managedRoles": [
+        {
+          "name": "Daily Quotes",
+          "id": "989704352094638083"
+        }
+      ]
+    },
+    {
+      "tag": "Uzox#9688",
+      "id": "760027263046909992",
+      "replace": true,
+      "roles": [
+        {
+          "name": "🤖Bot",
+          "id": "980331356246638604"
+        },
+        {
+          "name": "Uzox",
+          "id": "1212453616808628341"
+        }
+      ],
+      "dangerousPerms": [
+        "Administrator",
+        "ManageGuild",
+        "ManageRoles",
+        "ManageChannels",
+        "KickMembers",
+        "BanMembers",
+        "ManageWebhooks",
+        "ManageMessages",
+        "MentionEveryone",
+        "ViewAuditLog"
+      ],
+      "managedRoles": [
+        {
+          "name": "Uzox",
+          "id": "1212453616808628341"
+        }
+      ]
+    },
+    {
+      "tag": "♜Lurker.tv#9202",
+      "id": "377796671113003008",
+      "replace": true,
+      "roles": [
+        {
+          "name": "🤖Bot",
+          "id": "980331356246638604"
+        },
+        {
+          "name": "♜Lurker.tv",
+          "id": "985300729944219662"
+        }
+      ],
+      "dangerousPerms": [
+        "Administrator",
+        "ManageGuild",
+        "ManageRoles",
+        "ManageChannels",
+        "KickMembers",
+        "BanMembers",
+        "ManageWebhooks",
+        "ManageMessages",
+        "MentionEveryone",
+        "ViewAuditLog"
+      ],
+      "managedRoles": [
+        {
+          "name": "♜Lurker.tv",
+          "id": "985300729944219662"
+        }
+      ]
+    },
+    {
+      "tag": "MEE6#4876",
+      "id": "159985870458322944",
+      "replace": true,
+      "roles": [
+        {
+          "name": "⭐Viewer〔Level 0⁺〕",
+          "id": "980331356196311078"
+        },
+        {
+          "name": "(Music bots)",
+          "id": "980331356217311280"
+        },
+        {
+          "name": "🔒DM close",
+          "id": "980331356196311073"
+        },
+        {
+          "name": "(MEE6 bot for verification and moderation)",
+          "id": "980331356246638603"
+        },
+        {
+          "name": "🤖Bot",
+          "id": "980331356246638604"
+        },
+        {
+          "name": "MEE6",
+          "id": "980335344757129268"
+        }
+      ],
+      "dangerousPerms": [
+        "Administrator",
+        "ManageGuild",
+        "ManageRoles",
+        "ManageChannels",
+        "KickMembers",
+        "BanMembers",
+        "ManageWebhooks",
+        "ManageMessages",
+        "MentionEveryone",
+        "ViewAuditLog"
+      ],
+      "managedRoles": [
+        {
+          "name": "MEE6",
+          "id": "980335344757129268"
+        }
+      ]
+    },
+    {
+      "tag": "Stab Bot#8487",
+      "id": "1482157000426258493",
+      "replace": false,
+      "roles": [
+        {
+          "name": "Stab Bot",
+          "id": "1482157844995510394"
+        },
+        {
+          "name": "🤖Bot",
+          "id": "980331356246638604"
+        }
+      ],
+      "dangerousPerms": [
+        "Administrator",
+        "ManageGuild",
+        "ManageRoles",
+        "ManageChannels",
+        "KickMembers",
+        "BanMembers",
+        "ManageWebhooks",
+        "ManageMessages",
+        "MentionEveryone",
+        "ViewAuditLog"
+      ],
+      "managedRoles": [
+        {
+          "name": "Stab Bot",
+          "id": "1482157844995510394"
+        }
+      ]
+    }
+  ],
+  "roles": [
+    {
+      "position": 62,
+      "name": "Server Maintenance",
+      "id": "985365173630029824",
+      "color": "#000000",
+      "members": 2,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 61,
+      "name": "✴ ⊶▬▬⊶▬Staff Perms▬⊷▬▬⊷ ✴",
+      "id": "980331356267626524",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 60,
+      "name": "Stab Bot",
+      "id": "1482157844995510394",
+      "color": "#000000",
+      "members": 1,
+      "managed": true,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 59,
+      "name": "👑Owner",
+      "id": "980331356267626523",
+      "color": "#ffcd4f",
+      "members": 1,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 58,
+      "name": "👑Co Owner",
+      "id": "980331356267626522",
+      "color": "#f0c76b",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 57,
+      "name": "🚨Head Administrator",
+      "id": "980331356267626521",
+      "color": "#a20000",
+      "members": 3,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 56,
+      "name": "🔥Administrator",
+      "id": "980331356267626520",
+      "color": "#ff0004",
+      "members": 2,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 55,
+      "name": "🌐Head Moderator",
+      "id": "980331356267626519",
+      "color": "#2c00ff",
+      "members": 3,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 54,
+      "name": "🌀Moderator",
+      "id": "980331356267626518",
+      "color": "#0082ff",
+      "members": 3,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "MOD"
+      ]
+    },
+    {
+      "position": 53,
+      "name": "❓Trial Mod",
+      "id": "980331356267626517",
+      "color": "#ffffff",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "MOD"
+      ]
+    },
+    {
+      "position": 52,
+      "name": "⚙️Server Staff",
+      "id": "980331356267626516",
+      "color": "#00ffce",
+      "members": 6,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 51,
+      "name": "The ban community",
+      "id": "981426641492381756",
+      "color": "#96ff14",
+      "members": 4,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 50,
+      "name": "MEE6",
+      "id": "980335344757129268",
+      "color": "#000000",
+      "members": 1,
+      "managed": true,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 49,
+      "name": "Uzox",
+      "id": "1212453616808628341",
+      "color": "#000000",
+      "members": 1,
+      "managed": true,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 48,
+      "name": "♜Lurker.tv",
+      "id": "985300729944219662",
+      "color": "#000000",
+      "members": 1,
+      "managed": true,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 47,
+      "name": "Tickets",
+      "id": "985058838308880427",
+      "color": "#000000",
+      "members": 1,
+      "managed": true,
+      "hoisted": false,
+      "flags": [
+        "ADMIN",
+        "MOD"
+      ]
+    },
+    {
+      "position": 46,
+      "name": "Daily Quotes",
+      "id": "989704352094638083",
+      "color": "#000000",
+      "members": 1,
+      "managed": true,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 45,
+      "name": "✴ ⊶▬▬⊶▬Social▬⊷▬▬⊷ ✴",
+      "id": "980331356246638611",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 44,
+      "name": "HAPPY BIRTHDAY",
+      "id": "986685986673156117",
+      "color": "#ffff00",
+      "members": 0,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 43,
+      "name": "LIVE NOW",
+      "id": "985304307400310834",
+      "color": "#e91e63",
+      "members": 3,
+      "managed": false,
+      "hoisted": true,
+      "flags": [
+        "LIVE/STREAM"
+      ]
+    },
+    {
+      "position": 42,
+      "name": "✴ ⊶▬▬⊶▬Staff Display▬⊷▬▬⊷ ✴",
+      "id": "986686678913650728",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 41,
+      "name": "👑Owner",
+      "id": "986686728930754630",
+      "color": "#ffcd4f",
+      "members": 1,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 40,
+      "name": "👑Co Owner",
+      "id": "986686696366166016",
+      "color": "#f0c76b",
+      "members": 0,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 39,
+      "name": "🚨Head Administrator",
+      "id": "986686773918830672",
+      "color": "#a20000",
+      "members": 3,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 38,
+      "name": "🔥Administrator",
+      "id": "986686749424091156",
+      "color": "#ff0004",
+      "members": 2,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 37,
+      "name": "🌐Head Moderator",
+      "id": "986686715886469150",
+      "color": "#2c00ff",
+      "members": 3,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 36,
+      "name": "🌀Moderator",
+      "id": "986686737973641237",
+      "color": "#0082ff",
+      "members": 2,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 35,
+      "name": "❓Trial Mod",
+      "id": "986686761449168946",
+      "color": "#ffffff",
+      "members": 0,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 34,
+      "name": "✴ ⊶▬▬⊶▬Special▬⊷▬▬⊷ ✴",
+      "id": "980331356246638608",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 33,
+      "name": "💎Twitch Subscriber",
+      "id": "980331356246638607",
+      "color": "#a700ff",
+      "members": 4,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 32,
+      "name": "🚀Server Booster",
+      "id": "980331356246638606",
+      "color": "#79bdf1",
+      "members": 0,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 31,
+      "name": "KBD Runner",
+      "id": "985305689830346784",
+      "color": "#1f8b4c",
+      "members": 3,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 30,
+      "name": "✴ ⊶▬▬⊶▬Bot▬⊷▬▬⊷ ✴",
+      "id": "980331356246638605",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 29,
+      "name": "🤖Bot",
+      "id": "980331356246638604",
+      "color": "#a8b6cc",
+      "members": 7,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 28,
+      "name": "(MEE6 bot for verification and moderation)",
+      "id": "980331356246638603",
+      "color": "#56ff00",
+      "members": 1,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 27,
+      "name": "(Arcane bot for levels and leaderboard)",
+      "id": "980331356246638602",
+      "color": "#41ff00",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 26,
+      "name": "(ServerStats bot for member count)",
+      "id": "980331356217311281",
+      "color": "#26ff00",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 25,
+      "name": "(Music bots)",
+      "id": "980331356217311280",
+      "color": "#18ff00",
+      "members": 1,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 24,
+      "name": "✴ ⊶▬▬⊶▬LeaderBoard▬⊷▬▬⊷ ✴",
+      "id": "980331356217311279",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 23,
+      "name": "🥇First Place〔Leaderboard〕",
+      "id": "980331356217311278",
+      "color": "#00ffd6",
+      "members": 0,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 22,
+      "name": "✴ ⊶▬▬⊶▬Member▬⊷▬▬⊷ ✴",
+      "id": "980331356217311277",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 21,
+      "name": "💯 Godlike Viewer〔Level 100⁺〕",
+      "id": "980331356217311276",
+      "color": "#becc04",
+      "members": 0,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 20,
+      "name": "⚜️Mythic Viewer〔Level 80⁺〕",
+      "id": "980331356217311275",
+      "color": "#f1ff37",
+      "members": 1,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 19,
+      "name": "🔱Legend Viewer〔Level 60⁺〕",
+      "id": "980331356217311274",
+      "color": "#f4ff69",
+      "members": 4,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 18,
+      "name": "🌠Ace Viewer〔Level 40⁺〕",
+      "id": "980331356217311273",
+      "color": "#f8ff9b",
+      "members": 2,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 17,
+      "name": "✨Good Viewer〔Level 20⁺〕",
+      "id": "980331356217311272",
+      "color": "#3769ff",
+      "members": 2,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 16,
+      "name": "🌟Active Viewer〔Level 10⁺〕",
+      "id": "980331356196311079",
+      "color": "#698eff",
+      "members": 2,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 15,
+      "name": "⭐Viewer〔Level 0⁺〕",
+      "id": "980331356196311078",
+      "color": "#9bb4ff",
+      "members": 3,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 14,
+      "name": "✅Verified",
+      "id": "980331356196311077",
+      "color": "#00a73b",
+      "members": 134,
+      "managed": false,
+      "hoisted": true,
+      "flags": []
+    },
+    {
+      "position": 13,
+      "name": "🔇Muted",
+      "id": "980331356196311076",
+      "color": "#8b8b8b",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 12,
+      "name": "✴ ⊶▬▬⊶▬DM Status▬⊷▬▬⊷ ✴",
+      "id": "980331356196311075",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 11,
+      "name": "🔐Ask for DM",
+      "id": "980331356196311074",
+      "color": "#ffffff",
+      "members": 8,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 10,
+      "name": "🔒DM close",
+      "id": "980331356196311073",
+      "color": "#ff0000",
+      "members": 2,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 9,
+      "name": "🔓DM open",
+      "id": "980331356196311072",
+      "color": "#00ff6e",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 8,
+      "name": "✴ ⊶▬▬⊶▬Streamer Roles▬⊷▬▬⊷ ✴",
+      "id": "986688198891683880",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "LIVE/STREAM"
+      ]
+    },
+    {
+      "position": 7,
+      "name": "🎥Youtuber",
+      "id": "980331356246638609",
+      "color": "#eb3b36",
+      "members": 1,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 6,
+      "name": "🔴Twitch Streamer",
+      "id": "980331356246638610",
+      "color": "#7c00b8",
+      "members": 12,
+      "managed": false,
+      "hoisted": false,
+      "flags": [
+        "LIVE/STREAM"
+      ]
+    },
+    {
+      "position": 5,
+      "name": "____*gaming notifications*____",
+      "id": "991789197138612234",
+      "color": "#f8f8f9",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 4,
+      "name": "new role",
+      "id": "991789377686622309",
+      "color": "#000000",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 3,
+      "name": "Code notification",
+      "id": "991789471517392917",
+      "color": "#25c059",
+      "members": 0,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 2,
+      "name": "Spoticord Music",
+      "id": "1019022428673949739",
+      "color": "#000000",
+      "members": 1,
+      "managed": true,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 1,
+      "name": "Server Booster",
+      "id": "1020045109405941821",
+      "color": "#f47fff",
+      "members": 0,
+      "managed": true,
+      "hoisted": false,
+      "flags": []
+    },
+    {
+      "position": 0,
+      "name": "@everyone",
+      "id": "980331356196311070",
+      "color": "#000000",
+      "members": 143,
+      "managed": false,
+      "hoisted": false,
+      "flags": []
+    }
+  ],
+  "channels": [
+    {
+      "name": "support",
+      "id": "980339550742257725",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Please don't hesitate to contact us in our support server if you need any assistance!",
+      "parentId": null,
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🏆｜meme-of-the-week",
+      "id": "980331357131636799",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "The best meme of the week.",
+      "parentId": null,
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🏆｜photo-of-the-week",
+      "id": "980331357131636800",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "The best photo of the week.",
+      "parentId": null,
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🏆｜fan-art-of-the-week",
+      "id": "980331357131636801",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "The best fan art of the week.",
+      "parentId": null,
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 SERVER STATS 〕|✴",
+      "id": "980331356695433276",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "Total Members: 143",
+      "id": "985355979581448212",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331356695433276",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "Humans: 136",
+      "id": "985356099639181363",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331356695433276",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "Bots: 7",
+      "id": "985356014989750282",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331356695433276",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 VERIFICATION 〕|✴",
+      "id": "980331356695433279",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✅｜verify",
+      "id": "980331356695433280",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for member verification.",
+      "parentId": "980331356695433279",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 INFORMATION 〕|✴",
+      "id": "980331356695433281",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "rules",
+      "id": "980339550742257724",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331356695433281",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "👋🏼｜welcome",
+      "id": "980331356695433282",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Welcome to our discord server!",
+      "parentId": "980331356695433281",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "💬｜faq",
+      "id": "980331356695433284",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for frequently asked questions.",
+      "parentId": "980331356695433281",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "📖｜about-server",
+      "id": "980331356695433283",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel with all the information you need to know about our server.",
+      "parentId": "980331356695433281",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 IMPORTANT 〕|✴",
+      "id": "980331356695433285",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "📨｜suggestions",
+      "id": "980331356926148659",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331356695433285",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎊｜events",
+      "id": "980331356926148661",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Check here for events!",
+      "parentId": "980331356695433285",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "📰｜announcements",
+      "id": "980331356926148658",
+      "type": "announcement",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Check here for the most important announcements.",
+      "parentId": "980331356695433285",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "📥｜vote",
+      "id": "980331356926148662",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331356695433285",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎉｜giveaways",
+      "id": "980331356926148660",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Check here for giveaways!",
+      "parentId": "980331356695433285",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 NOTIFICATIONS 〕|✴",
+      "id": "980331356926148663",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🔔｜twitch",
+      "id": "980331356926148664",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for getting notified when someone goes live.",
+      "parentId": "980331356926148663",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎬｜twitch-clips",
+      "id": "980331356926148665",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for posting your clips from stream.",
+      "parentId": "980331356926148663",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🔔｜youtube",
+      "id": "980331356926148666",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for getting notified when someone upload a video.",
+      "parentId": "980331356926148663",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 CONNECTION 〕|✴",
+      "id": "980331356926148667",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🔌｜link-your-twitch",
+      "id": "980331357131636797",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Guide for how to link your twitch account with discord.",
+      "parentId": "980331356926148667",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 MAIN HALL 〕|✴",
+      "id": "980331357131636802",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "👥｜chatting",
+      "id": "980331357131636803",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for chatting with other people.",
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "sexy-chat",
+      "id": "1060771766890414180",
+      "type": "text",
+      "nsfw": true,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "swf",
+      "id": "1057473429063864340",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🤣｜memes",
+      "id": "980331357131636804",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for posting your favorites memes.",
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "📷｜photos",
+      "id": "980331357131636805",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for posting your favorites photos & wallpapers.",
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "📺｜videos",
+      "id": "980331357131636806",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for posting your favorites videos.",
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎨｜fan-art",
+      "id": "980331357391695882",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for posting your fan art.",
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎮--gaming",
+      "id": "985050268662112307",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "quote-of-the-day",
+      "id": "988284822248108072",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "pc-set-up",
+      "id": "1128256383352066098",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357131636802",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 ADVERTISEMENTS 〕|✴",
+      "id": "980331357391695883",
+      "type": "category",
+      "socialLiveCategory": true
+    },
+    {
+      "name": "lurkertv-bot-go-live",
+      "id": "985292457279356938",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357391695883",
+      "socialLiveCategory": true
+    },
+    {
+      "name": "📢｜self-advertising",
+      "id": "980331357391695884",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for self promote.",
+      "parentId": "980331357391695883",
+      "socialLiveCategory": true
+    },
+    {
+      "name": "🔴｜stream-advertising",
+      "id": "980331357391695885",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357391695883",
+      "socialLiveCategory": true
+    },
+    {
+      "name": "🎥｜youtube-advertising",
+      "id": "980331357391695886",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357391695883",
+      "socialLiveCategory": true
+    },
+    {
+      "name": "🐦twitter-ads🐦",
+      "id": "984326533386764358",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357391695883",
+      "socialLiveCategory": true
+    },
+    {
+      "name": "💥tiktok💥",
+      "id": "984326641687875584",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357391695883",
+      "socialLiveCategory": true
+    },
+    {
+      "name": "instagram",
+      "id": "987488966125187153",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357391695883",
+      "socialLiveCategory": true
+    },
+    {
+      "name": "✴|〔 BOTS 〕|✴",
+      "id": "980331357391695887",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🤖｜bot-commands",
+      "id": "980331357391695888",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for bot commands.",
+      "parentId": "980331357391695887",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "👾｜level",
+      "id": "980331357391695889",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357391695887",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 SERVER BOOSTERS 〕|✴",
+      "id": "980331357391695890",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🚀｜Server Boosters VC 🔒",
+      "id": "980331357559464006",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357391695890",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🌌｜server-boosters-chat",
+      "id": "980331357391695891",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Private chat for server boosters only.",
+      "parentId": "980331357391695890",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 SUBSCRIBERS 〕|✴",
+      "id": "980331357559464007",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🔞｜nsfw",
+      "id": "980331357559464009",
+      "type": "text",
+      "nsfw": true,
+      "slowmode": 0,
+      "topic": "Channel for nsfw content.",
+      "parentId": "980331357559464007",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "💎｜Subscribers VC 🔒",
+      "id": "980331357559464010",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464007",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "💵｜subscribers-chat",
+      "id": "980331357559464008",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Private chat for subscribers and server boosters only.",
+      "parentId": "980331357559464007",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 VOICE CHATS 〕|✴",
+      "id": "980331357559464011",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "⏰｜SWF",
+      "id": "980331357559464012",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🙋｜smokeflix and chill",
+      "id": "980331357559464013",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🔴｜Streaming 🔒",
+      "id": "980331357559464014",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "Recording YT",
+      "id": "1268664621192187975",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "👥｜Chilling",
+      "id": "980331357559464015",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🥂｜Bar",
+      "id": "980331357785972756",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "-afk-",
+      "id": "984149531744686170",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🚬Smoke Session🚬",
+      "id": "1012611865148391474",
+      "type": "voice",
+      "nsfw": true,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🚬Smoke Session🚬 (live on twitch)",
+      "id": "984276972953804842",
+      "type": "voice",
+      "nsfw": true,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "Hidey Hole",
+      "id": "1005630343040213023",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "the hidden society",
+      "id": "1198756267779428455",
+      "type": "voice",
+      "nsfw": true,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "sisters",
+      "id": "1198824729683955742",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357559464011",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 MUSIC〕|✴",
+      "id": "980331357785972758",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "song-requests",
+      "id": "1019023432404447232",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357785972758",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎧｜Music VC",
+      "id": "980331357785972761",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357785972758",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "spoticord",
+      "id": "1019022883336491059",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357785972758",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎧｜Music VC 2",
+      "id": "980331357785972762",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357785972758",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎵｜beat-makers",
+      "id": "980331357785972759",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for posting your beats.",
+      "parentId": "980331357785972758",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎧｜Music VC 3",
+      "id": "980331357785972763",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357785972758",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🎶｜song-request",
+      "id": "980331357785972760",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Channel for requesting a song.",
+      "parentId": "980331357785972758",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "✴|〔 MODERATION 〕|✴",
+      "id": "980331357785972764",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "admin-setups",
+      "id": "985059578502840370",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357785972764",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "📞｜Staff VC 🔒",
+      "id": "980331358029246475",
+      "type": "voice",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357785972764",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "📝｜logs",
+      "id": "980331357785972765",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357785972764",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🚔｜staff-chat",
+      "id": "980331358029246474",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "980331357785972764",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "Tech-help",
+      "id": "984092848888639498",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "kbd-updates",
+      "id": "984154210503372822",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "984092848888639498",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🤖--about-kbd",
+      "id": "984092925208186910",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": "Kuma Bot Defender",
+      "parentId": "984092848888639498",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "🤖❓kbd-requests❓🤖",
+      "id": "984095661387550820",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "984092848888639498",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "tech-support",
+      "id": "984095740525678602",
+      "type": "text",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "984092848888639498",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "STAGE CHANNELS",
+      "id": "984531173772492840",
+      "type": "category",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "AFTER STREAM LOUNGE",
+      "id": "984531269629132910",
+      "type": "stage",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "984531173772492840",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "BEFORE STREAM LOUNGE",
+      "id": "984536591966011402",
+      "type": "stage",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "984531173772492840",
+      "socialLiveCategory": false
+    },
+    {
+      "name": "open stage channel",
+      "id": "987231705813364756",
+      "type": "stage",
+      "nsfw": false,
+      "slowmode": 0,
+      "topic": null,
+      "parentId": "984531173772492840",
+      "socialLiveCategory": false
+    }
+  ],
+  "threads": [],
+  "webhooks": [
+    {
+      "name": "MEE6",
+      "id": "984516388028842065",
+      "creator": "MEE6#4876 (159985870458322944)",
+      "channel": "#📝｜logs (980331357785972765)",
+      "avatarUrl": null
+    },
+    {
+      "name": "Daily Quotes",
+      "id": "989836322535526410",
+      "creator": "Daily Quotes#0641 (880237210484506675)",
+      "channel": "#quote-of-the-day (988284822248108072)",
+      "avatarUrl": "https://cdn.discordapp.com/avatars/989836322535526410/9cdb1db3ff49e53f77e2239f0ce9bd52.webp"
+    }
+  ],
+  "automod": [
+    {
+      "name": "Block Mention Spam",
+      "id": "1030554520465440818",
+      "enabled": true,
+      "triggerType": 5,
+      "actions": [
+        {
+          "type": 1,
+          "metadata": {
+            "durationSeconds": null,
+            "channelId": null,
+            "customMessage": null
+          }
+        }
+      ],
+      "creatorId": "1008776202191634432"
+    }
+  ],
+  "permissions": {
+    "issues": [],
+    "botAccess": [
+      {
+        "channel": "#🐦twitter-ads🐦 (984326533386764358)",
+        "sendMessages": true,
+        "mentionEveryone": true,
+        "embedLinks": true,
+        "manageMessages": true,
+        "viewChannel": true
+      },
+      {
+        "channel": "#💥tiktok💥 (984326641687875584)",
+        "sendMessages": true,
+        "mentionEveryone": true,
+        "embedLinks": true,
+        "manageMessages": true,
+        "viewChannel": true
+      },
+      {
+        "channel": "#🎥｜youtube-advertising (980331357391695886)",
+        "sendMessages": true,
+        "mentionEveryone": true,
+        "embedLinks": true,
+        "manageMessages": true,
+        "viewChannel": true
+      },
+      {
+        "channel": "#instagram (987488966125187153)",
+        "sendMessages": true,
+        "mentionEveryone": true,
+        "embedLinks": true,
+        "manageMessages": true,
+        "viewChannel": true
+      },
+      {
+        "channel": "#lurkertv-bot-go-live (985292457279356938)",
+        "sendMessages": true,
+        "mentionEveryone": true,
+        "embedLinks": true,
+        "manageMessages": true,
+        "viewChannel": true
+      },
+      {
+        "channel": "#🔴｜stream-advertising (980331357391695885)",
+        "sendMessages": true,
+        "mentionEveryone": true,
+        "embedLinks": true,
+        "manageMessages": true,
+        "viewChannel": true
+      },
+      {
+        "channel": "#📢｜self-advertising (980331357391695884)",
+        "sendMessages": true,
+        "mentionEveryone": true,
+        "embedLinks": true,
+        "manageMessages": true,
+        "viewChannel": true
+      }
+    ]
+  },
+  "streamerList": [
+    {
+      "platform": "twitch",
+      "username": "darkwolf5",
+      "sourceBot": "kadodarkwolf",
+      "count": 98,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitter",
+      "username": "shadowraid5",
+      "sourceBot": "kadodarkwolf",
+      "count": 76,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "glock19_420",
+      "sourceBot": "forbiddendeath420, ultrauwu1015804, ultra_uwu_1019242",
+      "count": 28,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "ninjamaccaswifi",
+      "sourceBot": "polyninja., ultra_uwu_1019242",
+      "count": 13,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "eggnog92",
+      "sourceBot": "eggnog92, psychotic_doll",
+      "count": 9,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitter",
+      "username": "i",
+      "sourceBot": "kadodarkwolf",
+      "count": 6,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "stabcrazy",
+      "sourceBot": "♜Lurker.tv#9202, StabCrazy (owner), ultra_uwu_1019242",
+      "count": 5,
+      "isStabCrazy": true
+    },
+    {
+      "platform": "twitch",
+      "username": "ultra_uwu_101",
+      "sourceBot": "ultrauwu1015804, psychotic_doll",
+      "count": 5,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "vampyfiend3",
+      "sourceBot": "vampy0306",
+      "count": 3,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "psychotic_doll",
+      "sourceBot": "psychotic_doll",
+      "count": 3,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "dhdannyboy",
+      "sourceBot": "polyninja.",
+      "count": 3,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "hazbin_hotel_husk",
+      "sourceBot": "Deleted User",
+      "count": 3,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "youtube",
+      "username": "UCxO9jkP8AKox-ujr1gvF57A",
+      "sourceBot": "ultrauwu1015804",
+      "count": 2,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "eevee1787",
+      "sourceBot": "eevee1787",
+      "count": 2,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "tr3x_06",
+      "sourceBot": "tr3x.1",
+      "count": 2,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "stonergirl11",
+      "sourceBot": "j_11_",
+      "count": 2,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "kawaiikitty143",
+      "sourceBot": "Deleted User",
+      "count": 2,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "ekmirsocial",
+      "sourceBot": "ekmirsocial",
+      "count": 2,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitter",
+      "username": "coleman_ttv",
+      "sourceBot": "coleman__ttv7419",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "tiktok",
+      "username": "flufffypet",
+      "sourceBot": "seachicken_nc_71",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "tiktok",
+      "username": "coleman_ttv",
+      "sourceBot": "coleman__ttv7419",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "instagram",
+      "username": "warrick.colten",
+      "sourceBot": "ttv_itscolten101",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "instagram",
+      "username": "invites",
+      "sourceBot": "ultra_uwu_1019242",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "crystalredpunx",
+      "sourceBot": "♜Lurker.tv#9202",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "peachpng",
+      "sourceBot": "♜Lurker.tv#9202",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "kawaiihamstercosplay",
+      "sourceBot": "kawaiihamster",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "itscolten101",
+      "sourceBot": "ttv_itscolten101",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "wizardexilettv",
+      "sourceBot": ".mysticsky",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "scottishgamer4312",
+      "sourceBot": "scottishgamer4312.",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "instagram",
+      "username": "ultra.uwu.101",
+      "sourceBot": "ultrauwu1015804",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "tiktok",
+      "username": "615boro",
+      "sourceBot": "ultrauwu1015804",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "the_spidervenom_guy",
+      "sourceBot": "the_spidervenom_guy",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "cereal_killer_xo",
+      "sourceBot": "StabCrazy (owner)",
+      "count": 1,
+      "isStabCrazy": true
+    },
+    {
+      "platform": "twitch",
+      "username": "tcbryantcb",
+      "sourceBot": "StabCrazy (owner)",
+      "count": 1,
+      "isStabCrazy": true
+    },
+    {
+      "platform": "twitch",
+      "username": "00scream",
+      "sourceBot": "Deleted User",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "ttvblessedgaming",
+      "sourceBot": "Deleted User",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "ttv_purpleninja1996",
+      "sourceBot": "StabCrazy (owner)",
+      "count": 1,
+      "isStabCrazy": true
+    },
+    {
+      "platform": "twitch",
+      "username": "foxyroxiii",
+      "sourceBot": "forbiddendeath420",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "zealousgorgeouspidgeonspicyboy",
+      "sourceBot": "kadodarkwolf",
+      "count": 1,
+      "isStabCrazy": false
+    },
+    {
+      "platform": "twitch",
+      "username": "sweet_chicken_nug",
+      "sourceBot": "Deleted User",
+      "count": 1,
+      "isStabCrazy": false
+    }
+  ],
+  "socialLiveBotCounts": {
+    "377796671113003008": 3
+  },
+  "socialLiveTotalMessages": 285,
+  "dbConfig": {
+    "guilds": [
+      {
+        "guild_id": "980331356196311070",
+        "guild_name": "The Stab Crazies",
+        "owner_id": "274331594280665088",
+        "icon_hash": "7a2273213b21bc738eb4ebe9896e1215",
+        "member_count": 143,
+        "last_seen": "2026-03-13T23:26:07.000Z",
+        "announcement_channel_id": null,
+        "announcement_message": null,
+        "use_webhook_persona": 0,
+        "live_role_id": null,
+        "bot_nickname": null,
+        "webhook_avatar_url": null,
+        "enable_stream_summaries": 0,
+        "avatar_upload_channel_id": null,
+        "youtube_visibility_level": "public",
+        "privacy_setting": "public_only",
+        "summary_persistence": "delete_on_offline",
+        "members_announcement_channel_id": null,
+        "subscribers_announcement_channel_id": null,
+        "privacy_level": "public",
+        "leveling_enabled": 1,
+        "leveling_xp_rate": 20,
+        "leveling_xp_cooldown": 60,
+        "leveling_ignored_channels": null,
+        "leveling_ignored_roles": null,
+        "sticky_roles_enabled": 0,
+        "afk_enabled": 1,
+        "panic_mode_active": 0,
+        "auto_delete_stream_summary": 0,
+        "ai_ticket_autoresponder": 0,
+        "heat_decay_minutes": 5,
+        "heat_action_thresholds": null,
+        "threat_intelligence_sharing": 0,
+        "stream_ignored_roles": null
+      }
+    ],
+    "logging_config": [],
+    "log_event_config": [],
+    "welcome_settings": [],
+    "level_config": [],
+    "ticket_panels": [],
+    "reaction_role_panels": [],
+    "reaction_roles": {
+      "error": "Table 'cert_CertiFriedUtility.reaction_roles' doesn't exist"
+    },
+    "subscriptions_streamers": [],
+    "guild_streamer_auto_track": [],
+    "anti_nuke_config": [],
+    "raid_detection_config": [],
+    "automod_config": {
+      "error": "Table 'cert_CertiFriedUtility.automod_config' doesn't exist"
+    },
+    "phishing_config": [],
+    "infractions": []
+  },
+  "botActivity": {
+    "#📝｜logs": {
+      "bots": {
+        "MEE6": 100
+      },
+      "embedTypes": {
+        "rich": 107
+      },
+      "componentTypes": {}
+    },
+    "#quote-of-the-day": {
+      "bots": {
+        "Daily Quotes": 100
+      },
+      "embedTypes": {
+        "rich": 100
+      },
+      "componentTypes": {
+        "button": 200
+      }
+    },
+    "#🎮--gaming": {
+      "bots": {
+        "DBDLeaks #📦codes": 82
+      },
+      "embedTypes": {
+        "gifv": 2,
+        "article": 1,
+        "link": 2
+      },
+      "componentTypes": {}
+    },
+    "#👾｜level": {
+      "bots": {
+        "MEE6#4876": 99
+      },
+      "embedTypes": {},
+      "componentTypes": {}
+    },
+    "#✅｜verify": {
+      "bots": {
+        "MEE6#4876": 1
+      },
+      "embedTypes": {},
+      "componentTypes": {}
+    },
+    "#kbd-updates": {
+      "bots": {
+        "Twitch Moderators Community #repo": 27
+      },
+      "embedTypes": {
+        "rich": 27
+      },
+      "componentTypes": {}
+    },
+    "#support": {
+      "bots": {
+        "Tickets#6981": 1
+      },
+      "embedTypes": {
+        "rich": 1
+      },
+      "componentTypes": {
+        "button": 1
+      }
+    },
+    "#song-requests": {
+      "bots": {
+        "Uzox#9688": 36,
+        "Hydra#1214": 3
+      },
+      "embedTypes": {
+        "rich": 38
+      },
+      "componentTypes": {
+        "button": 188
+      }
+    },
+    "#🤖｜bot-commands": {
+      "bots": {
+        "Stab Bot#8487": 1
+      },
+      "embedTypes": {
+        "rich": 1
+      },
+      "componentTypes": {}
+    },
+    "#lurkertv-bot-go-live": {
+      "bots": {
+        "♜Lurker.tv#9202": 3
+      },
+      "embedTypes": {
+        "rich": 3
+      },
+      "componentTypes": {}
+    },
+    "#admin-setups": {
+      "bots": {
+        "Community Updates": 16
+      },
+      "embedTypes": {
+        "article": 2,
+        "video": 2,
+        "link": 1
+      },
+      "componentTypes": {}
+    }
+  },
+  "logChannels": [
+    {
+      "name": "📝｜logs",
+      "id": "980331357785972765",
+      "parentCategory": "✴|〔 MODERATION 〕|✴",
+      "mee6Messages": 0
+    }
+  ],
+  "recommendations": [
+    "SECURITY: 5 bots have Administrator permission: Tickets#6981, Uzox#9688, ♜Lurker.tv#9202, MEE6#4876, Stab Bot#8487",
+    "REPLACE MEE6 (IN SERVER) -> CertiFried leveling, moderation, logging",
+    "REPLACE Tickets Bot (IN SERVER) -> CertiFried ticket system",
+    "REPLACE Uzox (IN SERVER) -> CertiFried utility commands",
+    "REPLACE Lurker.tv (IN SERVER) -> CertiFried stream manager",
+    "MISSING CONFIG: logging_config not configured for this guild",
+    "MISSING CONFIG: welcome_settings not configured for this guild",
+    "MISSING CONFIG: level_config not configured for this guild",
+    "MISSING CONFIG: ticket_panels not configured for this guild",
+    "MISSING CONFIG: anti_nuke_config not configured for this guild",
+    "MISSING CONFIG: phishing_config not configured for this guild",
+    "STREAMER MIGRATION: 40 unique streamers found in social/live channels - import into CertiFried stream manager",
+    "OWNER STREAMS: 4 StabCrazy streams detected - prioritize these"
+  ]
+}

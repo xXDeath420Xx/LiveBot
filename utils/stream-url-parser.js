@@ -10,7 +10,9 @@ const BLOCKED_PATHS = new Set([
     'directory', 'watch', 'explore', 'videos', 'clips', 'about',
     'schedule', 'search', 'settings', 'following', 'followers',
     'subscriptions', 'feed', 'trending', 'gaming', 'live', 'results',
-    'playlist', 'shorts', 'premium', 'categories', 'browse'
+    'playlist', 'shorts', 'premium', 'categories', 'browse',
+    // Instagram path keywords (post/reel/IGTV/stories/share/accounts/direct)
+    'p', 'reel', 'reels', 'tv', 'stories', 'share', 'accounts', 'direct'
 ]);
 
 const PLATFORM_PATTERNS = [
@@ -41,8 +43,18 @@ const PLATFORM_PATTERNS = [
         regex: /(?:www\.)?trovo\.live\/s\/([a-zA-Z0-9_]+)(?:\/|$|\?)/,
     },
     {
+        platform: 'rumble',
+        // rumble.com/user/<name> and rumble.com/c/<name>
+        regex: /(?:www\.)?rumble\.com\/(?:user|c)\/([a-zA-Z0-9_-]+)(?:\/|$|\?)/,
+    },
+    {
         platform: 'facebook',
         regex: /(?:www\.)?facebook\.com\/gaming\/([a-zA-Z0-9_.]+)(?:\/|$|\?)/,
+    },
+    {
+        platform: 'instagram',
+        // stories URLs: instagram.com/stories/<handle>/<media_id> — capture handle, not "stories"
+        regex: /(?:www\.)?instagram\.com\/stories\/([a-zA-Z0-9_.]+)\//,
     },
     {
         platform: 'instagram',

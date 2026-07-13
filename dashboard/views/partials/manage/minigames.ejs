@@ -1,0 +1,186 @@
+<%# Cat Bot, Grow a Tree, Timezones. API-driven; needs `guild` and `channels` in locals. %>
+<div class="page-section" id="minigamesPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-dice"></i>
+                <span>Minigames</span>
+            </div>
+            <div class="page-section-subtitle">
+                Cat Bot, Grow a Tree and Timezones. All three are inert until you turn them on here.
+            </div>
+        </div>
+    </div>
+
+    <div id="mgError" class="alert alert-danger" hidden></div>
+
+    <!-- Cat Bot -->
+    <div class="mg-card">
+        <h3 class="mg-h">🐱 Cat Bot</h3>
+        <p class="form-help">
+            Cats appear on a timer. The first person to type <code>cat</code> catches it. Catching earns
+            Cat Coins, which buy catnip perks and twelve minigames (<code>/cat game</code>).
+        </p>
+
+        <div class="mg-add">
+            <select id="mgCatChannel" class="form-control">
+                <option value="">Choose a channel…</option>
+                <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).forEach(c => { %>
+                    <option value="<%= c.id %>">#<%= c.name %></option>
+                <% }) %>
+            </select>
+            <button class="btn btn-primary" id="mgCatAdd">Spawn cats here</button>
+        </div>
+        <span class="mg-status" id="mgCatStatus"></span>
+
+        <div id="mgCatChannels" class="mg-list">Loading…</div>
+    </div>
+
+    <!-- Grow a Tree -->
+    <div class="mg-card">
+        <h3 class="mg-h">🌳 Grow a Tree</h3>
+        <p class="form-help">
+            One communal tree per server. Members water it with the 💧 button; nobody may water twice
+            in a row. It is planted by running <code>/tree plant</code> in Discord — there is nothing to
+            configure here.
+        </p>
+        <div id="mgTree" class="mg-list">Loading…</div>
+    </div>
+
+    <!-- Timezones -->
+    <div class="mg-card">
+        <div class="mg-head">
+            <div>
+                <h3 class="mg-h">🕰️ Timezones</h3>
+                <p class="form-help">
+                    Members set a zone with <code>/timezone set</code>. React 🕰️ to any message that
+                    mentions a time and the bot converts it for you.
+                </p>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="mgTz">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <span class="mg-status" id="mgTzStatus"></span>
+    </div>
+</div>
+
+<style>
+  #minigamesPage .mg-card { background:#1e2028; border:1px solid #2c2f3a; border-radius:10px; padding:1.1rem 1.25rem; margin-bottom:1rem; }
+  #minigamesPage .mg-h { margin:0 0 .35rem; font-size:1rem; font-weight:600; }
+  #minigamesPage .mg-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; }
+  #minigamesPage .mg-add { display:grid; grid-template-columns:1fr auto; gap:.5rem; }
+  @media (max-width:800px){ #minigamesPage .mg-add { grid-template-columns:1fr; } }
+  #minigamesPage .mg-status { font-size:.85rem; color:#57F287; min-height:1em; display:block; margin-top:.4rem; }
+  #minigamesPage .mg-list { margin-top:.9rem; display:grid; gap:.45rem; }
+  #minigamesPage .mg-row { display:flex; align-items:center; justify-content:space-between; gap:1rem;
+    padding:.6rem .8rem; border:1px solid #2c2f3a; border-radius:8px; background:#14161c; font-size:.9rem; }
+  #minigamesPage .mg-muted { color:#8b8f9e; }
+  #minigamesPage .mg-timing { display:flex; gap:.4rem; align-items:center; }
+  #minigamesPage .mg-timing input { width:5.5rem; }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('minigamesPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/minigames${p}`;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  async function req(url, options) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const el = $('mgError'); if (!m) { el.hidden = true; return; } el.textContent = m; el.hidden = false; };
+  const flash = (el, m, ok = true) => { el.textContent = m; el.style.color = ok ? '#57F287' : '#ED4245'; setTimeout(() => { el.textContent = ''; }, 3000); };
+
+  function renderCats(channels) {
+    const el = $('mgCatChannels');
+    const live = channels.filter(c => c.enabled);
+    if (!live.length) { el.innerHTML = '<div class="mg-muted">Cats do not spawn anywhere yet.</div>'; return; }
+    el.innerHTML = live.map(c => `
+      <div class="mg-row">
+        <div><strong>${c.channel_name ? '#' + esc(c.channel_name) : esc(c.channel_id)}</strong></div>
+        <div class="mg-timing">
+          <span class="mg-muted">every</span>
+          <input type="number" class="form-control" min="20" value="${c.spawn_min ?? 60}" data-min="${c.channel_id}">
+          <span class="mg-muted">–</span>
+          <input type="number" class="form-control" min="20" value="${c.spawn_max ?? 600}" data-max="${c.channel_id}">
+          <span class="mg-muted">sec</span>
+          <button class="btn btn-sm btn-secondary" data-timing="${c.channel_id}">Save</button>
+          <button class="btn btn-sm btn-danger" data-catoff="${c.channel_id}">Stop</button>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderTree(t) {
+    const el = $('mgTree');
+    el.innerHTML = t.planted
+      ? `<div class="mg-row"><div><strong>${esc(t.tree.name || 'The tree')}</strong></div>
+           <div class="mg-muted">size ${t.tree.size}</div></div>`
+      : '<div class="mg-muted">No tree planted yet. Run <code>/tree plant</code> in Discord.</div>';
+  }
+
+  async function load() {
+    try {
+      showError('');
+      const data = await req(api('/'));
+      renderCats(data.catbot.channels || []);
+      renderTree(data.growtree);
+      $('mgTz').checked = !!data.timezone.enabled;
+    } catch (err) { showError(err.message); }
+  }
+
+  $('mgCatAdd').addEventListener('click', async () => {
+    const channel_id = $('mgCatChannel').value;
+    if (!channel_id) return flash($('mgCatStatus'), 'Pick a channel first.', false);
+    try {
+      await req(api('/catbot'), { method: 'POST', body: JSON.stringify({ channel_id, enabled: true }) });
+      flash($('mgCatStatus'), 'Cats will start appearing.');
+      await load();
+    } catch (err) { flash($('mgCatStatus'), err.message, false); }
+  });
+
+  $('mgTz').addEventListener('change', async (e) => {
+    try {
+      await req(api('/timezone'), { method: 'POST', body: JSON.stringify({ enabled: e.target.checked }) });
+      flash($('mgTzStatus'), e.target.checked ? 'Timezones enabled.' : 'Timezones disabled.');
+    } catch (err) {
+      flash($('mgTzStatus'), err.message, false);
+      e.target.checked = !e.target.checked;
+    }
+  });
+
+  root.addEventListener('click', async (e) => {
+    const off = e.target.closest('[data-catoff]');
+    if (off) {
+      if (!confirm('Stop spawning cats in this channel? Caught cats are kept.')) return;
+      try {
+        await req(api('/catbot'), { method: 'POST', body: JSON.stringify({ channel_id: off.dataset.catoff, enabled: false }) });
+        await load();
+      } catch (err) { showError(err.message); }
+      return;
+    }
+
+    const save = e.target.closest('[data-timing]');
+    if (save) {
+      const id = save.dataset.timing;
+      try {
+        await req(api('/catbot/timings'), { method: 'PUT', body: JSON.stringify({
+          channel_id: id,
+          spawn_min: Number(root.querySelector(`[data-min="${id}"]`).value),
+          spawn_max: Number(root.querySelector(`[data-max="${id}"]`).value),
+        }) });
+        flash($('mgCatStatus'), 'Timings saved.');
+      } catch (err) { flash($('mgCatStatus'), err.message, false); }
+    }
+  });
+
+  load();
+})();
+</script>

@@ -1,0 +1,70 @@
+- generic [ref=e1]:
+  - generic:
+    - log
+    - log
+  - generic [ref=e2]:
+    - img
+    - img
+    - generic [ref=e7]:
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - heading "Welcome back!" [level=1] [ref=e18]
+          - generic [ref=e19]: We're so excited to see you again!
+        - generic [ref=e20]:
+          - generic [ref=e22]:
+            - generic [ref=e24]:
+              - text: Email or Phone Number
+              - generic [ref=e25]: "*"
+            - textbox "Email or Phone Number" [ref=e29]:
+              - /placeholder: ""
+              - text: death032894@gmail.com
+          - generic [ref=e30]:
+            - generic [ref=e32]:
+              - text: Password
+              - generic [ref=e33]: "*"
+            - textbox "Password" [ref=e37]:
+              - /placeholder: ""
+              - text: Ichitaro~0329
+          - button "Forgot your password?" [ref=e39] [cursor=pointer]:
+            - generic [ref=e40]: Forgot your password?
+          - button "Log In Loading" [ref=e51] [cursor=pointer]:
+            - generic [ref=e43]:
+              - generic [ref=e45]: Log In
+              - img "Loading" [ref=e53]
+          - generic [ref=e46]:
+            - text: Need an account?
+            - button "Register" [ref=e48] [cursor=pointer]:
+              - generic [ref=e49]: Register
+      - generic:
+        - generic:
+          - dialog "Wait! Are you human?" [active]:
+            - generic [ref=e58]:
+              - banner [ref=e60]:
+                - generic [ref=e61]:
+                  - button "Close" [ref=e69] [cursor=pointer]:
+                    - img [ref=e72]
+                  - heading "Wait! Are you human?" [level=1] [ref=e74]
+                  - generic [ref=e76]: Please confirm you’re not a robot.
+              - main [ref=e79]:
+                - iframe [ref=e82]:
+                  - generic [ref=f4e2]:
+                    - generic [ref=f4e6]:
+                      - checkbox "'I am human', Select in order to trigger the challenge, or to bypass it if you have an accessibility cookie" [active] [ref=f4e7]
+                      - img [ref=f4e82]
+                    - generic [ref=f4e11]: I am human
+                    - generic [ref=f4e12]:
+                      - generic "hCaptcha" [ref=f4e13]:
+                        - button "hCaptcha logo, opens new window with more information" [ref=f4e14] [cursor=pointer]:
+                          - img [ref=f4e16]
+                      - generic [ref=f4e78]:
+                        - link "hCaptcha Privacy Policy, opens in a new tab" [ref=f4e79] [cursor=pointer]:
+                          - /url: https://hcaptcha.com/privacy?ref=discord.com&utm_campaign=a9b5fb07-92ff-493f-86fe-352a2803b3df&utm_medium=checkbox&hl=en
+                          - text: Privacy
+                        - text: "-"
+                        - link "hCaptcha Terms of Service, opens in a new tab" [ref=f4e80] [cursor=pointer]:
+                          - /url: https://hcaptcha.com/terms?ref=discord.com&utm_campaign=a9b5fb07-92ff-493f-86fe-352a2803b3df&utm_medium=checkbox&hl=en
+                          - text: Terms
+                      - generic:
+                        - img
+  - generic:
+    - img

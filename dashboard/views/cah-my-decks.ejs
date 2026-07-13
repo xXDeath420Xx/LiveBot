@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>My Decks — CertiFried CAH</title>
+<%- include('components/cah-shell-head') %>
+<style>
+    .hero { padding: 2.5rem 0 1.5rem; }
+    .hero h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.025em; }
+    .hero p { color: var(--text-secondary); margin-top: 0.4rem; }
+
+    .deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; padding-bottom: 3rem; }
+    .deck-tile { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; transition: border-color 0.15s; }
+    .deck-tile:hover { border-color: var(--accent-purple); }
+    .deck-tile .name { font-weight: 700; font-size: 1.05rem; }
+    .deck-tile .desc { color: var(--text-muted); font-size: 0.85rem; min-height: 2.4em; }
+    .deck-tile .stats { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.3rem; }
+    .deck-tile .actions { display: flex; gap: 0.4rem; margin-top: auto; padding-top: 0.5rem; }
+    .deck-tile .code { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--text-muted); }
+
+    .new-deck { background: var(--bg-secondary); border: 1px dashed var(--border-color); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.6rem; align-items: stretch; justify-content: center; min-height: 200px; }
+    .new-deck h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+    .empty-state { padding: 3rem 2rem; text-align: center; color: var(--text-muted); background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: 12px; grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<%- include('components/cah-shell-nav', { user, page: 'my-decks' }) %>
+<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'CAH' }, { label: 'My Decks' }] }) %>
+
+<div class="container">
+    <section class="hero">
+        <h1>📚 My Card Packs</h1>
+        <p>Create your own CAH decks. Public packs appear in everyone's lobby picker; private ones live by share code.</p>
+    </section>
+
+    <div class="deck-grid">
+        <div class="new-deck">
+            <h3>+ New Pack</h3>
+            <input class="form-input" id="new-name" placeholder="Pack name" maxlength="60">
+            <input class="form-input" id="new-desc" placeholder="Short description (optional)" maxlength="120">
+            <label class="form-check">
+                <input type="checkbox" id="new-public" checked>
+                <span style="font-size: 0.85rem;">Public — anyone can use it</span>
+            </label>
+            <label class="form-check">
+                <input type="checkbox" id="new-nsfw">
+                <span style="font-size: 0.85rem;">🔞 NSFW</span>
+            </label>
+            <button class="btn btn-primary" onclick="createDeck()">Create</button>
+            <div id="new-error" class="toast err" style="display:none;"></div>
+        </div>
+
+        <% if (!decks || decks.length === 0) { %>
+            <div class="empty-state" style="grid-column: span 2;">
+                <div style="font-size: 1.5rem; margin-bottom: 0.5rem; opacity: 0.5;">📦</div>
+                <div>You haven't made any packs yet. Use the form on the left to create one.</div>
+            </div>
+        <% } else { %>
+            <% decks.forEach(d => { %>
+                <div class="deck-tile">
+                    <div class="name"><%= d.name %></div>
+                    <div class="desc"><%= d.description || 'No description.' %></div>
+                    <div class="stats">
+                        <span class="pill"><%= d.white_count %> white</span>
+                        <span class="pill"><%= d.black_count %> black</span>
+                        <% if (d.is_public) { %><span class="pill pill-green">Public</span><% } else { %><span class="pill">Private</span><% } %>
+                        <% if (d.nsfw) { %><span class="pill pill-red">🔞</span><% } %>
+                    </div>
+                    <div class="code">Share code: <strong><%= d.share_code %></strong></div>
+                    <div class="actions">
+                        <a class="btn btn-outline btn-sm" href="/cah/my-decks/<%= d.id %>/edit">Edit</a>
+                        <button class="btn btn-ghost btn-sm" onclick="copyCode('<%= d.share_code %>', this)">Copy code</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteDeck(<%= d.id %>, this)" style="margin-left:auto;">Delete</button>
+                    </div>
+                </div>
+            <% }); %>
+        <% } %>
+    </div>
+</div>
+
+<script>
+    async function createDeck() {
+        const err = document.getElementById('new-error');
+        err.style.display = 'none';
+        const body = {
+            name: document.getElementById('new-name').value.trim(),
+            description: document.getElementById('new-desc').value.trim(),
+            isPublic: document.getElementById('new-public').checked,
+            nsfw: document.getElementById('new-nsfw').checked
+        };
+        if (!body.name) { err.textContent = 'Name is required.'; err.style.display = 'block'; return; }
+        const res = await cfetch('/cah/my-decks/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (!data.ok) { err.textContent = '⚠️ ' + (data.reason || 'failed'); err.style.display = 'block'; return; }
+        location.href = '/cah/my-decks/' + data.deckId + '/edit';
+    }
+
+    async function deleteDeck(id, btn) {
+        if (!confirm('Permanently delete this pack? Any games currently using it will lose access to its cards.')) return;
+        btn.disabled = true;
+        const res = await cfetch('/cah/my-decks/' + id, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.ok) location.reload();
+        else { btn.disabled = false; alert('Failed: ' + data.reason); }
+    }
+
+    function copyCode(code, btn) {
+        navigator.clipboard?.writeText(code).then(() => {
+            const orig = btn.textContent;
+            btn.textContent = 'Copied ✓';
+            setTimeout(() => btn.textContent = orig, 1500);
+        });
+    }
+</script>
+</body>
+</html>

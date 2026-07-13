@@ -567,7 +567,7 @@ function renderTopMessagers(messagers) {
             <div class="ss-rank-entry">
                 <div class="ss-rank-info">
                     <div class="ss-rank-pos ${posClass}">${i + 1}</div>
-                    <div class="ss-rank-name"><i class="fas fa-user"></i>User ${user.user_id.slice(-6)}</div>
+                    <div class="ss-rank-name"><i class="fas fa-user"></i>${user.username || ('User ' + user.user_id.slice(-6))}</div>
                 </div>
                 <div class="ss-rank-value">
                     <span class="ss-rank-count">${user.total_messages.toLocaleString()}</span>

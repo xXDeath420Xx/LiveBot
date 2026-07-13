@@ -1,0 +1,544 @@
+<%# Command Center — prefixes, the command browser, aliases, and custom commands.
+    Fully API-driven; needs only `guild` in locals. %>
+<div class="page-section" id="commandCenter" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-terminal"></i>
+                <span>Command Center</span>
+            </div>
+            <div class="page-section-subtitle">
+                Every slash command also works from chat. Set your prefixes, browse what's available,
+                make shortcuts, and write your own commands.
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Tabs ──────────────────────────────────────────────────────────── -->
+    <div class="cc-tabs" role="tablist">
+        <button class="cc-tab active" data-tab="access" role="tab">Access &amp; Prefixes</button>
+        <button class="cc-tab" data-tab="browse" role="tab">Browse Commands</button>
+        <button class="cc-tab" data-tab="aliases" role="tab">Shortcuts</button>
+        <button class="cc-tab" data-tab="custom" role="tab">Custom Commands</button>
+    </div>
+
+    <!-- ── Access & prefixes ─────────────────────────────────────────────── -->
+    <div class="cc-panel active" data-panel="access">
+        <div class="cc-card">
+            <h3 class="cc-h"><i class="fas fa-keyboard"></i> Prefixes</h3>
+            <div class="form-help">
+                Any of these lets members run commands from chat. A prefix must be 1–5 symbols —
+                no letters or digits — and only counts when a letter follows it, so
+                <code>...</code>, <code>?? what</code> and <code>$5</code> stay ordinary messages.
+            </div>
+
+            <div id="ccPrefixChips" class="cc-chips"></div>
+            <div class="cc-row">
+                <input type="text" id="ccPrefixInput" class="form-control" maxlength="5"
+                       placeholder="Add a prefix, e.g. &gt;" style="max-width: 200px;">
+                <button class="btn btn-secondary" id="ccPrefixAdd" type="button">Add prefix</button>
+            </div>
+            <div id="ccPrefixError" class="cc-error" hidden></div>
+
+            <hr class="cc-hr">
+
+            <label class="cc-toggle">
+                <input type="checkbox" id="ccAllowMention">
+                <div>
+                    <strong>Respond to @mentions</strong>
+                    <div class="form-help">Members can type <code>@<%= guild.name %> play &lt;url&gt;</code>.</div>
+                </div>
+            </label>
+
+            <label class="cc-toggle">
+                <input type="checkbox" id="ccUniversal">
+                <div>
+                    <strong>Reach every slash command from chat</strong>
+                    <div class="form-help">
+                        Turn this off and only the classic prefix commands work.
+                        With it on, <code>!play</code> runs <code>/music play</code>.
+                    </div>
+                </div>
+            </label>
+
+            <label class="cc-toggle">
+                <input type="checkbox" id="ccEnabled">
+                <div>
+                    <strong>Enable prefix commands at all</strong>
+                    <div class="form-help">Master switch. Slash commands keep working either way.</div>
+                </div>
+            </label>
+
+            <hr class="cc-hr">
+            <div class="cc-row">
+                <button class="btn btn-primary" id="ccSaveAccess" type="button">Save</button>
+                <span id="ccAccessStatus" class="cc-status"></span>
+            </div>
+        </div>
+
+        <div class="cc-card cc-preview">
+            <h3 class="cc-h"><i class="fas fa-eye"></i> What members can type</h3>
+            <div id="ccPreview" class="cc-preview-list"></div>
+        </div>
+    </div>
+
+    <!-- ── Browse ────────────────────────────────────────────────────────── -->
+    <div class="cc-panel" data-panel="browse">
+        <div class="cc-card">
+            <div class="cc-row">
+                <input type="search" id="ccBrowseSearch" class="form-control"
+                       placeholder="Search commands…" autocomplete="off">
+                <select id="ccBrowseCategory" class="form-control" style="max-width: 220px;">
+                    <option value="">All categories</option>
+                </select>
+            </div>
+            <div class="form-help" id="ccBrowseCount">Loading…</div>
+            <div id="ccBrowseList" class="cc-browse-list"></div>
+        </div>
+    </div>
+
+    <!-- ── Aliases ───────────────────────────────────────────────────────── -->
+    <div class="cc-panel" data-panel="aliases">
+        <div class="cc-card">
+            <h3 class="cc-h"><i class="fas fa-link"></i> Shortcuts</h3>
+            <div class="form-help">
+                Point a short word at any command. The target can be a plain name
+                (<code>ping</code>) or a full path (<code>music play</code>).
+            </div>
+            <div class="cc-row">
+                <input type="text" id="ccAliasName" class="form-control" maxlength="30"
+                       placeholder="Shortcut, e.g. pp" style="max-width: 180px;">
+                <span class="cc-arrow">→</span>
+                <input type="text" id="ccAliasTarget" class="form-control" list="ccPathList"
+                       placeholder="Command, e.g. music play">
+                <datalist id="ccPathList"></datalist>
+                <button class="btn btn-primary" id="ccAliasAdd" type="button">Add</button>
+            </div>
+            <div id="ccAliasError" class="cc-error" hidden></div>
+            <div id="ccAliasList" class="cc-alias-list"></div>
+        </div>
+    </div>
+
+    <!-- ── Custom commands ───────────────────────────────────────────────── -->
+    <div class="cc-panel" data-panel="custom">
+        <div class="cc-card">
+            <h3 class="cc-h"><i class="fas fa-wand-magic-sparkles"></i> Start from a template</h3>
+            <div class="form-help">One click creates the command; edit it afterwards.</div>
+            <div id="ccTemplates" class="cc-template-grid"></div>
+        </div>
+
+        <div class="cc-card">
+            <h3 class="cc-h"><i class="fas fa-plus"></i> Your commands</h3>
+            <div id="ccCustomError" class="cc-error" hidden></div>
+
+            <form id="ccCustomForm" class="cc-form">
+                <input type="hidden" id="ccCustomId">
+                <div class="cc-form-row">
+                    <div>
+                        <label class="form-label">Name</label>
+                        <input type="text" id="ccCustomName" class="form-control" maxlength="30"
+                               placeholder="rules" required>
+                        <div class="form-help">Members type <span class="cc-prefix-hint">!</span><span id="ccNameEcho">rules</span></div>
+                    </div>
+                    <div>
+                        <label class="form-label">Does what?</label>
+                        <select id="ccCustomAction" class="form-control">
+                            <option value="reply">Sends a message</option>
+                            <option value="add_role">Gives a role</option>
+                            <option value="remove_role">Removes a role</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="ccReplyFields">
+                    <label class="form-label">Response</label>
+                    <textarea id="ccCustomResponse" class="form-control" rows="4"
+                              maxlength="2000" placeholder="Welcome to {server.name}, {user.mention}!"></textarea>
+                    <div class="cc-vars" id="ccVars"></div>
+                </div>
+
+                <div id="ccRoleFields" hidden>
+                    <label class="form-label">Role ID</label>
+                    <input type="text" id="ccCustomRole" class="form-control" placeholder="123456789012345678">
+                    <div class="form-help">Right-click a role → Copy Role ID (needs Developer Mode).</div>
+                </div>
+
+                <div class="cc-row">
+                    <button type="submit" class="btn btn-primary" id="ccCustomSave">Create command</button>
+                    <button type="button" class="btn btn-secondary" id="ccCustomCancel" hidden>Cancel</button>
+                    <span id="ccCustomStatus" class="cc-status"></span>
+                </div>
+            </form>
+
+            <div id="ccCustomList" class="cc-custom-list"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+#commandCenter .cc-tabs { display:flex; gap:var(--spacing-1); border-bottom:1px solid var(--color-border); margin-bottom:var(--spacing-4); flex-wrap:wrap; }
+#commandCenter .cc-tab { background:none; border:none; padding:var(--spacing-3) var(--spacing-4); cursor:pointer; color:var(--color-text-secondary); font-weight:var(--font-weight-medium); border-bottom:2px solid transparent; }
+#commandCenter .cc-tab:hover { color:var(--color-text-primary); }
+#commandCenter .cc-tab.active { color:var(--color-primary); border-bottom-color:var(--color-primary); }
+#commandCenter .cc-panel { display:none; }
+#commandCenter .cc-panel.active { display:block; }
+#commandCenter .cc-card { background:var(--color-bg-secondary); border:1px solid var(--color-border); border-radius:var(--radius-md); padding:var(--spacing-4); margin-bottom:var(--spacing-4); }
+#commandCenter .cc-h { font-size:var(--font-size-lg); font-weight:var(--font-weight-bold); margin:0 0 var(--spacing-2); display:flex; align-items:center; gap:var(--spacing-2); }
+#commandCenter .cc-row { display:flex; gap:var(--spacing-2); align-items:center; flex-wrap:wrap; margin-top:var(--spacing-3); }
+#commandCenter .cc-hr { border:none; border-top:1px solid var(--color-border); margin:var(--spacing-4) 0; }
+#commandCenter .cc-chips { display:flex; gap:var(--spacing-2); flex-wrap:wrap; margin-top:var(--spacing-3); min-height:34px; }
+#commandCenter .cc-chip { display:inline-flex; align-items:center; gap:var(--spacing-2); background:var(--color-bg-tertiary,rgba(127,127,127,.12)); border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:4px 10px; font-family:monospace; font-size:var(--font-size-md); }
+#commandCenter .cc-chip button { background:none; border:none; cursor:pointer; color:var(--color-text-secondary); font-size:14px; line-height:1; padding:0; }
+#commandCenter .cc-chip button:hover { color:var(--color-danger,#ef4444); }
+#commandCenter .cc-toggle { display:flex; gap:var(--spacing-3); align-items:flex-start; padding:var(--spacing-3) 0; cursor:pointer; }
+#commandCenter .cc-toggle input { margin-top:4px; width:18px; height:18px; flex:none; }
+#commandCenter .cc-status { font-size:var(--font-size-sm); color:var(--color-text-secondary); }
+#commandCenter .cc-status.ok { color:var(--color-success,#22c55e); }
+#commandCenter .cc-error { margin-top:var(--spacing-3); padding:var(--spacing-2) var(--spacing-3); border-radius:var(--radius-sm); background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.3); color:var(--color-danger,#ef4444); font-size:var(--font-size-sm); }
+#commandCenter .cc-preview-list { font-family:monospace; font-size:var(--font-size-sm); line-height:2; color:var(--color-text-secondary); }
+#commandCenter .cc-preview-list b { color:var(--color-text-primary); }
+#commandCenter .cc-browse-list { max-height:520px; overflow-y:auto; margin-top:var(--spacing-3); }
+#commandCenter .cc-cmd { display:flex; justify-content:space-between; gap:var(--spacing-3); padding:var(--spacing-2) var(--spacing-3); border-bottom:1px solid var(--color-border); }
+#commandCenter .cc-cmd code { font-size:var(--font-size-sm); }
+#commandCenter .cc-cmd .cc-shortcuts { color:var(--color-text-secondary); font-size:var(--font-size-sm); }
+#commandCenter .cc-arrow { color:var(--color-text-secondary); }
+#commandCenter .cc-alias-list, #commandCenter .cc-custom-list { margin-top:var(--spacing-4); }
+#commandCenter .cc-alias, #commandCenter .cc-custom { display:flex; justify-content:space-between; align-items:center; gap:var(--spacing-3); padding:var(--spacing-3); border:1px solid var(--color-border); border-radius:var(--radius-sm); margin-bottom:var(--spacing-2); }
+#commandCenter .cc-template-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:var(--spacing-3); margin-top:var(--spacing-3); }
+#commandCenter .cc-template { border:1px solid var(--color-border); border-radius:var(--radius-sm); padding:var(--spacing-3); display:flex; flex-direction:column; gap:6px; }
+#commandCenter .cc-template strong { font-size:var(--font-size-md); }
+#commandCenter .cc-template .cc-tcat { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--color-text-secondary); }
+#commandCenter .cc-template p { margin:0; font-size:var(--font-size-sm); color:var(--color-text-secondary); flex:1; }
+#commandCenter .cc-form-row { display:grid; grid-template-columns:1fr 1fr; gap:var(--spacing-3); margin-bottom:var(--spacing-3); }
+#commandCenter .cc-vars { display:flex; flex-wrap:wrap; gap:6px; margin-top:var(--spacing-2); }
+#commandCenter .cc-var { font-family:monospace; font-size:12px; padding:2px 8px; border-radius:var(--radius-sm); border:1px solid var(--color-border); background:var(--color-bg-tertiary,rgba(127,127,127,.12)); cursor:pointer; }
+#commandCenter .cc-var:hover { border-color:var(--color-primary); }
+#commandCenter .cc-prefix-hint { font-family:monospace; color:var(--color-primary); }
+@media (max-width:640px){ #commandCenter .cc-form-row { grid-template-columns:1fr; } }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('commandCenter');
+  if (!root || root.dataset.init) return;
+  root.dataset.init = '1';
+
+  const guildId = root.dataset.guildId;
+  const api = (path) => `/api/guilds/${guildId}${path}`;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  async function req(url, options) {
+    const res = await fetch(url, {
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  function showError(el, message) {
+    if (!message) { el.hidden = true; return; }
+    el.textContent = message; el.hidden = false;
+  }
+  function flash(el, message, ok = true) {
+    el.textContent = message; el.className = 'cc-status' + (ok ? ' ok' : '');
+    setTimeout(() => { el.textContent = ''; }, 2500);
+  }
+
+  // ── Tabs ──
+  root.querySelectorAll('.cc-tab').forEach(tab => tab.addEventListener('click', () => {
+    root.querySelectorAll('.cc-tab').forEach(t => t.classList.toggle('active', t === tab));
+    root.querySelectorAll('.cc-panel').forEach(p =>
+      p.classList.toggle('active', p.dataset.panel === tab.dataset.tab));
+  }));
+
+  // ── State ──
+  let config = { prefixes: ['!'], allow_mention: true, universal_commands: true, enabled: 1, prefix: '!' };
+  let paths = [];
+
+  // ── Access & prefixes ──
+  function renderPrefixes() {
+    const wrap = $('ccPrefixChips');
+    wrap.innerHTML = config.prefixes.map(p =>
+      `<span class="cc-chip"><span>${esc(p)}</span><button type="button" data-prefix="${esc(p)}" title="Remove">&times;</button></span>`
+    ).join('') || '<span class="form-help">No prefixes — only @mention and slash commands will work.</span>';
+
+    wrap.querySelectorAll('button[data-prefix]').forEach(btn => btn.addEventListener('click', () => {
+      config.prefixes = config.prefixes.filter(p => p !== btn.dataset.prefix);
+      renderPrefixes(); renderPreview();
+    }));
+  }
+
+  function renderPreview() {
+    const p = config.prefixes[0] || '!';
+    const rows = [];
+    if (config.enabled && config.universal_commands) {
+      rows.push(`<b>${esc(p)}play</b> https://…   →  /music play`);
+      rows.push(`<b>${esc(p)}cat inventory</b>    →  /cat inventory`);
+      rows.push(`<b>${esc(p)}np</b>               →  /music nowplaying`);
+    } else if (config.enabled) {
+      rows.push(`<b>${esc(p)}ping</b>             →  classic prefix commands only`);
+    } else {
+      rows.push('Prefix commands are off — slash commands still work.');
+    }
+    if (config.allow_mention && config.enabled) rows.push(`<b>@bot play</b> https://…  →  /music play`);
+    $('ccPreview').innerHTML = rows.join('<br>');
+    document.querySelectorAll('.cc-prefix-hint').forEach(el => el.textContent = p);
+  }
+
+  $('ccPrefixAdd').addEventListener('click', () => {
+    const input = $('ccPrefixInput');
+    const value = input.value.trim();
+    showError($('ccPrefixError'), '');
+    if (!value) return;
+    if (!/^[^\w\s]{1,5}$/.test(value)) {
+      return showError($('ccPrefixError'), 'A prefix must be 1–5 symbols — no letters, digits or spaces.');
+    }
+    if (config.prefixes.includes(value)) return showError($('ccPrefixError'), 'That prefix is already listed.');
+    if (config.prefixes.length >= 8) return showError($('ccPrefixError'), 'At most 8 prefixes.');
+    config.prefixes.push(value);
+    input.value = '';
+    renderPrefixes(); renderPreview();
+  });
+  $('ccPrefixInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('ccPrefixAdd').click(); } });
+
+  ['ccAllowMention','ccUniversal','ccEnabled'].forEach(id => $(id).addEventListener('change', () => {
+    config.allow_mention = $('ccAllowMention').checked;
+    config.universal_commands = $('ccUniversal').checked;
+    config.enabled = $('ccEnabled').checked ? 1 : 0;
+    renderPreview();
+  }));
+
+  $('ccSaveAccess').addEventListener('click', async () => {
+    showError($('ccPrefixError'), '');
+    try {
+      await req(api('/prefix-commands/config'), { method: 'PUT', body: JSON.stringify({
+        prefix: config.prefixes[0] || '!',
+        prefixes: config.prefixes,
+        allow_mention: config.allow_mention,
+        universal_commands: config.universal_commands,
+        enabled: config.enabled,
+      }) });
+      flash($('ccAccessStatus'), 'Saved');
+    } catch (err) { showError($('ccPrefixError'), err.message); }
+  });
+
+  // ── Browse ──
+  function renderBrowse() {
+    const term = $('ccBrowseSearch').value.trim().toLowerCase();
+    const category = $('ccBrowseCategory').value;
+    const hits = paths.filter(p =>
+      (!category || p.category === category) &&
+      (!term || p.path.includes(term) || p.shortcuts.some(s => s.includes(term))));
+    const prefix = config.prefixes[0] || '!';
+
+    $('ccBrowseCount').textContent = `${hits.length} of ${paths.length} commands`;
+    $('ccBrowseList').innerHTML = hits.slice(0, 400).map(p => {
+      const args = p.options.map(o => o.required ? `&lt;${esc(o.name)}&gt;` : `[${esc(o.name)}]`).join(' ');
+      const short = p.shortcuts.length ? `${p.shortcuts.map(s => esc(prefix + s)).join(', ')}` : '';
+      return `<div class="cc-cmd">
+        <code>${esc(prefix)}${esc(p.path)}${args ? ' ' + args : ''}</code>
+        <span class="cc-shortcuts">${short}</span>
+      </div>`;
+    }).join('') || '<div class="form-help">Nothing matches.</div>';
+  }
+  $('ccBrowseSearch').addEventListener('input', renderBrowse);
+  $('ccBrowseCategory').addEventListener('change', renderBrowse);
+
+  // ── Aliases ──
+  let aliases = [];
+  function renderAliases() {
+    const prefix = config.prefixes[0] || '!';
+    $('ccAliasList').innerHTML = aliases.map(a => `
+      <div class="cc-alias">
+        <div><code>${esc(prefix)}${esc(a.alias)}</code> <span class="cc-arrow">→</span> <code>${esc(a.command_name)}</code></div>
+        <button class="btn btn-secondary" data-del-alias="${esc(a.alias)}" type="button">Remove</button>
+      </div>`).join('') || '<div class="form-help">No shortcuts yet.</div>';
+
+    $('ccAliasList').querySelectorAll('[data-del-alias]').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        await req(api(`/prefix-commands/aliases/${encodeURIComponent(btn.dataset.delAlias)}`), { method: 'DELETE' });
+        aliases = aliases.filter(a => a.alias !== btn.dataset.delAlias);
+        renderAliases();
+      } catch (err) { showError($('ccAliasError'), err.message); }
+    }));
+  }
+
+  $('ccAliasAdd').addEventListener('click', async () => {
+    showError($('ccAliasError'), '');
+    const alias = $('ccAliasName').value.trim().toLowerCase();
+    const target = $('ccAliasTarget').value.trim().toLowerCase();
+    if (!alias || !target) return showError($('ccAliasError'), 'Both fields are required.');
+    try {
+      await req(api('/prefix-commands/aliases'), { method: 'POST', body: JSON.stringify({ alias, command_name: target }) });
+      aliases = aliases.filter(a => a.alias !== alias).concat({ alias, command_name: target });
+      aliases.sort((a, b) => a.alias.localeCompare(b.alias));
+      $('ccAliasName').value = ''; $('ccAliasTarget').value = '';
+      renderAliases();
+    } catch (err) { showError($('ccAliasError'), err.message); }
+  });
+
+  // ── Custom commands ──
+  let customs = [], variables = [];
+
+  function renderVars() {
+    $('ccVars').innerHTML = variables.map(v =>
+      `<span class="cc-var" title="${esc(v.description)}" data-token="${esc(v.token)}">${esc(v.token)}</span>`).join('');
+    $('ccVars').querySelectorAll('.cc-var').forEach(el => el.addEventListener('click', () => {
+      const box = $('ccCustomResponse');
+      const at = box.selectionStart ?? box.value.length;
+      box.value = box.value.slice(0, at) + el.dataset.token + box.value.slice(box.selectionEnd ?? at);
+      box.focus();
+      box.selectionStart = box.selectionEnd = at + el.dataset.token.length;
+    }));
+  }
+
+  function renderCustoms() {
+    const prefix = config.prefixes[0] || '!';
+    const label = { reply: 'sends a message', add_role: 'gives a role', remove_role: 'removes a role' };
+    $('ccCustomList').innerHTML = customs.map(c => `
+      <div class="cc-custom">
+        <div>
+          <code>${esc(prefix)}${esc(c.command_name)}</code>
+          <div class="form-help">${esc(label[c.action_type] || c.action_type)}</div>
+        </div>
+        <div class="cc-row" style="margin:0;">
+          <button class="btn btn-secondary" data-edit="${c.id}" type="button">Edit</button>
+          <button class="btn btn-secondary" data-del="${c.id}" type="button">Delete</button>
+        </div>
+      </div>`).join('') || '<div class="form-help">No custom commands yet — try a template above.</div>';
+
+    $('ccCustomList').querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('Delete this command?')) return;
+      try {
+        await req(api(`/custom-commands/${btn.dataset.del}`), { method: 'DELETE' });
+        customs = customs.filter(c => String(c.id) !== btn.dataset.del);
+        renderCustoms();
+      } catch (err) { showError($('ccCustomError'), err.message); }
+    }));
+
+    $('ccCustomList').querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => {
+      const c = customs.find(x => String(x.id) === btn.dataset.edit);
+      if (!c) return;
+      $('ccCustomId').value = c.id;
+      $('ccCustomName').value = c.command_name;
+      $('ccCustomAction').value = c.action_type;
+      $('ccCustomResponse').value = c.response || '';
+      $('ccCustomRole').value = c.action_content || '';
+      $('ccCustomSave').textContent = 'Save changes';
+      $('ccCustomCancel').hidden = false;
+      syncActionFields();
+      $('ccNameEcho').textContent = c.command_name;
+      $('ccCustomForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }));
+  }
+
+  function syncActionFields() {
+    const isReply = $('ccCustomAction').value === 'reply';
+    $('ccReplyFields').hidden = !isReply;
+    $('ccRoleFields').hidden = isReply;
+  }
+  $('ccCustomAction').addEventListener('change', syncActionFields);
+  $('ccCustomName').addEventListener('input', () => { $('ccNameEcho').textContent = $('ccCustomName').value || 'name'; });
+
+  function resetCustomForm() {
+    $('ccCustomForm').reset();
+    $('ccCustomId').value = '';
+    $('ccCustomSave').textContent = 'Create command';
+    $('ccCustomCancel').hidden = true;
+    $('ccNameEcho').textContent = 'name';
+    syncActionFields();
+  }
+  $('ccCustomCancel').addEventListener('click', resetCustomForm);
+
+  $('ccCustomForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showError($('ccCustomError'), '');
+    const id = $('ccCustomId').value;
+    const payload = {
+      command_name: $('ccCustomName').value.trim().toLowerCase(),
+      action_type: $('ccCustomAction').value,
+      response: $('ccCustomResponse').value,
+      action_content: $('ccCustomRole').value.trim() || null,
+    };
+    try {
+      await req(api(id ? `/custom-commands/${id}` : '/custom-commands'),
+        { method: id ? 'PUT' : 'POST', body: JSON.stringify(payload) });
+      flash($('ccCustomStatus'), id ? 'Saved' : 'Created');
+      resetCustomForm();
+      await loadCustoms();
+    } catch (err) { showError($('ccCustomError'), err.message); }
+  });
+
+  function renderTemplates(templates) {
+    $('ccTemplates').innerHTML = templates.map(t => `
+      <div class="cc-template">
+        <span class="cc-tcat">${esc(t.category)}</span>
+        <strong>${esc(t.name)}</strong>
+        <p>${esc(t.description)}</p>
+        <button class="btn btn-secondary" data-tpl="${esc(t.id)}" type="button">Use this</button>
+      </div>`).join('');
+
+    $('ccTemplates').querySelectorAll('[data-tpl]').forEach(btn => btn.addEventListener('click', async () => {
+      showError($('ccCustomError'), '');
+      const tpl = templates.find(t => t.id === btn.dataset.tpl);
+      // Role templates have no role yet — prefill the form instead of saving a broken command.
+      if (tpl.needs === 'role') {
+        $('ccCustomName').value = tpl.command_name;
+        $('ccCustomAction').value = tpl.action_type;
+        $('ccNameEcho').textContent = tpl.command_name;
+        syncActionFields();
+        showError($('ccCustomError'), 'Pick a role for this command, then press Create.');
+        $('ccCustomForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+      try {
+        await req(api(`/custom-commands/templates/${encodeURIComponent(tpl.id)}`), { method: 'POST', body: '{}' });
+        flash($('ccCustomStatus'), `Created ${tpl.command_name}`);
+        await loadCustoms();
+      } catch (err) { showError($('ccCustomError'), err.message); }
+    }));
+  }
+
+  async function loadCustoms() {
+    const data = await req(api('/custom-commands'));
+    customs = data.commands || [];
+    variables = data.variables || variables;
+    renderCustoms(); renderVars();
+  }
+
+  // ── Boot ──
+  (async function init() {
+    try {
+      const cfg = await req(api('/prefix-commands/config'));
+      config = { ...config, ...cfg.config };
+      if (!Array.isArray(config.prefixes) || !config.prefixes.length) config.prefixes = [config.prefix || '!'];
+      aliases = cfg.aliases || [];
+      $('ccAllowMention').checked = !!config.allow_mention;
+      $('ccUniversal').checked = !!config.universal_commands;
+      $('ccEnabled').checked = !!config.enabled;
+      renderPrefixes(); renderPreview(); renderAliases();
+    } catch (err) { showError($('ccPrefixError'), err.message); }
+
+    try {
+      const data = await req(api('/prefix-commands/slash-commands'));
+      paths = data.commands || [];
+      $('ccBrowseCategory').insertAdjacentHTML('beforeend',
+        (data.categories || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join(''));
+      $('ccPathList').innerHTML = paths.slice(0, 1200).map(p => `<option value="${esc(p.path)}">`).join('');
+      renderBrowse();
+    } catch (err) { $('ccBrowseCount').textContent = err.message; }
+
+    try {
+      const t = await req(api('/custom-commands/templates'));
+      variables = t.variables || [];
+      renderTemplates(t.templates || []);
+      await loadCustoms();
+    } catch (err) { showError($('ccCustomError'), err.message); }
+
+    syncActionFields();
+  })();
+})();
+</script>

@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>Cards Against Humanity — CertiFried MultiTool</title>
+<%- include('components/cah-shell-head') %>
+<style>
+    .container.cah-wide { max-width: 1400px; }
+
+    /* HERO — bold centered title with inline stat strip and one strong CTA */
+    .hero {
+        padding: 4rem 0 3rem;
+        text-align: center;
+        position: relative;
+    }
+    .hero::before {
+        content: '';
+        position: absolute; inset: 0;
+        background: radial-gradient(circle at 50% 0%, rgba(167, 139, 250, 0.08), transparent 60%);
+        pointer-events: none;
+    }
+    .hero > * { position: relative; }
+    .hero .eyebrow {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--accent-purple);
+        margin-bottom: 1rem;
+    }
+    .hero h1 {
+        font-size: 4rem;
+        font-weight: 900;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        margin-bottom: 1rem;
+    }
+    .hero h1 .accent {
+        background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .hero .tagline {
+        color: var(--text-secondary);
+        font-size: 1.15rem;
+        max-width: 580px;
+        margin: 0 auto 2rem;
+        line-height: 1.5;
+    }
+    .hero-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 1rem 2.25rem;
+        background: linear-gradient(135deg, var(--accent-purple), #8b5cf6);
+        color: #fff;
+        font-weight: 700;
+        font-size: 1rem;
+        border-radius: 12px;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        transition: transform 0.15s, box-shadow 0.15s;
+        box-shadow: 0 4px 20px rgba(167, 139, 250, 0.25);
+    }
+    .hero-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(167, 139, 250, 0.4); }
+
+    /* INLINE STAT STRIP — three big numbers below the CTA */
+    .hero-stats {
+        display: flex; justify-content: center; gap: 3rem;
+        margin-top: 3rem; padding-top: 2rem;
+        border-top: 1px solid var(--border-color);
+        max-width: 600px; margin-left: auto; margin-right: auto;
+        flex-wrap: wrap;
+    }
+    .hero-stat { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+    .hero-stat .num { font-size: 2rem; font-weight: 800; color: var(--accent-purple); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+    .hero-stat .lbl { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); font-weight: 600; }
+
+    @media (max-width: 700px) {
+        .hero h1 { font-size: 2.5rem; }
+        .hero-stats { gap: 1.5rem; }
+        .hero-stat .num { font-size: 1.5rem; }
+    }
+
+    /* SECTION HEADER */
+    .section-header {
+        display: flex; align-items: baseline; justify-content: space-between;
+        padding: 2.5rem 0 1.25rem;
+        gap: 1rem; flex-wrap: wrap;
+    }
+    .section-header h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; }
+    .section-header .meta { color: var(--text-muted); font-size: 0.85rem; }
+
+    /* LOBBY GRID — 3 columns desktop, 2 tablet, 1 mobile */
+    .lobby-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        padding-bottom: 4rem;
+    }
+    @media (max-width: 1100px) { .lobby-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 720px)  { .lobby-grid { grid-template-columns: 1fr; } }
+
+    .lobby-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        padding: 1.5rem;
+        display: flex; flex-direction: column; gap: 1rem;
+        transition: transform 0.15s, border-color 0.15s, background 0.15s;
+        text-decoration: none;
+        color: inherit;
+        position: relative;
+        overflow: hidden;
+    }
+    .lobby-card::before {
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+        background: linear-gradient(90deg, var(--accent-purple), var(--accent-pink));
+        opacity: 0; transition: opacity 0.15s;
+    }
+    .lobby-card:hover { transform: translateY(-2px); border-color: var(--accent-purple); background: var(--bg-card-hover); color: inherit; }
+    .lobby-card:hover::before { opacity: 1; }
+
+    .lobby-card .lobby-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+    .lobby-card .lobby-id { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.75rem; color: var(--text-muted); background: var(--bg-secondary); padding: 0.2rem 0.6rem; border-radius: 5px; }
+    .lobby-card .lobby-host { font-size: 0.85rem; color: var(--text-secondary); }
+    .lobby-card .lobby-host strong { color: var(--text-primary); font-weight: 600; }
+
+    .lobby-card .lobby-players {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.85rem 1rem; background: var(--bg-secondary); border-radius: 10px;
+    }
+    .lobby-card .lobby-players .count { font-size: 1.5rem; font-weight: 800; color: var(--accent-purple); font-variant-numeric: tabular-nums; }
+    .lobby-card .lobby-players .max { color: var(--text-muted); font-size: 0.95rem; }
+    .lobby-card .lobby-players .label { color: var(--text-muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+
+    .lobby-card .lobby-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .lobby-card .lobby-join {
+        margin-top: auto; padding: 0.75rem; text-align: center;
+        background: var(--bg-elevated); color: var(--accent-purple);
+        border-radius: 8px; font-weight: 700; font-size: 0.9rem;
+        transition: background 0.15s;
+    }
+    .lobby-card:hover .lobby-join { background: var(--accent-purple); color: #fff; }
+
+    /* EMPTY STATE */
+    .empty-state {
+        grid-column: 1 / -1;
+        text-align: center;
+        padding: 5rem 2rem;
+        background: var(--bg-card);
+        border: 1px dashed var(--border-color);
+        border-radius: 14px;
+    }
+    .empty-state .icon { font-size: 3.5rem; opacity: 0.3; margin-bottom: 1rem; }
+    .empty-state h3 { font-size: 1.25rem; color: var(--text-primary); margin-bottom: 0.5rem; font-weight: 600; }
+    .empty-state p { color: var(--text-secondary); margin-bottom: 1.5rem; }
+
+    /* MODAL — slide-in create flow */
+    .modal-backdrop {
+        position: fixed; inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(8px);
+        display: none; align-items: flex-start; justify-content: center;
+        z-index: 200; padding: 2rem 1rem;
+        overflow-y: auto;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        max-width: 720px; width: 100%;
+        padding: 0;
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+        animation: modalSlide 0.25s ease-out;
+        margin: auto 0;
+    }
+    @keyframes modalSlide { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+    .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+    .modal-header h2 { font-size: 1.3rem; font-weight: 700; }
+    .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.5rem; padding: 0.5rem; line-height: 1; }
+    .modal-close:hover { color: var(--text-primary); }
+    .modal-body { padding: 1.5rem 2rem; }
+    .modal-footer { padding: 1rem 2rem; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+    /* Form styling inside modal */
+    .form-grid { display: grid; gap: 1rem; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+    @media (max-width: 540px) { .form-row-2 { grid-template-columns: 1fr; } }
+    .form-field { display: flex; flex-direction: column; gap: 0.35rem; }
+    .form-field label { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .form-field input, .form-field select, .form-field textarea {
+        padding: 0.7rem 0.85rem;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-family: inherit;
+        transition: border-color 0.15s, background 0.15s;
+    }
+    .form-field input:focus, .form-field select:focus, .form-field textarea:focus {
+        outline: none; border-color: var(--accent-purple);
+    }
+    .form-field .hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
+
+    /* Tabs inside modal */
+    .modal-tabs { display: flex; gap: 0.25rem; padding: 0 2rem; border-bottom: 1px solid var(--border-color); }
+    .modal-tab {
+        padding: 0.85rem 1.25rem;
+        background: none; border: none; color: var(--text-secondary);
+        font-size: 0.9rem; font-weight: 600; cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: color 0.15s, border-color 0.15s;
+        font-family: inherit;
+    }
+    .modal-tab:hover { color: var(--text-primary); }
+    .modal-tab.active { color: var(--accent-purple); border-bottom-color: var(--accent-purple); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Preset buttons — selected state */
+    .preset-btn {
+        background: var(--bg-primary); border: 1px solid var(--border-color);
+        color: var(--text-primary); padding: 0.65rem 0.95rem; border-radius: 8px;
+        font-family: inherit; font-size: 0.85rem; font-weight: 600;
+        cursor: pointer; line-height: 1.3;
+        transition: border-color 0.15s, background 0.15s, transform 0.1s;
+        flex: 1; min-width: 130px;
+    }
+    .preset-btn small { display: block; font-size: 0.7rem; font-weight: 500; color: var(--text-muted); margin-top: 0.15rem; }
+    .preset-btn:hover { border-color: var(--accent-purple); }
+    .preset-btn.active { background: var(--accent-purple-dim); border-color: var(--accent-purple); color: var(--accent-purple); }
+    .preset-btn.active small { color: var(--accent-purple); opacity: 0.8; }
+
+    /* Highlight pulse on fields that just got updated by a preset */
+    @keyframes presetPulse { 0% { background: var(--accent-purple-dim); } 100% { background: var(--bg-primary); } }
+    .preset-pulse { animation: presetPulse 1.2s ease-out; }
+
+    /* Advanced collapse */
+    .advanced-toggle {
+        background: none; border: 1px solid var(--border-color); color: var(--text-secondary);
+        padding: 0.5rem 0.9rem; border-radius: 6px; font-size: 0.8rem; font-weight: 500;
+        cursor: pointer; font-family: inherit;
+        display: flex; align-items: center; gap: 0.5rem; width: fit-content;
+    }
+    .advanced-toggle:hover { color: var(--text-primary); border-color: var(--border-hover); }
+    .advanced-panel { display: none; padding: 1rem 0 0; }
+    .advanced-panel.open { display: block; }
+
+    /* Deck picker */
+    .deck-picker-tall { max-height: 50vh; overflow-y: auto; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.5rem; }
+    .deck-row { display: flex; align-items: center; gap: 0.65rem; padding: 0.6rem 0.7rem; border-radius: 6px; font-size: 0.88rem; transition: background 0.1s; }
+    .deck-row:hover { background: var(--bg-card-hover); }
+    .deck-row label { flex: 1; cursor: pointer; display: flex; align-items: center; gap: 0.6rem; min-width: 0; margin: 0; }
+    .deck-row input[type=checkbox] { accent-color: var(--accent-purple); width: 17px; height: 17px; cursor: pointer; flex-shrink: 0; }
+    .deck-row .deck-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .deck-row .deck-code { color: var(--text-muted); font-size: 0.72rem; font-family: ui-monospace, monospace; flex-shrink: 0; }
+    .deck-row .deck-stats { color: var(--text-muted); font-size: 0.72rem; flex-shrink: 0; }
+    .deck-tools { display: flex; gap: 0.4rem; margin-top: 0.6rem; }
+    .deck-tools button { flex: 1; padding: 0.5rem; }
+    .deck-filter { width: 100%; padding: 0.6rem 0.8rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.9rem; }
+
+    /* Guild picker */
+    #guild-picker-group { background: var(--bg-card); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); margin-top: 0.5rem; }
+</style>
+</head>
+<body>
+<%- include('components/cah-shell-nav', { user, page: 'lobbies' }) %>
+
+<div class="container cah-wide">
+    <section class="hero">
+        <span class="eyebrow">Cross-platform Discord + Web</span>
+        <h1>Cards Against <span class="accent">Humanity</span></h1>
+        <p class="tagline">Build a lobby, deal blanks, write your own answers, judge the chaos. Play in your browser or any Discord server we're in.</p>
+        <button class="hero-cta" onclick="hostFlow()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+            Host a Game
+        </button>
+        <% if (typeof user === 'undefined' || !user) { %>
+            <p style="margin-top: 1rem; color: var(--text-muted); font-size: 0.85rem;">
+                Play as a guest — just pick a name. Or
+                <a href="/auth/discord" style="color: var(--accent-purple);">sign in with Discord</a>
+                to save your decks and history.
+            </p>
+        <% } %>
+    </section>
+        <div class="hero-stats">
+            <div class="hero-stat">
+                <span class="num"><%= (decks?.length || 0).toLocaleString() %></span>
+                <span class="lbl">Card Packs</span>
+            </div>
+            <div class="hero-stat">
+                <span class="num"><%= lobbies?.length || 0 %></span>
+                <span class="lbl">Open Lobbies</span>
+            </div>
+            <div class="hero-stat">
+                <span class="num">3–20</span>
+                <span class="lbl">Players</span>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-header">
+        <h2>Public Lobbies</h2>
+        <span class="meta">Games marked <code style="background:var(--bg-secondary);padding:0.1rem 0.4rem;border-radius:4px;color:var(--accent-purple);font-size:0.78rem;">public</code> in Discord show up here too.</span>
+    </div>
+
+    <div class="lobby-grid">
+        <% if (!lobbies || lobbies.length === 0) { %>
+            <div class="empty-state">
+                <div class="icon">🃏</div>
+                <h3>No public lobbies right now</h3>
+                <p>Be the first — host one and it'll appear here for everyone.</p>
+                <button class="hero-cta" onclick="hostFlow()">Host a Game</button>
+            </div>
+        <% } else { %>
+            <% lobbies.forEach(l => { %>
+                <a class="lobby-card" href="/cah/<%= l.id %>" onclick="return enterLobby(event, '<%= l.id %>')">
+                    <div class="lobby-head">
+                        <div class="lobby-host"><strong><%= l.hostUserId.slice(0, 4) %>…</strong>'s game</div>
+                        <span class="lobby-id"><%= l.id.slice(0, 8) %></span>
+                    </div>
+                    <div class="lobby-players">
+                        <div>
+                            <span class="count"><%= l.playerCount %></span>
+                            <span class="max">/ 20</span>
+                        </div>
+                        <span class="label">Players</span>
+                    </div>
+                    <div class="lobby-badges">
+                        <span class="pill pill-purple"><%= l.settings.pointsToWin %> pts</span>
+                        <span class="pill"><%= l.settings.maxRounds %>r max</span>
+                        <% if (l.settings.blankCardCount > 0) { %><span class="pill pill-amber">✍️ <%= l.settings.blankCardCount %></span><% } %>
+                        <% if (l.settings.randoCount > 0) { %><span class="pill">🤖 <%= l.settings.randoCount %></span><% } %>
+                        <% if (l.settings.hasPassword) { %><span class="pill pill-amber">🔒</span><% } %>
+                        <% if (l.settings.nsfw) { %><span class="pill pill-red">🔞</span><% } %>
+                    </div>
+                    <div class="lobby-join">Join Game →</div>
+                </a>
+            <% }); %>
+        <% } %>
+    </div>
+</div>
+
+<!-- GUEST USERNAME MODAL -->
+<div class="modal-backdrop" id="guest-modal" onclick="if(event.target===this)closeGuestModal()">
+    <div class="modal" style="max-width: 440px;">
+        <div class="modal-header">
+            <h2>👋 Pick a name to play</h2>
+            <button class="modal-close" onclick="closeGuestModal()" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-body">
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                No account needed — just a display name. Other players will see this in the game.
+            </p>
+            <div class="form-field">
+                <label>Your name</label>
+                <input id="guest-username" type="text" maxlength="24" minlength="2" placeholder="e.g. Bean Goblin" autocomplete="off" onkeydown="if(event.key==='Enter')submitGuestName()">
+                <span class="hint">2–24 chars. Letters, numbers, spaces, dashes, dots, underscores.</span>
+            </div>
+            <div id="guest-error" style="display:none; color: var(--accent-red); font-size: 0.85rem; margin-top: 0.5rem;"></div>
+            <p style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color); color: var(--text-muted); font-size: 0.8rem;">
+                Want to save your custom decks and game history?
+                <a href="/auth/discord" style="color: var(--accent-purple);">Sign in with Discord</a> instead.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="closeGuestModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="submitGuestName()">Continue →</button>
+        </div>
+    </div>
+</div>
+
+<!-- CREATE GAME MODAL -->
+<div class="modal-backdrop" id="create-modal" onclick="if(event.target===this)closeCreateModal()">
+    <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-header">
+            <h2>🎴 Host a New Game</h2>
+            <button class="modal-close" onclick="closeCreateModal()" aria-label="Close">✕</button>
+        </div>
+        <div class="modal-tabs">
+            <button class="modal-tab active" data-tab="basics" onclick="switchTab('basics')">Game</button>
+            <button class="modal-tab" data-tab="decks" onclick="switchTab('decks')">Card Packs</button>
+        </div>
+        <form id="create-form" onsubmit="return submitCreate(event)">
+            <div class="modal-body">
+                <!-- TAB: Game basics -->
+                <div class="tab-panel active" data-panel="basics">
+                    <div style="display:flex; flex-direction:column; gap:0.6rem; margin-bottom:1.25rem; padding-bottom:1.25rem; border-bottom:1px solid var(--border-color);">
+                        <label style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em;">Quick Preset</label>
+                        <div class="preset-buttons" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                            <button type="button" class="preset-btn" data-preset="quick" onclick="applyPreset('quick', this)">⚡ Quick<br><small>5 pts · 10 rds</small></button>
+                            <button type="button" class="preset-btn" data-preset="standard" onclick="applyPreset('standard', this)">📋 Standard<br><small>7 · 20</small></button>
+                            <button type="button" class="preset-btn" data-preset="marathon" onclick="applyPreset('marathon', this)">🏃 Marathon<br><small>15 · 30</small></button>
+                            <button type="button" class="preset-btn" data-preset="spicy" onclick="applyPreset('spicy', this)">🌶️ Spicy<br><small>NSFW + blanks</small></button>
+                        </div>
+                        <div id="preset-applied" style="display:none; padding:0.55rem 0.8rem; background:var(--accent-green-dim); border:1px solid rgba(35,245,107,0.3); color:var(--accent-green); border-radius:6px; font-size:0.82rem; font-weight:500;">
+                            ✅ <span id="preset-applied-text"></span>
+                        </div>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-row-2">
+                            <div class="form-field">
+                                <label>Points to win</label>
+                                <input name="points" type="number" min="3" max="30" value="7">
+                            </div>
+                            <div class="form-field">
+                                <label>Max rounds</label>
+                                <input name="maxRounds" type="number" min="3" max="50" value="20">
+                            </div>
+                        </div>
+                        <div class="form-row-2">
+                            <div class="form-field">
+                                <label>Rando players</label>
+                                <input name="randoCount" type="number" min="0" max="3" value="0">
+                                <span class="hint">AI players for solo play</span>
+                            </div>
+                            <div class="form-field">
+                                <label>Visibility</label>
+                                <select name="visibility" id="visibility-select" onchange="onVisibilityChange()">
+                                    <option value="public">Public · listed</option>
+                                    <option value="private">Private · link only</option>
+                                    <option value="guild_only">Guild · post to Discord</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="guild-picker-group" style="display:none;">
+                            <div class="form-field">
+                                <label style="display:flex;justify-content:space-between;align-items:center;">
+                                    <span>Discord server</span>
+                                    <button type="button" id="refresh-guilds" style="background:none;border:none;color:var(--accent-purple);font-size:0.7rem;cursor:pointer;padding:0;text-transform:none;letter-spacing:normal;font-weight:500;">↻ Refresh</button>
+                                </label>
+                                <select name="guildId" id="guild-select" onchange="onGuildChange()">
+                                    <option value="">— Loading… —</option>
+                                </select>
+                                <span class="hint" id="guild-stats"></span>
+                                <button type="button" id="why-missing-btn" style="background:none;border:none;color:var(--accent-blue);font-size:0.72rem;cursor:pointer;padding:0;margin-top:0.2rem;text-decoration:underline;display:none;text-align:left;">Why don't I see all my servers?</button>
+                                <div id="why-missing-detail" style="display:none;margin-top:0.5rem;padding:0.6rem;background:var(--bg-primary);border:1px solid var(--border-color);border-radius:6px;font-size:0.72rem;font-family:ui-monospace,monospace;max-height:240px;overflow-y:auto;"></div>
+                            </div>
+                            <div class="form-field" style="margin-top:0.75rem;">
+                                <label>Channel</label>
+                                <select name="channelId" id="channel-select">
+                                    <option value="">— Pick a server first —</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-field">
+                            <label>🔒 Password <span style="color:var(--text-muted);text-transform:none;letter-spacing:normal;font-weight:400;">(optional)</span></label>
+                            <input name="joinPassword" type="text" placeholder="Leave blank for no password" maxlength="64" autocomplete="off">
+                        </div>
+
+                        <button type="button" class="advanced-toggle" onclick="document.getElementById('advanced').classList.toggle('open');this.querySelector('.chev').textContent=document.getElementById('advanced').classList.contains('open')?'▾':'▸';">
+                            <span class="chev">▸</span> Advanced settings
+                        </button>
+                        <div class="advanced-panel" id="advanced">
+                            <div class="form-grid">
+                                <div class="form-field">
+                                    <label>Card Czar rotation</label>
+                                    <select name="czarRotation">
+                                        <option value="rotate">Rotate (round-robin)</option>
+                                        <option value="random">Random</option>
+                                        <option value="previous_winner">Previous round winner</option>
+                                    </select>
+                                </div>
+                                <div class="form-row-2">
+                                    <div class="form-field">
+                                        <label>AFK Timeout (sec)</label>
+                                        <input name="timeoutSeconds" type="number" min="30" max="600" value="90">
+                                    </div>
+                                    <div class="form-field">
+                                        <label>Blank cards</label>
+                                        <input name="blankCardCount" type="number" min="0" max="20" value="0">
+                                        <span class="hint">Write-your-own slots</span>
+                                    </div>
+                                </div>
+                                <label style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;cursor:pointer;">
+                                    <input type="checkbox" name="nsfw" value="true" style="accent-color:var(--accent-purple);">
+                                    <span style="font-size:0.9rem;">🔞 Allow NSFW decks (host opt-in)</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Card packs -->
+                <div class="tab-panel" data-panel="decks">
+                    <div class="form-field">
+                        <label>Filter packs</label>
+                        <input class="deck-filter" id="deck-filter" placeholder="🔍 Filter by name or code…">
+                    </div>
+                    <div class="deck-picker-tall" id="deck-picker">
+                        <% if (decks && decks.length > 0) { %>
+                            <% decks.forEach(d => { %>
+                                <div class="deck-row" data-name="<%= (d.name || '').toLowerCase() %>" data-code="<%= (d.cast_id || '').toLowerCase() %>" data-nsfw="<%= d.nsfw ? 1 : 0 %>">
+                                    <label>
+                                        <input type="checkbox" name="deckCheck" value="<%= d.id %>" id="deck-<%= d.id %>" <%= d.source === 'builtin' ? 'checked' : '' %>>
+                                        <span class="deck-name"><%= d.name %></span>
+                                    </label>
+                                    <% if (d.cast_id) { %><span class="deck-code"><%= d.cast_id %></span><% } %>
+                                    <span class="deck-stats"><%= d.white_count %>w/<%= d.black_count %>b</span>
+                                    <% if (d.nsfw) { %><span class="pill pill-red" style="padding:0.1rem 0.4rem;font-size:0.65rem;">🔞</span><% } %>
+                                </div>
+                            <% }); %>
+                        <% } else { %>
+                            <div style="padding:2rem;color:var(--text-muted);text-align:center;font-size:0.9rem;">
+                                No decks loaded. Visit <a href="/cah/my-decks">My Decks</a> to make your own.
+                            </div>
+                        <% } %>
+                    </div>
+                    <div class="deck-tools">
+                        <button type="button" class="btn btn-outline btn-sm" onclick="selectAllDecks(true)">Select All</button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="selectAllDecks(false)">None</button>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="selectAllDecks('sfw')">SFW Only</button>
+                    </div>
+                    <input type="hidden" name="deckIds" id="deck-ids">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" onclick="closeCreateModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-lg">🎴 Create Lobby</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    // ─── Presets ──────────────────────────────────────────────────────
+    const PRESETS = {
+        quick:    { label: '⚡ Quick',    points: 5,  maxRounds: 10, blankCardCount: 0, nsfw: false, timeoutSeconds: 60 },
+        standard: { label: '📋 Standard', points: 7,  maxRounds: 20, blankCardCount: 0, nsfw: false, timeoutSeconds: 90 },
+        marathon: { label: '🏃 Marathon', points: 15, maxRounds: 30, blankCardCount: 2, nsfw: false, timeoutSeconds: 120 },
+        spicy:    { label: '🌶️ Spicy',   points: 7,  maxRounds: 20, blankCardCount: 5, nsfw: true,  timeoutSeconds: 90 }
+    };
+    function applyPreset(name, btnEl) {
+        const p = PRESETS[name]; if (!p) return;
+        const form = document.getElementById('create-form');
+
+        // Make sure the user can SEE the basics tab where the changed fields live
+        switchTab('basics');
+
+        // Apply field values + pulse-highlight each one so the change is visible
+        Object.entries(p).forEach(([k, v]) => {
+            if (k === 'label') return;
+            const fieldEl = form.querySelector(`[name="${k}"]`);
+            if (!fieldEl) return;
+            if (fieldEl.type === 'checkbox') fieldEl.checked = !!v;
+            else fieldEl.value = String(v);
+            // Brief pulse animation so the user sees which fields changed
+            fieldEl.classList.remove('preset-pulse');
+            void fieldEl.offsetWidth;   // force reflow to restart the animation
+            fieldEl.classList.add('preset-pulse');
+        });
+
+        // Toggle the selected-state styling on the buttons
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', b === btnEl));
+
+        // Show the "applied" confirmation row, including a hint about Advanced fields
+        const applied = document.getElementById('preset-applied');
+        const text = document.getElementById('preset-applied-text');
+        const advancedFields = `Timeout ${p.timeoutSeconds}s${p.nsfw ? ' · 🔞 enabled' : ''}${p.blankCardCount ? ` · ${p.blankCardCount} blank cards` : ''}`;
+        text.textContent = `${p.label} mode applied — ${p.points} pts to win, max ${p.maxRounds} rounds, ${advancedFields}`;
+        applied.style.display = 'block';
+
+        // Clear "active" state if the user manually edits any field afterward
+        // — the preset is no longer accurate at that point.
+        form.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('input', clearPresetActive, { once: true });
+        });
+    }
+    function clearPresetActive() {
+        document.querySelectorAll('.preset-btn.active').forEach(b => b.classList.remove('active'));
+        const applied = document.getElementById('preset-applied');
+        if (applied) applied.style.display = 'none';
+    }
+
+    // ─── Identity (Discord OR guest) ────────────────────────────────
+    let CURRENT_IDENTITY = <%- JSON.stringify(user ? { id: user.id, displayName: user.username, kind: 'discord' } : null) %>;
+
+    async function ensureIdentity() {
+        if (CURRENT_IDENTITY) return CURRENT_IDENTITY;
+        // Check if we already have a guest session from a previous visit
+        try {
+            const r = await cfetch('/cah/guest/identity');
+            const d = await r.json();
+            if (d.identity) { CURRENT_IDENTITY = d.identity; return d.identity; }
+        } catch (_) {}
+        // Otherwise prompt for a name
+        return await new Promise((resolve) => {
+            pendingGuestResolve = resolve;
+            openGuestModal();
+        });
+    }
+
+    let pendingGuestResolve = null;
+    function openGuestModal() {
+        document.getElementById('guest-modal').classList.add('open');
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => document.getElementById('guest-username').focus(), 50);
+    }
+    function closeGuestModal() {
+        document.getElementById('guest-modal').classList.remove('open');
+        document.body.style.overflow = '';
+        if (pendingGuestResolve) { pendingGuestResolve(null); pendingGuestResolve = null; }
+    }
+    async function submitGuestName() {
+        const username = document.getElementById('guest-username').value.trim();
+        const err = document.getElementById('guest-error');
+        err.style.display = 'none';
+        if (username.length < 2 || username.length > 24) { err.textContent = 'Name must be 2–24 characters.'; err.style.display = 'block'; return; }
+        try {
+            const r = await cfetch('/cah/guest/identity', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) });
+            const d = await r.json();
+            if (!d.ok) { err.textContent = d.message || d.reason; err.style.display = 'block'; return; }
+            CURRENT_IDENTITY = d.identity;
+            document.getElementById('guest-modal').classList.remove('open');
+            document.body.style.overflow = '';
+            if (pendingGuestResolve) { pendingGuestResolve(d.identity); pendingGuestResolve = null; }
+        } catch (_) {
+            err.textContent = 'Couldn\'t save your name. Try again.';
+            err.style.display = 'block';
+        }
+    }
+
+    // Host flow: ensure identity (prompts if guest), then open the create modal
+    async function hostFlow() {
+        const id = await ensureIdentity();
+        if (!id) return;   // user cancelled the guest prompt
+        openCreateModal();
+    }
+    // Join flow: clicking a lobby card prompts for identity before navigating
+    async function enterLobby(event, gameId) {
+        event.preventDefault();
+        const id = await ensureIdentity();
+        if (!id) return false;
+        location.href = '/cah/' + gameId;
+        return false;
+    }
+
+    // ─── Modal control ──────────────────────────────────────────────
+    function openCreateModal() {
+        document.getElementById('create-modal').classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeCreateModal() {
+        document.getElementById('create-modal').classList.remove('open');
+        document.body.style.overflow = '';
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { closeCreateModal(); closeGuestModal(); }
+    });
+    function switchTab(name) {
+        document.querySelectorAll('.modal-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === name));
+    }
+
+    // ─── Deck selection ──────────────────────────────────────────────
+    function collectCheckedDeckIds() {
+        const ids = Array.from(document.querySelectorAll('input[name="deckCheck"]:checked')).map(c => c.value);
+        document.getElementById('deck-ids').value = ids.join(',');
+        return ids;
+    }
+    function selectAllDecks(mode) {
+        document.querySelectorAll('.deck-row').forEach(row => {
+            if (row.style.display === 'none') return;
+            const cb = row.querySelector('input[type=checkbox]');
+            if (!cb) return;
+            if (mode === true) cb.checked = true;
+            else if (mode === false) cb.checked = false;
+            else if (mode === 'sfw') cb.checked = row.dataset.nsfw === '0';
+        });
+    }
+    document.getElementById('deck-filter')?.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        document.querySelectorAll('.deck-row').forEach(row => {
+            const match = !q || row.dataset.name.includes(q) || row.dataset.code.includes(q);
+            row.style.display = match ? '' : 'none';
+        });
+    });
+
+    // ─── Submit ──────────────────────────────────────────────────────
+    async function submitCreate(e) {
+        e.preventDefault();
+        collectCheckedDeckIds();
+        const body = Object.fromEntries(new FormData(e.target).entries());
+        const res = await cfetch('/cah/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (data.ok) location.href = '/cah/' + data.gameId;
+        else alert('Failed: ' + data.reason + (data.nsfwDeckNames ? ' (' + data.nsfwDeckNames.join(', ') + ')' : ''));
+        return false;
+    }
+
+    // ─── Option element helpers ──────────────────────────────────────
+    function optEl(value, label) { const o = document.createElement('option'); o.value = value; o.textContent = label; return o; }
+    function replaceOptions(selectEl, options) { selectEl.replaceChildren(...options.map(o => optEl(o.value, o.label))); }
+
+    // ─── Visibility-driven UI ────────────────────────────────────────
+    let myGuildsLoaded = false;
+    async function onVisibilityChange() {
+        const v = document.getElementById('visibility-select').value;
+        document.getElementById('guild-picker-group').style.display = v === 'guild_only' ? '' : 'none';
+        if (v === 'guild_only' && !myGuildsLoaded) {
+            myGuildsLoaded = true;
+            await loadGuilds();
+        }
+    }
+    async function loadGuilds() {
+        const sel = document.getElementById('guild-select');
+        const stats = document.getElementById('guild-stats');
+        replaceOptions(sel, [{ value: '', label: '— Loading… —' }]);
+        stats.textContent = '';
+        try {
+            const res = await cfetch('/cah/my-guilds');
+            const data = await res.json();
+            const guilds = data.guilds || [];
+            if (!guilds.length) {
+                replaceOptions(sel, [{ value: '', label: '— No mutual servers with our bots —' }]);
+            } else {
+                replaceOptions(sel, [{ value: '', label: '— Pick a server —' }, ...guilds.map(g => ({ value: g.id, label: g.name }))]);
+            }
+            const parts = [`Showing ${guilds.length} of ${data.totalGuilds} servers you're in`];
+            if (data.guildsWithoutBot > 0) parts.push(`${data.guildsWithoutBot} don't have our bots`);
+            if (!data.wasFresh) parts.push('list may be stale');
+            stats.textContent = parts.join(' · ');
+            document.getElementById('why-missing-btn').style.display = 'inline-block';
+        } catch (err) {
+            replaceOptions(sel, [{ value: '', label: '— Failed to load —' }]);
+        }
+    }
+    async function onGuildChange() {
+        const gid = document.getElementById('guild-select').value;
+        const csel = document.getElementById('channel-select');
+        if (!gid) { replaceOptions(csel, [{ value: '', label: '— Pick a server first —' }]); return; }
+        replaceOptions(csel, [{ value: '', label: '— Loading… —' }]);
+        try {
+            const res = await cfetch('/cah/guild-channels/' + encodeURIComponent(gid));
+            const { channels, ok, reason } = await res.json();
+            if (!ok) { replaceOptions(csel, [{ value: '', label: '— ' + (reason || 'failed') + ' —' }]); return; }
+            if (!channels?.length) { replaceOptions(csel, [{ value: '', label: '— No writable text channels —' }]); return; }
+            replaceOptions(csel, [
+                { value: '', label: '— Pick a channel —' },
+                ...channels.map(c => ({ value: c.id, label: '#' + c.name + (c.parentName ? ' (' + c.parentName + ')' : '') }))
+            ]);
+        } catch (err) {
+            replaceOptions(csel, [{ value: '', label: '— Failed to load —' }]);
+        }
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('refresh-guilds')?.addEventListener('click', () => loadGuilds());
+        document.getElementById('why-missing-btn')?.addEventListener('click', loadDiagnostic);
+    });
+    async function loadDiagnostic() {
+        const detail = document.getElementById('why-missing-detail');
+        detail.style.display = 'block';
+        detail.textContent = 'Loading diagnostic…';
+        try {
+            const res = await cfetch('/cah/my-guilds/debug');
+            const d = await res.json();
+            detail.replaceChildren();
+            const addLine = (label, value) => {
+                const row = document.createElement('div'); row.style.marginBottom = '0.25rem';
+                const k = document.createElement('strong'); k.textContent = label + ': ';
+                row.append(k, document.createTextNode(String(value))); detail.appendChild(row);
+            };
+            addLine('OAuth list', `${d.oauthGuildCount} servers (${d.wasFresh ? 'fresh' : 'session-cached'})`);
+            addLine('Mutual with our bots', d.mutualCount);
+            addLine('Bot clients ready', `${d.botHealth.filter(b => b.ready).length} / ${d.botClientCount}`);
+            addLine('Admin guilds w/o bot', d.adminSurfacedButNoBot);
+        } catch (err) {
+            detail.textContent = 'Failed to load diagnostic.';
+        }
+    }
+</script>
+</body>
+</html>

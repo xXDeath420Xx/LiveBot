@@ -11,6 +11,8 @@ import { configHandler } from './handlers/config.js';
 import { statsHandler } from './handlers/stats.js';
 import { moderationHandler } from './handlers/moderation.js';
 import { streamHandler } from './handlers/stream.js';
+import { cahHandler } from './handlers/cah.js';
+import { initWebAdapter } from '../../core/cah-web-adapter.js';
 
 let io = null;
 
@@ -37,15 +39,20 @@ export function initializeSocket(httpServer, sessionMiddleware) {
         sessionMiddleware(socket.request, {}, next);
     });
 
-    // Authentication middleware
+    // Soft auth — set socket.user from a Discord passport session OR a CAH
+    // guest identity (set via POST /cah/guest/identity). Anonymous users
+    // without either get a connection but no userId, so they can only receive
+    // events (spectator).
     io.use((socket, next) => {
         const session = socket.request.session;
         if (session && session.passport && session.passport.user) {
             socket.user = session.passport.user;
-            next();
-        } else {
-            next(new Error('Authentication required'));
+        } else if (session?.cahGuest?.id) {
+            // Mirror the passport user shape so per-handler code can keep
+            // doing `socket.user?.id` without knowing about guests.
+            socket.user = { id: session.cahGuest.id, username: session.cahGuest.displayName, kind: 'guest' };
         }
+        next();
     });
 
     // Connection handler
@@ -80,6 +87,7 @@ export function initializeSocket(httpServer, sessionMiddleware) {
         statsHandler(io, socket);
         moderationHandler(io, socket);
         streamHandler(io, socket);
+        cahHandler(io, socket);
 
         // Disconnection
         socket.on('disconnect', (reason) => {
@@ -91,6 +99,9 @@ export function initializeSocket(httpServer, sessionMiddleware) {
             logger.error(`[Socket.io] Error for ${user?.username}:`, error);
         });
     });
+
+    // Wire the CAH engine → Socket.io broadcast bridge (no-op until games exist)
+    initWebAdapter(() => io);
 
     logger.info('[Socket.io] Server initialized');
     return io;

@@ -182,6 +182,31 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
+
+@media (max-width: 768px) {
+    .hub-hero { padding: 24px 20px; margin-bottom: 24px; border-radius: 14px; }
+    .hub-hero h1 { font-size: 1.5rem; }
+    .hub-hero p { font-size: 0.9rem; }
+    .section-title { font-size: 1.15rem; margin-bottom: 16px; }
+    .module-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .module-card { padding: 16px 12px; border-radius: 12px; }
+    .module-card:hover { transform: translateY(-4px); }
+    .module-icon { font-size: 1.75rem; margin-bottom: 8px; }
+    .module-name { font-size: 0.85rem; }
+    .module-description { font-size: 0.7rem; }
+    .quick-stats { grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 24px; }
+    .quick-stat { padding: 16px; border-radius: 12px; }
+    .quick-stat-icon { font-size: 1.25rem; margin-bottom: 8px; }
+    .quick-stat-value { font-size: 1.25rem; }
+    .modules-section { margin-bottom: 32px; }
+}
+
+@media (max-width: 400px) {
+    .hub-hero h1 { font-size: 1.25rem; }
+    .module-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .module-card { padding: 14px 10px; }
+    .quick-stats { grid-template-columns: 1fr 1fr; gap: 8px; }
+}
 </style>
 
 <!-- Hub Hero -->
@@ -223,15 +248,10 @@
         Core
     </h2>
     <div class="module-grid">
-        <a href="/manage/<%= guild.id %>?page=streamers" class="module-card">
-            <i class="fas fa-users module-icon"></i>
-            <div class="module-name">Streamers</div>
-            <div class="module-description">Track and announce streamers</div>
-        </a>
-        <a href="/manage/<%= guild.id %>?page=teams" class="module-card">
-            <i class="fas fa-user-friends module-icon"></i>
-            <div class="module-name">Teams</div>
-            <div class="module-description">Manage streaming teams</div>
+        <a href="/manage/<%= guild.id %>?page=streaming" class="module-card">
+            <i class="fas fa-video module-icon"></i>
+            <div class="module-name">Streaming</div>
+            <div class="module-description">Streamers, teams & announcements</div>
         </a>
         <a href="/manage/<%= guild.id %>?page=appearance" class="module-card">
             <i class="fas fa-paint-brush module-icon"></i>
@@ -453,15 +473,10 @@
             <div class="module-name">Social Feeds</div>
             <div class="module-description">Reddit, YouTube, Twitter</div>
         </a>
-        <a href="/manage/<%= guild.id %>?page=twitch-schedules" class="module-card">
+        <a href="/manage/<%= guild.id %>?page=streaming&tab=schedules" class="module-card">
             <i class="fab fa-twitch module-icon"></i>
             <div class="module-name">Twitch Schedules</div>
             <div class="module-description">Sync Twitch schedules</div>
-        </a>
-        <a href="/manage/<%= guild.id %>?page=announcements" class="module-card">
-            <i class="fas fa-bullhorn module-icon"></i>
-            <div class="module-name">Announcements</div>
-            <div class="module-description">Announcement settings</div>
         </a>
         <a href="/manage/<%= guild.id %>?page=automemes" class="module-card">
             <i class="fas fa-laugh-squint module-icon"></i>

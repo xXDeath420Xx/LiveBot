@@ -777,10 +777,23 @@ router.post('/api/super-admin/refresh-guilds', requireSuperAdmin, async (req, re
             return res.status(response.status).json({ error: `Discord API error: ${response.status}` });
         }
 
-        const guilds = await response.json();
-        req.user.guilds = guilds;
+        const freshGuilds = await response.json();
 
-        // Persist updated guilds into the session
+        // Merge: use fresh guild list (new joins/leaves) but PRESERVE passport permissions
+        // Discord REST API returns base-only permissions, passport returns role-based permissions
+        const existingPerms = {};
+        for (const g of (req.user.guilds || [])) {
+            existingPerms[g.id] = { permissions: g.permissions, owner: g.owner };
+        }
+        const guilds = freshGuilds.map(g => {
+            const existing = existingPerms[g.id];
+            if (existing && parseInt(existing.permissions) > parseInt(g.permissions || '0')) {
+                return { ...g, permissions: existing.permissions, owner: existing.owner || g.owner };
+            }
+            return g;
+        });
+
+        req.user.guilds = guilds;
         req.session.passport.user.guilds = guilds;
         await new Promise((resolve, reject) => {
             req.session.save(err => err ? reject(err) : resolve());
@@ -809,10 +822,8 @@ router.get('/api/super-admin/my-guilds', requireSuperAdmin, async (req, res) => 
         const client = req.app.locals.client;
         const botClientId = process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
 
-        // Filter guilds where user is Owner or has Administrator permission (0x8)
-        const adminGuilds = userGuilds.filter(g => {
-            return g.owner || ((parseInt(g.permissions) & 0x8) === 0x8);
-        });
+        // Show all guilds — super admin needs full visibility for bot deployment
+        const adminGuilds = userGuilds;
 
         // Collect all guild IDs served by ANY bot (main + custom)
         const botManager = global.botManager;
@@ -832,13 +843,7 @@ router.get('/api/super-admin/my-guilds', requireSuperAdmin, async (req, res) => 
             }
         }
 
-        // Also check guild_bot_mapping DB table as fallback (cache may not be populated yet after restart)
-        try {
-            const [dbMappings] = await pool.execute('SELECT DISTINCT guild_id FROM guild_bot_mapping');
-            for (const row of dbMappings) {
-                allBotGuildIds.add(row.guild_id);
-            }
-        } catch (e) { /* db fallback failed, rely on cache */ }
+        // NOTE: guild_bot_mapping DB NOT used for botPresent — stale entries cause false positives
 
         // Build guild list with bot presence info (checks ALL bot instances)
         const guilds = adminGuilds.map(g => {
@@ -858,8 +863,12 @@ router.get('/api/super-admin/my-guilds', requireSuperAdmin, async (req, res) => 
                 }
             }
 
-            const roleCategory = g.owner ? 'Owner' : 'Administrator';
-            const rolePriority = g.owner ? 0 : 1;
+            const perms = parseInt(g.permissions) || 0;
+            let roleCategory, rolePriority;
+            if (g.owner) { roleCategory = 'Owner'; rolePriority = 0; }
+            else if ((perms & 0x8) === 0x8) { roleCategory = 'Administrator'; rolePriority = 1; }
+            else if ((perms & 0x20) === 0x20) { roleCategory = 'Moderator'; rolePriority = 2; }
+            else { roleCategory = 'Member'; rolePriority = 3; }
 
             return {
                 id: g.id,
@@ -894,6 +903,73 @@ router.get('/api/super-admin/my-guilds', requireSuperAdmin, async (req, res) => 
     } catch (error) {
         logger.error('[Super Admin] Error fetching my guilds:', error);
         res.status(500).json({ error: 'Failed to fetch guilds' });
+    }
+});
+
+// BOT-ONLY GUILDS (bot is in guild but user is not a member via OAuth)
+router.get('/api/super-admin/bot-only-guilds', requireSuperAdmin, async (req, res) => {
+    try {
+        const oauthGuildIds = new Set((req.user.guilds || []).map(g => g.id));
+        const userId = req.user.id;
+        const client = req.app.locals.client;
+        const botManager = global.botManager;
+
+        const botGuildsMap = new Map();
+        if (client?.guilds?.cache) {
+            client.guilds.cache.forEach((guild, guildId) => {
+                if (!botGuildsMap.has(guildId)) botGuildsMap.set(guildId, guild);
+            });
+        }
+        if (botManager) {
+            for (const [, botClient] of botManager.clients.entries()) {
+                if (botClient.isReady() && botClient.guilds?.cache) {
+                    botClient.guilds.cache.forEach((guild, guildId) => {
+                        if (!botGuildsMap.has(guildId)) botGuildsMap.set(guildId, guild);
+                    });
+                }
+            }
+        }
+
+        let botAssignments = {};
+        try {
+            const [assignments] = await pool.execute(`
+                SELECT gbm.guild_id, gbm.bot_id, cb.bot_name
+                FROM guild_bot_mapping gbm
+                JOIN custom_bots cb ON gbm.bot_id = cb.bot_id
+            `);
+            for (const a of assignments) botAssignments[a.guild_id] = a;
+        } catch {}
+
+        const botOnlyGuilds = [];
+        for (const [guildId, guild] of botGuildsMap) {
+            if (oauthGuildIds.has(guildId)) continue;
+
+            let ownerInfo = null;
+            if (guild.ownerId) {
+                try {
+                    const ownerUser = await guild.client.users.fetch(guild.ownerId).catch(() => null);
+                    ownerInfo = { id: guild.ownerId, username: ownerUser?.username || guild.ownerId };
+                } catch {}
+            }
+
+            const assignment = botAssignments[guildId] || null;
+            botOnlyGuilds.push({
+                id: guildId,
+                name: guild.name,
+                memberCount: guild.memberCount || null,
+                iconUrl: guild.iconURL({ size: 64 }) || null,
+                customBot: assignment ? { bot_id: assignment.bot_id, bot_name: assignment.bot_name } : null,
+                guildOwner: ownerInfo,
+                isMember: false,
+                roleCategory: null
+            });
+        }
+
+        botOnlyGuilds.sort((a, b) => a.name.localeCompare(b.name));
+        res.json({ success: true, guilds: botOnlyGuilds, missingFromMyGuilds: [], total: botOnlyGuilds.length });
+    } catch (error) {
+        logger.error('[Super Admin] Error fetching bot-only guilds:', error);
+        res.status(500).json({ error: 'Failed to fetch bot-only guilds' });
     }
 });
 
@@ -1150,16 +1226,21 @@ router.post('/api/super-admin/global-ban/entries', requireSuperAdmin, async (req
             return res.status(400).json({ error: 'User ID is required' });
         }
 
+        const manager = req.app.locals.client?.globalBanManager;
+        const username = manager ? await manager.resolveUsername(user_id) : null;
+
         const [result] = await pool.execute(
-            `INSERT INTO global_ban_entries (user_id, severity, category, reason, evidence, source, reporter_id, verified, active, expires_at)
-             VALUES (?, ?, ?, ?, ?, 'system', ?, 1, 1, ?)`,
+            `INSERT INTO global_ban_entries (user_id, username, severity, category, reason, evidence, source, reporter_id, reporter_name, verified, active, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'system', ?, ?, 1, 1, ?)`,
             [
                 user_id,
+                username,
                 severity || 'medium',
                 category || 'other',
                 reason || null,
                 evidence ? JSON.stringify(Array.isArray(evidence) ? evidence : [evidence]) : null,
                 req.user.id,
+                req.user.username || null,
                 expires_at || null
             ]
         );
@@ -1405,10 +1486,19 @@ router.put('/api/super-admin/global-ban/reports/:id', requireSuperAdmin, async (
 
         // If approved, create a global ban entry
         if (status === 'approved') {
+            const client = req.app.locals.client;
+            const manager = client?.globalBanManager;
+            const [targetName, reporterName] = manager
+                ? await Promise.all([
+                    manager.resolveUsername(report.target_user_id),
+                    manager.resolveUsername(report.reporter_id)
+                ])
+                : [null, null];
+
             const [result] = await pool.execute(
-                `INSERT INTO global_ban_entries (user_id, severity, category, reason, evidence, source, reporter_id, source_guild_id, verified, active)
-                 VALUES (?, ?, ?, ?, ?, 'manual_report', ?, ?, 1, 1)`,
-                [report.target_user_id, report.severity, report.category, report.reason, report.evidence, report.reporter_id, report.reporter_guild_id]
+                `INSERT INTO global_ban_entries (user_id, username, severity, category, reason, evidence, source, reporter_id, reporter_name, source_guild_id, verified, active)
+                 VALUES (?, ?, ?, ?, ?, ?, 'manual_report', ?, ?, ?, 1, 1)`,
+                [report.target_user_id, targetName, report.severity, report.category, report.reason, report.evidence, report.reporter_id, reporterName, report.reporter_guild_id]
             );
 
             await pool.execute(

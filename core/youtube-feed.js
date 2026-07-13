@@ -9,7 +9,14 @@ import logger from '../utils/logger.js';
  */
 async function checkYouTubeFeeds(client) {
   try {
-    const [feeds] = await pool.execute('SELECT * FROM youtube_feeds');
+    // Skip feeds that have been suspended due to repeated failures (circuit
+    // breaker). Without this, malformed channel IDs spam the logs forever —
+    // 671 warnings in ~hour before this fix.
+    const [feeds] = await pool.execute(
+      `SELECT * FROM youtube_feeds
+       WHERE (suspended_until IS NULL OR suspended_until < NOW())
+         AND youtube_channel_id REGEXP '^UC[A-Za-z0-9_-]{22}$'`
+    );
     if (feeds.length === 0) return;
 
     for (const feed of feeds) {
@@ -77,11 +84,36 @@ async function processYouTubeFeed(feed, client) {
       });
 
       await pool.execute(
-        'UPDATE youtube_feeds SET last_video_id = ? WHERE id = ?',
+        'UPDATE youtube_feeds SET last_video_id = ?, failed_count = 0, last_error = NULL WHERE id = ?',
         [latestVideoId, feed.id]
       );
+    } else {
+      // Successful fetch but nothing new — still reset failure counter so
+      // a temporary blip doesn't trip the circuit breaker.
+      if (feed.failed_count > 0) {
+        await pool.execute('UPDATE youtube_feeds SET failed_count = 0, last_error = NULL WHERE id = ?', [feed.id]);
+      }
     }
   } catch (error) {
+    // Circuit breaker: track consecutive failures, suspend after 5 in a row
+    // for 24h. Stops "channel doesn't exist" feeds from spamming the logs +
+    // burning HTTP requests on every check cycle.
+    try {
+      const [r] = await pool.execute(
+        `UPDATE youtube_feeds
+         SET failed_count = failed_count + 1,
+             last_error = ?,
+             suspended_until = CASE WHEN failed_count + 1 >= 5 THEN DATE_ADD(NOW(), INTERVAL 24 HOUR) ELSE suspended_until END
+         WHERE id = ?`,
+        [String(error.message || error).slice(0, 240), feed.id]
+      );
+      if (r.affectedRows > 0) {
+        const newCount = (feed.failed_count || 0) + 1;
+        if (newCount === 5) {
+          logger.error(`[YouTubeFeed] Suspending feed ${feed.id} (channel "${feed.youtube_channel_id}") for 24h after 5 consecutive failures: ${error.message}`);
+        }
+      }
+    } catch (_) { /* meta-failure on the failure counter — don't compound */ }
     logger.warn(`[YouTubeFeed] Failed to process feed for channel ID ${feed.youtube_channel_id}:`, error.message);
   }
 }

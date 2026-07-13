@@ -1,52 +1,61 @@
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
+import { EmbedBuilder } from 'discord.js';
 
 /**
- * Auto-Response Manager - Handles phrase-based automatic responses
- * Triggers when users type specific phrases and responds automatically
+ * Auto-Response Manager — triggers on user messages matching configured phrases
+ * Uses the `autoresponders` table (rich schema with regex, embeds, reactions, cooldowns, restrictions)
  */
 class AutoResponseManager {
   constructor(client) {
     this.client = client;
-    this.responseCache = new Map(); // guild_id -> array of responses
-    this.cacheExpiry = new Map(); // guild_id -> expiry timestamp
-    this.CACHE_TTL = 60000; // 1 minute cache
-    logger.info('[AutoResponseManager] Auto-response manager initialized');
+    this.responseCache = new Map(); // guild_id -> array of autoresponders
+    this.cacheExpiry = new Map();
+    this.cooldowns = new Map(); // "guildId:arId:scope:scopeId" -> timestamp
+    this.CACHE_TTL = 60000;
+    logger.info('[AutoResponseManager] Initialized');
   }
 
-  /**
-   * Load auto-responses for a guild
-   * @param {string} guildId - Guild ID
-   * @returns {Promise<Array>} Array of auto-responses
-   */
   async loadResponses(guildId) {
     try {
-      // Check cache
       const expiry = this.cacheExpiry.get(guildId);
       if (expiry && Date.now() < expiry && this.responseCache.has(guildId)) {
         return this.responseCache.get(guildId);
       }
 
-      const [responses] = await pool.execute(
-        'SELECT * FROM auto_responses WHERE guild_id = ? AND enabled = TRUE',
+      const [rows] = await pool.execute(
+        'SELECT * FROM autoresponders WHERE guild_id = ? AND enabled = 1',
         [guildId]
       );
 
-      this.responseCache.set(guildId, responses);
-      this.cacheExpiry.set(guildId, Date.now() + this.CACHE_TTL);
+      // Pre-compile regex patterns
+      for (const ar of rows) {
+        if (ar.match_type === 'regex') {
+          try { ar._regex = new RegExp(ar.trigger_text, ar.case_sensitive ? '' : 'i'); }
+          catch { ar._regex = null; }
+        } else if (ar.match_type === 'wildcard') {
+          try {
+            const escaped = ar.trigger_text.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+            ar._regex = new RegExp(`^${escaped}$`, ar.case_sensitive ? '' : 'i');
+          } catch { ar._regex = null; }
+        }
+        // Parse JSON fields once
+        ar._allowedChannels = parseJson(ar.allowed_channels);
+        ar._blockedChannels = parseJson(ar.blocked_channels);
+        ar._allowedRoles = parseJson(ar.allowed_roles);
+        ar._blockedRoles = parseJson(ar.blocked_roles);
+        ar._reactions = parseJson(ar.reactions);
+      }
 
-      return responses;
+      this.responseCache.set(guildId, rows);
+      this.cacheExpiry.set(guildId, Date.now() + this.CACHE_TTL);
+      return rows;
     } catch (error) {
-      logger.error(`[AutoResponseManager] Failed to load responses: ${error.message}`, { guildId });
+      logger.error(`[AutoResponseManager] Failed to load: ${error.message}`, { guildId });
       return [];
     }
   }
 
-  /**
-   * Check a message for auto-response triggers
-   * @param {Message} message - Discord message
-   * @returns {Promise<boolean>} Whether a response was sent
-   */
   async checkMessage(message) {
     try {
       const responses = await this.loadResponses(message.guild.id);
@@ -54,168 +63,244 @@ class AutoResponseManager {
 
       const content = message.content;
 
-      for (const autoResponse of responses) {
-        const trigger = autoResponse.trigger_phrase;
-        const caseSensitive = autoResponse.case_sensitive;
-        const matchType = autoResponse.match_type;
+      for (const ar of responses) {
+        if (!this.matchesTrigger(ar, content)) continue;
+        if (!this.passesRestrictions(ar, message)) continue;
+        if (this.isOnCooldown(ar, message)) continue;
 
-        const checkContent = caseSensitive ? content : content.toLowerCase();
-        const checkTrigger = caseSensitive ? trigger : trigger.toLowerCase();
+        // Matched — execute the response
+        await this.executeResponse(ar, message);
+        this.setCooldown(ar, message);
 
-        let matches = false;
+        // Update stats (fire-and-forget)
+        pool.execute(
+          'UPDATE autoresponders SET use_count = use_count + 1, last_triggered = NOW() WHERE id = ?',
+          [ar.id]
+        ).catch(() => {});
 
-        switch (matchType) {
-          case 'exact':
-            matches = checkContent === checkTrigger;
-            break;
-          case 'contains':
-            matches = checkContent.includes(checkTrigger);
-            break;
-          case 'starts_with':
-            matches = checkContent.startsWith(checkTrigger);
-            break;
-          case 'ends_with':
-            matches = checkContent.endsWith(checkTrigger);
-            break;
-          default:
-            matches = checkContent.includes(checkTrigger);
-        }
-
-        if (matches) {
-          // Parse response for channel mentions like {#channel-name}
-          let responseText = autoResponse.response;
-          const channelMentionRegex = /\{#([^}]+)\}/g;
-          let match;
-
-          while ((match = channelMentionRegex.exec(autoResponse.response)) !== null) {
-            const channelName = match[1];
-            const channel = message.guild.channels.cache.find(
-              c => c.name.toLowerCase() === channelName.toLowerCase()
-            );
-            if (channel) {
-              responseText = responseText.replace(match[0], `<#${channel.id}>`);
-            }
-          }
-
-          await message.channel.send(responseText);
-
-          // Increment use count
-          await pool.execute(
-            'UPDATE auto_responses SET uses = uses + 1 WHERE id = ?',
-            [autoResponse.id]
-          );
-
-          logger.debug('[AutoResponseManager] Auto-response triggered', {
-            guildId: message.guild.id,
-            trigger: trigger,
-            userId: message.author.id
-          });
-
-          return true;
-        }
+        return true;
       }
 
       return false;
     } catch (error) {
-      logger.error(`[AutoResponseManager] Error checking message: ${error.message}`, {
-        guildId: message.guild?.id
+      logger.error(`[AutoResponseManager] Error: ${error.message}`, { guildId: message.guild?.id });
+      return false;
+    }
+  }
+
+  matchesTrigger(ar, content) {
+    if (ar.match_type === 'regex' || ar.match_type === 'wildcard') {
+      return ar._regex ? ar._regex.test(content) : false;
+    }
+
+    const check = ar.case_sensitive ? content : content.toLowerCase();
+    const trigger = ar.case_sensitive ? ar.trigger_text : ar.trigger_text.toLowerCase();
+
+    switch (ar.match_type) {
+      case 'exact': return check === trigger;
+      case 'contains': return check.includes(trigger);
+      case 'starts_with': return check.startsWith(trigger);
+      case 'ends_with': return check.endsWith(trigger);
+      default: return check.includes(trigger);
+    }
+  }
+
+  passesRestrictions(ar, message) {
+    // Channel restrictions
+    if (ar._allowedChannels.length > 0 && !ar._allowedChannels.includes(message.channel.id)) return false;
+    if (ar._blockedChannels.length > 0 && ar._blockedChannels.includes(message.channel.id)) return false;
+
+    // Role restrictions
+    const memberRoles = message.member?.roles?.cache?.map(r => r.id) || [];
+    if (ar._blockedRoles.length > 0 && ar._blockedRoles.some(r => memberRoles.includes(r))) return false;
+    if (ar._allowedRoles.length > 0) {
+      if (ar.require_all_roles) {
+        if (!ar._allowedRoles.every(r => memberRoles.includes(r))) return false;
+      } else {
+        if (!ar._allowedRoles.some(r => memberRoles.includes(r))) return false;
+      }
+    }
+
+    return true;
+  }
+
+  isOnCooldown(ar, message) {
+    if (!ar.cooldown_seconds || ar.cooldown_seconds <= 0) return false;
+
+    const now = Date.now();
+    const cooldownMs = ar.cooldown_seconds * 1000;
+
+    if (ar.cooldown_per_user) {
+      const key = `${ar.id}:u:${message.author.id}`;
+      const last = this.cooldowns.get(key);
+      if (last && now - last < cooldownMs) return true;
+    }
+
+    if (ar.cooldown_per_channel) {
+      const key = `${ar.id}:c:${message.channel.id}`;
+      const last = this.cooldowns.get(key);
+      if (last && now - last < cooldownMs) return true;
+    }
+
+    // Global cooldown (neither per-user nor per-channel)
+    if (!ar.cooldown_per_user && !ar.cooldown_per_channel) {
+      const key = `${ar.id}:g`;
+      const last = this.cooldowns.get(key);
+      if (last && now - last < cooldownMs) return true;
+    }
+
+    return false;
+  }
+
+  setCooldown(ar, message) {
+    if (!ar.cooldown_seconds || ar.cooldown_seconds <= 0) return;
+    const now = Date.now();
+
+    if (ar.cooldown_per_user) this.cooldowns.set(`${ar.id}:u:${message.author.id}`, now);
+    if (ar.cooldown_per_channel) this.cooldowns.set(`${ar.id}:c:${message.channel.id}`, now);
+    if (!ar.cooldown_per_user && !ar.cooldown_per_channel) this.cooldowns.set(`${ar.id}:g`, now);
+  }
+
+  async executeResponse(ar, message) {
+    try {
+      // Delete the trigger message if configured
+      if (ar.delete_trigger) {
+        message.delete().catch(() => {});
+      }
+
+      if (ar.response_type === 'react') {
+        // Add reactions to the message
+        for (const emoji of ar._reactions) {
+          await message.react(emoji).catch(() => {});
+        }
+        return;
+      }
+
+      if (ar.response_type === 'embed') {
+        // Send embed from JSON
+        let embedData;
+        try { embedData = JSON.parse(ar.embed_json); } catch { return; }
+        const embed = new EmbedBuilder(embedData);
+        if (ar.reply_to_user) {
+          await message.reply({ embeds: [embed] });
+        } else {
+          await message.channel.send({ embeds: [embed] });
+        }
+        return;
+      }
+
+      // Default: text response
+      let responseText = this.parseVariables(ar.response_text, message);
+
+      if (ar.reply_to_user) {
+        await message.reply(responseText);
+      } else {
+        await message.channel.send(responseText);
+      }
+    } catch (error) {
+      logger.error(`[AutoResponseManager] Failed to execute response: ${error.message}`, {
+        guildId: message.guild.id, arId: ar.id
       });
-      return false;
     }
   }
 
-  /**
-   * Create a new auto-response
-   * @param {string} guildId - Guild ID
-   * @param {string} trigger - Trigger phrase
-   * @param {string} response - Response text
-   * @param {string} createdBy - User ID who created it
-   * @param {object} options - Additional options
-   * @returns {Promise<{success: boolean, error?: string}>}
-   */
-  async createResponse(guildId, trigger, response, createdBy, options = {}) {
-    try {
-      const {
-        matchType = 'contains',
-        caseSensitive = false
-      } = options;
+  parseVariables(text, message) {
+    return text
+      .replace(/{user}/g, `<@${message.author.id}>`)
+      .replace(/{username}/g, message.author.username)
+      .replace(/{displayname}/g, message.member?.displayName || message.author.username)
+      .replace(/{server}/g, message.guild.name)
+      .replace(/{channel}/g, `<#${message.channel.id}>`)
+      .replace(/{membercount}/g, message.guild.memberCount.toString())
+      .replace(/\{#([^}]+)\}/g, (match, name) => {
+        const ch = message.guild.channels.cache.find(c => c.name.toLowerCase() === name.toLowerCase());
+        return ch ? `<#${ch.id}>` : match;
+      });
+  }
 
+  // CRUD methods for dashboard API
+
+  async createResponse(guildId, data, createdBy) {
+    try {
       await pool.execute(
-        `INSERT INTO auto_responses (guild_id, trigger_phrase, response, match_type, case_sensitive, created_by)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [guildId, trigger, response, matchType, caseSensitive, createdBy]
+        `INSERT INTO autoresponders (guild_id, trigger_text, response_text, match_type, case_sensitive,
+         response_type, embed_json, reactions, delete_trigger, reply_to_user,
+         allowed_channels, blocked_channels, allowed_roles, blocked_roles, require_all_roles,
+         cooldown_seconds, cooldown_per_user, cooldown_per_channel, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          guildId, data.trigger_text, data.response_text || null,
+          data.match_type || 'contains', data.case_sensitive ? 1 : 0,
+          data.response_type || 'text', data.embed_json || null, data.reactions || null,
+          data.delete_trigger ? 1 : 0, data.reply_to_user !== false ? 1 : 0,
+          data.allowed_channels || null, data.blocked_channels || null,
+          data.allowed_roles || null, data.blocked_roles || null, data.require_all_roles ? 1 : 0,
+          data.cooldown_seconds || 0, data.cooldown_per_user !== false ? 1 : 0, data.cooldown_per_channel ? 1 : 0,
+          createdBy
+        ]
       );
-
-      // Invalidate cache
-      this.responseCache.delete(guildId);
-      this.cacheExpiry.delete(guildId);
-
-      logger.info(`[AutoResponseManager] Created auto-response for "${trigger}"`, { guildId });
+      this.invalidateCache(guildId);
       return { success: true };
     } catch (error) {
-      if (error.code === 'ER_DUP_ENTRY') {
-        return { success: false, error: 'An auto-response with this trigger already exists!' };
-      }
-      logger.error(`[AutoResponseManager] Failed to create response: ${error.message}`, { guildId });
-      return { success: false, error: 'Failed to create auto-response.' };
+      logger.error(`[AutoResponseManager] Create failed: ${error.message}`, { guildId });
+      return { success: false, error: error.code === 'ER_DUP_ENTRY' ? 'Trigger already exists' : 'Failed to create' };
     }
   }
 
-  /**
-   * Delete an auto-response
-   * @param {string} guildId - Guild ID
-   * @param {string} trigger - Trigger phrase
-   * @returns {Promise<{success: boolean, error?: string}>}
-   */
-  async deleteResponse(guildId, trigger) {
+  async updateResponse(guildId, id, data) {
     try {
-      const [result] = await pool.execute(
-        'DELETE FROM auto_responses WHERE guild_id = ? AND trigger_phrase = ?',
-        [guildId, trigger]
-      );
+      const sets = [];
+      const params = [];
 
-      if (result.affectedRows === 0) {
-        return { success: false, error: 'Auto-response not found.' };
+      for (const [key, value] of Object.entries(data)) {
+        if (key === 'id' || key === 'guild_id') continue;
+        sets.push(`\`${key}\` = ?`);
+        params.push(value);
       }
 
-      // Invalidate cache
-      this.responseCache.delete(guildId);
-      this.cacheExpiry.delete(guildId);
+      if (sets.length === 0) return { success: false, error: 'Nothing to update' };
 
-      logger.info(`[AutoResponseManager] Deleted auto-response "${trigger}"`, { guildId });
+      params.push(id, guildId);
+      await pool.execute(`UPDATE autoresponders SET ${sets.join(', ')} WHERE id = ? AND guild_id = ?`, params);
+      this.invalidateCache(guildId);
       return { success: true };
     } catch (error) {
-      logger.error(`[AutoResponseManager] Failed to delete response: ${error.message}`, { guildId });
-      return { success: false, error: 'Failed to delete auto-response.' };
+      logger.error(`[AutoResponseManager] Update failed: ${error.message}`, { guildId, id });
+      return { success: false, error: 'Failed to update' };
     }
   }
 
-  /**
-   * List all auto-responses for a guild
-   * @param {string} guildId - Guild ID
-   * @returns {Promise<Array>}
-   */
+  async deleteResponse(guildId, id) {
+    try {
+      const [result] = await pool.execute('DELETE FROM autoresponders WHERE id = ? AND guild_id = ?', [id, guildId]);
+      this.invalidateCache(guildId);
+      return { success: result.affectedRows > 0, error: result.affectedRows === 0 ? 'Not found' : undefined };
+    } catch (error) {
+      logger.error(`[AutoResponseManager] Delete failed: ${error.message}`, { guildId, id });
+      return { success: false, error: 'Failed to delete' };
+    }
+  }
+
   async listResponses(guildId) {
     try {
-      const [responses] = await pool.execute(
-        'SELECT * FROM auto_responses WHERE guild_id = ? ORDER BY created_at DESC',
-        [guildId]
-      );
-      return responses;
+      const [rows] = await pool.execute('SELECT * FROM autoresponders WHERE guild_id = ? ORDER BY created_at DESC', [guildId]);
+      return rows;
     } catch (error) {
-      logger.error(`[AutoResponseManager] Failed to list responses: ${error.message}`, { guildId });
+      logger.error(`[AutoResponseManager] List failed: ${error.message}`, { guildId });
       return [];
     }
   }
 
-  /**
-   * Invalidate cache for a guild
-   * @param {string} guildId - Guild ID
-   */
   invalidateCache(guildId) {
     this.responseCache.delete(guildId);
     this.cacheExpiry.delete(guildId);
   }
+}
+
+function parseJson(val) {
+  if (!val) return [];
+  try { const arr = JSON.parse(val); return Array.isArray(arr) ? arr : []; }
+  catch { return []; }
 }
 
 export default AutoResponseManager;
