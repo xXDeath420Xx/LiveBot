@@ -2,8 +2,12 @@
  * Guild takeover — migrate a server from third-party bots onto this one, channel by channel.
  *
  * Design rules, in order of importance:
- *   1. NOTHING is posted, deleted or edited in any channel. Takeover only writes config
- *      rows. Panels, welcome messages and rules stay exactly as the old bot left them.
+ *   1. `apply()` NEVER posts, deletes or edits anything in any channel — it only writes config
+ *      rows. Welcome messages and rules stay exactly as the old bot left them.
+ *      The single exception is `postPanels()`, which is deliberately NOT an apply step and must be
+ *      invoked on its own: it posts the new self-assign panels and removes Carl-bot's old reaction
+ *      panels, which would otherwise sit there looking clickable forever. It archives before it
+ *      deletes. Nothing else in this file touches a channel's contents.
  *   2. `plan()` is pure inspection and always safe to run. `apply()` only ever performs the
  *      steps a plan produced, and only the ones the caller explicitly opted into.
  *   3. Every step is idempotent and independently skippable. Re-running is a no-op.
@@ -740,18 +744,29 @@ export async function plan(guild, opts = {}) {
       : missingRoles.length ? `these roles no longer exist: ${missingRoles.join(', ')}`
         : missingEmoji.length ? `upload the platform emoji first — not in this server yet: ${missingEmoji.join(', ')}`
           : null;
+    // Surface the old panels we will take down, BEFORE anyone clicks anything. The one destructive
+    // act in the whole takeover should never be a surprise discovered afterwards.
+    const oldPanels = channel ? await findOldPanels(channel).catch(() => []) : [];
+
     push('carlbot_panels', {
       label: 'Self-assign role panels',
       channelId: SELF_ASSIGN_CHANNEL,
       channelName: channel?.name ?? SELF_ASSIGN_CHANNEL,
+      removes: oldPanels.map(m => ({ id: m.id, title: m.embeds[0]?.title ?? '(untitled)' })),
       done: Number(panels.n) >= CARLBOT_PANELS.length,
       blocked: panelBlocker,
       sequenced: panelBlocker || !notYetRenamed.length ? null
         : `run the role clean-up first (scripts/kabster-role-plan.mjs --apply) — ${notYetRenamed.length} role(s) ` +
           `still carry their old duplicate name, so a member clicking "${notYetRenamed[0]}" would be given the wrong-named role`,
       deliberate: panelBlocker || notYetRenamed.length ? null
-        : `ready — posts ${CARLBOT_PANELS.length} button panels. Use the "Post panels" action; it is the only step that writes to the guild.`,
-      note: CARLBOT_PANELS.map(p => `${p.name} (${p.roles.length})`).join(' · '),
+        : `ready — posts ${CARLBOT_PANELS.length} button panels` +
+          (oldPanels.length ? `, then removes Carl-bot's ${oldPanels.length} old reaction panel(s) once ours are up` : '') +
+          '. Use the "Post panels" action; it is the only step that writes to the guild.',
+      note: CARLBOT_PANELS.map(p => `${p.name} (${p.roles.length})`).join(' · ')
+        + (oldPanels.length
+          ? ` — REMOVES (archived first): ${oldPanels.map(m => m.embeds[0]?.title ?? m.id).join(', ')}. `
+            + 'Carl-bot panels keep showing their reactions after it leaves, so members would click a dead panel.'
+          : ''),
       replaces: byFeature.get('reaction_roles').name,
     });
   }
@@ -999,10 +1014,16 @@ async function runStep(guild, step) {
 }
 
 /**
- * Rebuild Carl-bot's self-assign panels as our own. This POSTS MESSAGES, which is why it is not a
- * case in `apply()` and can never be swept up by an "apply everything" click — it is its own
- * deliberate action. Carl-bot's original panels are never touched; they simply stop responding
- * when it leaves, and a moderator can delete them once ours are up.
+ * Rebuild Carl-bot's self-assign panels as our own. This POSTS MESSAGES and then DELETES Carl-bot's
+ * originals, which is why it is not a case in `apply()` and can never be swept up by an "apply
+ * everything" click — it is its own deliberate action, and the only place the takeover writes to a
+ * channel at all.
+ *
+ * The originals cannot simply be left in place. A Carl-bot panel is a REACTION panel: after Carl-bot
+ * leaves, the message still renders every reaction, so members carry on clicking it and silently get
+ * nothing. A dead panel that looks alive is worse than no panel. They come down only AFTER every
+ * replacement is confirmed posted, and every one is archived to `takeover_archived_messages` first —
+ * it is not our server, and deleting is irreversible.
  *
  * Buttons, not reactions: a reaction panel needs the member to have Add Reactions in the channel
  * and silently does nothing when they don't, and every emoji must be re-fetched on restart.
@@ -1046,5 +1067,50 @@ export async function postPanels(guild) {
     if (!made) throw new Error(`${panel.name}: panel creation failed`);
     results.push({ panel: panel.name, outcome: 'posted', messageId: made.messageId });
   }
+
+  // Only now that every replacement is up do the originals come down. If any panel above threw, we
+  // have already returned and the old ones are still there — never a channel with neither.
+  for (const old of await findOldPanels(channel)) {
+    await archiveMessage(guild.id, old);
+    await old.delete(ascii('Takeover: replaced by our own self-assign panel'))
+      .then(() => results.push({ panel: old.embeds[0]?.title ?? old.id, outcome: 'old-panel-removed', messageId: old.id }))
+      .catch(e => results.push({ panel: old.id, outcome: `old-panel-delete-failed: ${e.message}` }));
+  }
   return results;
+}
+
+/**
+ * Carl-bot's own panels, still sitting in the channel.
+ *
+ * Identified by AUTHOR + STRUCTURE, never by a hardcoded message id: an id list would silently rot
+ * if a panel were ever reposted, and worse, could point at whatever message inherited the position.
+ * A Carl-bot panel is an embed with a title we recognise and reactions but no buttons — which is
+ * exactly what makes it dangerous to leave behind. The reactions still render after Carl-bot is
+ * gone, so members keep clicking a dead panel and silently get nothing.
+ *
+ * Human messages in the channel are never candidates: `author.bot` gates that.
+ */
+async function findOldPanels(channel) {
+  const CARLBOT = '235148962103951360';
+  const titles = new Set(CARLBOT_PANELS.map(p => p.name.toLowerCase()));
+  const msgs = await channel.messages.fetch({ limit: 100 });
+  return [...msgs.values()].filter(m =>
+    m.author?.bot
+    && m.author.id === CARLBOT
+    && m.reactions.cache.size > 0
+    && !m.components?.length
+    && titles.has((m.embeds[0]?.title ?? '').trim().toLowerCase()));
+}
+
+/** Keep a copy of anything we delete from a guild. Deleting is irreversible; this is the receipt. */
+async function archiveMessage(guildId, msg) {
+  await pool.execute(
+    `INSERT INTO takeover_archived_messages
+       (guild_id, channel_id, message_id, author_id, author_name, content, embeds, reactions)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE archived_at = CURRENT_TIMESTAMP`,
+    [guildId, msg.channelId, msg.id, msg.author?.id ?? null, msg.author?.username ?? null,
+      msg.content ?? '', JSON.stringify(msg.embeds ?? []),
+      JSON.stringify([...msg.reactions.cache.values()].map(r => ({
+        emoji: r.emoji.id ? `${r.emoji.name}:${r.emoji.id}` : r.emoji.name, count: r.count })))]);
 }
