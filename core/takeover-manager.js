@@ -1288,6 +1288,72 @@ export async function postTwitchLinkPanel(guild, channelId) {
 }
 
 /**
+ * The Fire. A ONE-OFF, not a command.
+ *
+ * Kabster is giving up a 193ft tree to start again on ours. "The old bot left and your tree is gone"
+ * is a shrug — a thing that happened TO the server, with nobody to blame and nothing to say about it.
+ * A tree that *died*, on the other hand, is an event. The sapling that follows it means something,
+ * and the 193ft is not deleted, it is mourned.
+ *
+ * Deliberately NOT a `/tree burn` subcommand. A server does not need a permanent, discoverable button
+ * that destroys its own tree — that is a footgun sitting in the command list forever, for one night's
+ * use. It lives here, with the other takeover actions that write to a guild: asked for by name, run
+ * once, gone.
+ *
+ * What survives the fire is chosen: levels, XP, sticker books and coins are all kept, because they
+ * are the PLAYERS' and burning them is just a punishment for having played. What burns is the tree —
+ * the shared thing — and the gardener board that ranked people on it, which would otherwise be a
+ * leaderboard for a tree that no longer exists.
+ */
+export async function postForestFire(guild, channelId, { name = null } = {}) {
+  const { EmbedBuilder } = await import('discord.js');
+  const { burnDown } = await import('./growtree/manager.js');
+  const { buildTreeMessage } = await import('./growtree/display.js');
+
+  const channel = guild.channels.cache.get(channelId)
+    ?? guild.channels.cache.find(c => c.isTextBased?.() && nameMatches(c, /grow-a-tree|tree/));
+  if (!channel?.isTextBased?.()) throw new Error('no tree channel — pass one explicitly');
+
+  const miss = missingPerms(channel, guild, ['ViewChannel', 'SendMessages', 'EmbedLinks']);
+  if (miss.length) throw new Error(`missing ${miss.join(', ')} in #${channel.name}`);
+
+  const res = await burnDown(guild.id, { name, plantedBy: guild.ownerId });
+  if (!res.ok) throw new Error('there is no tree here to burn — plant ours first with /tree plant');
+
+  const { name: lost, height } = res.lost;
+
+  await channel.send({
+    embeds: [new EmbedBuilder()
+      .setColor(0xC0392B)
+      .setTitle('🔥 The Fire')
+      .setDescription(
+        'It started somewhere past the treeline, and by the time anyone smelled the smoke it had '
+        + 'already crossed the clearing.\n\n'
+        + `**${lost}** stood **${height}ft**. Years of somebody remembering to come back and water it — `
+        + 'one turn each, nobody twice in a row. It did not come down quickly. Trees that size never do.\n\n'
+        + 'By morning there was nothing left but the shape of it in the ash.')],
+  });
+
+  await channel.send({
+    embeds: [new EmbedBuilder()
+      .setColor(0x3E8E41)
+      .setTitle('🌱 …and then, a green shoot')
+      .setDescription(
+        'Something came up through the ash. Three feet of it, if you are generous.\n\n'
+        + `**${res.tree.name}** starts again from nothing — but you do not. Your **level**, your **XP**, `
+        + 'your **sticker book** and your **coins** all came through the fire. They were never the '
+        + "tree's. They were yours.\n\n"
+        + 'Water it. 💧')],
+  });
+
+  const sapling = await channel.send(await buildTreeMessage(res.tree, guild));
+  await sapling.pin(ascii('Takeover: the new tree')).catch(() => {});
+
+  logger.info(`[Takeover] burned "${lost}" (${height}ft) in ${guild.name}; planted "${res.tree.name}"`);
+  return { lost: { name: lost, height }, planted: res.tree.name, channel: channel.name, messageId: sapling.id };
+}
+
+/**
  * The incumbent Grow a Tree bot's CURRENT tree, read straight out of its own message.
  *
  * It posts exactly one message per guild and edits that message in place for the tree's whole life,

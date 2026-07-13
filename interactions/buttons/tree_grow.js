@@ -9,6 +9,8 @@ import { MessageFlags } from 'discord.js';
 import { waterTree, getTree, getPlayer } from '../../core/growtree/manager.js';
 import { buildTreeMessage } from '../../core/growtree/display.js';
 import { formatDuration } from '../../core/growtree/formulas.js';
+import { maybeSpawn, setEncounterMessage } from '../../core/growtree/critters.js';
+import { encounterMessage } from './tree_catch.js';
 import logger from '../../utils/logger.js';
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral };
@@ -49,6 +51,12 @@ export async function handleTreeGrow(interaction) {
     } else if (player.notifyXp) {
       await interaction.followUp({ content: `+${result.gainedXp} XP`, ...EPHEMERAL }).catch(() => {});
     }
+
+    // Something may land on the tree. Most waters produce nothing — that is what makes it an event.
+    // It is posted as its OWN message, not an edit of the tree: the tree message is permanent and
+    // people scroll back to it, and a race that lives inside it would be invisible to anyone who
+    // arrives later.
+    await spawnEncounter(interaction);
   } catch (err) {
     logger.error(`[GrowTree] grow button failed: ${err.message}`);
     await interaction.followUp({ content: 'Something went wrong watering the tree.', ...EPHEMERAL }).catch(() => {});
@@ -64,5 +72,24 @@ export async function handleTreeRefresh(interaction) {
     await interaction.editReply(payload).catch(() => {});
   } catch (err) {
     logger.error(`[GrowTree] refresh failed: ${err.message}`);
+  }
+}
+
+/**
+ * Roll for a bug or a fruit, and post it if one turns up.
+ *
+ * Never allowed to break watering: a failed spawn is a missed encounter, not a failed water, and the
+ * player already has their growth. Hence the catch — the tree message has already been edited by the
+ * time we get here.
+ */
+async function spawnEncounter(interaction) {
+  try {
+    const spawn = await maybeSpawn(interaction.guildId, interaction.channelId);
+    if (!spawn) return;
+
+    const msg = await interaction.followUp({ ...encounterMessage(spawn), fetchReply: true });
+    await setEncounterMessage(spawn.id, msg.id);
+  } catch (err) {
+    logger.warn(`[GrowTree] could not spawn an encounter: ${err.message}`);
   }
 }

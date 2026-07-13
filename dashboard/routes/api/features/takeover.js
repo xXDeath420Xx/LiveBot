@@ -17,7 +17,7 @@ import {
     startScan, resumeScan, cancelScan, isScanning,
     getScan, getLatestScan, getBots, getTemplates, attribute, scannableChannels,
 } from '../../../../core/guild-analyzer.js';
-import { plan, apply, postPanels, postTwitchLinkPanel, profileFor, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
+import { plan, apply, postPanels, postTwitchLinkPanel, postForestFire, profileFor, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
 import { deriveProfile, getProfile, approveProfile, needsReview } from '../../../../core/takeover-profile.js';
 import { evaluate, retire, autoAttribute, acknowledgeExtraction, DATA_HOLDERS, DEFAULT_SOAK_HOURS } from '../../../../core/bot-retirement.js';
 import { QUESTIONS, CATALOGUE } from '../../../../core/takeover-questions.js';
@@ -379,6 +379,30 @@ router.post('/twitch-link-panel', ownerOnly, async (req, res) => {
         res.json({ success: true, ...result });
     } catch (err) {
         logger.error(`[API takeover] twitch link panel failed: ${err.message}`);
+        res.status(400).json({ error: err.message });
+    }
+});
+
+/**
+ * The Fire. Burns the guild's tree and plants a sapling, with the story.
+ *
+ * One-off, owner-only, and typed-confirmation. It is destructive and it is a SURPRISE to everyone in
+ * the server who is not the person clicking, which is exactly why it must never be an ordinary step
+ * that rides along with a config apply.
+ */
+router.post('/forest-fire', ownerOnly, async (req, res) => {
+    try {
+        const guild = resolveGuild(req, res);
+        if (!guild) return;
+        if (req.body?.confirm !== 'BURN') {
+            return res.status(400).json({ error: 'Type BURN to confirm. The tree does not come back.' });
+        }
+
+        const result = await postForestFire(guild, req.body?.channelId ?? null, { name: req.body?.name ?? null });
+        logger.info(`[Takeover] ${req.user?.id} burned the tree in ${guild.name}`);
+        res.json({ success: true, ...result });
+    } catch (err) {
+        logger.error(`[API takeover] forest fire failed: ${err.message}`);
         res.status(400).json({ error: err.message });
     }
 });
