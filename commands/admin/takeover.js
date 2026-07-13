@@ -131,10 +131,13 @@ export default {
       await interaction.deferReply(EPHEMERAL);
       const guild = interaction.guild;
 
-      // A dry run is the default. Going live needs the server name typed EXACTLY — the same barrier
-      // the dashboard uses — so "go" can never be an accident or a fat-fingered autocomplete.
+      // A dry run is the default. Going live needs the server name typed — a real barrier, so "go"
+      // can never be an accident — but a forgiving one: this guild's name has a CURLY apostrophe
+      // (Kabster’s), and refusing a run because someone typed a normal ' would be a confirmation that
+      // punishes correctness. Fold the quote variants and surrounding space; nothing else.
+      const norm = (s) => String(s ?? '').replace(/[’‘‛]/g, "'").replace(/[“”]/g, '"').trim();
       const confirm = interaction.options.getString('confirm');
-      const live = !!confirm && confirm === guild.name;
+      const live = !!confirm && norm(confirm) === norm(guild.name);
       if (confirm && !live) {
         return interaction.editReply(`That did not match. To run for real, type the server name exactly: **${guild.name}**. Nothing ran.`);
       }
