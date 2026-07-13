@@ -580,11 +580,29 @@ export async function plan(guild, opts = {}) {
 
   // ── Grow a Tree ──
   if (byFeature.has('growtree')) {
-    const [[tree]] = await pool.execute('SELECT guild_id FROM gat_trees WHERE guild_id = ?', [guildId]);
+    const [[tree]] = await pool.execute(
+      'SELECT guild_id, name, size FROM gat_trees WHERE guild_id = ?', [guildId]);
+
+    // The incumbent's tree is READABLE. It keeps a single message and edits it in place forever, so
+    // its live height is sitting right there in the channel — this is not history, it is current
+    // state. That turns "start again from a 3ft sapling" from the only option into a CHOICE.
+    const old = await readIncumbentTree(guild);
+
     push('growtree', {
-      label: STEPS.growtree.label, done: !!tree,
-      // Nothing to pre-configure — `/tree` plants on first use. Not a blocker, not a task.
-      noop: tree ? null : 'no setup needed — the first /tree plants the tree',
+      label: STEPS.growtree.label,
+      done: !!tree,
+      carryOver: old,
+      // Not blocked and not a no-op: it is a decision only the owner can make, because the two
+      // answers are both defensible and we must not pick for her.
+      needsInput: tree ? null
+        : old
+          ? `the server's tree is "${old.name}" at ${old.size}ft — carry it over at that height, or start fresh? ` +
+            `(/tree setup ${old.size} carries it; plain /tree plants a 3ft sapling)`
+          : null,
+      noop: tree || old ? null : 'no setup needed — the first /tree plants the tree',
+      note: old
+        ? `read live from #${old.channelName}: "${old.name}", ${old.size}ft, last watered by <@${old.lastWateredBy}>`
+        : null,
       replaces: byFeature.get('growtree').name,
     });
   }
@@ -1100,6 +1118,42 @@ async function findOldPanels(channel) {
     && m.reactions.cache.size > 0
     && !m.components?.length
     && titles.has((m.embeds[0]?.title ?? '').trim().toLowerCase()));
+}
+
+/**
+ * The incumbent Grow a Tree bot's CURRENT tree, read straight out of its own message.
+ *
+ * It posts exactly one message per guild and edits that message in place for the tree's whole life,
+ * so what is rendered there is not a stale log line — it is the live tree. That means the height,
+ * the tree's name and whoever watered it last are all recoverable, and "everyone loses the tree" is
+ * a choice rather than a technical limit.
+ *
+ * Returns null if there is no tree to read; the caller must not invent one.
+ */
+async function readIncumbentTree(guild) {
+  const channel = guild.channels.cache.find(c => c.isTextBased?.() && nameMatches(c, /grow-a-tree|tree/));
+  if (!channel) return null;
+
+  const msgs = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+  if (!msgs) return null;
+
+  for (const m of msgs.values()) {
+    if (!m.author?.bot) continue;
+    const text = [m.content, ...m.embeds.flatMap(e => [e.title, e.description])].filter(Boolean).join(' ');
+    // "Kababi | **Your tree is 193ft tall.** Last watered by: <@756325866660691998>"
+    const height = text.match(/tree is\s+\*{0,2}([\d,]+)\s*(ft|feet|cm|m)\b/i);
+    if (!height) continue;
+
+    return {
+      name: (text.match(/^\s*([^|*\n]{1,36}?)\s*\|/) ?? [])[1]?.trim() || guild.name,
+      size: Number(height[1].replace(/,/g, '')),
+      unit: height[2].toLowerCase(),
+      lastWateredBy: (text.match(/watered by:?\s*<@!?(\d+)>/i) ?? [])[1] ?? null,
+      channelName: channel.name,
+      messageId: m.id,
+    };
+  }
+  return null;
 }
 
 /** Keep a copy of anything we delete from a guild. Deleting is irreversible; this is the receipt. */

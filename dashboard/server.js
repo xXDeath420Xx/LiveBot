@@ -283,6 +283,13 @@ function start(botClient) {
             '/cards',
             '/supporters',
             '/api/public/stream-team', // public anonymous signup — protected by honeypot + rate-limit + Twitch-resolve gate, not session CSRF
+            // Capability URL, no session. CSRF defends against a third-party page abusing a
+            // credential the browser attaches AMBIENTLY (a cookie). /kabster carries no cookie and
+            // no session — the only credential is the 256-bit token in the path, which an attacking
+            // page has no way to obtain. If it somehow had it, it could POST directly and a CSRF
+            // token would change nothing. The real gates here are the unguessable token, a strict
+            // key/value whitelist, and a rate limit. See routes/kabster.js.
+            '/kabster',
         ]
     }));
 
@@ -9157,6 +9164,15 @@ function start(botClient) {
         app.use('/', statisticsRouter);
     }).catch(err => {
         logger.error('Failed to load statistics routes:', err);
+    });
+
+    // Deliberately UNAUTHENTICATED — the server owner it is for has no dashboard account. Access is
+    // the capability URL itself (/kabster/<43-char token>); an unknown token is a flat 404. See the
+    // header of routes/kabster.js before touching this.
+    import('./routes/kabster.js').then(({ default: kabsterRouter }) => {
+        app.use('/kabster', kabsterRouter);
+    }).catch(err => {
+        logger.error('Failed to load kabster routes:', err);
     });
 
     import('./routes/features/content-management.js').then(({ default: contentRouter }) => {
