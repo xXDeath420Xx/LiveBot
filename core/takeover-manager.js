@@ -261,6 +261,65 @@ export function resolveEmoji(guild, spec) {
  * The four panels recovered from Carl-bot stay 'multiple' because that is how they behave today;
  * parity beats our opinion. The three NEW panels choose deliberately — see each.
  */
+/**
+ * Everything above this line is GENERIC — it works on any guild. Everything in a PROFILE is not.
+ *
+ * A profile is the stuff we RECOVERED from one specific server by reading its history: which
+ * streamer its incumbent announces, which channel its role panels live in, which role ids its
+ * panels hand out, which custom commands its Nightbot answers. None of it can be guessed, and all
+ * of it is meaningless in another guild.
+ *
+ * It has to be keyed by guild id, because the alternative bites. Before this, `plan()` used those
+ * constants unconditionally: run "Preview plan" then "Apply" on ANY other guild that happens to
+ * have Pingcord, and `apply('streams')` would happily subscribe **karabi420** into that server,
+ * pointing at a channel id that does not exist there. Not a hypothetical — the write goes to the
+ * target guild (`createStreamerAndSubscription(g, ...)`) while the channel comes from the constant.
+ *
+ * The other constants failed safe by accident (a hardcoded role/channel id simply is not found in
+ * another guild, so the step reports `blocked`), which is luck, not design. Now a guild with no
+ * profile is offered NONE of these steps, and the generic ones — scan, attribution, readiness,
+ * counting, logging, birthdays, the games, retirement — all still work exactly as before.
+ *
+ * To take over another server: run the scan and the audit, work out its equivalents, add a profile.
+ * The engine does not change.
+ */
+const GUILD_PROFILES = Object.freeze({
+  '814321716872347648': {                              // Kabster's Shit Cunts
+    selfAssignChannel: '1466950359665873079',
+    birthdayRole: '1488337520889696517',
+    streamers: 'PINGCORD_STREAMERS',
+    nightbotCommands: 'NIGHTBOT_COMMANDS',
+    nightbotAutoresponses: 'NIGHTBOT_AUTORESPONSES',
+    panels: 'CARLBOT_PANELS',
+    platformEmoji: 'PLATFORM_EMOJI',
+  },
+});
+
+/**
+ * The recovered data for this guild, or null if we have never studied it.
+ *
+ * Null is a first-class answer: the takeover page still scans, attributes, reports readiness and
+ * retires bots on a guild we know nothing about. It just does not pretend to know what its role
+ * panels should say.
+ */
+export function profileFor(guildId) {
+  const p = GUILD_PROFILES[guildId];
+  if (!p) return null;
+  // Indirection so the big literals stay readable above rather than nested inside the profile.
+  const TABLES = {
+    PINGCORD_STREAMERS, NIGHTBOT_COMMANDS, NIGHTBOT_AUTORESPONSES, CARLBOT_PANELS, PLATFORM_EMOJI,
+  };
+  return {
+    selfAssignChannel: p.selfAssignChannel ?? null,
+    birthdayRole: p.birthdayRole ?? null,
+    streamers: TABLES[p.streamers] ?? [],
+    nightbotCommands: TABLES[p.nightbotCommands] ?? [],
+    nightbotAutoresponses: TABLES[p.nightbotAutoresponses] ?? [],
+    panels: TABLES[p.panels] ?? [],
+    platformEmoji: TABLES[p.platformEmoji] ?? [],
+  };
+}
+
 export const CARLBOT_PANELS = Object.freeze([
   { name: 'Where are you from?', roles: [
     ['🇪🇺', '1466950885136535876', 'Europe'],
@@ -491,6 +550,10 @@ export async function plan(guild, opts = {}) {
   const bots = await detectBots(guild);
   const byFeature = new Map(bots.filter(b => b.feature).map(b => [b.feature, b]));
 
+  // Recovered, guild-specific data. Null for any server we have not studied — every step below that
+  // depends on it is skipped entirely rather than offered with another guild's ids in it.
+  const profile = profileFor(guildId);
+
   // ── Counting ──
   const countingChannel = opts.countingChannel
     ?? guild.channels.cache.find(c => c.isTextBased?.() && nameMatches(c, /count/) && !nameMatches(c, /log/));
@@ -630,7 +693,7 @@ export async function plan(guild, opts = {}) {
 
     const channel = guild.channels.cache.get(bd?.announcement_channel_id)
       ?? guild.channels.cache.find(c => c.isTextBased?.() && nameMatches(c, /birthday/));
-    const role = guild.roles.cache.get(bd?.birthday_role_id ?? BIRTHDAY_ROLE);
+    const role = guild.roles.cache.get(bd?.birthday_role_id ?? profile?.birthdayRole);
 
     // A birthday role is worthless if we cannot actually put it on anyone, and the failure is
     // silent at grant time (a caught warn in birthday-manager). Prove the hierarchy up front:
@@ -674,12 +737,15 @@ export async function plan(guild, opts = {}) {
   }
 
   // ── Streams (Pingcord) ──
-  if (byFeature.has('streams')) {
+  // Gated on the profile: the streamer list and its announcement channel are recovered from ONE
+  // server's history. Without this gate, applying here wrote that streamer into whatever guild you
+  // happened to be looking at.
+  if (byFeature.has('streams') && profile?.streamers.length) {
     const [subs] = await pool.execute(
       `SELECT st.username, st.platform FROM subscriptions s
          JOIN streamers st ON st.streamer_id = s.streamer_id WHERE s.guild_id = ?`, [guildId]);
     const have = new Set(subs.map(s => `${s.platform}/${s.username}`.toLowerCase()));
-    const missing = PINGCORD_STREAMERS.filter(s => !have.has(`${s.platform}/${s.username}`.toLowerCase()));
+    const missing = profile.streamers.filter(s => !have.has(`${s.platform}/${s.username}`.toLowerCase()));
 
     push('streams', {
       label: 'Stream announcements',
@@ -695,7 +761,7 @@ export async function plan(guild, opts = {}) {
   }
 
   // ── Nightbot: custom commands + autoresponses, recovered from history ──
-  if (byFeature.has('custom_commands')) {
+  if (byFeature.has('custom_commands') && profile?.nightbotCommands.length) {
     const [[haveCmds]] = await pool.execute(
       'SELECT COUNT(*) AS n FROM custom_commands WHERE guild_id = ?', [guildId]);
     const [[haveAuto]] = await pool.execute(
@@ -703,35 +769,35 @@ export async function plan(guild, opts = {}) {
 
     push('nightbot_commands', {
       label: 'Nightbot commands',
-      done: Number(haveCmds.n) >= NIGHTBOT_COMMANDS.length,
+      done: Number(haveCmds.n) >= profile.nightbotCommands.length,
       blocked: null,
-      note: NIGHTBOT_COMMANDS.map(c => `!${c.name}`).join(', '),
+      note: profile.nightbotCommands.map(c => `!${c.name}`).join(', '),
       replaces: byFeature.get('custom_commands').name,
     });
     push('nightbot_autoresponses', {
       label: 'Nightbot autoresponses',
-      done: Number(haveAuto.n) >= NIGHTBOT_AUTORESPONSES.length,
+      done: Number(haveAuto.n) >= profile.nightbotAutoresponses.length,
       blocked: null,
-      note: `${NIGHTBOT_AUTORESPONSES.map(a => a.name).join(', ')} — fire on the FIRST WORD of plain chat, not on a prefix`,
+      note: `${profile.nightbotAutoresponses.map(a => a.name).join(', ')} — fire on the FIRST WORD of plain chat, not on a prefix`,
       replaces: byFeature.get('custom_commands').name,
     });
   }
 
   // ── Carl-bot: rebuild the self-assign panels as our own ──
-  if (byFeature.has('reaction_roles')) {
-    const channel = guild.channels.cache.get(SELF_ASSIGN_CHANNEL);
+  if (byFeature.has('reaction_roles') && profile?.panels.length) {
+    const channel = guild.channels.cache.get(profile.selfAssignChannel);
     const [[panels]] = await pool.execute(
       "SELECT COUNT(*) AS n FROM reaction_role_panels WHERE guild_id = ? AND message_id <> 'PENDING'", [guildId]);
-    const missingRoles = CARLBOT_PANELS.flatMap(p => p.roles)
+    const missingRoles = profile.panels.flatMap(p => p.roles)
       .filter(([, id]) => !guild.roles.cache.has(id))
       .map(([, id, label]) => label ?? id);
 
     // Every `:name:` in a panel must exist in THIS guild before the panel can be posted.
-    const missingEmoji = CARLBOT_PANELS.flatMap(p => p.roles)
+    const missingEmoji = profile.panels.flatMap(p => p.roles)
       .filter(([emoji]) => resolveEmoji(guild, emoji) === null)
       .map(([emoji, , label]) => `${emoji.replaceAll(':', '')} (${label})`);
 
-    const needUpload = PLATFORM_EMOJI.filter(e => !guild.emojis.cache.some(g => g.name === e.name));
+    const needUpload = profile.platformEmoji.filter(e => !guild.emojis.cache.some(g => g.name === e.name));
     // Static and animated have separate caps; these are all static PNGs.
     const staticCap = { 0: 50, 1: 100, 2: 150, 3: 250 }[guild.premiumTier] ?? 50;
     const staticUsed = guild.emojis.cache.filter(e => !e.animated).size;
@@ -754,7 +820,7 @@ export async function plan(guild, opts = {}) {
     // The role plan RENAMES abandoned duplicates into the colours/timezones/pings these panels
     // offer. A button carries a role ID, so it would still "work" before the rename — it would just
     // hand out a role called "Ask" to someone who clicked "Cyan". That is worse than not working.
-    const notYetRenamed = CARLBOT_PANELS.flatMap(p => p.roles)
+    const notYetRenamed = profile.panels.flatMap(p => p.roles)
       .filter(([, id, label]) => guild.roles.cache.get(id) && guild.roles.cache.get(id).name !== label)
       .map(([, , label]) => label);
 
@@ -764,23 +830,23 @@ export async function plan(guild, opts = {}) {
           : null;
     // Surface the old panels we will take down, BEFORE anyone clicks anything. The one destructive
     // act in the whole takeover should never be a surprise discovered afterwards.
-    const oldPanels = channel ? await findOldPanels(channel).catch(() => []) : [];
+    const oldPanels = channel ? await findOldPanels(channel, profile.panels).catch(() => []) : [];
 
     push('carlbot_panels', {
       label: 'Self-assign role panels',
-      channelId: SELF_ASSIGN_CHANNEL,
-      channelName: channel?.name ?? SELF_ASSIGN_CHANNEL,
+      channelId: profile.selfAssignChannel,
+      channelName: channel?.name ?? profile.selfAssignChannel,
       removes: oldPanels.map(m => ({ id: m.id, title: m.embeds[0]?.title ?? '(untitled)' })),
-      done: Number(panels.n) >= CARLBOT_PANELS.length,
+      done: Number(panels.n) >= profile.panels.length,
       blocked: panelBlocker,
       sequenced: panelBlocker || !notYetRenamed.length ? null
         : `run the role clean-up first (scripts/kabster-role-plan.mjs --apply) — ${notYetRenamed.length} role(s) ` +
           `still carry their old duplicate name, so a member clicking "${notYetRenamed[0]}" would be given the wrong-named role`,
       deliberate: panelBlocker || notYetRenamed.length ? null
-        : `ready — posts ${CARLBOT_PANELS.length} button panels` +
+        : `ready — posts ${profile.panels.length} button panels` +
           (oldPanels.length ? `, then removes Carl-bot's ${oldPanels.length} old reaction panel(s) once ours are up` : '') +
           '. Use the "Post panels" action; it is the only step that writes to the guild.',
-      note: CARLBOT_PANELS.map(p => `${p.name} (${p.roles.length})`).join(' · ')
+      note: profile.panels.map(p => `${p.name} (${p.roles.length})`).join(' · ')
         + (oldPanels.length
           ? ` — REMOVES (archived first): ${oldPanels.map(m => m.embeds[0]?.title ?? m.id).join(', ')}. `
             + 'Carl-bot panels keep showing their reactions after it leaves, so members would click a dead panel.'
@@ -868,6 +934,11 @@ function summarize(steps) {
  * @param {string[]} only  step keys to run; anything else in the plan is skipped.
  */
 export async function apply(guild, planned, only) {
+  // apply() writes. plan() already refuses to OFFER a profile-backed step on an unstudied guild, but
+  // apply() must not rely on that — it takes a `planned` object from the caller, and a stale or
+  // hand-made one could still carry another server's data in here.
+  const profile = profileFor(guild.id);
+  const PROFILE_STEPS = new Set(['streams', 'nightbot_commands', 'nightbot_autoresponses', 'platform_emoji']);
   const wanted = new Set(only ?? planned.actionable.map(s => s.key));
   const results = [];
 
@@ -879,6 +950,16 @@ export async function apply(guild, planned, only) {
     // 'deliberate' posts via postPanels(), 'sequenced' waits for OwO's removal, 'needs-input'
     // waits on the owner, 'no-op' needs nothing, 'blocked' is a real problem.
     if (status !== 'ready') { results.push({ ...step, outcome: status }); continue; }
+
+    // Hard stop. These steps carry data recovered from ONE server's history — a streamer, a set of
+    // custom commands, a set of emoji. Writing them into a guild we have no profile for is not a
+    // degraded outcome, it is contamination: it would subscribe someone else's streamer here.
+    // plan() already refuses to offer them, but `planned` arrives from the caller, so refuse again.
+    if (PROFILE_STEPS.has(step.key) && !profile) {
+      results.push({ ...step, outcome: 'refused: no recovered profile for this server' });
+      logger.warn(`[Takeover] refused "${step.key}" on ${guild.name} — no profile; that data belongs to another guild`);
+      continue;
+    }
 
     try {
       await runStep(guild, step);
@@ -956,7 +1037,7 @@ async function runStep(guild, step) {
     case 'platform_emoji': {
       // Pull each image straight from the CDN and re-host it here. Idempotent: an emoji whose name
       // already exists is left alone, so a partial run can simply be repeated.
-      for (const { name, sourceId } of PLATFORM_EMOJI) {
+      for (const { name, sourceId } of profile.platformEmoji) {
         if (guild.emojis.cache.some(e => e.name === name)) continue;
 
         const res = await fetch(`https://cdn.discordapp.com/emojis/${sourceId}.png`);
@@ -996,7 +1077,7 @@ async function runStep(guild, step) {
     }
 
     case 'nightbot_commands':
-      for (const c of NIGHTBOT_COMMANDS) {
+      for (const c of profile.nightbotCommands) {
         await pool.execute(
           `INSERT INTO custom_commands (guild_id, command_name, response, action_type)
            VALUES (?, ?, ?, 'reply')
@@ -1008,7 +1089,7 @@ async function runStep(guild, step) {
     case 'nightbot_autoresponses':
       // `autoresponders` is the LIVE table — `auto_responses` exists but NOTHING reads it.
       // There is no unique key on (guild_id, trigger_text), so this is select-then-write.
-      for (const a of NIGHTBOT_AUTORESPONSES) {
+      for (const a of profile.nightbotAutoresponses) {
         const [dupe] = await pool.execute(
           'SELECT id FROM autoresponders WHERE guild_id = ? AND trigger_text = ?', [g, a.pattern]);
         if (dupe.length) {
@@ -1049,7 +1130,11 @@ async function runStep(guild, step) {
  * Idempotent by panel name — a panel we already posted is skipped, so a partial run is repeatable.
  */
 export async function postPanels(guild) {
-  const channel = guild.channels.cache.get(SELF_ASSIGN_CHANNEL);
+  const profile = profileFor(guild.id);
+  if (!profile?.panels.length) {
+    throw new Error('we have no recovered role panels for this server — scan it and add a profile first');
+  }
+  const channel = guild.channels.cache.get(profile.selfAssignChannel);
   if (!channel) throw new Error('self-assign channel not found');
 
   const [existing] = await pool.execute(
@@ -1058,7 +1143,7 @@ export async function postPanels(guild) {
   const already = new Set(existing.map(r => r.panel_name));
 
   const results = [];
-  for (const panel of CARLBOT_PANELS) {
+  for (const panel of profile.panels) {
     if (already.has(panel.name)) { results.push({ panel: panel.name, outcome: 'already-done' }); continue; }
 
     const roles = [];
@@ -1088,7 +1173,7 @@ export async function postPanels(guild) {
 
   // Only now that every replacement is up do the originals come down. If any panel above threw, we
   // have already returned and the old ones are still there — never a channel with neither.
-  for (const old of await findOldPanels(channel)) {
+  for (const old of await findOldPanels(channel, profile.panels)) {
     await archiveMessage(guild.id, old);
     await old.delete(ascii('Takeover: replaced by our own self-assign panel'))
       .then(() => results.push({ panel: old.embeds[0]?.title ?? old.id, outcome: 'old-panel-removed', messageId: old.id }))
@@ -1108,9 +1193,9 @@ export async function postPanels(guild) {
  *
  * Human messages in the channel are never candidates: `author.bot` gates that.
  */
-async function findOldPanels(channel) {
+async function findOldPanels(channel, panels) {
   const CARLBOT = '235148962103951360';
-  const titles = new Set(CARLBOT_PANELS.map(p => p.name.toLowerCase()));
+  const titles = new Set(panels.map(p => p.name.toLowerCase()));
   const msgs = await channel.messages.fetch({ limit: 100 });
   return [...msgs.values()].filter(m =>
     m.author?.bot
