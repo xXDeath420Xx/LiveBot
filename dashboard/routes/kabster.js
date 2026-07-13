@@ -24,7 +24,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
-import { QUESTIONS, validateAnswer, MAX_NOTE } from '../../core/takeover-questions.js';
+import { QUESTIONS, CATALOGUE, validateAnswer, MAX_NOTE } from '../../core/takeover-questions.js';
 
 const router = express.Router();
 const PRIVATE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'private');
@@ -70,7 +70,7 @@ router.get('/:token/answers', async (req, res) => {
 
   const answers = {};
   for (const r of rows) answers[r.item_key] = { value: r.value, note: r.note, updatedAt: r.updated_at };
-  res.json({ questions: QUESTIONS, answers, maxNote: MAX_NOTE });
+  res.json({ questions: QUESTIONS, catalogue: CATALOGUE, answers, maxNote: MAX_NOTE });
 });
 
 /** Autosave. One question at a time — a half-finished form is a first-class state, not an error. */

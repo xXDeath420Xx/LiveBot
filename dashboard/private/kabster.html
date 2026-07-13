@@ -159,6 +159,29 @@
   .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
   .progress b { color: var(--ink); font-variant-numeric: tabular-nums; }
 
+  /* ── the menu ────────────────────────────────────────────────────
+     44 rows. Full question-cards would be a wall, so these are compact: name, one line of what it
+     actually does, and three buttons. Scannable in a sitting. */
+  .mgroup { margin-top: 1.8rem; }
+  .mgroup > h3 { margin-bottom: .7rem; }
+  .mrow { display: flex; gap: 1rem; align-items: center; justify-content: space-between;
+    padding: .7rem .9rem; border: 1px solid var(--line); border-left: 3px solid var(--line);
+    background: var(--surface); border-radius: 5px; margin-bottom: .4rem; flex-wrap: wrap; }
+  .mrow.yes { border-left-color: var(--exact); background: var(--exact-bg); }
+  .mrow.no  { border-left-color: var(--faint); opacity: .6; }
+  .mrow.explain { border-left-color: var(--differs); background: var(--differs-bg); }
+  .mrow .txt { flex: 1 1 20rem; min-width: 0; }
+  .mrow .nm { font-weight: 600; font-size: .95rem; }
+  .mrow .wt { color: var(--muted); font-size: .87rem; }
+  .mrow.no .wt, .mrow.no .nm { color: var(--faint); }
+  .pick { display: flex; gap: .3rem; flex: none; }
+  .pick button { padding: .35rem .7rem; font-size: .8rem; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--line); background: var(--bg); border-radius: 5px; white-space: nowrap; }
+  .pick button:hover { border-color: var(--accent); }
+  .pick button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent);
+    color: #fff; }
+  @media (prefers-color-scheme: dark) { .pick button[aria-pressed="true"] { color: #06100F; } }
+
   .q { color: var(--muted); font-style: italic; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   @media print { #themeToggle, #saveState, .progress { display: none; } }
@@ -196,6 +219,17 @@
     any order, close the tab whenever — it all saves itself.</p>
 
   <div id="form"><p class="q">Loading…</p></div>
+
+  <!-- ============ THE MENU ============ -->
+  <h2>And everything else it can do</h2>
+  <p class="sub">
+    None of this is part of the swap — your server has never had any of it, and none of it happens
+    unless you ask. It's just what Kabbot is capable of, so you can pick. <b>If you don't know what
+    something is, say so</b> — that's a real answer and we'll explain it properly rather than you
+    having to guess.
+  </p>
+
+  <div id="menu"><p class="q">Loading…</p></div>
 
   <!-- ============ REFERENCE ============ -->
   <h2>What's actually being swapped</h2>
@@ -370,26 +404,83 @@ You can take one more or use `/pass`.
     if (kind !== 'saving') pillTimer = setTimeout(function () { pill.className = ''; }, 1800);
   }
 
-  var QUESTIONS = [], ANSWERS = {};
+  var QUESTIONS = [], CATALOGUE = [], ANSWERS = {};
+
+  function isAnswered(key) {
+    var a = ANSWERS[key];
+    // A note alone counts. On the Questions/Comments/Concerns entries it is the ONLY possible
+    // answer, so treating it as blank would hide exactly what we most want to read.
+    return !!(a && ((a.value && a.value.length) || (a.note && a.note.trim().length)));
+  }
 
   function progress() {
-    // "Answered" means she has told us something — a choice OR words. A note alone is a real answer;
-    // on the free-text questions it is the ONLY possible answer.
-    var done = QUESTIONS.filter(function (q) {
-      var a = ANSWERS[q.key];
-      return a && ((a.value && a.value.length) || (a.note && a.note.trim().length));
-    }).length;
+    // The menu is optional, so it is NOT part of the "you still have things to answer" count —
+    // leaving a feature untouched is a legitimate final state and must not read as unfinished work.
+    var done = QUESTIONS.filter(function (q) { return isAnswered(q.key); }).length;
     document.getElementById('pDone').textContent = done;
     document.getElementById('pTotal').textContent = QUESTIONS.length;
     document.getElementById('pBar').style.width = (QUESTIONS.length ? (done / QUESTIONS.length) * 100 : 0) + '%';
-    document.getElementById('pHint').textContent = done === QUESTIONS.length && done > 0
-      ? 'all answered — thank you' : 'answers save automatically';
+
+    var picked = CATALOGUE.filter(function (c) { return ANSWERS[c.key] && ANSWERS[c.key].value; }).length;
+    document.getElementById('pHint').textContent =
+      (done === QUESTIONS.length && done > 0 ? 'all answered — thank you' : 'answers save automatically')
+      + (picked ? ' · ' + picked + ' feature' + (picked === 1 ? '' : 's') + ' picked' : '');
+
     QUESTIONS.forEach(function (q) {
       var card = document.getElementById('card-' + q.key);
-      if (!card) return;
-      var a = ANSWERS[q.key];
-      var has = a && ((a.value && a.value.length) || (a.note && a.note.trim().length));
-      card.classList.toggle('answered', !!has);
+      if (card) card.classList.toggle('answered', isAnswered(q.key));
+    });
+  }
+
+  var PICKS = [
+    { v: 'yes',     label: 'Yes please' },
+    { v: 'no',      label: 'No thanks' },
+    { v: 'explain', label: 'Tell me more' }
+  ];
+
+  function renderMenu() {
+    var groups = [];
+    CATALOGUE.forEach(function (c) {
+      var g = groups.find(function (x) { return x.name === c.group; });
+      if (!g) groups.push(g = { name: c.group, items: [] });
+      g.items.push(c);
+    });
+
+    var html = '';
+    groups.forEach(function (g) {
+      html += '<div class="mgroup"><h3>' + esc(g.name) + '</h3>';
+      g.items.forEach(function (c) {
+        var v = (ANSWERS[c.key] || {}).value || '';
+        html += '<div class="mrow ' + esc(v) + '" id="row-' + esc(c.key) + '">'
+             +  '<div class="txt"><div class="nm">' + esc(c.name) + '</div>'
+             +  '<div class="wt">' + esc(c.what) + '</div></div><div class="pick">';
+        PICKS.forEach(function (p) {
+          html += '<button type="button" data-feat="' + esc(c.key) + '" data-v="' + esc(p.v) + '"'
+               +  ' aria-pressed="' + (v === p.v) + '">' + esc(p.label) + '</button>';
+        });
+        html += '</div></div>';
+      });
+      html += '</div>';
+    });
+
+    var menu = document.getElementById('menu');
+    menu.innerHTML = html;
+
+    menu.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-feat]');
+      if (!btn) return;
+      var k = btn.dataset.feat;
+      ANSWERS[k] = ANSWERS[k] || {};
+      // Clicking the choice she already has clears it — otherwise a mis-click is permanent, and
+      // "I have not decided" would be unreachable once anything is pressed.
+      ANSWERS[k].value = ANSWERS[k].value === btn.dataset.v ? '' : btn.dataset.v;
+
+      var row = document.getElementById('row-' + k);
+      row.className = 'mrow ' + (ANSWERS[k].value || '');
+      row.querySelectorAll('[data-feat]').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset.v === ANSWERS[k].value));
+      });
+      save(k);
     });
   }
 
@@ -481,10 +572,18 @@ You can take one more or use `/pass`.
 
   fetch(BASE + '/answers')
     .then(function (r) { if (!r.ok) throw new Error('This link is no longer valid.'); return r.json(); })
-    .then(function (d) { QUESTIONS = d.questions; ANSWERS = d.answers || {}; render(); })
+    .then(function (d) {
+      QUESTIONS = d.questions;
+      CATALOGUE = d.catalogue || [];
+      ANSWERS = d.answers || {};
+      render();
+      renderMenu();
+      progress();
+    })
     .catch(function (e) {
-      document.getElementById('form').innerHTML =
-        '<div class="note warn"><b>' + esc(e.message) + '</b> Ask for a fresh link.</div>';
+      var msg = '<div class="note warn"><b>' + esc(e.message) + '</b> Ask for a fresh link.</div>';
+      document.getElementById('form').innerHTML = msg;
+      document.getElementById('menu').innerHTML = '';
     });
 })();
 </script>

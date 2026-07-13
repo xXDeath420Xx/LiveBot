@@ -19,7 +19,7 @@ import {
 } from '../../../../core/guild-analyzer.js';
 import { plan, apply, postPanels, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
 import { evaluate, retire, autoAttribute, acknowledgeExtraction, DATA_HOLDERS, DEFAULT_SOAK_HOURS } from '../../../../core/bot-retirement.js';
-import { QUESTIONS } from '../../../../core/takeover-questions.js';
+import { QUESTIONS, CATALOGUE } from '../../../../core/takeover-questions.js';
 import { createLink } from '../../kabster.js';
 
 const router = express.Router({ mergeParams: true });
@@ -244,6 +244,7 @@ router.get('/questionnaire', async (req, res) => {
 
         res.json({
             questions: QUESTIONS,
+            catalogue: CATALOGUE,
             answers,
             url: link ? `${(process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/$/, '')}/kabster/${link.token}` : null,
             answered: rows.filter(r => r.value || r.note?.trim()).length,

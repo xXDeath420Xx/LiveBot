@@ -169,8 +169,135 @@ export const QUESTIONS = Object.freeze([
   },
 ]);
 
-/** Fast lookups for the save endpoint. Built once; the questions never change at runtime. */
+/**
+ * Everything else the bot can do, offered as a menu.
+ *
+ * The questions above are about REPLACING what she already has. This is the opposite: things her
+ * server has never had, that she can simply switch on. Nothing here is implied by the takeover and
+ * nothing here happens unless she asks for it.
+ *
+ * Three answers, and the third one matters most: 'explain' means "I don't know what this is". A menu
+ * that only offers yes/no quietly punishes not knowing, and the honest answer to half of these — for
+ * anyone who has not run them — is "what does that actually do in practice?".
+ *
+ * `have` marks the handful already covered by the takeover, so she can see them without being asked
+ * to choose something she is already getting.
+ */
+export const CATALOGUE = Object.freeze([
+  // ── Keeping the server safe. She currently has almost none of this. ──────────
+  { key: 'feat_antinuke',     group: 'Keeping the server safe', name: 'Anti-nuke',
+    what: 'If someone with power goes rogue — mass-deleting channels, mass-banning — it stops them mid-way and strips their roles.' },
+  { key: 'feat_antiraid',     group: 'Keeping the server safe', name: 'Raid protection',
+    what: 'Spots a flood of new accounts joining at once and locks the door until you look at it.' },
+  { key: 'feat_antispam',     group: 'Keeping the server safe', name: 'Anti-spam',
+    what: 'Catches someone posting the same thing over and over, across channels, and times them out.' },
+  { key: 'feat_phishing',     group: 'Keeping the server safe', name: 'Scam link detection',
+    what: 'Deletes "free Nitro" and Steam-scam links before anyone clicks them.' },
+  { key: 'feat_scamimage',    group: 'Keeping the server safe', name: 'Scam image detection',
+    what: 'Reads the text inside images, so a scam posted as a screenshot is caught too.' },
+  { key: 'feat_automod',      group: 'Keeping the server safe', name: 'Word filters & automod',
+    what: 'Your own banned-word list, link rules and invite blocking.' },
+  { key: 'feat_globalban',    group: 'Keeping the server safe', name: 'Shared ban list',
+    what: 'Someone banned for scamming elsewhere in our network cannot walk into your server.' },
+  { key: 'feat_verify',       group: 'Keeping the server safe', name: 'Verification gate',
+    what: 'New members click "I agree" before they can see or say anything.' },
+
+  // ── Running the place ───────────────────────────────────────────────────────
+  { key: 'feat_tickets',      group: 'Running the place', name: 'Support tickets',
+    what: 'A button that opens a private channel between a member and your staff.' },
+  { key: 'feat_warnings',     group: 'Running the place', name: 'Warnings that escalate',
+    what: 'Warn someone; repeat offences automatically step up to mute, then kick, on your rules.' },
+  { key: 'feat_welcome',      group: 'Running the place', name: 'Welcome messages',
+    what: 'Greet people when they join, in your own words, with an image if you want one.' },
+  { key: 'feat_suggestions',  group: 'Running the place', name: 'Suggestions box',
+    what: 'Members suggest things, everyone votes, staff approve or decline with a reason.' },
+  { key: 'feat_starboard',    group: 'Running the place', name: 'Starboard',
+    what: 'Funny messages that get enough ⭐ get reposted to a hall-of-fame channel.' },
+  { key: 'feat_serverstats',  group: 'Running the place', name: 'Live stat channels',
+    what: 'Voice channels that show your member count, or a live clock in your timezone.' },
+  { key: 'feat_announce',     group: 'Running the place', name: 'Scheduled announcements',
+    what: 'Write it once, it posts every Friday at 8pm — or whenever you like.' },
+  { key: 'feat_afk',          group: 'Running the place', name: 'AFK',
+    what: 'Set yourself away; anyone who pings you is told why you are not answering.' },
+
+  // ── Giving people a reason to hang around ───────────────────────────────────
+  { key: 'feat_leveling',     group: 'Giving people a reason to stay', name: 'Levels & XP',
+    what: 'People earn XP for chatting, level up, and can unlock roles for it. Comes with rank cards.' },
+  { key: 'feat_achievements', group: 'Giving people a reason to stay', name: 'Achievements',
+    what: 'Unlockable badges for doing things in the server.' },
+  { key: 'feat_giveaways',    group: 'Giving people a reason to stay', name: 'Giveaways',
+    what: 'Timed giveaways with a button to enter and a fair random draw.' },
+  { key: 'feat_polls',        group: 'Giving people a reason to stay', name: 'Polls',
+    what: 'Proper polls with live results.' },
+  { key: 'feat_qotd',         group: 'Giving people a reason to stay', name: 'Question of the day',
+    what: 'A new question posted every day to get the chat moving.' },
+  { key: 'feat_events',       group: 'Giving people a reason to stay', name: 'Event schedule',
+    what: 'A visual timetable of what is on and when — good for stream schedules.' },
+  { key: 'feat_reminders',    group: 'Giving people a reason to stay', name: 'Reminders',
+    what: '"Remind me in 3 hours" and it does.' },
+  { key: 'feat_tags',         group: 'Giving people a reason to stay', name: 'Tags / FAQ snippets',
+    what: 'Save a canned answer and pull it up with one word.' },
+
+  // ── Games ───────────────────────────────────────────────────────────────────
+  { key: 'feat_fishing',      group: 'Games', name: 'Fishing',
+    what: 'A full fishing game — rods, rare catches, a bestiary, tournaments and pets.' },
+  { key: 'feat_pokemon',      group: 'Games', name: 'Pokémon',
+    what: 'Pokémon spawn in chat and people race to catch them.' },
+  { key: 'feat_rpg',          group: 'Games', name: 'Dungeons & Dragons',
+    what: 'A proper D&D game with an AI dungeon master, characters, parties and campaigns.' },
+  { key: 'feat_cah',          group: 'Games', name: 'Cards Against Humanity',
+    what: 'Play in Discord or in a browser. You can write your own cards.' },
+  { key: 'feat_trivia',       group: 'Games', name: 'Trivia & quizzes',
+    what: 'Trivia, hangman, word games, a music quiz.' },
+  { key: 'feat_economy',      group: 'Games', name: 'Coins, shop & gambling',
+    what: 'A server currency people earn and spend — a shop, pets, and gambling if you want it.' },
+  { key: 'feat_lfg',          group: 'Games', name: 'Looking-for-group',
+    what: 'Post that you want people for a game; others click to join.' },
+
+  // ── Music and voice ─────────────────────────────────────────────────────────
+  { key: 'feat_music',        group: 'Music & voice', name: 'Music player',
+    what: 'Play music in voice from Spotify, YouTube or SoundCloud, with a control panel.' },
+  { key: 'feat_soundboard',   group: 'Music & voice', name: 'Soundboard',
+    what: 'Upload your own clips and play them into voice with a button panel. This is the Blerp replacement.' },
+  { key: 'feat_vcguard',      group: 'Music & voice', name: 'Locked voice channels',
+    what: 'A voice channel only certain people can sit in — anyone else is removed automatically.' },
+  { key: 'feat_tts',          group: 'Music & voice', name: 'Text to speech',
+    what: 'Type it, the bot says it in voice.' },
+
+  // ── For the stream ──────────────────────────────────────────────────────────
+  { key: 'feat_selfpromo',    group: 'For the stream', name: 'Member stream promotion',
+    what: 'Members sign themselves up and get announced when they go live — no work for you.' },
+  { key: 'feat_socialfeeds',  group: 'For the stream', name: 'Social feeds',
+    what: 'Auto-post your new YouTube, TikTok, Twitter, Bluesky or Reddit posts into the server.' },
+  { key: 'feat_twitchsched',  group: 'For the stream', name: 'Twitch schedule',
+    what: 'Your Twitch schedule, mirrored into Discord and kept up to date.' },
+  { key: 'feat_gamepatch',    group: 'For the stream', name: 'Game update watcher',
+    what: 'Tells the server when a game you follow gets patched.' },
+
+  // ── Money ───────────────────────────────────────────────────────────────────
+  { key: 'feat_bmac',         group: 'Money', name: 'Buy Me a Coffee',
+    what: 'Supporter roles, same as Ko-fi but for BMAC.' },
+  { key: 'feat_fourthwall',   group: 'Money', name: 'Fourthwall shop',
+    what: 'Announce orders from your merch store and give buyers a role.' },
+
+  // ── Odds and ends ───────────────────────────────────────────────────────────
+  { key: 'feat_grow',         group: 'Odds & ends', name: 'Grow journal',
+    what: 'A proper grow tracker — log your plants, stages, feeding, photos, with reminders and stats. '
+        + 'Given what this server is, this is probably the one worth a look.' },
+  { key: 'feat_confessions',  group: 'Odds & ends', name: 'Anonymous confessions',
+    what: 'Members post anonymously; staff can still trace abuse.' },
+  { key: 'feat_weather',      group: 'Odds & ends', name: 'Weather & lookups',
+    what: 'Weather, translation, QR codes, colour tools, unit conversion.' },
+  { key: 'feat_selfcare',     group: 'Odds & ends', name: 'Self-care nudges',
+    what: 'Gentle "drink water / stand up" reminders. Some servers love it, some find it annoying.' },
+]);
+
+/** The answers a catalogue row will accept. Anything else is a rejected write. */
+export const CATALOGUE_VALUES = Object.freeze(['yes', 'no', 'explain']);
+
+/** Fast lookups for the save endpoint. Built once; neither list changes at runtime. */
 const BY_KEY = new Map(QUESTIONS.map(q => [q.key, q]));
+const CAT_BY_KEY = new Map(CATALOGUE.map(c => [c.key, c]));
 
 export const MAX_NOTE = 2000;
 
@@ -181,11 +308,14 @@ export const MAX_NOTE = 2000;
  * options we offered, is rejected outright — the form is public, so the server must not trust it.
  */
 export function validateAnswer(key, value, note) {
-  const q = BY_KEY.get(key);
+  const q = BY_KEY.get(key) ?? CAT_BY_KEY.get(key);
   if (!q) return 'unknown question';
 
+  // A catalogue row has no `options` — its answers are the fixed three.
+  const allowed = q.options ? q.options.map(o => o.v) : CATALOGUE_VALUES;
+
   if (value !== null && value !== undefined && value !== '') {
-    if (!q.options.some(o => o.v === value)) return 'not one of the offered answers';
+    if (!allowed.includes(value)) return 'not one of the offered answers';
   }
   // A note is accepted on EVERY question, even ones that do not prompt for one. If she wants to
   // explain an answer we did not invite an explanation for, that explanation is the most valuable
@@ -196,4 +326,4 @@ export function validateAnswer(key, value, note) {
   return null;
 }
 
-export default { QUESTIONS, validateAnswer, MAX_NOTE };
+export default { QUESTIONS, CATALOGUE, CATALOGUE_VALUES, validateAnswer, MAX_NOTE };
