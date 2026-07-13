@@ -24,6 +24,7 @@ import { handleStaffIntroButton } from './buttons/staff_intro.js';
 import { handleSuggestionFormButton, handleBugReportFormButton } from './buttons/forum_submit.js';
 import { handleVerifyAccept } from './buttons/verify_accept.js';
 import { handleTreeGrow, handleTreeRefresh } from './buttons/tree_grow.js';
+import { handleTreeCatch } from './buttons/tree_catch.js';
 import { handleCatGameButton, handleCatQuestButton } from './buttons/catbot_game.js';
 import { handleGuildBossButton } from './buttons/owo_guildboss.js';
 import { handleTakeoverButton } from '../commands/admin/takeover.js';
@@ -116,6 +117,9 @@ export const buttonHandlers = {
   'verify_accept': handleVerifyAccept,
   // Static ids: the tree is resolved from the guild, so old messages keep working.
   'tree_grow': handleTreeGrow,
+  // Prefix match: the encounter id rides in the customId (`gat_net:12`, `gat_basket:12:3`).
+  'gat_net': handleTreeCatch,
+  'gat_basket': handleTreeCatch,
   'tree_refresh': handleTreeRefresh,
 
   // Cat Bot: cbg:<game>:<action> tables, cbq:<claim|season> battlepass.

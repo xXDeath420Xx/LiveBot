@@ -11,7 +11,7 @@
 import pool from '../../utils/db.js';
 import { newTree, grow } from './tiles.js';
 import {
-  getWateringInterval, getTreeXp, applyXp, canBeWateredAt, backgroundForSize,
+  getWateringInterval, getTreeXp, applyXp, canBeWateredAt, backgroundForSize, getTreeHeight,
 } from './formulas.js';
 
 export const NAME_RE = /^[a-zA-Z0-9\-' ]{1,36}$/;
@@ -28,6 +28,10 @@ function hydrate(row) {
     lastWateredBy: row.last_watered_by,
     lastWateredAt: Number(row.last_watered_at),
     plantedBy: row.planted_by,
+    // Without this the composter is a coin sink that does nothing: `tree.compost` would be
+    // undefined, compostBonus(undefined) returns 0, and every coin anyone spent would vanish
+    // silently into a heap that never grew anything.
+    compost: Number(row.compost ?? 0),
   };
 }
 
@@ -109,7 +113,11 @@ export async function waterTree(guildId, userId, rng = Math.random) {
     return { ok: false, reason: 'cooldown', tree, nextWaterAt: ready };
   }
 
-  const pieces = grow(tree.pieces, rng);
+  // The community composter. Everyone's coins, everyone's tree.
+  const { compostBonus } = await import('./critters.js');
+  const bonus = compostBonus(tree.compost);
+
+  const pieces = grow(tree.pieces, rng, bonus);
   const size = pieces.length;
   const background = backgroundForSize(size, tree.background);
   const at = nowSec();
@@ -136,9 +144,48 @@ export async function waterTree(guildId, userId, rng = Math.random) {
 
   const grown = { ...tree, pieces, size, background, lastWateredBy: userId, lastWateredAt: at };
   return {
-    ok: true, tree: grown, gainedXp,
+    ok: true, tree: grown, gainedXp, compostBonus: bonus,
     level: next.level, levelsGained: next.levelsGained,
     nextWaterAt: at + getWateringInterval(size - 1),
+  };
+}
+
+/**
+ * The fire.
+ *
+ * Kabster is giving up a 193ft tree to start again on ours, and "the old bot left and your tree is
+ * gone" is a shrug. A tree that DIED is a thing that happened to the server, and the sapling that
+ * follows it means something. So the reset is a story, not an absence.
+ *
+ * What survives is chosen, not accidental: people keep their level, their XP, their sticker book and
+ * their coins, because those are THEIRS and burning them down is just a punishment for having played.
+ * What burns is the tree — the shared thing — and the contributor board that ranked people on it,
+ * because a leaderboard for a tree that no longer exists is a leaderboard for nothing.
+ *
+ * Returns the story so the caller can post it; this never writes to a channel itself.
+ */
+export async function burnDown(guildId, { name, plantedBy } = {}) {
+  const old = await getTree(guildId);
+  if (!old) return { ok: false, reason: 'none' };
+
+  // getTreeHeight takes the whole TREE (it reads pieces.length and lastWateredAt to interpolate
+  // mid-growth), not a size. Passing old.size threw on `.length` — and threw inside an async path
+  // that swallowed it, so the fire would have half-run: tree deleted, nothing posted.
+  const height = getTreeHeight(old);
+
+  await pool.execute('DELETE FROM gat_trees WHERE guild_id = ?', [guildId]);
+  // The gardener board ranked people on a tree that no longer exists.
+  await pool.execute('DELETE FROM gat_contributors WHERE guild_id = ?', [guildId]);
+  // Any bug mid-flight died with it.
+  await pool.execute('DELETE FROM gat_encounters WHERE guild_id = ?', [guildId]);
+
+  const planted = await plantTree(guildId, plantedBy ?? old.plantedBy, name ?? old.name);
+
+  return {
+    ok: true,
+    lost: { name: old.name, height, size: old.size },
+    tree: planted.tree ?? planted,
+    kept: 'levels, XP, sticker books and coins all survive — they are yours, not the tree\'s',
   };
 }
 

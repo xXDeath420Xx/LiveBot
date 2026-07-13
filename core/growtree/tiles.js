@@ -88,8 +88,17 @@ export function newTree(rng = Math.random) {
 }
 
 /** Grow by one. Mutates nothing; returns the new pieces array. */
-export function grow(pieces, rng = Math.random) {
-  return [...pieces, generateNextSegment(pieces, rng)];
+/**
+ * One water = one segment, plus whatever the compost heap is worth.
+ *
+ * `extra` comes from compostBonus() and is capped there, deliberately. Uncapped compost would let
+ * one player with coins buy a 900ft tree over an afternoon, and the tree is supposed to be a thing
+ * the server does together over weeks — a shortcut past that is not a feature, it is an ending.
+ */
+export function grow(pieces, rng = Math.random, extra = 0) {
+  const out = [...pieces];
+  for (let i = 0; i <= Math.max(0, extra); i++) out.push(generateNextSegment(out, rng));
+  return out;
 }
 
 /** The renderer only draws the top of the trunk. */

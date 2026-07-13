@@ -37,6 +37,7 @@ import { startSocialFeedScheduler, stopSocialFeedScheduler } from './jobs/social
 import { startStreamCheckScheduler, stopStreamCheckScheduler } from './jobs/stream-check-scheduler.js';
 import { startKofiExpiry, stopKofiExpiry } from './jobs/kofi-expiry.js';
 import { startOwoBossReaper, stopOwoBossReaper } from './jobs/owo-boss-reaper.js';
+import { startGrowTreeReaper, stopGrowTreeReaper } from './jobs/growtree-reaper.js';
 import { startAnnouncementUpdater, stopAnnouncementUpdater } from './jobs/announcement-updater.js';
 import { startTeamSyncScheduler, stopTeamSyncScheduler } from './jobs/team-sync-scheduler.js';
 import { startBirthdayScheduler, stopBirthdayScheduler } from './jobs/birthday-scheduler.js';
@@ -756,6 +757,7 @@ async function initializeSchedulersAndDashboard(client) {
   startStreamCheckScheduler(client);
   startKofiExpiry(client);
   startOwoBossReaper(client);
+  startGrowTreeReaper();
   logger.info('[Core] Stream check scheduler initialized');
 
   // Cat Bot: re-arm per-channel spawn timers and revive any that came due while we

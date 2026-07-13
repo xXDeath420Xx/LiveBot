@@ -9,6 +9,7 @@ import {
 } from '../../core/growtree/manager.js';
 import { buildTreeMessage } from '../../core/growtree/display.js';
 import { getNextLevelRequiredXp, getTreeHeight } from '../../core/growtree/formulas.js';
+import { getBook, getCoins, compost, compostBonus, BUGS } from '../../core/growtree/critters.js';
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral };
 const GREEN = 0x3E8E41;
@@ -39,7 +40,13 @@ export default {
     .addSubcommand(s => s.setName('profile').setDescription('Your level and contribution')
       .addUserOption(o => o.setName('user').setDescription('Someone else')))
     .addSubcommand(s => s.setName('xp-messages').setDescription('Toggle your "+N XP" messages')
-      .addBooleanOption(o => o.setName('enabled').setDescription('On or off').setRequired(true))),
+      .addBooleanOption(o => o.setName('enabled').setDescription('On or off').setRequired(true)))
+    .addSubcommand(s => s.setName('book').setDescription('Your sticker book of caught bugs')
+      .addUserOption(o => o.setName('user').setDescription('Someone else')))
+    .addSubcommand(s => s.setName('coins').setDescription('How many coins you have'))
+    .addSubcommand(s => s.setName('compost').setDescription('Spend coins to make the tree grow faster for everyone')
+      .addIntegerOption(o => o.setName('coins').setDescription('How many to throw on the heap')
+        .setRequired(true).setMinValue(1).setMaxValue(1_000_000))),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -99,6 +106,67 @@ export default {
       return interaction.reply({
         content: gone ? '🪓 The tree is gone, along with its contributor history.' : 'There was no tree here.',
         ...EPHEMERAL,
+      });
+    }
+
+    if (sub === 'book') {
+      const who = interaction.options.getUser('user') ?? interaction.user;
+      const book = await getBook(who.id);
+      const have = book.filter(b => b.count > 0).length;
+
+      // Unfound bugs are LISTED, not hidden. A sticker book you cannot see the gaps in is just a
+      // list of things you own, and the gaps are the entire reason to keep swinging.
+      const lines = book.map(b => b.count > 0
+        ? `${b.emoji} **${b.name}** ×${b.count}`
+        : `<:blank:0> ~~${b.name}~~ — *not caught*`.replace('<:blank:0> ', '▫️ '));
+
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor(have === book.length ? 0xF0B23B : GREEN)
+          .setTitle(`📔 ${who.username}'s sticker book`)
+          .setDescription(lines.join('\n'))
+          .setFooter({ text: have === book.length
+            ? 'Complete. Every bug in the garden.'
+            : `${have}/${book.length} collected` })],
+      });
+    }
+
+    if (sub === 'coins') {
+      const coins = await getCoins(interaction.user.id);
+      return interaction.reply({
+        content: coins
+          ? `🪙 You have **${coins.toLocaleString()}** coins. Spend them with \`/tree compost\`.`
+          : '🪙 You have no coins yet. Catch bugs and fruit when they appear on the tree.',
+        ...EPHEMERAL,
+      });
+    }
+
+    if (sub === 'compost') {
+      const tree = await getTree(interaction.guildId);
+      if (!tree) return interaction.reply({ content: 'There is no tree here yet.', ...EPHEMERAL });
+
+      const amount = interaction.options.getInteger('coins');
+      const res = await compost(interaction.guildId, interaction.user.id, amount);
+
+      if (!res.ok) {
+        return interaction.reply({
+          content: res.reason === 'broke'
+            ? `🪙 You only have **${res.have.toLocaleString()}** coins.`
+            : 'That is not a number of coins.',
+          ...EPHEMERAL,
+        });
+      }
+
+      const bonus = compostBonus(res.total);
+      return interaction.reply({
+        embeds: [new EmbedBuilder()
+          .setColor(0x6B4F2A)
+          .setTitle('🪱 Onto the heap')
+          .setDescription(
+            `**${interaction.user.username}** composted **${res.coins.toLocaleString()}** coins.\n`
+            + `The heap is now **${res.total.toLocaleString()}**, growing the tree **+${bonus}** extra per water — `
+            + 'for everyone.')
+          .setFooter({ text: 'The composter is shared. Everyone\'s tree grows faster.' })],
       });
     }
 
