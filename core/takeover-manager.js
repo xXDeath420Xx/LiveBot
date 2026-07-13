@@ -1158,7 +1158,7 @@ export function selectRemovals(present, { ours, exclude = new Set(), decisions }
  * to (DISBOARD, Blerp). `exclude` lets the caller veto specific bot ids after reading the dry run.
  */
 export async function executeAll(guild, { scanId, userId, overrideSoak = false, dryRun = true, exclude = [] } = {}) {
-  const { retire, evaluate, isAutoVerifiable } = await import('./bot-retirement.js');
+  const { retire, evaluate, isAutoVerifiable, acknowledgeExtraction } = await import('./bot-retirement.js');
   const decisions = await loadDecisions(guild.id);
   const planned = await plan(guild);
   const stepFor = (key) => planned.steps.find(s => s.key === key);
@@ -1192,7 +1192,14 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
     };
     if (bot.feature === 'reaction_roles') return {
       label: 'post the role panels',
-      run: async () => { const r = await postPanels(guild); return [`posted ${Array.isArray(r) ? r.filter(x => x.outcome === 'posted').length : ''} panel(s)`.trim()]; },
+      run: async () => {
+        const r = await postPanels(guild);
+        // Carl-bot is a data-holder: the gate wants its panels rebuilt before it goes. We JUST rebuilt
+        // them, so the acknowledgement is a true statement, not a rubber stamp — record it so the
+        // removal's data gate passes on the strength of the thing we actually did.
+        await acknowledgeExtraction(guild.id, bot.id, userId).catch(() => {});
+        return [`posted ${Array.isArray(r) ? r.filter(x => x.outcome === 'posted').length : ''} panel(s)`.trim()];
+      },
     };
     if (bot.feature === 'growtree') return {
       label: 'plant Kababi @193ft',
@@ -1244,6 +1251,11 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
     const verifiable = isAutoVerifiable(bot.feature);
     const spec = enableSpec(bot);
 
+    // Gates our OWN enable step is about to satisfy, so a red reading here is not a real blocker:
+    // parity (the config we are about to write) and, for Carl-bot only, data (the panels we are about
+    // to rebuild). Every other gate — evidence, hierarchy, permission, present — is a genuine stop.
+    const softGate = (id) => id === 'parity' || (bot.feature === 'reaction_roles' && id === 'data');
+
     // Read-only prediction for the dry run. It calls evaluate() — which touches nothing — so the dry
     // run tells the TRUTH about what will happen, instead of optimistically listing removals that then
     // skip live (the exact way the first dry run misled).
@@ -1252,7 +1264,7 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
       if (isDisboard) return { ok: true, why: 'you asked to drop the listing — direct removal (nothing to replace)' };
       if (!verifiable) return { ok: false, why: `no automated parity check for "${bot.feature}" — remove on the dashboard after a look` };
       const pre = await evaluate(guild, bot.id, scanId, { overrideSoak });
-      const blockers = pre.gates.filter(g => g.pass !== true && g.id !== 'parity');
+      const blockers = pre.gates.filter(g => g.pass !== true && !softGate(g.id));
       if (blockers.length) return { ok: false, why: blockers.map(g => `${g.label}: ${g.detail}`).join('; ') };
       return { ok: true, why: `${spec.label}, then remove${overrideSoak ? ' (soak waived)' : ''}` };
     };
@@ -1268,7 +1280,7 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
         // (evidence, hierarchy, data) is red, skip WITHOUT enabling — otherwise we would leave a
         // replacement running next to a bot we could not remove, doubling its output.
         const pre = await evaluate(guild, bot.id, scanId, { overrideSoak });
-        const blockers = pre.gates.filter(g => g.pass !== true && g.id !== 'parity');
+        const blockers = pre.gates.filter(g => g.pass !== true && !softGate(g.id));
         if (blockers.length) return `SKIPPED (nothing enabled) — ${blockers.map(g => `${g.label}: ${g.detail}`).join('; ')}`;
 
         let done = [];
