@@ -85,6 +85,27 @@ export const QUESTIONS = Object.freeze([
     note: 'One per line — e.g. Fortnite, Minecraft, Movie Nights…',
   },
   {
+    key: 'twitch_roles',
+    section: 'Roles',
+    q: 'Link your Twitch, so your VIPs and mods get roles here',
+    // Deliberately NOT offering subscriber roles. `sub_role_id` exists in the table but nothing ever
+    // fills it: the scheduler only fetches VIPs and moderators, and the OAuth flow does not even ask
+    // for channel:read:subscriptions. Promising sub roles here would be a lie we would have to walk
+    // back after she had already said yes.
+    why: 'If you connect your Twitch, anyone you make a VIP or a mod on stream automatically gets the '
+       + 'matching role in Discord — and loses it if you take it away on Twitch. It keeps itself in step, '
+       + 'so you never hand out those Discord roles by hand again. '
+       + 'The one catch: we can only match a person up if THEY have linked their own Twitch to Discord too, '
+       + 'so it fills in as people link themselves rather than all at once. '
+       + 'Subscriber roles are not part of this — we cannot read your sub list, so we will not pretend to.',
+    options: [
+      { v: 'yes',    label: 'Yes, link it',   detail: "One click on our site — you'll be asked to approve it on Twitch" },
+      { v: 'later',  label: 'Maybe later',    detail: 'Leave it for now; it can be switched on any time' },
+      { v: 'no',     label: 'No thanks',      detail: 'Twitch and Discord stay separate' },
+    ],
+    note: 'Which Discord roles should your Twitch VIPs and mods get? (Existing ones, or we can make them.)',
+  },
+  {
     key: 'roles_ok',
     section: 'Roles',
     q: 'The role clean-up',
