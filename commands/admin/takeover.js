@@ -144,19 +144,19 @@ export default {
       const waiveSoak = interaction.options.getBoolean('waive-soak') ?? true;
       const exclude = (interaction.options.getString('exclude') ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
-      // Removals re-gate live and that needs a completed scan. Only required for a real run.
-      let scan = null;
-      if (live) {
-        scan = await getLatestScan(guild.id).catch(() => null);
-        if (scan?.status !== 'complete') {
-          return interaction.editReply('A completed scan is required before a real run. Run the dashboard scan (`?page=takeover` → Scan) to completion, then try again.');
-        }
+      // The scan is needed by BOTH paths, not just the live one: the dry run's whole job is to
+      // predict the gates, and the evidence gate reads the scan. Fetching it only for live runs is
+      // what made the dry run report "no completed scan" for every bot and predict nothing would run.
+      const scan = await getLatestScan(guild.id).catch(() => null);
+      if (live && scan?.status !== 'complete') {
+        return interaction.editReply('A completed scan is required before a real run. Run the dashboard scan (`?page=takeover` → Scan) to completion, then try again.');
       }
+      const scanId = scan?.status === 'complete' ? scan.id : undefined;
 
       let res;
       try {
         res = await executeAll(guild, {
-          scanId: scan?.id, userId: interaction.user.id, overrideSoak: waiveSoak, dryRun: !live, exclude,
+          scanId, userId: interaction.user.id, overrideSoak: waiveSoak, dryRun: !live, exclude,
         });
       } catch (err) {
         logger.error(`[Takeover] executeAll failed: ${err.message}`, { stack: err.stack });
