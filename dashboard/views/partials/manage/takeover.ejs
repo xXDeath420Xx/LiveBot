@@ -132,6 +132,8 @@
     background:#191b22; border-left:3px solid #3a3f4d; }
   #takeoverPage .to-q.yes { border-left-color:#57F287; }
   #takeoverPage .to-q.no  { border-left-color:#3a3f4d; opacity:.72; }
+  /* "Tell me more" is the only pick that is a job for US — it must not read as a soft maybe. */
+  #takeoverPage .to-q.ask { border-left-color:#FEE75C; }
   #takeoverPage .to-qq { font-weight:600; font-size:.92rem; }
   #takeoverPage .to-qa { font-size:.9rem; color:#dfe3ea; margin-top:.15rem; }
   #takeoverPage .to-qa.waiting { color:#7a8291; font-style:italic; }
@@ -447,6 +449,31 @@
       }
       html += '</div>';
     }
+
+    // The feature menu. Only what she actually touched is shown — 44 untouched rows would bury the
+    // handful she picked, and "she didn't pick it" is not information worth 44 lines.
+    const cat = d.catalogue || [];
+    const picked = cat.filter(c => d.answers[c.key]?.value);
+    html += `<div class="to-qsec">Features she picked${picked.length ? '' : ' — none yet'}</div>`;
+
+    if (picked.length) {
+      const want    = picked.filter(c => d.answers[c.key].value === 'yes');
+      const explain = picked.filter(c => d.answers[c.key].value === 'explain');
+      const nope    = picked.filter(c => d.answers[c.key].value === 'no');
+
+      const list = (arr, cls, lead) => arr.length
+        ? `<div class="to-q ${cls}"><div class="to-qq">${lead} <span class="to-muted">(${arr.length})</span></div>
+             <div class="to-qa">${arr.map(c => esc(c.name)).join(' · ')}</div></div>`
+        : '';
+
+      // "Tell me more" first: it is the only one that is a job for us right now.
+      html += list(explain, 'ask',  'Wants these explained');
+      html += list(want,    'yes',  'Wants these');
+      html += list(nope,    'no',   'Does not want these');
+    } else {
+      html += `<div class="to-q no"><div class="to-qa waiting">she has not been through the menu</div></div>`;
+    }
+
     $('toQ').innerHTML = html;
     $('toQ').classList.remove('to-muted');
   }

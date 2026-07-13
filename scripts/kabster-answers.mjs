@@ -10,7 +10,7 @@
  */
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
-import { QUESTIONS } from '../core/takeover-questions.js';
+import { QUESTIONS, CATALOGUE } from '../core/takeover-questions.js';
 
 const GUILD = process.argv.find(a => /^\d{17,20}$/.test(a)) ?? '814321716872347648';
 const WANT_LINK = process.argv.includes('--link');
@@ -65,5 +65,29 @@ for (const q of QUESTIONS) {
   }
   console.log(`      ${new Date(a.updated_at).toISOString().slice(0, 16).replace('T', ' ')}`);
 }
-console.log('');
+
+// ── The feature menu. Only what she touched: 44 untouched rows would bury the few she picked.
+const picked = CATALOGUE.filter(c => byKey.get(c.key)?.value);
+console.log(`\n\n── Features ${'─'.repeat(50)}`);
+
+if (!picked.length) {
+  console.log('\n  she has not been through the menu yet\n');
+} else {
+  const bucket = (v) => picked.filter(c => byKey.get(c.key).value === v);
+  // "Tell me more" first — it is the only pick that is a job for us right now.
+  const show = (v, lead) => {
+    const rows = bucket(v);
+    if (!rows.length) return;
+    console.log(`\n  ${lead} (${rows.length})`);
+    for (const c of rows) {
+      console.log(`      ${c.name}`);
+      const note = byKey.get(c.key)?.note?.trim();
+      if (note) console.log(`        "${note.split('\n').join('\n         ')}"`);
+    }
+  };
+  show('explain', 'WANTS THESE EXPLAINED — over to us');
+  show('yes', 'Wants these');
+  show('no', 'Does not want these');
+  console.log('');
+}
 process.exit(0);
