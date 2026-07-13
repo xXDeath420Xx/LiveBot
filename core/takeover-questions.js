@@ -282,8 +282,7 @@ export const CATALOGUE = Object.freeze([
 
   // ── Odds and ends ───────────────────────────────────────────────────────────
   { key: 'feat_grow',         group: 'Odds & ends', name: 'Grow journal',
-    what: 'A proper grow tracker — log your plants, stages, feeding, photos, with reminders and stats. '
-        + 'Given what this server is, this is probably the one worth a look.' },
+    what: 'A proper grow tracker — log your plants, stages, feeding, photos, with reminders and stats.' },
   { key: 'feat_confessions',  group: 'Odds & ends', name: 'Anonymous confessions',
     what: 'Members post anonymously; staff can still trace abuse.' },
   { key: 'feat_weather',      group: 'Odds & ends', name: 'Weather & lookups',
