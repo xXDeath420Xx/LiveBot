@@ -17,7 +17,8 @@ import {
     startScan, resumeScan, cancelScan, isScanning,
     getScan, getLatestScan, getBots, getTemplates, attribute, scannableChannels,
 } from '../../../../core/guild-analyzer.js';
-import { plan, apply, postPanels, postTwitchLinkPanel, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
+import { plan, apply, postPanels, postTwitchLinkPanel, profileFor, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
+import { deriveProfile, getProfile, approveProfile, needsReview } from '../../../../core/takeover-profile.js';
 import { evaluate, retire, autoAttribute, acknowledgeExtraction, DATA_HOLDERS, DEFAULT_SOAK_HOURS } from '../../../../core/bot-retirement.js';
 import { QUESTIONS, CATALOGUE } from '../../../../core/takeover-questions.js';
 import { createLink } from '../../kabster.js';
@@ -214,6 +215,58 @@ router.get('/plan', async (req, res) => {
     } catch (err) {
         logger.error(`[API takeover] plan failed: ${err.message}`, { stack: err.stack });
         res.status(500).json({ error: 'Failed to build a plan' });
+    }
+});
+
+// ── Profile: the things we can only learn by reading this server's history ────
+
+/** The stored profile, plus the list of fields derivation is NOT sure about. */
+router.get('/profile', async (req, res) => {
+    try {
+        const profile = await getProfile(req.params.guildId);
+        res.json({
+            profile,
+            review: profile ? needsReview(profile) : [],
+            // Kabster's profile is hand-written in code and always wins over a derived one, so the UI
+            // must not offer to overwrite something it cannot actually overwrite.
+            handVerified: !!(await profileFor(req.params.guildId))?.source?.startsWith('hand'),
+        });
+    } catch (err) {
+        logger.error(`[API takeover] get profile failed: ${err.message}`);
+        res.status(500).json({ error: 'Failed to load the profile' });
+    }
+});
+
+/**
+ * Read the guild's history and propose a profile. Read-only — posts nothing, changes nothing.
+ * Always lands as `proposed`; a human still has to approve it before apply() will touch it.
+ */
+router.post('/profile/derive', async (req, res) => {
+    try {
+        const guild = resolveGuild(req, res);
+        if (!guild) return;
+        const profile = await deriveProfile(guild);
+        logger.info(`[Takeover] ${req.user?.id} derived a profile for ${guild.name}`);
+        res.json({ profile, review: needsReview(profile) });
+    } catch (err) {
+        logger.error(`[API takeover] derive failed: ${err.message}`, { stack: err.stack });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * Sign it off. Owner-only: an approved profile is what apply() is allowed to write into the server,
+ * so approving is the moment a machine's guess becomes a human's decision.
+ */
+router.post('/profile/approve', ownerOnly, async (req, res) => {
+    try {
+        const guild = resolveGuild(req, res);
+        if (!guild) return;
+        const merged = await approveProfile(guild.id, req.user.id, req.body?.edits ?? null);
+        res.json({ success: true, profile: merged });
+    } catch (err) {
+        logger.error(`[API takeover] approve failed: ${err.message}`);
+        res.status(400).json({ error: err.message });
     }
 });
 

@@ -60,12 +60,32 @@
         <div id="toBots" class="to-list">Run a scan to see results.</div>
     </div>
 
+    <!-- The recovered profile. Sits between the scan and the plan because the plan is BUILT from it:
+         without a profile, the guild-specific steps are not offered at all. -->
+    <div class="to-card">
+        <div class="to-head">
+            <div>
+                <h3 class="to-h">3 · This server's profile</h3>
+                <p class="form-help">
+                    The things we can only learn by reading this server's own history — which streamer
+                    the old bot announces, where its role panels live, what <code>!commands</code>
+                    people type. Reading is safe: it posts nothing and changes nothing.
+                </p>
+            </div>
+            <div class="to-actions">
+                <button class="btn btn-secondary" id="toDerive">Read the history</button>
+                <button class="btn btn-primary" id="toApprove" hidden>Approve</button>
+            </div>
+        </div>
+        <div id="toProfile" class="to-list to-muted">Loading…</div>
+    </div>
+
     <!-- What the owner actually wants. Sits BEFORE the parity phase on purpose: her answers should
          shape what you apply, not be discovered after you have applied it. -->
     <div class="to-card">
         <div class="to-head">
             <div>
-                <h3 class="to-h">3 · What the server owner wants</h3>
+                <h3 class="to-h">4 · What the server owner wants</h3>
                 <p class="form-help">
                     Her own answers, from the questionnaire she filled in. She has no dashboard
                     account — the link below is the only way she reaches it, so treat it like a key.
@@ -84,7 +104,7 @@
     <div class="to-card">
         <div class="to-head">
             <div>
-                <h3 class="to-h">4 · Apply feature parity</h3>
+                <h3 class="to-h">5 · Apply feature parity</h3>
                 <p class="form-help">
                     Writes configuration only. It carries live values across — a counting channel
                     resumes at the exact number the old bot left off on.
@@ -478,12 +498,117 @@
     $('toQ').classList.remove('to-muted');
   }
 
+  const CONF = {
+    certain: ['ok',  'certain'],
+    likely:  ['warn','likely — worth a look'],
+    guess:   ['ask', 'A GUESS — check this'],
+    unknown: ['no',  'could not work it out'],
+    none:    ['no',  'nothing found'],
+  };
+
+  /**
+   * The recovered profile.
+   *
+   * The review list goes FIRST and stays loud. Derivation is genuinely good at some of this (a
+   * Twitch handle in an announcement is not an inference) and genuinely bad at other parts (which
+   * role a panel's 🧡 button grants is nowhere in the message). Rendering both at the same visual
+   * weight would invite someone to approve a guess by reflex.
+   */
+  function renderProfile(d) {
+    const p = d.profile;
+    const btnDerive = $('toDerive');
+    const btnApprove = $('toApprove');
+
+    if (d.handVerified) {
+      $('toProfile').innerHTML =
+        `<div class="to-q yes"><div class="to-qq">Hand-verified profile</div>
+         <div class="to-qa">This server's profile is written and checked by hand, which always beats a
+         derived one — a machine cannot recover the emoji-to-role mapping. Reading the history again
+         is harmless, but it will not override it.</div></div>`;
+      btnApprove.hidden = true;
+      return;
+    }
+
+    if (!p) {
+      $('toProfile').innerHTML =
+        `<div class="to-q no"><div class="to-qa waiting">No profile yet. Until there is one, the
+         steps that need this server's own data — its streamer, its role panels, its custom commands
+         — are not offered at all.</div></div>`;
+      btnApprove.hidden = true;
+      return;
+    }
+
+    const approved = p.status === 'approved';
+    btnApprove.hidden = approved;
+    btnDerive.textContent = 'Read it again';
+
+    let html = `<div class="to-qsum">${approved
+      ? '<b style="color:#57F287">Approved</b> — the plan can use this.'
+      : '<b style="color:#FEE75C">Proposed.</b> Nothing will be written from this until you approve it.'}
+      Read ${p.stats?.messagesRead ?? '?'} messages across ${p.stats?.channelsRead ?? '?'} channels.</div>`;
+
+    // Review list first. These are the fields that will be wrong.
+    if (d.review?.length) {
+      html += `<div class="to-qsec">Check these before approving</div>`;
+      for (const r of d.review) {
+        const [cls, label] = CONF[r.confidence] ?? ['warn', r.confidence];
+        html += `<div class="to-q ${cls}">
+          <div class="to-qq">${esc(r.key)} <span class="to-tag ${cls === 'ask' ? 'warn' : 'seq'}">${esc(label)}</span></div>
+          <div class="to-qa">${esc(r.evidence)}</div></div>`;
+      }
+    }
+
+    html += `<div class="to-qsec">What it found</div>`;
+    const rows = [
+      ['Streamer',        p.streamers,        v => v.length ? v.map(s => `${s.platform}/${s.username}${s.pingRoleId === 'everyone' ? ' (@everyone)' : ''}`).join(', ') : '—'],
+      ['Role panels',     p.panels,           v => v.length ? v.map(x => `${x.name} (${x.options.length})`).join(' · ') : '—'],
+      ['Panel channel',   p.selfAssignChannel,v => v ? `<code class="to-code">${v}</code>` : '—'],
+      ['Custom commands', p.customCommands,   v => v.length ? v.map(c => c.prefix + c.name).join(', ') : '—'],
+      ['Birthday role',   p.birthdayRole,     v => v ? `<code class="to-code">${v}</code>` : '—'],
+      ['Emoji to upload', p.platformEmoji,    v => v.length ? v.map(e => e.name).join(', ') : 'none needed'],
+      ['Spare roles',     p.roleHygiene,      v => `${v.duplicates.length} empty duplicate(s), ${v.empty.length} other empty`],
+    ];
+    for (const [label, f, fmt] of rows) {
+      if (!f) continue;
+      const [cls, conf] = CONF[f.confidence] ?? ['warn', f.confidence];
+      html += `<div class="to-q ${cls === 'ok' ? 'yes' : cls}">
+        <div class="to-qq">${esc(label)} <span class="to-tag ${cls === 'ok' ? 'ok' : 'warn'}">${esc(conf)}</span></div>
+        <div class="to-qa">${fmt(f.value)}</div>
+        <div class="to-qwhen">${esc(f.evidence ?? '')}</div></div>`;
+    }
+    $('toProfile').innerHTML = html;
+    $('toProfile').classList.remove('to-muted');
+  }
+
+  $('toDerive').addEventListener('click', async () => {
+    const b = $('toDerive');
+    b.disabled = true; b.textContent = 'Reading every channel…';
+    try {
+      await req(api('/profile/derive'), { method: 'POST' });
+      renderProfile(await req(api('/profile')));
+    } catch (err) { showError(err.message); }
+    finally { b.disabled = false; b.textContent = 'Read it again'; }
+  });
+
+  $('toApprove').addEventListener('click', async () => {
+    if (!confirm('Approve this profile? Only after this will the plan write any of it into the server. '
+      + 'Check the guesses first — an unresolved panel button does nothing when clicked.')) return;
+    try {
+      await req(api('/profile/approve'), { method: 'POST' });
+      renderProfile(await req(api('/profile')));
+    } catch (err) { showError(err.message); }
+  });
+
   async function load() {
     try {
       showError('');
       state = await req(api('/'));
       renderScan(state);
       renderBots(state);
+
+      req(api('/profile')).then(renderProfile).catch(() => {
+        $('toProfile').textContent = 'Could not load the profile.';
+      });
 
       // Independent of the scan — her answers exist whether or not anyone has scanned anything.
       req(api('/questionnaire')).then(renderQuestionnaire).catch(() => {
