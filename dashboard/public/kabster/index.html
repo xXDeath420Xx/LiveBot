@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kabster's Shit Cunts — The Bot Changeover, in Plain English</title>
+<meta name="robots" content="noindex">
+<meta property="og:title" content="Kabster's Shit Cunts — The Bot Changeover, in Plain English">
+<meta property="og:description" content="Every bot being replaced, the role clean-up, and the decisions that need you.">
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body, h1, h2, h3, h4, p, ul, figure { margin: 0; }
+  ul { padding: 0; }
+  img { max-width: 100%; display: block; }
+  button { font: inherit; color: inherit; }
+</style>
+</head>
+<body>
+<style>
+  :root {
+    --bg: #F6F7F8; --surface: #FFFFFF; --surface-2: #EEF1F3;
+    --ink: #14181D; --muted: #5A646E; --faint: #8A939C; --line: #DDE2E6;
+    --accent: #1E7F76;
+    --exact: #2F7A52; --exact-bg: #E4F2EA;
+    --differs: #9A6710; --differs-bg: #FBF0DC;
+    --gap: #A93A2C; --gap-bg: #FAE6E2;
+    --keep: #4E5A66; --keep-bg: #E7EBEE;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0E1114; --surface: #161A1F; --surface-2: #1D2228;
+      --ink: #E6EAEE; --muted: #8B95A0; --faint: #6B747D; --line: #262C33;
+      --accent: #38A99D;
+      --exact: #6BC292; --exact-bg: #16281F;
+      --differs: #D8A93F; --differs-bg: #2A2214;
+      --gap: #E88574; --gap-bg: #2C1A16;
+      --keep: #98A2AC; --keep-bg: #1E242A;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E1114; --surface: #161A1F; --surface-2: #1D2228;
+    --ink: #E6EAEE; --muted: #8B95A0; --faint: #6B747D; --line: #262C33;
+    --accent: #38A99D;
+    --exact: #6BC292; --exact-bg: #16281F;
+    --differs: #D8A93F; --differs-bg: #2A2214;
+    --gap: #E88574; --gap-bg: #2C1A16;
+    --keep: #98A2AC; --keep-bg: #1E242A;
+  }
+  :root[data-theme="light"] {
+    --bg: #F6F7F8; --surface: #FFFFFF; --surface-2: #EEF1F3;
+    --ink: #14181D; --muted: #5A646E; --faint: #8A939C; --line: #DDE2E6;
+    --accent: #1E7F76;
+    --exact: #2F7A52; --exact-bg: #E4F2EA;
+    --differs: #9A6710; --differs-bg: #FBF0DC;
+    --gap: #A93A2C; --gap-bg: #FAE6E2;
+    --keep: #4E5A66; --keep-bg: #E7EBEE;
+  }
+
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans);
+    font-size: 16px; line-height: 1.62; margin: 0; -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 62rem; margin: 0 auto; padding: 3rem 1.5rem 6rem; }
+
+  .mast { border-bottom: 2px solid var(--ink); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  .eyebrow { font-family: var(--mono); font-size: .72rem; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 .6rem; }
+  h1 { font-size: clamp(1.9rem, 4.5vw, 2.7rem); line-height: 1.1; margin: 0 0 .7rem;
+    letter-spacing: -.02em; text-wrap: balance; font-weight: 700; }
+  .lede { color: var(--muted); max-width: 46rem; margin: 0; font-size: 1.05rem; }
+  .meta { display: flex; flex-wrap: wrap; gap: 1.4rem; margin-top: 1.2rem;
+    font-family: var(--mono); font-size: .78rem; color: var(--faint); }
+  .meta b { color: var(--ink); font-weight: 600; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 1px;
+    background: var(--line); border: 1px solid var(--line); margin: 2rem 0 3rem; }
+  .stat { background: var(--surface); padding: 1rem 1.1rem; }
+  .stat .n { font-family: var(--mono); font-size: 1.7rem; font-weight: 600; letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums; display: block; line-height: 1.2; }
+  .stat .k { font-size: .74rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+  .stat.ok .n { color: var(--exact); }
+  .stat.warn .n { color: var(--differs); }
+  .stat.bad .n { color: var(--gap); }
+
+  h2 { font-size: 1.45rem; letter-spacing: -.015em; margin: 3.5rem 0 .4rem;
+    padding-top: 1.2rem; border-top: 1px solid var(--line); text-wrap: balance; }
+  h2 .num { font-family: var(--mono); color: var(--accent); font-size: .95rem; margin-right: .5rem; font-weight: 600; }
+  h3 { font-size: 1.06rem; margin: 2rem 0 .5rem; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 1.4rem; max-width: 48rem; }
+  p { max-width: 48rem; }
+
+  .chip { display: inline-block; font-family: var(--mono); font-size: .68rem; font-weight: 600;
+    letter-spacing: .05em; text-transform: uppercase; padding: .18rem .5rem;
+    border-radius: 3px; white-space: nowrap; vertical-align: middle; }
+  .chip.exact { color: var(--exact); background: var(--exact-bg); }
+  .chip.differs { color: var(--differs); background: var(--differs-bg); }
+  .chip.gap { color: var(--gap); background: var(--gap-bg); }
+  .chip.keep { color: var(--keep); background: var(--keep-bg); }
+
+  .scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--surface); margin: 1.2rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th { text-align: left; font-family: var(--mono); font-size: .68rem; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted); font-weight: 600;
+    padding: .7rem .9rem; border-bottom: 1px solid var(--line); background: var(--surface-2); white-space: nowrap; }
+  td { padding: .65rem .9rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  code { font-family: var(--mono); font-size: .85em; background: var(--surface-2);
+    padding: .12rem .35rem; border-radius: 3px; color: var(--ink); white-space: nowrap; }
+  td .n { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--faint); font-size: .82em; }
+  .grp td { background: var(--surface-2); font-family: var(--mono); font-size: .68rem;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  tr.act td:first-child { box-shadow: inset 3px 0 0 var(--gap); }
+  tr.warnrow td:first-child { box-shadow: inset 3px 0 0 var(--differs); }
+  tr.okrow td:first-child { box-shadow: inset 3px 0 0 var(--exact); }
+
+  .bot { border: 1px solid var(--line); background: var(--surface); margin: 1.4rem 0; }
+  .bot > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    padding: .85rem 1.1rem; border-bottom: 1px solid var(--line); background: var(--surface-2); flex-wrap: wrap; }
+  .bot h4 { margin: 0; font-size: 1rem; letter-spacing: -.01em; }
+  .bot h4 span { color: var(--muted); font-weight: 400; font-size: .85rem; margin-left: .5rem; }
+  .bot .body { padding: 1.1rem; }
+  .bot .body > *:first-child { margin-top: 0; }
+  .bot .body > *:last-child { margin-bottom: 0; }
+
+  .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line);
+    border: 1px solid var(--line); margin: 1rem 0 0; }
+  @media (max-width: 40rem) { .diff { grid-template-columns: 1fr; } }
+  .diff > div { background: var(--surface); padding: .8rem .9rem; overflow-x: auto; }
+  .diff .lbl { font-family: var(--mono); font-size: .66rem; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: .45rem; }
+  .diff pre { font-family: var(--mono); font-size: .78rem; margin: 0; white-space: pre-wrap;
+    line-height: 1.55; color: var(--ink); }
+  .diff .them { border-left: 3px solid var(--faint); }
+  .diff .us-ok { border-left: 3px solid var(--exact); }
+  .diff .us-bad { border-left: 3px solid var(--gap); }
+
+  .note { border-left: 3px solid var(--accent); background: var(--surface); padding: .85rem 1rem;
+    margin: 1.4rem 0; font-size: .93rem; color: var(--muted); }
+  .note b { color: var(--ink); }
+  .note.danger { border-left-color: var(--gap); }
+  .note.warn { border-left-color: var(--differs); }
+  .note.good { border-left-color: var(--exact); }
+
+  .ask { border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    background: var(--surface); padding: 1rem 1.1rem; margin-bottom: .9rem; }
+  .ask h4 { margin: 0 0 .35rem; font-size: 1rem; }
+  .ask p { margin: 0; color: var(--muted); font-size: .93rem; }
+  .ask .opts { margin-top: .6rem; font-size: .88rem; color: var(--ink); }
+  .ask .opts b { font-weight: 600; }
+
+  ul { max-width: 48rem; padding-left: 1.15rem; }
+  li { margin-bottom: .45rem; }
+  .q { color: var(--muted); font-style: italic; }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">Kabster's Shit Cunts · plan, not yet done</p>
+    <h1>One bot instead of twenty — and nobody has to learn anything new</h1>
+    <p class="lede">
+      Kabbot takes over what fifteen other bots currently do. The whole point is that it should feel
+      like <em>nothing changed</em>: the same commands you already type, the same replies you already
+      read. Here is every single thing being swapped, and the handful of decisions that need you.
+    </p>
+    <div class="meta">
+      <span>Based on <b>all 6,760 messages</b> in the server</span>
+      <span>Every channel, back to its first post</span>
+      <span><b>Nothing has been changed yet</b></span>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat ok"><span class="n">15</span><span class="k">bots replaced</span></div>
+    <div class="stat ok"><span class="n">15</span><span class="k">commands identical</span></div>
+    <div class="stat"><span class="n">4</span><span class="k">bots we keep</span></div>
+    <div class="stat warn"><span class="n">21</span><span class="k">dead roles revived</span></div>
+    <div class="stat bad"><span class="n">4</span><span class="k">questions for you</span></div>
+  </div>
+
+  <div class="note good">
+    <b>How we checked this.</b> Nothing here is from memory or a feature list. We read every message
+    every bot has ever posted in this server — 707 distinct kinds of reply — and every command anyone
+    typed at them. If it says a command works, it's because we watched someone use it and made ours
+    answer to the exact same thing.
+  </div>
+
+  <!-- ===== 1. QUESTIONS FIRST ===== -->
+  <h2><span class="num">01</span>Four things only you can decide</h2>
+  <p class="sub">Everything else is handled. These four need a call from you before we go ahead.</p>
+
+  <div class="ask">
+    <h4>1 · Ko-fi — do you want to keep it?</h4>
+    <p>Kabbot can hand out supporter roles automatically, but Ko-fi guards the key: there's a
+      <b>token</b> only you can copy out of your Ko-fi settings. No bot can fetch it for you.</p>
+    <p class="opts"><b>Either:</b> grab the token and Kabbot takes over supporter roles ·
+      <b>or:</b> leave Ko-fi Bot in the server and change nothing.</p>
+  </div>
+
+  <div class="ask">
+    <h4>2 · DISBOARD — do you want the server listed?</h4>
+    <p>DISBOARD only does one thing: it lists your server on a public "find a server" site so
+      strangers can bump into it. It's not a feature we can replace — it's a decision about whether
+      you want to be on that kind of site at all.</p>
+    <p class="opts"><b>Either:</b> keep it and keep the listing · <b>or:</b> remove it and the server
+      goes back to invite-only word of mouth.</p>
+  </div>
+
+  <div class="ask">
+    <h4>3 · Blerp — library, or your own clips?</h4>
+    <p>Kabbot has a soundboard: upload clips, get a panel of buttons, they play into voice. What it
+      <b>can't</b> do is Blerp's giant hosted library of sounds you didn't upload.</p>
+    <p class="opts"><b>If people use Blerp for the library,</b> keep it. <b>If it's a handful of
+      clips,</b> we can move those over and drop it.</p>
+  </div>
+
+  <div class="ask">
+    <h4>4 · Seven spare roles — what should they be?</h4>
+    <p>The cleanup leaves <b>7 empty roles</b> going spare. We could make them game roles
+      (Fortnite, Minecraft, whatever this server actually plays) — but you know that and we don't.
+      Tell us the names and we'll wire them to a click-to-get panel.</p>
+  </div>
+
+  <!-- ===== 2. THE BIG ONE ===== -->
+  <h2><span class="num">02</span>The thing that would have annoyed everyone</h2>
+
+  <div class="bot">
+    <header>
+      <h4>CannaFriend <span>the one bot people actually talk to, in #𝟰𝟮𝟬</span></h4>
+      <span class="chip exact">fixed</span>
+    </header>
+    <div class="body">
+      <p>People type <code>/cheers</code>, <code>/puff</code>, <code>/pass</code>, <code>/join</code>.
+        Ours <em>had</em> the same features — but buried, as <code>/cannabis circle puff</code>. Nobody
+        is going to type a three-part command to take a hit. That's now fixed: <b>all seven commands
+        work exactly as they do today.</b></p>
+
+      <div class="scroll">
+        <table>
+          <thead><tr><th>What people type</th><th>How often</th><th>Works with Kabbot?</th></tr></thead>
+          <tbody>
+            <tr class="okrow"><td><code>/cheers</code></td><td class="n">4×</td><td><span class="chip exact">yes</span></td></tr>
+            <tr class="okrow"><td><code>/puff</code></td><td class="n">3×</td><td><span class="chip exact">yes</span></td></tr>
+            <tr class="okrow"><td><code>/dailyjoint</code></td><td class="n">2×</td><td><span class="chip exact">yes</span></td></tr>
+            <tr class="okrow"><td><code>/pass</code></td><td class="n">1×</td><td><span class="chip exact">yes</span></td></tr>
+            <tr class="okrow"><td><code>/join</code></td><td class="n">1×</td><td><span class="chip exact">yes</span></td></tr>
+            <tr class="okrow"><td><code>/smokecircle</code></td><td class="n">1×</td><td><span class="chip exact">yes</span></td></tr>
+            <tr class="okrow"><td><code>/endcircle</code></td><td class="n">1×</td><td><span class="chip exact">yes</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><b>And the replies now read the same, word for word.</b> This is the bit people notice
+        without being able to say why — same event, different wording, and it feels wrong.</p>
+
+      <div class="diff">
+        <div class="them">
+          <div class="lbl">CannaFriend said</div>
+          <pre>Welcome, @karabi, to the smoke circle!
+
+Puff... @karabi takes a hit. You've taken 1 puff.
+You can take one more or use `/pass`.
+
+@duck, the joint has been passed to you! It's your turn.</pre>
+        </div>
+        <div class="us-ok">
+          <div class="lbl">Kabbot now says</div>
+          <pre>Welcome, @karabi, to the smoke circle!
+
+Puff... @karabi takes a hit. You've taken 1 puff.
+You can take one more or use `/pass`.
+
+@duck, the joint has been passed to you! It's your turn.</pre>
+        </div>
+      </div>
+
+      <div class="note good" style="margin-bottom:0">
+        <b>Even the rules match.</b> CannaFriend gives you <b>two puffs, then you must pass</b> — it
+        says so in its own reply. Ours now does exactly that, including refusing a third puff. Copying
+        the words without the rule would have been a lie.
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 3. EVERYTHING ELSE ===== -->
+  <h2><span class="num">03</span>Everything else being replaced</h2>
+  <p class="sub">Fifteen bots. In every case below, the thing you type stays the same.</p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>Bot</th><th>What it does now</th><th>What you'll type after</th><th></th></tr>
+      </thead>
+      <tbody>
+        <tr class="grp"><td colspan="4">Games — identical</td></tr>
+        <tr><td><b>OwO</b></td><td>Hunting &amp; battling</td><td><code>owoh</code>, <code>owob</code> — unchanged</td><td><span class="chip exact">same</span></td></tr>
+        <tr><td><b>Cat Bot</b></td><td>Cats appear, you catch them</td><td>Type <code>cat</code> — unchanged</td><td><span class="chip exact">same</span></td></tr>
+        <tr><td><b>Grow a Tree</b></td><td>The server tree</td><td>The 💧 button — unchanged</td><td><span class="chip exact">same</span></td></tr>
+        <tr><td><b>Counting Bot</b></td><td>The counting channel</td><td>Just post the number — unchanged</td><td><span class="chip exact">same</span></td></tr>
+
+        <tr class="grp"><td colspan="4">Chat toys — identical</td></tr>
+        <tr><td><b>Nightbot</b></td><td><code>!pp</code>, <code>!karabi</code>, and W / L / bruh</td><td>All exactly as they are</td><td><span class="chip exact">same</span></td></tr>
+        <tr><td><b>Sx Bot</b></td><td>Stealing emoji</td><td><code>/emoji steal</code> — unchanged</td><td><span class="chip exact">same</span></td></tr>
+
+        <tr class="grp"><td colspan="4">Announcements — nobody types anything, they just post</td></tr>
+        <tr class="okrow"><td><b>Pingcord</b></td><td>Your go-live pings</td><td>Same <code>@everyone</code> ping in <code>#kabs-live★</code></td><td><span class="chip exact">same</span></td></tr>
+        <tr><td><b>FreeStuff</b></td><td>Free game alerts</td><td>Same — plus GOG and Prime on top</td><td><span class="chip exact">better</span></td></tr>
+        <tr><td><b>Throne</b></td><td>Wishlist &amp; gift alerts</td><td>Same</td><td><span class="chip exact">same</span></td></tr>
+        <tr><td><b>Birthday Bot</b></td><td>Birthday shout-outs</td><td>Same — and it finally uses the <code>BIRTHDAY!!!</code> role</td><td><span class="chip exact">same</span></td></tr>
+        <tr><td><b>Dyno</b></td><td>Mod logs <em>(it already left)</em></td><td>Kabbot has been logging since it went</td><td><span class="chip exact">done</span></td></tr>
+
+        <tr class="grp"><td colspan="4">Slightly different — on purpose</td></tr>
+        <tr class="warnrow"><td><b>Carl-bot</b></td><td>Role panels you react to</td><td>Same roles — you <b>click a button</b> instead of adding a reaction</td><td><span class="chip differs">better</span></td></tr>
+        <tr class="warnrow"><td><b>Friend Time</b></td><td>Converting times</td><td>React 🕰️ — <b>unchanged.</b> Only the one-time setup differs</td><td><span class="chip differs">same daily</span></td></tr>
+        <tr><td><b>FlaviBot</b></td><td>Moderation</td><td>It has never actually posted here. Kabbot covers it</td><td><span class="chip differs">unused</span></td></tr>
+        <tr><td><b>Ko-fi Bot</b></td><td>Supporter roles</td><td>Needs your token — <b>see question 1</b></td><td><span class="chip differs">your call</span></td></tr>
+
+        <tr class="grp"><td colspan="4">Staying — nothing of ours does these</td></tr>
+        <tr><td><b>TacoShack</b></td><td>The taco game</td><td>Stays. We have no taco game</td><td><span class="chip keep">keep</span></td></tr>
+        <tr><td><b>BetterTTV</b></td><td>Twitch emotes</td><td>Stays. It's a Twitch thing, not a Discord thing</td><td><span class="chip keep">keep</span></td></tr>
+        <tr><td><b>TANGIA</b></td><td>Twitch TTS in <code>#𝙩𝙩𝙨</code></td><td>Stays</td><td><span class="chip keep">keep</span></td></tr>
+        <tr class="act"><td><b>DISBOARD</b></td><td>Public server listing</td><td><b>See question 2</b></td><td><span class="chip keep">your call</span></td></tr>
+        <tr class="act"><td><b>Blerp</b></td><td>Soundboard library</td><td><b>See question 3</b></td><td><span class="chip differs">partly</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <b>Two things worth calling out.</b> <b>Your go-live ping</b> is the most important thing this bot
+    does, and you were never actually set up in our system — so that gets wired first, and tested,
+    before Pingcord goes anywhere. And <b>your OwO stuff</b> — gems, weapons, crates, animals, your
+    team and their levels — all carries over. The one thing that can't is your <b>cowoncy balance</b>:
+    OwO never printed it in any channel, so there is genuinely nothing to read it from.
+  </div>
+
+  <!-- ===== 4. ROLES ===== -->
+  <h2><span class="num">04</span>The role clean-up</h2>
+  <p class="sub">The server has 106 roles and a lot of them are ghosts.</p>
+
+  <div class="note danger">
+    <b>There are six roles called "He/Him".</b> Every time Carl-bot's role panels got rebuilt, it made
+    a brand-new set of roles and abandoned the old lot. The pronoun roles exist <b>six times over</b>;
+    the region roles twice. Only one set of each has anybody in it — the rest are corpses cluttering
+    your role list.
+  </div>
+
+  <h3>Nobody loses a role</h3>
+  <p>Every role we touch has <b>zero people in it</b>. We're not deleting them either — we're
+    <b>renaming</b> them into roles you're missing. A rename keeps everything about the role intact;
+    it just stops being a ghost and starts being useful.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Empty ghost role</th><th>Becomes</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>1 spare region</td><td><b>Middle East</b></td><td>You have Europe, Americas, Asia, Oceania — this finishes the set</td></tr>
+        <tr><td>7 spare pronoun/region roles</td><td><b>CST · MST · CET · EET · AWST · ACST · NZST</b></td><td>You already have GMT, UTC, EST, PST and AEST. This fills the gaps — US, Europe, the rest of Australia, and NZ</td></tr>
+        <tr><td>8 spare pronoun roles</td><td><b>Cyan · Teal · Lime · Magenta · Gold · Lavender · Crimson · White</b></td><td>You have 7 colours and <b>no panel to pick them from</b>. Now there are 15 and a panel</td></tr>
+        <tr><td>5 spare pronoun roles</td><td><b>🔔 Stream Pings · Free Games · Giveaways · Events · Question of the Day</b></td><td>Opt-in pings, so people choose what they get pinged for instead of everything hitting <code>@everyone</code></td></tr>
+        <tr class="act"><td>7 left over</td><td><b>Your call</b></td><td>Game roles? Tell us what this server plays — <b>question 4</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>And then you can actually pick them</h3>
+  <p>Here's the thing worth knowing: <b>most of these roles already exist.</b> Colours, timezones,
+    Africa — they're sitting in your role list right now with nobody in them, and the reason is
+    simply that <b>there has never been a panel to pick them from</b>. So on top of rebuilding
+    Carl-bot's four panels, we add three more:</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>New panel</th><th>Options</th><th>How it behaves</th></tr></thead>
+      <tbody>
+        <tr><td><b>Pick a name colour</b></td><td class="n">15</td><td><b>One at a time.</b> Two colour roles fight and the higher one silently wins — which nobody can see or explain. Picking a new colour swaps the old one out</td></tr>
+        <tr><td><b>What timezone are you in?</b></td><td class="n">12</td><td><b>One at a time.</b> The point is that other people can read it off you</td></tr>
+        <tr><td><b>What do you want pinged for?</b></td><td class="n">5</td><td><b>Tick as many as you like.</b> That's the whole idea — you opt in to some and not others</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Carl-bot's original four panels stay exactly as they behave today — same roles, same
+    tick-as-many-as-you-like. We don't get to have opinions about those.</p>
+
+  <h3>Three roles that aren't dead — they're waiting</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Role</th><th>What happens to it</th></tr></thead>
+      <tbody>
+        <tr><td><code>BIRTHDAY!!!</code></td><td>Empty because Birthday Bot never actually granted it. <b>Kabbot already will</b> — it's wired up, along with your 7 saved birthdays, <code>#🎂-birthdays</code>, and the old bot's exact wording. You get the role on the day and it comes off the morning after.</td></tr>
+        <tr><td><code>Ko-fi Supporter &lt;3</code><br><code>MONTHLY Ko-fi Supporter &lt;3</code></td><td>Left alone. They're waiting on the Ko-fi token, not abandoned.</td></tr>
+        <tr><td><code>Africa</code></td><td>Restored. Carl-bot's region panel has a 🦒 button pointing at a role that <b>no longer exists</b> — click it today and nothing happens. The <code>Africa</code> role itself is fine; the button just lost track of it. We point it back.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note danger">
+    <b>Two security things, while we're in here.</b> A role called <code>ALT</code> has
+    <b>near-full admin powers</b> — kick, ban, manage roles, manage channels — and sits on one
+    account. Whatever it was for, it's a spare set of keys to the building. Also:
+    <b>two-factor isn't required for your mods</b>, and the server's verification level is set to
+    <b>Low</b>, which means a brand-new account can post the second it joins. All three are worth
+    thirty seconds of your time.
+  </div>
+
+  <!-- ===== 5. ORDER ===== -->
+  <h2><span class="num">05</span>What happens, in what order</h2>
+  <ul>
+    <li><b>Settings first</b> — counting, logging, your go-live ping, the games. Config only. Nothing
+      is posted, nothing is deleted, nobody notices.</li>
+    <li><b>Then the roles</b> — the renames above. Nothing with a person in it is touched.</li>
+    <li><b>Then the panels</b> — new click-to-get role panels go up. This is the only step that puts
+      messages in the server, so it's a separate, deliberate button. Carl-bot's old panels are left
+      exactly where they are; they just stop working when it leaves, and can be deleted after.</li>
+    <li><b>Only then, the bots leave</b> — one at a time, and only after every single thing that bot
+      has ever posted has been accounted for by something Kabbot does.</li>
+  </ul>
+
+  <p class="q" style="margin-top:2.5rem">Nothing in this document has been done to the server yet.
+    Everything is built and waiting on your say-so.</p>
+
+</div>
+<button id="themeToggle" type="button" aria-label="Switch between light and dark">◐</button>
+<style>
+  #themeToggle {
+    position: fixed; right: 1rem; bottom: 1rem; width: 2.6rem; height: 2.6rem;
+    border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+    border-radius: 50%; cursor: pointer; font-size: 1.1rem; line-height: 1;
+    display: grid; place-items: center; box-shadow: 0 2px 10px rgba(0,0,0,.12);
+  }
+  #themeToggle:hover { color: var(--ink); border-color: var(--accent); }
+  @media print { #themeToggle { display: none; } }
+</style>
+<script>
+  (function () {
+    var root = document.documentElement;
+    var saved = null;
+    try { saved = localStorage.getItem("kabster-theme"); } catch (e) {}
+    if (saved) root.setAttribute("data-theme", saved);
+    document.getElementById("themeToggle").addEventListener("click", function () {
+      var dark = root.getAttribute("data-theme") === "dark" ||
+        (!root.getAttribute("data-theme") &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches);
+      var next = dark ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("kabster-theme", next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>
