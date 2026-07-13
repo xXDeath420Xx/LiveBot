@@ -3197,7 +3197,10 @@ function start(botClient) {
             let twitchRoleSyncConfig = null;
             let twitchRoleSyncMembers = [];
             try {
-                const [configRows] = await pool.execute('SELECT guild_id, broadcaster_twitch_id, broadcaster_twitch_username, vip_role_id, mod_role_id, sub_role_id, remove_vip_on_leave, enabled, last_synced, token_scopes FROM twitch_role_sync_config WHERE guild_id = ?', [guildId]);
+                // sub_role_id is deliberately not selected — Discord's native Twitch integration
+                // grants subscriber roles itself, and nothing here has ever synced them. See the
+                // settings POST handler below.
+                const [configRows] = await pool.execute('SELECT guild_id, broadcaster_twitch_id, broadcaster_twitch_username, vip_role_id, mod_role_id, remove_vip_on_leave, enabled, last_synced, token_scopes FROM twitch_role_sync_config WHERE guild_id = ?', [guildId]);
                 if (configRows.length > 0) twitchRoleSyncConfig = configRows[0];
                 const [memberRows] = await pool.execute('SELECT * FROM twitch_role_sync_members WHERE guild_id = ? ORDER BY twitch_username', [guildId]);
                 twitchRoleSyncMembers = memberRows;
@@ -5420,16 +5423,26 @@ function start(botClient) {
     });
 
     // Twitch Role Sync — Save settings
+    //
+    // We sync VIPs and MODERATORS only. Subscriber roles are NOT ours to do: Discord's own Twitch
+    // integration already grants them natively (Server Settings → Integrations → Twitch), it is more
+    // reliable than anything we could build on top, and it needs no token from us.
+    //
+    // `sub_role_id` still exists on the table from migration 076, but nothing has ever read it — the
+    // scheduler only fetches VIPs and mods, and the broadcaster OAuth flow does not even request
+    // channel:read:subscriptions. It was therefore a field that saved happily and silently did
+    // nothing. It is no longer accepted here, so nobody can configure a ghost. The column is left in
+    // place (0 guilds ever set it) rather than dropped.
     app.post('/manage/:guildId/twitch-role-sync/settings', checkAuth, checkGuildAdmin, async (req, res) => {
         const guildId = req.params.guildId;
-        const { vip_role_id, mod_role_id, sub_role_id, remove_vip_on_leave, enabled } = req.body;
+        const { vip_role_id, mod_role_id, remove_vip_on_leave, enabled } = req.body;
         try {
             await pool.execute(`
                 UPDATE twitch_role_sync_config SET
-                    vip_role_id = ?, mod_role_id = ?, sub_role_id = ?,
+                    vip_role_id = ?, mod_role_id = ?,
                     remove_vip_on_leave = ?, enabled = ?
                 WHERE guild_id = ?
-            `, [vip_role_id || null, mod_role_id || null, sub_role_id || null, remove_vip_on_leave ? 1 : 0, enabled ? 1 : 0, guildId]);
+            `, [vip_role_id || null, mod_role_id || null, remove_vip_on_leave ? 1 : 0, enabled ? 1 : 0, guildId]);
             logger.info(`[TwitchRoleSync] Updated settings for guild ${guildId}`);
             res.redirect(`/manage/${guildId}?page=streamers&success=sync_settings_saved`);
         } catch (err) {
