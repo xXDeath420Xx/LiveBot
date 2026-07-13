@@ -23,10 +23,23 @@ const DAILY_STREAK_CAP = 1000;           // max 1000 bonus
 const DAILY_COOLDOWN_HOURS = 24;
 const STREAK_GRACE_HOURS = 48;           // streak resets if user lapses past this
 
+/**
+ * What a brand-new player starts with.
+ *
+ * Upstream OwO starts you at zero, which means a new player cannot do any of the things cowoncy is
+ * for until they have ground out a few dailies — and in a server taking over from the real OwO, a
+ * zero balance next to someone's carried-over 1.6 million reads as being robbed.
+ *
+ * `INSERT IGNORE` means this applies to NEW rows only. Nobody's existing balance is touched, and
+ * nobody is topped up: quietly minting currency for players who already have some would devalue
+ * what they earned.
+ */
+export const STARTING_COWONCY = 15_000;
+
 async function ensureRow(guildId, userId) {
     await pool.execute(
-        `INSERT IGNORE INTO owo_cowoncy (guild_id, id, money, daily_streak) VALUES (?, ?, 0, 0)`,
-        [guildId, userId]
+        `INSERT IGNORE INTO owo_cowoncy (guild_id, id, money, daily_streak) VALUES (?, ?, ?, 0)`,
+        [guildId, userId, STARTING_COWONCY]
     );
 }
 
