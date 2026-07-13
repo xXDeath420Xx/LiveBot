@@ -1107,6 +1107,28 @@ async function runStep(guild, step) {
   const g = guild.id;
   switch (step.key) {
     case 'counting': {
+      // Re-read the channel RIGHT NOW rather than trusting the number the plan captured.
+      //
+      // This is the difference between correct and destructive. `step.lastNumber` was true the moment
+      // the plan was previewed — but people keep counting, and there can be minutes or hours between
+      // previewing a plan and applying it. Seed a stale number into a `delete`-mode channel and the
+      // bot deletes every genuinely-correct post until the count crawls back up to where the members
+      // already are. So we take the live value; the plan's number is only a fallback for when the
+      // re-read fails (a transient fetch error must never seed 0 and wipe the channel).
+      let seed = Number(step.lastNumber) || 0;
+      const ch = await guild.channels.fetch(step.channelId).catch(() => null);
+      if (ch?.isTextBased?.()) {
+        const live = await readCountingState(ch).catch(() => null);
+        if (live && Number.isInteger(live.lastNumber)) {
+          if (live.lastNumber !== seed) {
+            logger.info(`[Takeover] counting re-read live: plan had ${seed}, channel is at ${live.lastNumber} — seeding live`);
+          }
+          seed = live.lastNumber;
+        } else {
+          logger.warn(`[Takeover] counting live re-read found no number — falling back to the plan's ${seed}`);
+        }
+      }
+
       // Seed at the number the old bot left off on. last_user_id stays NULL so whoever
       // posted last is not locked out of the next number.
       await pool.execute(
@@ -1124,7 +1146,7 @@ async function runStep(guild, step) {
            react_on_valid = VALUES(react_on_valid),
            announce_milestones = VALUES(announce_milestones),
            delete_chatter = VALUES(delete_chatter)`,
-        [g, step.channelId, step.lastNumber, step.lastNumber, step.failMode,
+        [g, step.channelId, seed, seed, step.failMode,
           step.allowSameUser, step.reactOnValid, step.announceMilestones, step.deleteChatter]);
       return;
     }
