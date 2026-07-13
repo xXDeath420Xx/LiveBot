@@ -1103,6 +1103,156 @@ export async function apply(guild, planned, only) {
   return results;
 }
 
+// Which enable step(s) stand up a feature's replacement, run the instant its incumbent is gone.
+// Only features with a clean, tested runStep enable belong here — anything else is a manual
+// follow-up we REPORT rather than pretend to flip, because a half-done irreversible takeover is
+// worse than an honest "you still need to do X".
+const ENABLE_AFTER_REMOVAL = Object.freeze({
+  counting: ['counting'],
+  streams: ['streams'],
+  timezone: ['timezone'],
+  catbot: ['catbot'],
+  owo: ['owo'],
+  birthday: ['birthday'],
+  custom_commands: ['nightbot_commands', 'nightbot_autoresponses'],
+});
+
+/**
+ * Which present bots to remove, and in what order. Pure so it can be tested without a live client —
+ * it holds the two guards that must never regress: our own bots are untouchable, and a keep-listed
+ * bot (no replacement) comes out only where the owner explicitly chose to.
+ *
+ * @param present  detectBots() output: [{ id, name, feature, ... }]
+ * @param ours     Set of bot ids we must never remove (our custom bots + the running bot)
+ * @param exclude  Set of bot ids the caller vetoed after reading the dry run
+ * @param decisions loadDecisions() result — supplies the explicit keep/remove answers
+ */
+export function selectRemovals(present, { ours, exclude = new Set(), decisions }) {
+  const explicitRemove = (b) =>
+    (b.id === '302050872383242240' && decisions?.value?.('disboard') === 'remove') ||  // DISBOARD listing
+    (b.id === '964278831085125722' && decisions?.value?.('blerp') === 'move');          // Blerp → our soundboard
+
+  return present
+    .filter(b => !ours.has(b.id) && !exclude.has(b.id) && (b.feature || explicitRemove(b)))
+    // Pingcord (streams) last; otherwise keep discovery order. A stable sort preserves the rest.
+    .sort((a, b) => (a.feature === 'streams' ? 1 : 0) - (b.feature === 'streams' ? 1 : 0));
+}
+
+/**
+ * The whole takeover, in one call.
+ *
+ * The owner asked to say "go" once instead of clicking five things, so this chains every phase in the
+ * one order that is actually safe: stand our replacements up, then remove each incumbent and enable
+ * its replacement the instant it is gone — never both running at once, which is what would double a
+ * reply or a go-live ping. Pingcord is removed last, because its @everyone announcement is the
+ * loudest thing to break and its replacement (the Karabi420 subscription) is the one we most want to
+ * see live first.
+ *
+ * dryRun is the default and it is load-bearing: it produces the exact ordered list of what WOULD
+ * happen, touching nothing, so the list can be read back before anything irreversible runs. Nothing
+ * here bypasses a safety gate — every removal still goes through retire()/evaluate() live, so a bot
+ * we have not actually replaced is skipped and reported, not removed.
+ *
+ * Two hard guards: it will never remove one of our own custom bots (id in `custom_bots`) or Kabbot
+ * itself, and a keep-listed bot with no replacement is removed ONLY where the owner explicitly chose
+ * to (DISBOARD, Blerp). `exclude` lets the caller veto specific bot ids after reading the dry run.
+ */
+export async function executeAll(guild, { scanId, userId, overrideSoak = false, dryRun = true, exclude = [] } = {}) {
+  const { retire } = await import('./bot-retirement.js');
+  const decisions = await loadDecisions(guild.id);
+  const planned = await plan(guild);
+  const stepFor = (key) => planned.steps.find(s => s.key === key);
+  const excludeSet = new Set(exclude);
+
+  // Never, ever remove one of our own bots.
+  const [ourRows] = await pool.execute('SELECT bot_id FROM custom_bots');
+  const ours = new Set(ourRows.map(r => r.bot_id));
+  if (guild.members.me?.id) ours.add(guild.members.me.id);
+
+  const present = await detectBots(guild);
+  const removable = selectRemovals(present, { ours, exclude: excludeSet, decisions });
+
+  const actions = [];
+
+  // ── Phase A — additive prep that is safe alongside the incumbents ──
+  const emojiStep = stepFor('platform_emoji');
+  if (emojiStep && !emojiStep.done && emojiStep.status !== 'declined' && !emojiStep.blocked) {
+    actions.push({ phase: 'prep', label: 'Upload platform emoji',
+      detail: (emojiStep.missing || []).join(', ') || 'none missing',
+      run: async () => { await runStep(guild, emojiStep); return 'uploaded'; } });
+  }
+
+  // ── Phase B — post our button panels (they coexist with Carl-bot's reactions) ──
+  const panelStep = stepFor('carlbot_panels');
+  if (panelStep && !panelStep.done && !panelStep.blocked && panelStep.status !== 'declined') {
+    actions.push({ phase: 'panels', label: 'Post the role panels',
+      detail: (planned.decisions?.spareRoleNames?.length ? 'self-assign + spare-role panels' : 'self-assign panels'),
+      run: async () => { const r = await postPanels(guild); return `posted ${Array.isArray(r) ? r.length : ''} panel(s)`.trim(); } });
+  }
+
+  // ── Phase C — remove each incumbent, then stand its replacement up ──
+  for (const bot of removable) {
+    const enableKeys = ENABLE_AFTER_REMOVAL[bot.feature] ?? [];
+    const special = bot.feature === 'growtree' ? 'plant Kababi @193ft + forest fire'
+      : bot.feature === 'reaction_roles' ? 'its old reaction panels go inert (ours are already up)'
+        : null;
+    const manual = !enableKeys.length && !special && bot.feature
+      ? ({ kofi: '/kofi setup + /kofi tier', soundboard: 'upload clips to /soundboard',
+          throne: '/throne setup', free_games: 'enable free-games feed', emoji: 'none — /emoji works standalone',
+          moderation: 'our protection suite is already on', lastfm: 'no replacement wired', cannabis: 'no replacement wired' }[bot.feature] ?? 'no auto-enable')
+      : null;
+
+    actions.push({
+      phase: 'retire', label: `Remove ${bot.name}`, botId: bot.id,
+      detail: special ?? (enableKeys.length ? `then enable ${enableKeys.join(' + ')}` : manual ? `follow-up: ${manual}` : ''),
+      run: async () => {
+        const res = await retire(guild, bot.id, { scanId, userId, overrideSoak });
+        if (!res.ok) return `SKIPPED — ${res.error}`;
+        const done = [];
+        for (const key of enableKeys) {
+          const st = stepFor(key);
+          if (!st) continue;
+          if (decisions.forStep(st.key).declined) { done.push(`${st.label ?? key} (owner declined — left off)`); continue; }
+          try { await runStep(guild, st); done.push(st.label ?? key); }
+          catch (err) { done.push(`${st.label ?? key} FAILED: ${err.message}`); }
+        }
+        if (bot.feature === 'growtree' && decisions.value('tree') === 'fresh') {
+          try {
+            const { plantTree } = await import('./growtree/manager.js');
+            const p = await plantTree(guild.id, guild.ownerId, 'Kababi', undefined,
+              { height: 193, lastWateredBy: '756325866660691998' });
+            if (p.ok || p.reason === 'exists') { await postForestFire(guild, null, { name: 'Kababi' }); done.push('planted + burned the tree'); }
+            else done.push(`tree plant FAILED: ${p.reason}`);
+          } catch (err) { done.push(`forest fire FAILED: ${err.message}`); }
+        }
+        return `removed via ${res.method}${res.verdict?.soakWaived ? ', soak waived' : ''}`
+          + (done.length ? ` → ${done.join(', ')}` : '');
+      },
+    });
+  }
+
+  // Things a one-shot honestly cannot flip for you.
+  const followUps = [];
+  if (decisions.kofiToken && removable.some(b => b.feature === 'kofi')) followUps.push('Ko-fi: /kofi setup + /kofi tier (token is supplied)');
+  if (decisions.value('blerp') === 'move') followUps.push('Blerp: upload its clips to /soundboard (the library does not transfer)');
+  if (decisions.spareRoleNames.length) followUps.push(`Spare-role panel roles to create/confirm: ${decisions.spareRoleNames.join(', ')}`);
+
+  const kept = present.filter(b => !removable.includes(b)).map(b => `${b.name}${excludeSet.has(b.id) ? ' (you excluded it)' : b.feature ? '' : ' (nothing to replace)'}`);
+
+  // Run for real, or just describe.
+  const results = [];
+  for (const a of actions) {
+    if (dryRun) { results.push({ phase: a.phase, label: a.label, detail: a.detail, outcome: 'dry-run — not executed' }); continue; }
+    try { results.push({ phase: a.phase, label: a.label, outcome: await a.run() }); }
+    catch (err) {
+      logger.error(`[Takeover] executeAll "${a.label}" failed: ${err.message}`, { stack: err.stack });
+      results.push({ phase: a.phase, label: a.label, outcome: `FAILED: ${err.message}` });
+    }
+  }
+
+  return { dryRun, guild: guild.name, order: results, followUps, kept, removableCount: removable.length };
+}
+
 async function runStep(guild, step) {
   const g = guild.id;
   switch (step.key) {
