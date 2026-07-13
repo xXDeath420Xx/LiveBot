@@ -63,14 +63,18 @@ export const QUESTIONS = Object.freeze([
     key: 'owo',
     section: 'Decisions',
     q: 'Your OwO progress',
-    why: 'From your profile we can read Level 29, 30,491 XP, and your three team animals at level 26. '
-       + 'Your cowoncy balance is the one thing OwO has never printed anywhere, so it cannot be read.',
+    // Cowoncy WAS the one unrecoverable piece — a balance only exists in a channel if somebody runs
+    // `owo balance`, and nobody had. Now they have, so it is recovered: 1,671,101, read from OwO's
+    // own reply and already imported. Do not tell her it is lost; it is not.
+    why: 'All of it carries over. Level 29, your 30,491 XP, your three team animals at level 26 — and '
+       + 'your 1,671,101 cowoncy, which we read from OwO\'s own reply when you checked your balance. '
+       + 'Everyone else starts with 15,000 cowoncy so nobody begins on nothing.',
     options: [
-      { v: 'carry',  label: 'Carry over what we can read', detail: 'Level 29, XP and your team come across' },
-      { v: 'fresh',  label: 'Everyone starts fresh', detail: 'A clean slate for the whole server' },
+      { v: 'carry',  label: 'Carry it all over', detail: 'Level, XP, your team and your 1,671,101 cowoncy' },
+      { v: 'fresh',  label: 'Everyone starts fresh', detail: 'A clean slate for the whole server, you included' },
       { v: 'keep',   label: 'Leave OwO alone', detail: 'The real OwO stays; we do not run it' },
     ],
-    note: 'Roughly how much cowoncy did you have? We can set it if you tell us.',
+    note: 'Anything else about OwO?',
   },
   {
     key: 'spare_roles',

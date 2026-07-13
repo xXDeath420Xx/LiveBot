@@ -709,7 +709,8 @@ export async function plan(guild, opts = {}) {
       // in the guild would make both bots answer `owoh`. Flip it on the moment OwO is removed.
       sequenced: owo?.enabled ? null : 'enable the moment the real OwO bot is removed (both would double-reply otherwise)',
       note: 'parity: hunt/gems/lootboxes/crates/battle/pets built; guild boss now built too (see readiness). ' +
-        'karabi progress is importable from #owo-game — cowoncy is the only unrecoverable piece.',
+        'karabi progress FULLY recovered from #owo-game: level 29, 30,491 XP, team @26, and 1,671,101 cowoncy '
+        + '(read from OwO\'s own `owo balance` reply — nothing is left unrecoverable). New players start at 15,000.',
       replaces: byFeature.get('owo').name,
     });
   }

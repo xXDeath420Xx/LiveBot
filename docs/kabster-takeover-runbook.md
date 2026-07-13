@@ -76,7 +76,7 @@ of it isn't: the bots *said* enough in the channels to rebuild from.
 
 | Bot | Lost |
 |---|---|
-| **OwO** | *mostly recoverable — see below. Only cowoncy is truly lost.* |
+| **OwO** | *fully recoverable — see below. Cowoncy included, once someone runs `owo balance`.* |
 | **Cat Bot** | cats caught, achievements |
 | **Grow a Tree** | *nothing — carried over at 190ft, see below* |
 | **TacoShack** | *(not being retired — no equivalent exists)* |
@@ -152,7 +152,13 @@ node scripts/owo-import-from-channel.mjs 814321716872347648 1509191647320346725 
 ```
 
 REST-GET only, dry-run by default. **Not lost:** gems, lootboxes, crates, weapons, team, pet levels.
-**Lost:** cowoncy (never printed), her pre-channel zoo (OwO's economy is global, so the imported zoo
+**Recovered 2026-07-13:** cowoncy. It was only ever "lost" because a balance appears in a channel
+*only if somebody runs `owo balance`* — and nobody had. Once karabi and death420 did, OwO printed
+them and `scripts/owo-import-cowoncy.mjs` read them straight out of its own reply:
+karabi **1,671,101**, death420 **15,000**. New players now start at **15,000** (migration 160), so
+nobody opens on nothing next to a carried-over millionaire.
+
+**Still lost:** her pre-channel zoo (OwO's economy is global, so the imported zoo
 is a floor), and each weapon's rolled qualities (type and count exact, stats re-roll).
 
 ### Guild bosses DO exist, and we don't have them (gap)
