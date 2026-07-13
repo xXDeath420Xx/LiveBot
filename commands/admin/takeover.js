@@ -164,18 +164,21 @@ export default {
       }
 
       const lines = res.order.map(a => {
-        const bad = /FAILED|SKIPPED/.test(a.outcome);
-        const icon = res.dryRun ? '▫️' : bad ? '⚠️' : '✅';
-        return `${icon} **${a.label}**${a.detail ? ` — ${a.detail}` : ''}${res.dryRun ? '' : `\n   ↳ ${a.outcome}`}`;
+        const icon = res.dryRun
+          ? (a.willRun ? '✅' : '⏭️')
+          : (/SKIPPED|FAILED|ERROR|MANUAL|LEFT IN PLACE/.test(a.outcome) ? '⚠️' : '✅');
+        return `${icon} **${a.label}**\n   ↳ ${a.outcome}`;
       }).join('\n');
 
       const embed = new EmbedBuilder()
         .setColor(res.dryRun ? COLOR : 0x57F287)
-        .setTitle(res.dryRun ? `Dry run — this is what “go” will do (${res.removableCount} removals)` : 'Takeover executed')
+        .setTitle(res.dryRun
+          ? `Dry run — ${res.willRunCount}/${res.order.length} will run (nothing changed)`
+          : `Takeover executed — ${res.willRunCount}/${res.order.length} actions`)
         .setDescription((lines || 'Nothing to do.').slice(0, 3600))
         .setFooter({ text: res.dryRun
           ? `Nothing was changed. Re-run with confirm:${guild.name} to do it for real.`
-          : `${res.removableCount} bot(s) targeted · soak ${waiveSoak ? 'waived' : 'enforced'}` });
+          : `soak ${waiveSoak ? 'waived' : 'enforced'}` });
 
       const extras = [];
       if (res.followUps.length) extras.push(`**Manual follow-ups:**\n${res.followUps.map(f => `• ${f}`).join('\n')}`);
