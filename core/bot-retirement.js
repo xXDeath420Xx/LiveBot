@@ -128,6 +128,11 @@ const PARITY_STEPS = {
     custom_commands: ['nightbot_commands', 'nightbot_autoresponses'],
     birthday: ['birthday'],
     streams: ['streams'],   // the subscription exists; the dry run + owner confirm ARE the by-hand review
+    // The last four, so a takeover can be fully hands-off. Each has a real, checkable replacement:
+    emoji: ['emoji_ready'],       // /emoji is a standing command — nothing to configure, so always ready
+    moderation: ['protection'],   // our anti-nuke/raid/spam/phishing suite is switched on
+    free_games: ['free_games'],   // a free-games subscription posts to the same channel FreeStuff used
+    throne: ['throne'],           // the guild's Throne wishlist owner is configured
 };
 
 /** Does the retirement gate have a machine check for this feature, or does it need a human? */

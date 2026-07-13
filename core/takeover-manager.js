@@ -295,6 +295,14 @@ const GUILD_PROFILES = Object.freeze({
     panels: 'CARLBOT_PANELS',
     platformEmoji: 'PLATFORM_EMOJI',
 
+    // Recovered guild-specifics for the last three auto-removable features. Kept HERE, not in
+    // runStep, for the same reason as every other id in this profile: writing another server's
+    // channel/username into a guild we have no profile for is contamination, so a guild without a
+    // profile simply is not offered these steps.
+    throneUsername: 'karabi420',                     // "karabi420 has added … to their wishlist"
+    freeGamesChannel: '1466968286158651609',         // #discounted-free-games (where FreeStuff posted)
+    freeGamesRole: '1466949549955219701',            // the Free Games ping role
+
     // Panels she asked us NOT to put up.
     //
     // She approved the role clean-up with: "everything but colours!". That is prose, and prose is
@@ -347,6 +355,9 @@ export async function profileFor(guildId) {
       panels,
       skippedPanels: [...skip],
       platformEmoji: TABLES[p.platformEmoji] ?? [],
+      throneUsername: p.throneUsername ?? null,
+      freeGamesChannel: p.freeGamesChannel ?? null,
+      freeGamesRole: p.freeGamesRole ?? null,
     };
   }
 
@@ -374,6 +385,11 @@ export async function profileFor(guildId) {
       mode: pan.mode ?? 'multiple',
       roles: pan.options.filter(o => o.roleId).map(o => [o.emoji, o.roleId, o.label]),
     })).filter(pan => pan.roles.length),
+    // Derivation does not recover these yet — a guild reaching takeover through a derived profile keeps
+    // Throne and free-games as manual steps until they are hand-verified.
+    throneUsername: null,
+    freeGamesChannel: null,
+    freeGamesRole: null,
   };
 }
 
@@ -809,6 +825,61 @@ export async function plan(guild, opts = {}) {
     });
   }
 
+  // ── Emoji (Sx Bot) ──
+  // The replacement is a standing command (/emoji steal|add|remove|list). There is nothing to
+  // configure, so parity is simply "the command exists" — always true for our bot.
+  if (byFeature.has('emoji')) {
+    push('emoji_ready', {
+      label: 'Emoji tools',
+      done: true,
+      note: '/emoji steal|add|remove|list replaces Sx Bot — a standing command, nothing to set up',
+      replaces: byFeature.get('emoji').name,
+    });
+  }
+
+  // ── Moderation / protection (FlaviBot) ──
+  if (byFeature.has('moderation')) {
+    const [[an]] = await pool.execute('SELECT enabled FROM anti_nuke_config WHERE guild_id = ?', [guildId]);
+    const [[ar]] = await pool.execute('SELECT is_enabled FROM anti_raid_config WHERE guild_id = ?', [guildId]);
+    const [[ph]] = await pool.execute('SELECT enabled FROM phishing_config WHERE guild_id = ?', [guildId]);
+    const on = !!an?.enabled && !!ar?.is_enabled && !!ph?.enabled;
+    push('protection', {
+      label: 'Protection suite',
+      done: on,
+      note: `anti-nuke ${an?.enabled ? 'on' : 'off'}, anti-raid ${ar?.is_enabled ? 'on' : 'off'}, ` +
+        `phishing ${ph?.enabled ? 'on' : 'off'} — enabling switches on the ones the owner asked for`,
+      replaces: byFeature.get('moderation').name,
+    });
+  }
+
+  // ── Free games (FreeStuff) — profile-gated: the channel is recovered from THIS guild ──
+  if (byFeature.has('free_games') && profile?.freeGamesChannel) {
+    const [[sub]] = await pool.execute(
+      'SELECT is_enabled FROM free_games_subscriptions WHERE guild_id = ? AND discord_channel_id = ?',
+      [guildId, profile.freeGamesChannel]);
+    const ch = guild.channels.cache.get(profile.freeGamesChannel);
+    push('free_games', {
+      label: 'Free games feed',
+      channelId: profile.freeGamesChannel,
+      channelName: ch?.name ?? profile.freeGamesChannel,
+      done: !!sub?.is_enabled,
+      blocked: ch ? null : 'the recovered free-games channel no longer exists',
+      note: `posts to #${ch?.name ?? profile.freeGamesChannel}, pinging the Free Games role — replaces FreeStuff`,
+      replaces: byFeature.get('free_games').name,
+    });
+  }
+
+  // ── Throne (Throne Integration) — profile-gated: the wishlist owner is recovered from THIS guild ──
+  if (byFeature.has('throne') && profile?.throneUsername) {
+    const [[tc]] = await pool.execute('SELECT featured_username FROM throne_guild_config WHERE guild_id = ?', [guildId]);
+    push('throne', {
+      label: 'Throne wishlist',
+      done: !!tc?.featured_username,
+      note: `features ${profile.throneUsername}'s Throne wishlist — replaces the Throne bot`,
+      replaces: byFeature.get('throne').name,
+    });
+  }
+
   // ── Streams (Pingcord) ──
   // Gated on the profile: the streamer list and its announcement channel are recovered from ONE
   // server's history. Without this gate, applying here wrote that streamer into whatever guild you
@@ -1115,6 +1186,10 @@ const ENABLE_AFTER_REMOVAL = Object.freeze({
   owo: ['owo'],
   birthday: ['birthday'],
   custom_commands: ['nightbot_commands', 'nightbot_autoresponses'],
+  emoji: ['emoji_ready'],
+  moderation: ['protection'],
+  free_games: ['free_games'],
+  throne: ['throne'],
 });
 
 /**
@@ -1327,6 +1402,9 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
 
 async function runStep(guild, step) {
   const g = guild.id;
+  // Fetch once, up front. Several cases below (platform_emoji, nightbot_*, free_games, throne) read
+  // recovered per-guild data from it; without this they threw `profile is not defined`.
+  const profile = await profileFor(g);
   switch (step.key) {
     case 'counting': {
       // Re-read the channel RIGHT NOW rather than trusting the number the plan captured.
@@ -1481,6 +1559,50 @@ async function runStep(guild, step) {
         }
       }
       return;
+
+    case 'emoji_ready':
+      // Nothing to configure — /emoji is a standing command. This step exists only so the parity gate
+      // has something to verify as done.
+      return;
+
+    case 'protection': {
+      // Switch on the suite the owner asked for. Idempotent; anti-nuke is often already on.
+      await pool.execute(
+        `INSERT INTO anti_nuke_config (guild_id, enabled) VALUES (?, 1)
+         ON DUPLICATE KEY UPDATE enabled = 1`, [g]);
+      await pool.execute(
+        `INSERT INTO anti_raid_config (guild_id, is_enabled) VALUES (?, 1)
+         ON DUPLICATE KEY UPDATE is_enabled = 1`, [g]);
+      await pool.execute(
+        `INSERT INTO phishing_config (guild_id, enabled) VALUES (?, 1)
+         ON DUPLICATE KEY UPDATE enabled = 1`, [g]);
+      return;
+    }
+
+    case 'free_games': {
+      if (!profile?.freeGamesChannel) throw new Error('no recovered free-games channel for this server');
+      // Match what FreeStuff did: post free games + weekend + Prime, all stores, to the recovered
+      // channel, pinging the Free Games role. Idempotent on (guild, channel).
+      await pool.execute(
+        `INSERT INTO free_games_subscriptions
+           (guild_id, discord_channel_id, mention_role_id, notify_free, notify_weekend, notify_prime,
+            filter_steam, filter_epic, filter_gog, filter_humble, filter_origin, filter_ubisoft,
+            filter_itch, filter_prime, is_enabled)
+         VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+         ON DUPLICATE KEY UPDATE mention_role_id = VALUES(mention_role_id), is_enabled = 1`,
+        [g, profile.freeGamesChannel, profile.freeGamesRole ?? null]);
+      return;
+    }
+
+    case 'throne': {
+      if (!profile?.throneUsername) throw new Error('no recovered Throne username for this server');
+      await pool.execute(
+        `INSERT INTO throne_guild_config (guild_id, featured_username, set_by)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE featured_username = VALUES(featured_username), set_by = VALUES(set_by)`,
+        [g, profile.throneUsername, '365905620060340224']);
+      return;
+    }
 
     default:
       throw new Error(`step "${step.key}" has no apply action`);
