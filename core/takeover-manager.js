@@ -1321,7 +1321,13 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
     if (!member) return 'already gone';
     const integrations = await guild.fetchIntegrations().catch(() => null);
     const hit = integrations?.find(i => i.application?.id === botId);
-    if (hit) { await hit.delete(ascii(why)); return 'removed via integration'; }
+    // Integration delete is preferred (it also clears slash commands), but it can fail — DISBOARD's
+    // returned "Missing Access". A failure there must fall through to a plain kick, not abort the
+    // removal.
+    if (hit) {
+      try { await hit.delete(ascii(why)); return 'removed via integration'; }
+      catch (err) { logger.warn(`[Takeover] integration delete failed for ${botId} (${err.message}) — kicking`); }
+    }
     await member.kick(ascii(why)); return 'removed via kick';
   };
 
@@ -1648,6 +1654,11 @@ export async function postPanels(guild) {
   if (!profile?.panels.length) {
     throw new Error('we have no recovered role panels for this server — scan it and add a profile first');
   }
+  // Pull the emoji cache fresh first. The platform panel references custom emoji we may have uploaded
+  // moments earlier in the same run, and a REST upload does not populate this process's cache until a
+  // gateway event lands — a lag that once threw "emoji not in this server" on panel 3 and stopped the
+  // whole panel post at two.
+  await guild.emojis.fetch().catch(() => {});
   const channel = guild.channels.cache.get(profile.selfAssignChannel);
   if (!channel) throw new Error('self-assign channel not found');
 

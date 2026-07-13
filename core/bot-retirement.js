@@ -284,9 +284,11 @@ const readSnapshot = (v) => {
 export async function acknowledgeExtraction(guildId, botId, userId) {
     if (!DATA_HOLDERS[botId]) throw new Error('that bot holds no data we track');
     const ack = JSON.stringify({ extraction_ack: { by: userId, at: new Date().toISOString() } });
+    // MariaDB's JSON type is an alias for LONGTEXT and it rejects `CAST(x AS JSON)` — that MySQL-ism
+    // is what crashed every removal. The bound string goes in directly; JSON_MERGE_PATCH still merges.
     await pool.execute(
-        `INSERT INTO guild_retire_state (guild_id, bot_id, snapshot) VALUES (?, ?, CAST(? AS JSON))
-         ON DUPLICATE KEY UPDATE snapshot = JSON_MERGE_PATCH(COALESCE(snapshot, JSON_OBJECT()), CAST(? AS JSON))`,
+        `INSERT INTO guild_retire_state (guild_id, bot_id, snapshot) VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE snapshot = JSON_MERGE_PATCH(COALESCE(snapshot, JSON_OBJECT()), ?)`,
         [guildId, botId, ack, ack]);
 }
 
@@ -307,16 +309,19 @@ export async function retire(guild, botId, { scanId, userId, soakHours = DEFAULT
         return { ok: false, verdict, error: `blocked: ${verdict.blockers.join('; ')}` };
     }
 
-    // A waiver is a thing that happened, not just a thing that was allowed. Record it before the
-    // removal so the audit trail exists even if the kick itself then fails.
+    // A waiver is a thing that happened, so we note it — but the NOTE must never be able to stop the
+    // removal. It did exactly that once: a CAST(x AS JSON) that MariaDB rejects threw here and killed
+    // all 16 kicks before they ran. An audit record is worth nothing next to the action it records, so
+    // this is best-effort and swallowed.
     if (verdict.soakWaived) {
         logger.warn(`[Retire] SOAK WAIVED by ${userId ?? 'unknown'} — removing ${verdict.name} (${botId}) from `
             + `${guild.name} without the ${soakHours}h parity proof. Every other gate passed.`);
         const waiver = JSON.stringify({ soak_waiver: { by: userId ?? null, at: new Date().toISOString(), soakHours } });
         await pool.execute(
-            `INSERT INTO guild_retire_state (guild_id, bot_id, snapshot) VALUES (?, ?, CAST(? AS JSON))
-             ON DUPLICATE KEY UPDATE snapshot = JSON_MERGE_PATCH(COALESCE(snapshot, JSON_OBJECT()), CAST(? AS JSON))`,
-            [guild.id, botId, waiver, waiver]);
+            `INSERT INTO guild_retire_state (guild_id, bot_id, snapshot) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE snapshot = JSON_MERGE_PATCH(COALESCE(snapshot, JSON_OBJECT()), ?)`,
+            [guild.id, botId, waiver, waiver])
+            .catch(err => logger.error(`[Retire] could not record soak waiver (removing anyway): ${err.message}`));
     }
 
     const member = await guild.members.fetch(botId).catch(() => null);
@@ -328,9 +333,11 @@ export async function retire(guild, botId, { scanId, userId, soakHours = DEFAULT
     try {
         const integrations = await guild.fetchIntegrations().catch(() => null);
         const hit = integrations?.find(i => i.application?.id === botId);
+        // Prefer the integration delete (clears slash commands too), but never let its failure abort
+        // the removal — some integrations return "Missing Access" even to an admin. Fall back to a kick.
         if (hit) {
-            await hit.delete(reason);
-            method = 'integration';
+            try { await hit.delete(reason); method = 'integration'; }
+            catch (err) { logger.warn(`[Retire] integration delete failed for ${botId} (${err.message}) — kicking`); await member.kick(reason); }
         } else {
             await member.kick(reason);
         }
