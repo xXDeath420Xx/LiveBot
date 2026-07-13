@@ -1121,6 +1121,57 @@ async function findOldPanels(channel) {
 }
 
 /**
+ * Post the "Link your Twitch" button.
+ *
+ * Linking the BROADCASTER's Twitch tells us who her VIPs and moderators are. It does not tell us
+ * which Discord account belongs to each of them — only they can say that. Without this, she would
+ * connect her account, watch nothing happen, and reasonably conclude the whole thing was broken.
+ *
+ * The member flow at /link/twitch already exists and works (623 links across 65 guilds). What was
+ * missing was any way to REACH it: nothing in Discord has ever pointed at that page.
+ *
+ * A Link-style button needs no interaction handler and no customId — Discord opens the URL itself,
+ * so this keeps working even if the bot is offline. Like postPanels(), this WRITES A MESSAGE to the
+ * guild, so it is never part of apply() and must be asked for by name.
+ */
+export async function postTwitchLinkPanel(guild, channelId) {
+  const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
+
+  const channel = guild.channels.cache.get(channelId);
+  if (!channel?.isTextBased?.()) throw new Error('that channel does not exist, or is not a text channel');
+
+  const miss = missingPerms(channel, guild, ['ViewChannel', 'SendMessages', 'EmbedLinks']);
+  if (miss.length) throw new Error(`missing ${miss.join(', ')} in #${channel.name}`);
+
+  const base = (process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/$/, '');
+
+  const embed = new EmbedBuilder()
+    .setTitle('Link your Twitch')
+    .setColor(0x9146FF)
+    .setDescription(
+      'If you are a **VIP** or a **moderator** on the stream, link your Twitch here and you will get '
+      + 'the matching role in this server automatically.\n\n'
+      + 'It takes about fifteen minutes to show up. You can unlink at any time, and we never get your '
+      + 'password — Twitch handles the login.');
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel('Link my Twitch')
+      .setEmoji('🟣')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${base}/link/twitch`));
+
+  const msg = await channel.send({ embeds: [embed], components: [row] });
+  await msg.pin(ascii('Takeover: members need to be able to find this')).catch(() => {
+    // Pinning is a nicety. A full pin list, or no Manage Messages, must not fail the whole post.
+    logger.warn(`[Takeover] posted the Twitch link panel in #${channel.name} but could not pin it`);
+  });
+
+  logger.info(`[Takeover] posted the Twitch link panel in #${channel.name} (${guild.name})`);
+  return { channelId: channel.id, channelName: channel.name, messageId: msg.id };
+}
+
+/**
  * The incumbent Grow a Tree bot's CURRENT tree, read straight out of its own message.
  *
  * It posts exactly one message per guild and edits that message in place for the tree's whole life,

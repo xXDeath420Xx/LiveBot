@@ -106,6 +106,25 @@ export const QUESTIONS = Object.freeze([
     note: 'Which Discord roles should your Twitch VIPs and mods get? (Existing ones, or we can make them.)',
   },
   {
+    key: 'twitch_member_link',
+    section: 'Roles',
+    // The other half of `twitch_roles`. Linking HER Twitch tells us who the VIPs and mods are; it
+    // does not tell us which Discord account each of them is. Without a way for members to link
+    // themselves, she would connect her account and watch nothing happen — which reads as broken.
+    q: 'Give your members a way to link their own Twitch',
+    why: 'This is the other half of the last question, and it is the half that actually makes it work. '
+       + 'Linking your Twitch tells us who your VIPs and mods are — it does not tell us which Discord '
+       + 'account belongs to each of them. Only they can say that. So we would put a "Link your Twitch" '
+       + 'button in a channel: they click it, approve it on Twitch, and their role appears within about '
+       + 'fifteen minutes. They can also unlink whenever they want.',
+    options: [
+      { v: 'panel',   label: 'Put a button in a channel', detail: 'A pinned post they can always come back to' },
+      { v: 'quiet',   label: 'Set it up, but do not announce it', detail: "It works, but I'll tell people myself" },
+      { v: 'no',      label: 'No thanks',                 detail: 'Nobody links anything' },
+    ],
+    note: 'Which channel should the button live in?',
+  },
+  {
     key: 'roles_ok',
     section: 'Roles',
     q: 'The role clean-up',
