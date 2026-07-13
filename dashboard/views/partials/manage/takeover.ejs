@@ -60,11 +60,31 @@
         <div id="toBots" class="to-list">Run a scan to see results.</div>
     </div>
 
-    <!-- Phase 3: parity -->
+    <!-- What the owner actually wants. Sits BEFORE the parity phase on purpose: her answers should
+         shape what you apply, not be discovered after you have applied it. -->
     <div class="to-card">
         <div class="to-head">
             <div>
-                <h3 class="to-h">3 · Apply feature parity</h3>
+                <h3 class="to-h">3 · What the server owner wants</h3>
+                <p class="form-help">
+                    Her own answers, from the questionnaire she filled in. She has no dashboard
+                    account — the link below is the only way she reaches it, so treat it like a key.
+                </p>
+            </div>
+            <div class="to-actions">
+                <button class="btn btn-secondary" id="toQLink">Get her link</button>
+                <button class="btn btn-secondary" id="toQRevoke" hidden>Revoke link</button>
+            </div>
+        </div>
+        <div id="toQUrl" class="to-muted" hidden></div>
+        <div id="toQ" class="to-list to-muted">Loading…</div>
+    </div>
+
+    <!-- Phase 4: parity -->
+    <div class="to-card">
+        <div class="to-head">
+            <div>
+                <h3 class="to-h">4 · Apply feature parity</h3>
                 <p class="form-help">
                     Writes configuration only. It carries live values across — a counting channel
                     resumes at the exact number the old bot left off on.
@@ -103,6 +123,27 @@
   #takeoverPage .to-bot-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.7rem .9rem; cursor:pointer; }
   #takeoverPage .to-bot-body { border-top:1px solid #2c2f3a; padding:.8rem .9rem; display:none; }
   #takeoverPage .to-bot.open .to-bot-body { display:block; }
+  /* Her questionnaire. An unanswered question must read as loudly as an answered one — the gaps
+     are the whole point of looking at this page. */
+  #takeoverPage .to-qsum { font-size:.86rem; color:#b8bdc9; margin-bottom:.9rem; }
+  #takeoverPage .to-qsec { font-size:.7rem; letter-spacing:.09em; text-transform:uppercase;
+    color:#7a8291; margin:1.1rem 0 .5rem; padding-bottom:.3rem; border-bottom:1px solid #2c2f3a; }
+  #takeoverPage .to-q { padding:.6rem .8rem; margin-bottom:.4rem; border-radius:7px;
+    background:#191b22; border-left:3px solid #3a3f4d; }
+  #takeoverPage .to-q.yes { border-left-color:#57F287; }
+  #takeoverPage .to-q.no  { border-left-color:#3a3f4d; opacity:.72; }
+  #takeoverPage .to-qq { font-weight:600; font-size:.92rem; }
+  #takeoverPage .to-qa { font-size:.9rem; color:#dfe3ea; margin-top:.15rem; }
+  #takeoverPage .to-qa.waiting { color:#7a8291; font-style:italic; }
+  #takeoverPage .to-qnote { margin:.45rem 0 0; padding:.4rem .7rem; border-left:2px solid #5865F2;
+    background:#16181e; border-radius:0 5px 5px 0; font-size:.89rem; color:#c9cfda;
+    white-space:pre-wrap; }
+  #takeoverPage .to-qwhen { font-size:.72rem; color:#6b7280; margin-top:.3rem; }
+  #takeoverPage .to-code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.8rem;
+    background:#16181e; border:1px solid #2c2f3a; border-radius:5px; padding:.35rem .55rem;
+    word-break:break-all; display:inline-block; max-width:100%; }
+  #takeoverPage .to-copy { margin-left:.5rem; padding:.25rem .7rem; font-size:.78rem; }
+
   #takeoverPage .to-tag { font-size:.72rem; padding:.15rem .45rem; border-radius:999px; border:1px solid #2c2f3a; }
   #takeoverPage .to-tag.ok { color:#57F287; border-color:#2f6f4a; }
   #takeoverPage .to-tag.no { color:#ED4245; border-color:#6f2f2f; }
@@ -362,6 +403,54 @@
     $('toApply').disabled = !p.actionable.length;
   }
 
+  /**
+   * Her answers. An unanswered question is shown as loudly as an answered one — the gaps are the
+   * point. A note with no chosen option is still a real answer (on the free-text questions it is the
+   * ONLY possible answer), so it must never render as "not answered".
+   */
+  function renderQuestionnaire(d) {
+    const url = $('toQUrl');
+    if (d.url) {
+      url.hidden = false;
+      url.innerHTML = `<code class="to-code">${esc(d.url)}</code>
+        <button class="btn btn-secondary to-copy" data-copy="${esc(d.url)}">Copy</button>`;
+      $('toQLink').hidden = true;
+      $('toQRevoke').hidden = false;
+    } else {
+      url.hidden = true;
+      $('toQLink').hidden = false;
+      $('toQRevoke').hidden = true;
+    }
+
+    const total = d.questions.length;
+    let html = `<div class="to-qsum">${d.answered} of ${total} answered${
+      d.answered === 0 ? ' — she has not opened it yet, or has not started' : ''}</div>`;
+
+    let section = null;
+    for (const q of d.questions) {
+      if (q.section !== section) { section = q.section; html += `<div class="to-qsec">${esc(section)}</div>`; }
+
+      const a = d.answers[q.key];
+      const note = (a?.note ?? '').trim();
+      const chosen = q.options.find(o => o.v === a?.value);
+      const answered = !!(a?.value || note);
+
+      html += `<div class="to-q ${answered ? 'yes' : 'no'}">`;
+      html += `<div class="to-qq">${esc(q.q)}</div>`;
+      if (!answered) {
+        html += `<div class="to-qa waiting">waiting on her</div>`;
+      } else {
+        if (chosen) html += `<div class="to-qa">${esc(chosen.label)}${chosen.detail ? ` <span class="to-muted">— ${esc(chosen.detail)}</span>` : ''}</div>`;
+        else if (a.value) html += `<div class="to-qa">${esc(a.value)}</div>`;
+        if (note) html += `<blockquote class="to-qnote">${esc(note)}</blockquote>`;
+        if (a.updatedAt) html += `<div class="to-qwhen">${new Date(a.updatedAt).toLocaleString()}</div>`;
+      }
+      html += '</div>';
+    }
+    $('toQ').innerHTML = html;
+    $('toQ').classList.remove('to-muted');
+  }
+
   async function load() {
     try {
       showError('');
@@ -369,10 +458,41 @@
       renderScan(state);
       renderBots(state);
 
+      // Independent of the scan — her answers exist whether or not anyone has scanned anything.
+      req(api('/questionnaire')).then(renderQuestionnaire).catch(() => {
+        $('toQ').textContent = 'Could not load her answers.';
+      });
+
       if (state.scanning && !poll) poll = setInterval(load, 3000);
       if (!state.scanning && poll) { clearInterval(poll); poll = null; }
     } catch (err) { showError(err.message); }
   }
+
+  $('toQLink').addEventListener('click', async () => {
+    try {
+      const r = await req(api('/questionnaire/link'), { method: 'POST', body: JSON.stringify({ label: 'owner' }) });
+      renderQuestionnaire(await req(api('/questionnaire')));
+      void r;
+    } catch (err) { showError(err.message); }
+  });
+
+  $('toQRevoke').addEventListener('click', async () => {
+    if (!confirm('Revoke her link? The page stops working for her immediately. Her answers are kept.')) return;
+    try {
+      await req(api('/questionnaire/revoke'), { method: 'POST' });
+      renderQuestionnaire(await req(api('/questionnaire')));
+    } catch (err) { showError(err.message); }
+  });
+
+  root.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-copy]');
+    if (!btn) return;
+    try {
+      await navigator.clipboard.writeText(btn.dataset.copy);
+      const was = btn.textContent; btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = was; }, 1400);
+    } catch { showError('Could not copy — select the link and copy it manually.'); }
+  });
 
   $('toScan').addEventListener('click', async () => {
     if (!confirm('Read every message in every channel? This posts nothing, but can take a while.')) return;
