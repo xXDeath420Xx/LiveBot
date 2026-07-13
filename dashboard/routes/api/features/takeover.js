@@ -19,6 +19,8 @@ import {
 } from '../../../../core/guild-analyzer.js';
 import { plan, apply, postPanels, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
 import { evaluate, retire, autoAttribute, acknowledgeExtraction, DATA_HOLDERS, DEFAULT_SOAK_HOURS } from '../../../../core/bot-retirement.js';
+import { QUESTIONS } from '../../../../core/takeover-questions.js';
+import { createLink } from '../../../kabster.js';
 
 const router = express.Router({ mergeParams: true });
 
@@ -212,6 +214,77 @@ router.get('/plan', async (req, res) => {
     } catch (err) {
         logger.error(`[API takeover] plan failed: ${err.message}`, { stack: err.stack });
         res.status(500).json({ error: 'Failed to build a plan' });
+    }
+});
+
+/**
+ * What the server owner has told us she wants, on her own questionnaire.
+ *
+ * This is the admin side of /kabster/<token>. She has no dashboard account, so her answers land in
+ * the DB and this is where we read them — next to the plan they are answers to, rather than in a
+ * shell somewhere.
+ *
+ * Minting is idempotent: one live link per guild. We never silently issue a second URL, because two
+ * live capability URLs means one of them is loose and nobody knows which.
+ */
+router.get('/questionnaire', async (req, res) => {
+    try {
+        const guild = resolveGuild(req, res);
+        if (!guild) return;
+
+        const [[link]] = await pool.execute(
+            'SELECT token FROM takeover_questionnaire_links WHERE guild_id = ? AND revoked = 0 LIMIT 1',
+            [guild.id]);
+        const [rows] = await pool.execute(
+            'SELECT item_key, value, note, updated_at FROM takeover_questionnaire WHERE guild_id = ?',
+            [guild.id]);
+
+        const answers = {};
+        for (const r of rows) answers[r.item_key] = { value: r.value, note: r.note, updatedAt: r.updated_at };
+
+        res.json({
+            questions: QUESTIONS,
+            answers,
+            url: link ? `${(process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/$/, '')}/kabster/${link.token}` : null,
+            answered: rows.filter(r => r.value || r.note?.trim()).length,
+        });
+    } catch (err) {
+        logger.error(`[API takeover] questionnaire failed: ${err.message}`, { stack: err.stack });
+        res.status(500).json({ error: 'Failed to load the questionnaire' });
+    }
+});
+
+/** Mint her link. Owner-only: it is a key to a page that speaks for this server. */
+router.post('/questionnaire/link', ownerOnly, async (req, res) => {
+    try {
+        const guild = resolveGuild(req, res);
+        if (!guild) return;
+
+        const [[existing]] = await pool.execute(
+            'SELECT token FROM takeover_questionnaire_links WHERE guild_id = ? AND revoked = 0 LIMIT 1',
+            [guild.id]);
+
+        const token = existing?.token ?? await createLink(guild.id, req.body?.label ?? null);
+        if (!existing) logger.info(`[Takeover] ${req.user?.id} minted a questionnaire link for ${guild.name}`);
+
+        res.json({ url: `${(process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/$/, '')}/kabster/${token}` });
+    } catch (err) {
+        logger.error(`[API takeover] mint link failed: ${err.message}`, { stack: err.stack });
+        res.status(500).json({ error: 'Failed to create a link' });
+    }
+});
+
+/** Revoke the link. Instantly 404s the page — the way you take a key back. */
+router.post('/questionnaire/revoke', ownerOnly, async (req, res) => {
+    try {
+        const guild = resolveGuild(req, res);
+        if (!guild) return;
+        await pool.execute('UPDATE takeover_questionnaire_links SET revoked = 1 WHERE guild_id = ?', [guild.id]);
+        logger.info(`[Takeover] ${req.user?.id} revoked the questionnaire link for ${guild.name}`);
+        res.json({ success: true });
+    } catch (err) {
+        logger.error(`[API takeover] revoke failed: ${err.message}`, { stack: err.stack });
+        res.status(500).json({ error: 'Failed to revoke the link' });
     }
 });
 
