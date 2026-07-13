@@ -130,6 +130,7 @@ const PARITY_STEPS = {
     streams: ['streams'],   // the subscription exists; the dry run + owner confirm ARE the by-hand review
     // The last four, so a takeover can be fully hands-off. Each has a real, checkable replacement:
     emoji: ['emoji_ready'],       // /emoji is a standing command — nothing to configure, so always ready
+    cannabis: ['cannabis_ready'], // /puff /pass /cheers /join /smokecircle /endcircle /dailyjoint — deployed
     moderation: ['protection'],   // our anti-nuke/raid/spam/phishing suite is switched on
     free_games: ['free_games'],   // a free-games subscription posts to the same channel FreeStuff used
     throne: ['throne'],           // the guild's Throne wishlist owner is configured
