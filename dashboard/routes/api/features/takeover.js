@@ -20,7 +20,7 @@ import {
 import { plan, apply, postPanels, KNOWN_BOTS, WEBHOOK_ONLY, resolveBotMeta, needsEvidence, presentBotNames } from '../../../../core/takeover-manager.js';
 import { evaluate, retire, autoAttribute, acknowledgeExtraction, DATA_HOLDERS, DEFAULT_SOAK_HOURS } from '../../../../core/bot-retirement.js';
 import { QUESTIONS } from '../../../../core/takeover-questions.js';
-import { createLink } from '../../../kabster.js';
+import { createLink } from '../../kabster.js';
 
 const router = express.Router({ mergeParams: true });
 
