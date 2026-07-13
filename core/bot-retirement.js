@@ -102,7 +102,20 @@ export async function autoAttribute(scanId, botId, name = null, selfId = null) {
 
 // ── Gates ────────────────────────────────────────────────────────────────────
 
-/** Steps in a takeover plan that must be `done` before a given feature counts as replaced. */
+/**
+ * Steps in a takeover plan that must be `done` before a given feature counts as replaced.
+ *
+ * A feature is auto-verifiable exactly when it appears here with a non-empty list: the gate can prove
+ * we replaced it by checking those plan steps are done. A feature that is absent, or present with an
+ * empty list, has NO machine check — the gate refuses it and a human must confirm parity by hand.
+ * That distinction is deliberate and load-bearing: it is the line between "a bot the tool can retire
+ * on its own" and "a bot only a person should sign off on".
+ *
+ * The four added below (reaction_roles, custom_commands, birthday, streams) each have a step whose
+ * `done` genuinely IS the proof — the panels are posted, the commands exist, the birthday config is
+ * live, the subscription is created. Leaving them out did not make anything safer; it only forced a
+ * manual click for a thing we could already verify.
+ */
 const PARITY_STEPS = {
     counting: ['counting'],
     logging: ['logging'],
@@ -111,8 +124,16 @@ const PARITY_STEPS = {
     growtree: ['growtree'],
     owo: ['owo'],
     kofi: ['kofi'],
-    streams: [], // subscriptions are reviewed by hand; `streams_review` is never auto-done
+    reaction_roles: ['carlbot_panels'],                         // our button panels are posted
+    custom_commands: ['nightbot_commands', 'nightbot_autoresponses'],
+    birthday: ['birthday'],
+    streams: ['streams'],   // the subscription exists; the dry run + owner confirm ARE the by-hand review
 };
+
+/** Does the retirement gate have a machine check for this feature, or does it need a human? */
+export function isAutoVerifiable(feature) {
+    return Array.isArray(PARITY_STEPS[feature]) && PARITY_STEPS[feature].length > 0;
+}
 
 const gate = (id, label, pass, detail) => ({ id, label, pass, detail });
 

@@ -1158,7 +1158,7 @@ export function selectRemovals(present, { ours, exclude = new Set(), decisions }
  * to (DISBOARD, Blerp). `exclude` lets the caller veto specific bot ids after reading the dry run.
  */
 export async function executeAll(guild, { scanId, userId, overrideSoak = false, dryRun = true, exclude = [] } = {}) {
-  const { retire } = await import('./bot-retirement.js');
+  const { retire, evaluate, isAutoVerifiable } = await import('./bot-retirement.js');
   const decisions = await loadDecisions(guild.id);
   const planned = await plan(guild);
   const stepFor = (key) => planned.steps.find(s => s.key === key);
@@ -1172,85 +1172,145 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
   const present = await detectBots(guild);
   const removable = selectRemovals(present, { ours, exclude: excludeSet, decisions });
 
+  // How a feature's replacement is stood up. It runs BEFORE the removal, not after — retire()'s
+  // parity gate checks the replacement is already configured, so enabling afterwards would guarantee
+  // every removal is refused (which is exactly the bug that made a whole run come back "skipped").
+  const enableSpec = (bot) => {
+    const keys = ENABLE_AFTER_REMOVAL[bot.feature] ?? [];
+    if (keys.length) return {
+      label: `enable ${keys.map(k => stepFor(k)?.label ?? k).join(' + ')}`,
+      run: async () => {
+        const d = [];
+        for (const k of keys) {
+          const st = stepFor(k);
+          if (!st) { d.push(`${k}: no plan step`); continue; }
+          if (decisions.forStep(st.key).declined) { d.push(`${st.label ?? k} (owner declined — left off)`); continue; }
+          await runStep(guild, st); d.push(st.label ?? k);
+        }
+        return d;
+      },
+    };
+    if (bot.feature === 'reaction_roles') return {
+      label: 'post the role panels',
+      run: async () => { const r = await postPanels(guild); return [`posted ${Array.isArray(r) ? r.filter(x => x.outcome === 'posted').length : ''} panel(s)`.trim()]; },
+    };
+    if (bot.feature === 'growtree') return {
+      label: 'plant Kababi @193ft',
+      run: async () => {
+        const { plantTree } = await import('./growtree/manager.js');
+        const p = await plantTree(guild.id, guild.ownerId, 'Kababi', undefined, { height: 193, lastWateredBy: '756325866660691998' });
+        if (!(p.ok || p.reason === 'exists')) throw new Error(`tree plant failed: ${p.reason}`);
+        return ['planted Kababi @193ft'];
+      },
+    };
+    if (bot.feature === 'kofi') return {
+      label: 'connect Ko-fi',
+      run: async () => {
+        if (!decisions.kofiToken) return ['Ko-fi token missing — setup skipped'];
+        const { setup } = await import('./kofi-manager.js');
+        await setup(guild.id, { verificationToken: decisions.kofiToken });
+        return ['Ko-fi connected (map tiers with /kofi tier)'];
+      },
+    };
+    return { label: '', run: async () => [] };
+  };
+
+  // Removal that is NOT a gated retire: a bot the owner explicitly chose to drop that has nothing to
+  // replace and no data to lose (DISBOARD's listing). Blerp is deliberately NOT here — it must be
+  // removed by hand AFTER she saves her clips, because a kick destroys the only copy she can reach.
+  const directRemove = async (botId, why) => {
+    const member = await guild.members.fetch(botId).catch(() => null);
+    if (!member) return 'already gone';
+    const integrations = await guild.fetchIntegrations().catch(() => null);
+    const hit = integrations?.find(i => i.application?.id === botId);
+    if (hit) { await hit.delete(ascii(why)); return 'removed via integration'; }
+    await member.kick(ascii(why)); return 'removed via kick';
+  };
+
   const actions = [];
 
-  // ── Phase A — additive prep that is safe alongside the incumbents ──
+  // ── Phase A — additive prep, safe alongside the incumbents and a prerequisite for the panels ──
   const emojiStep = stepFor('platform_emoji');
   if (emojiStep && !emojiStep.done && emojiStep.status !== 'declined' && !emojiStep.blocked) {
-    actions.push({ phase: 'prep', label: 'Upload platform emoji',
-      detail: (emojiStep.missing || []).join(', ') || 'none missing',
+    actions.push({ phase: 'prep', label: 'Upload platform emoji', detail: (emojiStep.missing || []).join(', ') || 'none missing',
+      predict: async () => ({ ok: true, why: 'additive — always safe' }),
       run: async () => { await runStep(guild, emojiStep); return 'uploaded'; } });
   }
 
-  // ── Phase B — post our button panels (they coexist with Carl-bot's reactions) ──
-  const panelStep = stepFor('carlbot_panels');
-  if (panelStep && !panelStep.done && !panelStep.blocked && panelStep.status !== 'declined') {
-    actions.push({ phase: 'panels', label: 'Post the role panels',
-      detail: (planned.decisions?.spareRoleNames?.length ? 'self-assign + spare-role panels' : 'self-assign panels'),
-      run: async () => { const r = await postPanels(guild); return `posted ${Array.isArray(r) ? r.length : ''} panel(s)`.trim(); } });
-  }
-
-  // ── Phase C — remove each incumbent, then stand its replacement up ──
+  // ── Phase B — each incumbent: enable its replacement, then remove it ──
   for (const bot of removable) {
-    const enableKeys = ENABLE_AFTER_REMOVAL[bot.feature] ?? [];
-    const special = bot.feature === 'growtree' ? 'plant Kababi @193ft + forest fire'
-      : bot.feature === 'reaction_roles' ? 'its old reaction panels go inert (ours are already up)'
-        : null;
-    const manual = !enableKeys.length && !special && bot.feature
-      ? ({ kofi: '/kofi setup + /kofi tier', soundboard: 'upload clips to /soundboard',
-          throne: '/throne setup', free_games: 'enable free-games feed', emoji: 'none — /emoji works standalone',
-          moderation: 'our protection suite is already on', lastfm: 'no replacement wired', cannabis: 'no replacement wired' }[bot.feature] ?? 'no auto-enable')
-      : null;
+    const isDisboard = bot.id === '302050872383242240';
+    const isBlerp = bot.id === '964278831085125722';
+    const verifiable = isAutoVerifiable(bot.feature);
+    const spec = enableSpec(bot);
+
+    // Read-only prediction for the dry run. It calls evaluate() — which touches nothing — so the dry
+    // run tells the TRUTH about what will happen, instead of optimistically listing removals that then
+    // skip live (the exact way the first dry run misled).
+    const predict = async () => {
+      if (isBlerp) return { ok: false, why: 'left in place — save its clips first, then remove it yourself (a kick loses them)' };
+      if (isDisboard) return { ok: true, why: 'you asked to drop the listing — direct removal (nothing to replace)' };
+      if (!verifiable) return { ok: false, why: `no automated parity check for "${bot.feature}" — remove on the dashboard after a look` };
+      const pre = await evaluate(guild, bot.id, scanId, { overrideSoak });
+      const blockers = pre.gates.filter(g => g.pass !== true && g.id !== 'parity');
+      if (blockers.length) return { ok: false, why: blockers.map(g => `${g.label}: ${g.detail}`).join('; ') };
+      return { ok: true, why: `${spec.label}, then remove${overrideSoak ? ' (soak waived)' : ''}` };
+    };
 
     actions.push({
-      phase: 'retire', label: `Remove ${bot.name}`, botId: bot.id,
-      detail: special ?? (enableKeys.length ? `then enable ${enableKeys.join(' + ')}` : manual ? `follow-up: ${manual}` : ''),
+      phase: 'retire', label: `Remove ${bot.name}`, botId: bot.id, predict,
       run: async () => {
+        if (isBlerp) return 'LEFT IN PLACE — save its clips, then remove it yourself (a kick loses them)';
+        if (isDisboard) return await directRemove(bot.id, 'Takeover: owner dropped the DISBOARD listing');
+        if (!verifiable) return `MANUAL — no automated parity check for "${bot.feature}"; verify and remove on the dashboard`;
+
+        // Gate the removal on everything EXCEPT parity first, without side effects. If a real gate
+        // (evidence, hierarchy, data) is red, skip WITHOUT enabling — otherwise we would leave a
+        // replacement running next to a bot we could not remove, doubling its output.
+        const pre = await evaluate(guild, bot.id, scanId, { overrideSoak });
+        const blockers = pre.gates.filter(g => g.pass !== true && g.id !== 'parity');
+        if (blockers.length) return `SKIPPED (nothing enabled) — ${blockers.map(g => `${g.label}: ${g.detail}`).join('; ')}`;
+
+        let done = [];
+        try { done = await spec.run(); } catch (err) { return `SKIPPED — could not enable replacement: ${err.message}`; }
+
         const res = await retire(guild, bot.id, { scanId, userId, overrideSoak });
-        if (!res.ok) return `SKIPPED — ${res.error}`;
-        const done = [];
-        for (const key of enableKeys) {
-          const st = stepFor(key);
-          if (!st) continue;
-          if (decisions.forStep(st.key).declined) { done.push(`${st.label ?? key} (owner declined — left off)`); continue; }
-          try { await runStep(guild, st); done.push(st.label ?? key); }
-          catch (err) { done.push(`${st.label ?? key} FAILED: ${err.message}`); }
-        }
+        if (!res.ok) return `enabled ${done.join(', ') || '—'}; removal SKIPPED — ${res.error}`;
+
         if (bot.feature === 'growtree' && decisions.value('tree') === 'fresh') {
-          try {
-            const { plantTree } = await import('./growtree/manager.js');
-            const p = await plantTree(guild.id, guild.ownerId, 'Kababi', undefined,
-              { height: 193, lastWateredBy: '756325866660691998' });
-            if (p.ok || p.reason === 'exists') { await postForestFire(guild, null, { name: 'Kababi' }); done.push('planted + burned the tree'); }
-            else done.push(`tree plant FAILED: ${p.reason}`);
-          } catch (err) { done.push(`forest fire FAILED: ${err.message}`); }
+          try { await postForestFire(guild, null, { name: 'Kababi' }); done.push('forest fire'); }
+          catch (err) { done.push(`forest fire FAILED: ${err.message}`); }
         }
-        return `removed via ${res.method}${res.verdict?.soakWaived ? ', soak waived' : ''}`
-          + (done.length ? ` → ${done.join(', ')}` : '');
+        return `removed via ${res.method}${res.verdict?.soakWaived ? ', soak waived' : ''}${done.length ? ` → ${done.join(', ')}` : ''}`;
       },
     });
   }
 
-  // Things a one-shot honestly cannot flip for you.
+  // Genuine follow-ups a one-shot cannot honestly do for you.
   const followUps = [];
-  if (decisions.kofiToken && removable.some(b => b.feature === 'kofi')) followUps.push('Ko-fi: /kofi setup + /kofi tier (token is supplied)');
-  if (decisions.value('blerp') === 'move') followUps.push('Blerp: upload its clips to /soundboard (the library does not transfer)');
-  if (decisions.spareRoleNames.length) followUps.push(`Spare-role panel roles to create/confirm: ${decisions.spareRoleNames.join(', ')}`);
+  if (decisions.value('blerp') === 'move') followUps.push('Blerp: upload its clips to /soundboard, then remove Blerp (the hosted library does not transfer)');
+  if (decisions.spareRoleNames.length) followUps.push(`Spare-role panel: create/confirm ${decisions.spareRoleNames.join(', ')} and post a picker`);
 
   const kept = present.filter(b => !removable.includes(b)).map(b => `${b.name}${excludeSet.has(b.id) ? ' (you excluded it)' : b.feature ? '' : ' (nothing to replace)'}`);
 
-  // Run for real, or just describe.
+  // Execute, or predict. Both walk the same action list in the same order.
   const results = [];
   for (const a of actions) {
-    if (dryRun) { results.push({ phase: a.phase, label: a.label, detail: a.detail, outcome: 'dry-run — not executed' }); continue; }
-    try { results.push({ phase: a.phase, label: a.label, outcome: await a.run() }); }
-    catch (err) {
-      logger.error(`[Takeover] executeAll "${a.label}" failed: ${err.message}`, { stack: err.stack });
-      results.push({ phase: a.phase, label: a.label, outcome: `FAILED: ${err.message}` });
+    try {
+      if (dryRun) {
+        const p = await a.predict();
+        results.push({ phase: a.phase, label: a.label, willRun: p.ok, outcome: p.ok ? `WILL RUN — ${p.why}` : `WILL SKIP — ${p.why}` });
+      } else {
+        results.push({ phase: a.phase, label: a.label, outcome: await a.run() });
+      }
+    } catch (err) {
+      logger.error(`[Takeover] executeAll "${a.label}" ${dryRun ? 'predict' : 'run'} failed: ${err.message}`, { stack: err.stack });
+      results.push({ phase: a.phase, label: a.label, outcome: `${dryRun ? 'PREDICT' : 'RUN'} ERROR: ${err.message}` });
     }
   }
 
-  return { dryRun, guild: guild.name, order: results, followUps, kept, removableCount: removable.length };
+  const willRunCount = dryRun ? results.filter(r => r.willRun).length : results.filter(r => /removed via|uploaded|posted/.test(r.outcome)).length;
+  return { dryRun, guild: guild.name, order: results, followUps, kept, removableCount: removable.length, willRunCount };
 }
 
 async function runStep(guild, step) {
