@@ -9,7 +9,8 @@ import {
   SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags,
   ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } from 'discord.js';
-import { plan, apply, detectBots } from '../../core/takeover-manager.js';
+import { plan, apply, detectBots, executeAll } from '../../core/takeover-manager.js';
+import { getLatestScan } from '../../core/guild-analyzer.js';
 import { isSuperAdmin } from '../../utils/constants.js';
 import logger from '../../utils/logger.js';
 
@@ -96,7 +97,15 @@ export default {
       .addBooleanOption(o => o.setName('react-on-valid').setDescription('Counting: react ✅ on every valid count'))
       .addBooleanOption(o => o.setName('announce-milestones').setDescription('Counting: announce milestones'))
       .addBooleanOption(o => o.setName('delete-chatter').setDescription('Counting: delete non-numeric messages too')))
-    .addSubcommand(s => s.setName('bots').setDescription('List the known bots present in this server')),
+    .addSubcommand(s => s.setName('bots').setDescription('List the known bots present in this server'))
+    .addSubcommand(s => s.setName('execute')
+      .setDescription('Run the ENTIRE takeover in one go: config, panels, tree fire, and remove every incumbent.')
+      .addStringOption(o => o.setName('confirm')
+        .setDescription('Type the server name EXACTLY to run for real. Leave blank for a dry run (changes nothing).'))
+      .addBooleanOption(o => o.setName('waive-soak')
+        .setDescription('Skip the 24h parity soak on removals — the wait only, never the parity checks (default: yes)'))
+      .addStringOption(o => o.setName('exclude')
+        .setDescription('Comma-separated bot IDs to leave alone (after reading a dry run)'))),
 
   async execute(interaction) {
     if (!interaction.guild) return interaction.reply({ content: 'Servers only.', ...EPHEMERAL });
@@ -115,6 +124,61 @@ export default {
         .setDescription(bots.map(b => b.feature
           ? `✅ **${b.name}** — we cover this (\`${b.feature}\`)`
           : `⚠️ **${b.name}** — ${b.why}`).join('\n').slice(0, 4000));
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (sub === 'execute') {
+      await interaction.deferReply(EPHEMERAL);
+      const guild = interaction.guild;
+
+      // A dry run is the default. Going live needs the server name typed EXACTLY — the same barrier
+      // the dashboard uses — so "go" can never be an accident or a fat-fingered autocomplete.
+      const confirm = interaction.options.getString('confirm');
+      const live = !!confirm && confirm === guild.name;
+      if (confirm && !live) {
+        return interaction.editReply(`That did not match. To run for real, type the server name exactly: **${guild.name}**. Nothing ran.`);
+      }
+      const waiveSoak = interaction.options.getBoolean('waive-soak') ?? true;
+      const exclude = (interaction.options.getString('exclude') ?? '').split(',').map(s => s.trim()).filter(Boolean);
+
+      // Removals re-gate live and that needs a completed scan. Only required for a real run.
+      let scan = null;
+      if (live) {
+        scan = await getLatestScan(guild.id).catch(() => null);
+        if (scan?.status !== 'complete') {
+          return interaction.editReply('A completed scan is required before a real run. Run the dashboard scan (`?page=takeover` → Scan) to completion, then try again.');
+        }
+      }
+
+      let res;
+      try {
+        res = await executeAll(guild, {
+          scanId: scan?.id, userId: interaction.user.id, overrideSoak: waiveSoak, dryRun: !live, exclude,
+        });
+      } catch (err) {
+        logger.error(`[Takeover] executeAll failed: ${err.message}`, { stack: err.stack });
+        return interaction.editReply(`Takeover ${live ? 'run' : 'dry run'} failed: ${err.message}`);
+      }
+
+      const lines = res.order.map(a => {
+        const bad = /FAILED|SKIPPED/.test(a.outcome);
+        const icon = res.dryRun ? '▫️' : bad ? '⚠️' : '✅';
+        return `${icon} **${a.label}**${a.detail ? ` — ${a.detail}` : ''}${res.dryRun ? '' : `\n   ↳ ${a.outcome}`}`;
+      }).join('\n');
+
+      const embed = new EmbedBuilder()
+        .setColor(res.dryRun ? COLOR : 0x57F287)
+        .setTitle(res.dryRun ? `Dry run — this is what “go” will do (${res.removableCount} removals)` : 'Takeover executed')
+        .setDescription((lines || 'Nothing to do.').slice(0, 3600))
+        .setFooter({ text: res.dryRun
+          ? `Nothing was changed. Re-run with confirm:${guild.name} to do it for real.`
+          : `${res.removableCount} bot(s) targeted · soak ${waiveSoak ? 'waived' : 'enforced'}` });
+
+      const extras = [];
+      if (res.followUps.length) extras.push(`**Manual follow-ups:**\n${res.followUps.map(f => `• ${f}`).join('\n')}`);
+      if (res.kept.length) extras.push(`**Left alone:** ${res.kept.join(', ')}`);
+      if (extras.length) embed.addFields({ name: '​', value: extras.join('\n\n').slice(0, 1024) });
+
       return interaction.editReply({ embeds: [embed] });
     }
 
