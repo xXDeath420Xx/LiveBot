@@ -214,12 +214,16 @@ async function handleDailyJoint(interaction, guildId, userId) {
     const now = new Date();
     const nowMySql = now.toISOString().slice(0, 19).replace('T', ' ');
 
+    // Use a single connection so the transaction actually holds across statements.
+    // pool.execute() grabs a fresh connection per call, which makes
+    // START TRANSACTION + FOR UPDATE + ROLLBACK a no-op.
+    const conn = await pool.getConnection();
     try {
         await interaction.deferReply();
 
-        await pool.execute('START TRANSACTION');
+        await conn.beginTransaction();
 
-        const [rows] = await pool.execute(
+        const [rows] = await conn.execute(
             `SELECT last_claimed, streak, total_claims FROM daily_joints WHERE guild_id = ? AND user_id = ? FOR UPDATE`,
             [guildId, userId]
         );
@@ -232,7 +236,7 @@ async function handleDailyJoint(interaction, guildId, userId) {
             const hoursSinceLastClaim = msSinceLastClaim / (1000 * 60 * 60);
 
             if (hoursSinceLastClaim < 24) {
-                await pool.execute('ROLLBACK');
+                await conn.rollback();
 
                 const nextClaimTime = new Date(lastClaimedDate.getTime() + (24 * 60 * 60 * 1000));
                 const remainingMs = nextClaimTime.getTime() - now.getTime();
@@ -264,7 +268,7 @@ async function handleDailyJoint(interaction, guildId, userId) {
             }
         }
 
-        const [strainRows] = await pool.execute(
+        const [strainRows] = await conn.execute(
             `SELECT id, strain_name, description FROM strains ORDER BY RAND() LIMIT 1`
         );
         const strainResult = strainRows[0];
@@ -272,7 +276,7 @@ async function handleDailyJoint(interaction, guildId, userId) {
         const strainName = strainResult?.strain_name || 'Mystery Strain';
         const strainDescription = strainResult?.description || 'A unique experience awaits.';
 
-        await pool.execute(
+        await conn.execute(
             `INSERT INTO daily_joints (guild_id, user_id, last_claimed, streak, total_claims, strain_id)
              VALUES (?, ?, ?, ?, 1, ?)
              ON DUPLICATE KEY UPDATE last_claimed = ?, streak = ?, total_claims = total_claims + 1, strain_id = ?`,
@@ -280,13 +284,13 @@ async function handleDailyJoint(interaction, guildId, userId) {
         );
 
         try {
-            await pool.execute(
+            await conn.execute(
                 `INSERT INTO joint_claims (guild_id, user_id, strain_name, claimed_at) VALUES (?, ?, ?, ?)`,
                 [guildId, userId, strainName, nowMySql]
             );
         } catch (claimLogErr) {
             if (claimLogErr.code === 'ER_BAD_FIELD_ERROR') {
-                await pool.execute(
+                await conn.execute(
                     `INSERT INTO joint_claims (guild_id, user_id, strain_name) VALUES (?, ?, ?)`,
                     [guildId, userId, strainName]
                 );
@@ -295,7 +299,7 @@ async function handleDailyJoint(interaction, guildId, userId) {
             }
         }
 
-        await pool.execute('COMMIT');
+        await conn.commit();
 
         const newTotalClaims = existingRecord ? (existingRecord.total_claims || 0) + 1 : 1;
 
@@ -315,8 +319,17 @@ async function handleDailyJoint(interaction, guildId, userId) {
         return interaction.editReply({ embeds: [embed] });
     } catch (err) {
         console.error('Error in dailyjoint:', err);
-        await pool.execute('ROLLBACK');
-        throw err;
+        try { await conn.rollback(); } catch { /* already rolled back */ }
+        // Reply so Discord doesn't show "application didn't respond"
+        try {
+            if (interaction.deferred) {
+                await interaction.editReply({ content: '❌ Daily joint failed: ' + err.message });
+            } else {
+                await interaction.reply({ content: '❌ Daily joint failed: ' + err.message, flags: 64 });
+            }
+        } catch { /* nothing */ }
+    } finally {
+        conn.release();
     }
 }
 
@@ -439,7 +452,7 @@ async function handleSmokeCircle(interaction, guildId) {
         );
 
         if (existingCircle && existingCircle.length > 0) {
-            return interaction.reply({ content: "A smoke circle is already active! Use `/cannabis circle join` to join.", ephemeral: true });
+            return interaction.reply({ content: "A smoke circle is already active! Use `/join` to join.", ephemeral: true });
         }
 
         await pool.execute(
@@ -448,7 +461,10 @@ async function handleSmokeCircle(interaction, guildId) {
             [guildId, interaction.channel.id, interaction.user.id]
         );
 
-        await interaction.reply("\ud83c\udf3f A new smoke circle has started! Type `/cannabis circle join` to join!");
+        // Wording is CannaFriend's, verbatim. See the note on MAX_PUFFS_PER_TURN below: the whole
+        // point of this module is that a member who typed `/smokecircle` at the old bot gets back
+        // exactly what they are used to reading.
+        await interaction.reply("A new smoke circle has started! Type `/join` to join the circle.");
     } catch (err) {
         console.error('Error starting smoke circle:', err);
         throw err;
@@ -463,7 +479,7 @@ async function handleJoinCircle(interaction, guildId, userId) {
         );
 
         if (!circleRows || circleRows.length === 0) {
-            return interaction.reply({ content: "No active smoke circle! Start one with `/cannabis circle start`", ephemeral: true });
+            return interaction.reply({ content: "No active smoke circle! Start one with `/smokecircle`", ephemeral: true });
         }
 
         const circleId = circleRows[0].id;
@@ -482,22 +498,24 @@ async function handleJoinCircle(interaction, guildId, userId) {
             [circleId, userId]
         );
 
-        const [participantCount] = await pool.execute(
-            `SELECT COUNT(*) as count FROM smoke_circle_participants WHERE circle_id = ?`,
-            [circleId]
-        );
-
-        await interaction.reply(`<@${userId}> has joined the smoke circle! \ud83c\udf3f (${participantCount[0].count} members)`);
+        await interaction.reply(`Welcome, <@${userId}>, to the smoke circle!`);
     } catch (err) {
         console.error('Error joining circle:', err);
         throw err;
     }
 }
 
+/**
+ * You get TWO puffs, then you must pass. That is CannaFriend's rule, and it is stated out loud in
+ * its own reply ("You can take one more" \u2192 "Now you must use `/pass`"), so copying the wording
+ * without the rule would promise a second puff we never actually gated on.
+ */
+const MAX_PUFFS_PER_TURN = 2;
+
 async function handlePuff(interaction, guildId, userId) {
     try {
         const [circleRows] = await pool.execute(
-            `SELECT id, current_turn, total_puffs FROM smoke_circles WHERE guild_id = ? AND status = 'active'`,
+            `SELECT id, current_turn, total_puffs, turn_puffs FROM smoke_circles WHERE guild_id = ? AND status = 'active'`,
             [guildId]
         );
 
@@ -522,19 +540,29 @@ async function handlePuff(interaction, guildId, userId) {
             return interaction.reply({ content: `It's not your turn! Wait for <@${currentUser}>`, ephemeral: true });
         }
 
+        const taken = Number(circle.turn_puffs) || 0;
+        if (taken >= MAX_PUFFS_PER_TURN) {
+            return interaction.reply({ content: "You've had your two. Now you must use `/pass`.", ephemeral: true });
+        }
+
+        const nowTaken = taken + 1;
+
         await pool.execute(
             `UPDATE smoke_circle_participants SET puffs_taken = puffs_taken + 1, high_meter = high_meter + 10
              WHERE circle_id = ? AND user_id = ?`,
             [circle.id, userId]
         );
-
-        const newTotalPuffs = circle.total_puffs + 1;
         await pool.execute(
-            `UPDATE smoke_circles SET total_puffs = ? WHERE id = ?`,
-            [newTotalPuffs, circle.id]
+            `UPDATE smoke_circles SET total_puffs = total_puffs + 1, turn_puffs = ? WHERE id = ?`,
+            [nowTaken, circle.id]
         );
 
-        await interaction.reply(`\ud83d\udca8 <@${userId}> takes a puff! (Total puffs: ${newTotalPuffs})`);
+        // CannaFriend's exact two lines, including the singular/plural switch on the count.
+        const noun = nowTaken === 1 ? 'puff' : 'puffs';
+        const tail = nowTaken < MAX_PUFFS_PER_TURN
+            ? 'You can take one more or use `/pass`.'
+            : 'Now you must use `/pass`.';
+        await interaction.reply(`Puff... <@${userId}> takes a hit. You've taken ${nowTaken} ${noun}. ${tail}`);
     } catch (err) {
         console.error('Error taking puff:', err);
         throw err;
@@ -571,12 +599,14 @@ async function handlePass(interaction, guildId, userId) {
 
         const nextTurn = (circle.current_turn + 1) % participants.length;
 
+        // turn_puffs resets: the next person gets their own two.
         await pool.execute(
-            `UPDATE smoke_circles SET current_turn = ? WHERE id = ?`,
+            `UPDATE smoke_circles SET current_turn = ?, turn_puffs = 0 WHERE id = ?`,
             [nextTurn, circle.id]
         );
 
-        await interaction.reply(`\ud83d\udc49 <@${userId}> passes to <@${participants[nextTurn].user_id}>!`);
+        // CannaFriend addresses the person RECEIVING the joint, not the one passing it.
+        await interaction.reply(`<@${participants[nextTurn].user_id}>, the joint has been passed to you! It's your turn.`);
     } catch (err) {
         console.error('Error passing:', err);
         throw err;
@@ -590,7 +620,7 @@ async function handleEndCircle(interaction, guildId) {
             [guildId]
         );
 
-        await interaction.reply("\ud83c\udf3f The smoke circle has ended! Thanks for participating!");
+        await interaction.reply("The smoke circle has ended. Thanks for participating! \ud83d\udc4b");
     } catch (err) {
         console.error('Error ending circle:', err);
         throw err;
@@ -864,3 +894,24 @@ async function handleTriviaTop(interaction, guildId) {
         throw err;
     }
 }
+
+/*
+ * ── CannaFriend command-structure parity ─────────────────────────────────────
+ *
+ * In Kabster's Shit Cunts, members type `/cheers`, `/puff`, `/pass`, `/join`, `/smokecircle`,
+ * `/endcircle` and `/dailyjoint` — CannaFriend registers all seven at TOP LEVEL. Ours live three
+ * levels down (`/cannabis circle puff`). Same feature, different muscle memory, and nobody is going
+ * to learn a three-level command to take a hit.
+ *
+ * These exports let the thin top-level alias commands in commands/community/cannafriend-*.js call
+ * the very same handlers, so there is one implementation and no drift between the two entry points.
+ */
+export {
+    handleSmokeCircle,
+    handleJoinCircle,
+    handlePuff,
+    handlePass,
+    handleEndCircle,
+    handleCheers,
+    handleDailyJoint,
+};
