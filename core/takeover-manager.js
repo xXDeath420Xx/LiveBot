@@ -837,6 +837,21 @@ export async function plan(guild, opts = {}) {
     });
   }
 
+  // ── Cannabis (CannaFriend) ──
+  // A full parity replacement (commit 572ec89): seven top-level commands — /puff /pass /cheers /join
+  // /smokecircle /endcircle /dailyjoint — word-for-word matched, plus /cannabis and /grow. Like the
+  // emoji tools these are STANDING commands deployed on the bot, so there is nothing per-guild to
+  // configure; parity is that they exist, which for a custom bot they do from startup.
+  if (byFeature.has('cannabis')) {
+    push('cannabis_ready', {
+      label: 'Cannabis commands',
+      done: true,
+      note: '/puff /pass /cheers /join /smokecircle /endcircle /dailyjoint (+ /cannabis, /grow) replace ' +
+        'CannaFriend word-for-word — standing commands, already deployed',
+      replaces: byFeature.get('cannabis').name,
+    });
+  }
+
   // ── Moderation / protection (FlaviBot) ──
   if (byFeature.has('moderation')) {
     const [[an]] = await pool.execute('SELECT enabled FROM anti_nuke_config WHERE guild_id = ?', [guildId]);
@@ -1187,6 +1202,7 @@ const ENABLE_AFTER_REMOVAL = Object.freeze({
   birthday: ['birthday'],
   custom_commands: ['nightbot_commands', 'nightbot_autoresponses'],
   emoji: ['emoji_ready'],
+  cannabis: ['cannabis_ready'],
   moderation: ['protection'],
   free_games: ['free_games'],
   throne: ['throne'],
@@ -1561,8 +1577,9 @@ async function runStep(guild, step) {
       return;
 
     case 'emoji_ready':
-      // Nothing to configure — /emoji is a standing command. This step exists only so the parity gate
-      // has something to verify as done.
+    case 'cannabis_ready':
+      // Nothing to configure — these are standing commands (/emoji, and the seven cannabis aliases).
+      // The step exists only so the parity gate has something to verify as done.
       return;
 
     case 'protection': {
