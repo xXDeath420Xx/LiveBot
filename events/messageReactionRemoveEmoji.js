@@ -1,8 +1,10 @@
-import { Events, EmbedBuilder } from 'discord.js';
+import { Events } from 'discord.js';
 import logger from '../utils/logger.js';
-import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
+import { saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 
+// Channel-embed audit log removed 2026-10-18 — reaction events were spamming log
+// channels. Internal DB row is kept so dashboard forensics still see mod-wipes.
 export default {
     name: Events.MessageReactionRemoveEmoji,
     async execute(reaction) {
@@ -20,19 +22,6 @@ export default {
                 emoji: reaction.emoji.name,
                 category: 'reactions'
             });
-
-            const embed = new EmbedBuilder()
-                .setColor(0xED4245)
-                .setTitle('💨 Reaction Emoji Removed')
-                .setDescription(`A reaction emoji was removed from a message`)
-                .addFields(
-                    { name: 'Emoji', value: emoji, inline: true },
-                    { name: 'Channel', value: `${reaction.message.channel}`, inline: true },
-                    { name: 'Message Link', value: `[Jump](${reaction.message.url})`, inline: true }
-                )
-                .setTimestamp();
-
-            await sendLogEmbed(reaction.message.guild, 'reactionRemoveEmoji', embed);
 
             await saveAuditLog(reaction.message.guild.id, 'REACTION_REMOVE_EMOJI', null, reaction.message.id, null, reaction.message.channel.id, 'Reaction emoji removed', null, reaction.emoji.name, null, {});
         } catch (error) {
