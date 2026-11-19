@@ -22,8 +22,8 @@ jobs:
     env:
       GITLEAKS_VERSION: 8.30.1
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       # Runs on the checkout only (no node_modules), so it sees exactly what is in git.
@@ -48,8 +48,8 @@ jobs:
       PUPPETEER_SKIP_DOWNLOAD: '1'
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -87,8 +87,8 @@ jobs:
       run:
         working-directory: desktop/studio
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -99,5 +99,16 @@ jobs:
         run: node --experimental-vm-modules --no-warnings ../../scripts/publish/syntax-check.mjs .
       # Includes two tests that launch the Electron app; windows-latest runners have a desktop
       # session, so they run. The live-site check is skipped unless CF_STUDIO_LIVE_URLS=1.
+      # Failing test names and their first error line are also written as annotations, which the
+      # public API exposes without a login (job logs need one).
       - name: Unit tests
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee "$RUNNER_TEMP/studio-test.log" || {
+            awk '/^ *not ok /{name=$0; sub(/^ *not ok [0-9]+ - /, "", name); want=1; next}
+                 want==2 {e=$0; gsub(/^ +/, "", e); printf "::error title=Studio test failed::%s -- %s\n", name, e; want=0; next}
+                 want==1 && /^ *error: /{e=$0; sub(/^ *error: /, "", e); if (e ~ /^[|>][-+]?$/) {want=2; next}
+                                          printf "::error title=Studio test failed::%s -- %s\n", name, e; want=0}' "$RUNNER_TEMP/studio-test.log" | head -20
+            exit 1
+          }

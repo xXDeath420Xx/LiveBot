@@ -10,7 +10,7 @@ import { FEATURE_SPECS } from '../core/feature-config-spec.js';
 import { PAGE_HELP, pageHelp, missingHelp } from '../core/page-help.js';
 import { parsePageMap, extractFields } from '../core/settings-index.js';
 import { createViewEngine } from '../dashboard/services/view-engine.js';
-import { loadClassicMap } from '../dashboard/services/classic-style.js';
+import { loadClassicMap, themeClassicCss } from '../dashboard/services/classic-style.js';
 
 /*
  * Wave 18 "pages-kit": the settings-row kit (dashboard/public/css/cf-settings.css,
@@ -436,7 +436,8 @@ test('pilot pages: the settings search still finds their fields, and Classic sti
         const engine = createViewEngine({ viewsDir: sviews, cache: false });
         const classic = engine.renderFile(path.join(dir, 'p.ejs'), { classicCss: true, label: 'x' });
         const modern = engine.renderFile(path.join(dir, 'p.ejs'), { classicCss: false, label: 'x' });
-        assert.ok(classic.includes(`{${original}}`), `${key}: classic CSS restored`);
+        // Restored = the original rule, themed for Light and Sand (classic-style.js themeClassicCss; Dark renders the literal).
+        assert.ok(classic.includes(`{${themeClassicCss(original, today)}}`), `${key}: classic CSS restored`);
         assert.ok(modern.includes(`{${today}}`) && modern !== classic, `${key}: cards/compact keep today's CSS`);
     } finally {
         fs.rmSync(dir, { recursive: true, force: true });

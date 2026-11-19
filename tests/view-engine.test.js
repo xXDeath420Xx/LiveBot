@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createViewEngine, versionAssetRefs, fileHash } from '../dashboard/services/view-engine.js';
 import { makeRequest, parseRequest, watchReloadRequests, writeJsonAtomic } from '../dashboard/services/dashboard-reload.js';
+import { themeClassicCss } from '../dashboard/services/classic-style.js';
 
 /*
  * No-restart dashboard reloads (dashboard/services/view-engine.js + dashboard-reload.js,
@@ -85,7 +86,8 @@ test('the Classic CSS variant is cached separately from the cards/compact render
     const classic = engine.renderFile(page, locals(true));
     const modern = engine.renderFile(page, locals(false));
     assert.notEqual(classic, modern, 'classic render differs');
-    assert.ok(classic.includes(`{${original}}`) && modern.includes(`{${today}}`), "classic has the original rule, cards keep today's");
+    // The original rule comes back themed for Light and Sand (classic-style.js themeClassicCss; Dark renders the literal).
+    assert.ok(classic.includes(`{${themeClassicCss(original, today)}}`) && modern.includes(`{${today}}`), "classic has the original rule, cards keep today's");
     assert.equal(engine.renderFile(page, locals(false)), modern, 'cards render unaffected by the classic one before it');
     assert.equal(engine.renderFile(page, locals(true)), classic);
 });
