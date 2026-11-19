@@ -97,15 +97,19 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Syntax check
         run: node --experimental-vm-modules --no-warnings ../../scripts/publish/syntax-check.mjs .
-      # Includes two tests that launch the Electron app; windows-latest runners have a desktop
-      # session, so they run. The live-site check is skipped unless CF_STUDIO_LIVE_URLS=1.
+      # Same as `npm test`, minus the offline speech-recognition test: the runner image has a
+      # System.Speech recogniser but no voice it can hear, so it always reports "heard []".
+      # The two tests that launch the Electron app do run (the runner has a desktop session).
+      # The live-site check is skipped unless CF_STUDIO_LIVE_URLS=1.
       # Failing test names and their first error line are also written as annotations, which the
       # public API exposes without a login (job logs need one).
       - name: Unit tests
         shell: bash
         run: |
           set -o pipefail
-          npm test 2>&1 | tee "$RUNNER_TEMP/studio-test.log" || {
+          skip='recognises phrases spoken by a Windows voice'
+          node --test --test-force-exit --test-concurrency=1 --test-skip-pattern="$skip" "test/*.test.js" 2>&1 \
+            | tee "$RUNNER_TEMP/studio-test.log" || {
             awk '/^ *not ok /{name=$0; sub(/^ *not ok [0-9]+ - /, "", name); want=1; next}
                  want==2 {e=$0; gsub(/^ +/, "", e); printf "::error title=Studio test failed::%s -- %s\n", name, e; want=0; next}
                  want==1 && /^ *error: /{e=$0; sub(/^ *error: /, "", e); if (e ~ /^[|>][-+]?$/) {want=2; next}
